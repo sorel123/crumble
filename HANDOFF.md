@@ -205,6 +205,20 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
   the size penalty, cap the penalty so 4-cell pieces stay at a fixed weight, or
   bias by "fits somewhere" instead of raw cell count.
 
+- **Board tidiness (`CFG.TIDY`).** Hand choice now penalizes hands whose best
+  play leaves a ragged board (`roughFlat` = filled/empty edge count, tracked in
+  `evalHand`), so pieces tend to fit the current gaps and help square things
+  off. In a bot sim it cut average fill about 10% at TIDY 2. Effect is modest;
+  a placement hint (highlight the flush spot) would be the next lever.
+
+- **Piece partners (`PAIR_CHANCE`).** Each L/J/T/S/Z/corner piece has partners
+  (`PARTNERS`, built at load by `pairHoles`) that sit against it to make a solid
+  2-4 wide block, allowing one single-cell hole. Awkward pieces from one tray
+  are remembered in `carry`, and the next tray seeds a partner into most
+  candidate hands. In a bot sim, a partner showed up next tray 69% of the time
+  vs 48% by chance, with fill up slightly. It can't force *where* she places the
+  first piece, so the fit is only as good as the board she made.
+
 ## Known gaps
 
 - Best score resets on refresh (no storage yet — task 3).

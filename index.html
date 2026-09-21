@@ -129,6 +129,11 @@ const CFG = {
   CANDIDATES:    36,   // random hands tried per tray before settling
   NODE_BUDGET:   2600,   // search cap per hand (raise = smarter, slower)
   SWEEP_COOLDOWN: 3,    // trays that must pass before another sweep hand
+  SINGLE_WEIGHT: 0.35,   // multiplier on the 1-cell piece (density bias otherwise floods the tray with them)
+  EARLY_TRAYS:   4,      // opening trays that favor stackable pieces (bars and rectangles)
+  EARLY_AWKWARD: 0.15,   // weight multiplier for non-rectangles during those trays
+  PAIR_CHANCE:   0.7,    // odds a tray carries a partner for an awkward piece (L/J/T/S/Z) from the previous tray
+  TIDY:          2.0,    // how much hand choice favors a compact board (0 = ignore; higher = flatter, fewer holes)
   SWEEP_MIN: 6, SWEEP_MAX: 30,  // gem count range where a sweep is plausible
 
   // scoring
@@ -190,7 +195,7 @@ const cvs=el('c'), ctx=cvs.getContext('2d'), safeProbe=el('safe');
 const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
 let grid,tray,score=0,best=0,combo=0,rescues=0,rescuesUsed=0,deaths=0;
-let tension=0, sweepCool=0, lastTier='—';
+let tension=0, sweepCool=0, lastTier='—', trayNo=0;
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[];
 let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0;
 let gemBig=[],gemSmall=[];
@@ -230,17 +235,29 @@ function applyFlat(a,s,r,c){
   for(const j of cols) for(let i=0;i<N;i++) b[i*N+j]=0;
   return {b,lines:rows.length+cols.length};
 }
+// edges between filled and empty cells: low = compact block, high = ragged/holey
+function roughFlat(a){
+  let n=0;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    const i=r*N+c;
+    if(c<N-1&&a[i]!==a[i+1]) n++;
+    if(r<N-1&&a[i]!==a[i+N]) n++;
+  }
+  return n;
+}
 const emptyFlat=a=>{ for(let i=0;i<a.length;i++) if(a[i]) return false; return true; };
 const countFlat=a=>{ let n=0; for(let i=0;i<a.length;i++) if(a[i]) n++; return n; };
 
 function evalHand(a0,shapes,budget){
-  const res={ok:false,lines:0,sweep:false,left:N*N};
+  const res={ok:false,lines:0,sweep:false,cleared:0,rough:999};
+  const base=countFlat(a0)+shapes[0].n+shapes[1].n+shapes[2].n;
   let b=budget;
   function dfs(a,order,i,acc){
     if(b<=0||res.sweep) return;
     if(i===3){
       res.ok=true; if(acc>res.lines) res.lines=acc;
-      const n=countFlat(a); if(n<res.left) res.left=n;
+      const cl=base-countFlat(a); if(cl>res.cleared) res.cleared=cl;
+      const rg=roughFlat(a); if(rg<res.rough) res.rough=rg;
       return;
     }
     const s=shapes[order[i]];
@@ -250,7 +267,7 @@ function evalHand(a0,shapes,budget){
       b--;
       const {b:a2,lines}=applyFlat(a,s,r,c);
       if(lines&&emptyFlat(a2)){
-        res.sweep=true; res.ok=true; res.left=0; res.lines=Math.max(res.lines,acc+lines); return;
+        res.sweep=true; res.ok=true; res.cleared=base; res.rough=0; res.lines=Math.max(res.lines,acc+lines); return;
       }
       dfs(a2,order,i+1,acc+lines);
     }
@@ -336,8 +353,38 @@ function planSweep(a){
 }
 
 /* ── hand selection ─────────────────────────────────────────── */
+const stackable=s=>s.n===s.rows*s.cols && s.n<=6;   // bars and small rectangles
+/* partners: for each piece, the shapes that sit against it to form a
+   solid 2-4 wide block (at most one hole, which a single fills) */
+function pairHoles(A,B){
+  let best=null;
+  for(let dr=-4;dr<=4;dr++) for(let dc=-4;dc<=4;dc++){
+    const set=new Set(); let ok=true;
+    for(const [r,c] of A.cells) set.add(r+','+c);
+    for(const [r,c] of B.cells){ const k=(r+dr)+','+(c+dc); if(set.has(k)){ok=false;break;} set.add(k); }
+    if(!ok) continue;
+    let r0=9,r1=-9,c0=9,c1=-9;
+    for(const k of set){ const [r,c]=k.split(',').map(Number); r0=Math.min(r0,r);r1=Math.max(r1,r);c0=Math.min(c0,c);c1=Math.max(c1,c); }
+    const h=r1-r0+1, w=c1-c0+1, holes=h*w-set.size;
+    if(h>=2&&w>=2&&h<=4&&w<=4&&holes<=1&&(best===null||holes<best)) best=holes;
+  }
+  return best;
+}
+const PARTNERS=new Map();
+SHAPES.forEach(A=>{ if(!stackable(A)) PARTNERS.set(A,SHAPES.filter(B=>B.n>1&&pairHoles(A,B)!==null)); });
+let carry=[];   // awkward pieces from the last tray, whose partners should show up next
+function makeHand(density){
+  const h=[weightedShape(density),weightedShape(density),weightedShape(density)];
+  if(carry.length && Math.random()<CFG.PAIR_CHANCE){
+    const ps=PARTNERS.get(carry[(Math.random()*carry.length)|0]);
+    if(ps&&ps.length) h[(Math.random()*3)|0]=ps[(Math.random()*ps.length)|0];
+  }
+  return h;
+}
 function weightedShape(density){
-  const w=SHAPES.map(s=>1/(1+s.n*density*3.0));
+  const early=trayNo<=CFG.EARLY_TRAYS;
+  const w=SHAPES.map(s=>(1/(1+s.n*density*3.0))*(s.n===1?CFG.SINGLE_WEIGHT:1)
+    *(early&&!stackable(s)?CFG.EARLY_AWKWARD:1));
   let r=Math.random()*w.reduce((x,y)=>x+y,0);
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
   return SHAPES[0];
@@ -349,6 +396,7 @@ function pickTier(a){
   return 'honest';
 }
 function genTray(){
+  trayNo++;
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
   let tier=pickTier(a0);
@@ -361,16 +409,17 @@ function genTray(){
   }
 
   const want = tier==='jackpot'?3 : tier==='solvable'?2 : 0;
-  let bestHand=null,bestScore=-Infinity;
+  let bestHand=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<CFG.CANDIDATES;i++){
-    const hand=[weightedShape(density),weightedShape(density),weightedShape(density)];
+    const hand=makeHand(density);
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     let sc;
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
-    else if(tier==='honest') sc=10;   // neutral — any fully-playable hand is fine
-    else sc=(ev.sweep?60:0)+ev.lines*10-ev.left*1.5;
+    else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
+    else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
     if(sc>bestScore){ bestScore=sc; bestHand=hand; }
-    if(ev.ok && (tier==='honest' || ev.lines>=want)) break;
+    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough) break;
+    if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
   }
   if(!bestHand) bestHand=[weightedShape(density),weightedShape(density),weightedShape(density)];
   commitTray(bestHand,tier.toUpperCase());
@@ -395,6 +444,7 @@ function genRescue(){
 function commitTray(shapes,label){
   tray=shapes.map(s=>({s,gi:(Math.random()*GEMS.length)|0}));
   lastTier=label;
+  carry=shapes.filter(x=>!stackable(x));
   updateDbg();
 }
 function updateDbg(){
@@ -975,7 +1025,7 @@ async function rescue(){
 }
 function start(){
   layout();
-  grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0;
+  grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];drag=null;ret=null;
   el('scoreVal').textContent='0'; el('bestVal').textContent=best;
   genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
