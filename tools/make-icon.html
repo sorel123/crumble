@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crumble icon</title>
+<style>
+  body{margin:0;padding:24px;background:#222;color:#ddd;font:14px/1.4 -apple-system,system-ui,sans-serif;
+       display:flex;flex-direction:column;align-items:center;gap:14px}
+  canvas{width:min(80vmin,512px);height:auto;aspect-ratio:1;background:#000;border-radius:0}
+  button{font:inherit;padding:10px 18px;border-radius:8px;border:0;background:#FFC12E;color:#222;font-weight:600;cursor:pointer}
+  p{margin:0;max-width:52ch;text-align:center;opacity:.8}
+</style>
+</head>
+<body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<p>Right-click the icon and choose “Save Image As…” for the 1024×1024 PNG.</p>
+<button id="exp">Export 180, 167, 152, 120</button>
+
+<script>
+/* ── copied verbatim from index.html — keep in sync if the gem look changes ── */
+const dpr=1;                                   // tiles are drawn at exact pixel size here
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const GEMS=[
+  {h:344,s:88},{h: 32,s:96},{h:150,s:72},
+  {h:188,s:85},{h:226,s:88},{h:278,s:82}
+];
+function roundPath(x,px,py,w,h,r){
+  const k=Math.min(r,w/2,h/2);
+  x.beginPath(); x.moveTo(px+k,py);
+  x.arcTo(px+w,py,px+w,py+h,k); x.arcTo(px+w,py+h,px,py+h,k);
+  x.arcTo(px,py+h,px,py,k); x.arcTo(px,py,px+w,py,k); x.closePath();
+}
+function newTile(size){
+  const cv=document.createElement('canvas');
+  const px=Math.max(10,Math.round(size*dpr));
+  cv.width=cv.height=px;
+  const x=cv.getContext('2d'); x.scale(px/size,px/size);
+  return {cv,x};
+}
+// Hard facets: lit top, shadowed bottom, angled sides, specular.
+function jewelTile(size,g){
+  const {cv,x}=newTile(size);
+  const L=d=>`hsl(${g.h} ${g.s}% ${clamp(57+d,5,96)}%)`;
+  const pad=size*0.055, S=size-pad*2, i=S*0.25;
+  const o=[[pad,pad],[pad+S,pad],[pad+S,pad+S],[pad,pad+S]];
+  const n=[[pad+i,pad+i],[pad+S-i,pad+i],[pad+S-i,pad+S-i],[pad+i,pad+S-i]];
+  x.save(); roundPath(x,pad,pad,S,S,S*0.25); x.clip();
+  x.fillStyle=L(0); x.fillRect(pad,pad,S,S);
+  const face=(a,b,c,d,dl)=>{ x.beginPath(); x.moveTo(a[0],a[1]); x.lineTo(b[0],b[1]);
+    x.lineTo(c[0],c[1]); x.lineTo(d[0],d[1]); x.closePath(); x.fillStyle=L(dl); x.fill(); };
+  face(o[0],o[1],n[1],n[0],24); face(o[3],o[0],n[0],n[3],7);
+  face(o[1],o[2],n[2],n[1],-13); face(o[2],o[3],n[3],n[2],-27);
+  const gr=x.createLinearGradient(n[0][0],n[0][1],n[2][0],n[2][1]);
+  gr.addColorStop(0,L(18)); gr.addColorStop(1,L(-5));
+  x.fillStyle=gr; x.fillRect(n[0][0],n[0][1],S-i*2,S-i*2);
+  x.globalAlpha=.5; x.fillStyle='#fff';
+  roundPath(x,pad+S*0.3,pad+S*0.29,S*0.22,S*0.13,S*0.065); x.fill();
+  x.globalAlpha=1; x.restore();
+  roundPath(x,pad,pad,S,S,S*0.25);
+  x.strokeStyle=L(26); x.lineWidth=Math.max(1,size*0.035); x.stroke();
+  return cv;
+}
+
+/* ── icon composition ── */
+const SIZE=1024, TILE=440;                     // 440px tiles keep the group inside the 12% margin (123px)
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+
+function drawIcon(){
+  // background: the game's deep purple, lit from the centre
+  const bg=ctx.createLinearGradient(0,0,0,SIZE);
+  bg.addColorStop(0,'#1B0E30'); bg.addColorStop(1,'#0E0719');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,SIZE,SIZE);
+  const glow=ctx.createRadialGradient(SIZE/2,SIZE*.46,0,SIZE/2,SIZE*.46,SIZE*.75);
+  glow.addColorStop(0,'rgba(78,36,128,.85)'); glow.addColorStop(1,'rgba(12,6,22,0)');
+  ctx.fillStyle=glow; ctx.fillRect(0,0,SIZE,SIZE);
+
+  // ruby (back left), citrine (back right), aqua (front, bottom centre)
+  const gems=[
+    {g:GEMS[0], x:400, y:400, rot:-13},
+    {g:GEMS[1], x:624, y:424, rot:11},
+    {g:GEMS[3], x:512, y:624, rot:-4}
+  ];
+  for(const {g,x,y,rot} of gems){
+    const tile=jewelTile(TILE,g);
+    ctx.save();
+    ctx.translate(x,y); ctx.rotate(rot*Math.PI/180);
+    ctx.shadowColor='rgba(0,0,0,.45)'; ctx.shadowBlur=40; ctx.shadowOffsetY=14;
+    ctx.drawImage(tile,-TILE/2,-TILE/2,TILE,TILE);
+    ctx.restore();
+  }
+}
+drawIcon();
+
+document.getElementById('exp').onclick=async()=>{
+  for(const s of [180,167,152,120]){
+    const o=document.createElement('canvas'); o.width=o.height=s;
+    const x=o.getContext('2d'); x.imageSmoothingQuality='high';
+    x.drawImage(cv,0,0,s,s);
+    const blob=await new Promise(r=>o.toBlob(r,'image/png'));
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='icon-'+s+'.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    await new Promise(r=>setTimeout(r,250));   // spacing so the browser doesn't drop downloads
+  }
+};
+</script>
+</body>
+</html>
