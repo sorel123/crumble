@@ -25,7 +25,7 @@ Goal: get it running as an app on an iPhone, add save/resume, then real ads.
 Top to bottom inside the one `<script>`:
 
 1. **`CFG`** — every tunable constant, commented. Start here.
-2. **`GEMS`** — six `{hue, saturation}` pairs. Changing a hue recolors that gem
+2. **`GEMS`** — six `{hue, saturation}` pairs plus a seventh gold gem used only by golden hands. Changing a hue recolors that gem
    everywhere including its facets.
 3. **`Ads`** — three methods, currently faked. The *only* ad code in the file.
 4. **`SHAPES`** — 37 pieces parsed from ASCII art.

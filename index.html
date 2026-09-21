@@ -29,11 +29,21 @@
          text-shadow:0 0 18px rgba(255,212,92,.35)}
   .right{text-align:right;display:flex;gap:14px;align-items:flex-start}
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--gold)}
-  #mute{pointer-events:auto;background:rgba(255,255,255,.09);border:0;color:#fff;
+  #mute,#devBtn{pointer-events:auto;background:rgba(255,255,255,.09);border:0;color:#fff;
         width:40px;height:40px;border-radius:12px;font-size:17px;cursor:pointer}
   #dbg{position:absolute;left:18px;top:calc(64px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
   #dbg[hidden]{display:none}
+  #devPanel{justify-content:flex-start;gap:12px;padding:calc(18px + env(safe-area-inset-top,0px)) 16px calc(18px + env(safe-area-inset-bottom,0px))}
+  #devList{flex:1 1 auto;min-height:0;width:min(420px,100%);overflow-y:auto;text-align:left;touch-action:pan-y;
+           display:flex;flex-direction:column;gap:12px;padding:0 4px}
+  #devList .tog,#devList .head{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600}
+  #devList .tog{padding:6px 0}
+  #devList .head output{color:var(--gold);font-variant-numeric:tabular-nums}
+  #devList input[type=range]{width:100%;touch-action:pan-y;accent-color:var(--gold)}
+  #devList input[type=checkbox]{width:22px;height:22px;accent-color:var(--gold)}
+  .devbtns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .devbtns button{font-size:14px;padding:10px 18px;min-height:44px}
   #safe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;
         padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 
@@ -82,6 +92,7 @@
     <div><div class="lbl">Score</div><div class="score" id="scoreVal">0</div></div>
     <div class="right">
       <div><div class="lbl">Best</div><div class="best" id="bestVal">0</div></div>
+      <button id="devBtn" aria-label="Developer settings" hidden>⚙️</button>
       <button id="mute" aria-label="Toggle sound">🔊</button>
     </div>
   </div>
@@ -111,6 +122,16 @@
     <p id="adTimer">5</p>
     <button class="cta" id="adClose" disabled>Close</button>
   </div>
+
+  <div class="overlay" id="devPanel" hidden>
+    <p class="eyebrow">Developer settings · game paused</p>
+    <div id="devList"></div>
+    <div class="devbtns">
+      <button class="ghost" id="devReset">Reset to defaults</button>
+      <button class="ghost" id="devCopy">Copy settings</button>
+      <button class="cta" id="devClose">Done</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -120,6 +141,7 @@
    ═══════════════════════════════════════════════════════════════ */
 const CFG = {
   GRID: 8,
+  DEV_MODE: true,        // shows the gear + developer panel; set false before release (also ignores saved panel overrides)
   SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
   SNAP_STICKY:   0.6,    // a shown ghost is kept until the piece drifts this many cells from it
   SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
@@ -143,19 +165,34 @@ const CFG = {
   LINE_POINTS: 10, COMBO_STEP: 0.5,
   SWEEP_BONUS: 300, SWEEP_PER_GEM: 25,
 
+  // golden hand: a bonus tray that pays a multiplier if she finds its planned clear
+  GOLDEN_CHANCE:   0.05, // random roll after a tray when tension > 0.5 (a clean sweep or combo >= 3 always qualifies)
+  GOLDEN_COOLDOWN: 4,    // trays that must pass before another golden hand
+  GOLDEN_MULT:     3,    // multiplier on the points earned by the three golden placements
+
   FREE_RESCUES: 1,       // rescues every run starts with (first one is never behind an ad)
   MAX_RESCUES: 2,        // most rescues one run can use
   RESCUE_FLOOR: 300,     // offer a rescue only above this score...
   RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
   ADS_EVERY: 3,
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
+  GOLDEN_ON:     true,   // master switch for golden hands
+
+  LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
+  SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
+  TIER_SOLVABLE: 0.05,   // tension above this deals 'solvable' hands (2+ lines)
+  TIER_JACKPOT:  0.25,   // ...above this 'jackpot' hands (3+ lines)
+  TIER_SWEEP:    0.70,   // ...above this a planned clean sweep (when off cooldown)
+
   SHOW_TENSION: true     // set false to hide the debug readout
 };
 
 const GEMS=[
   {h:344,s:88},{h: 32,s:96},{h:150,s:72},
-  {h:188,s:85},{h:226,s:88},{h:278,s:82}
+  {h:188,s:85},{h:226,s:88},{h:278,s:82},
+  {h: 47,s:100,gold:true}                 // golden hands only — never dealt in a normal tray
 ];
+const GOLD=GEMS.length-1, NCOLOR=GOLD;
 
 /* ═══════ ADS — the only ad code in the file ═══════ */
 const Ads = {
@@ -199,7 +236,9 @@ const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
 let grid,tray,score=0,best=0,combo=0,rescues=0,rescuesUsed=0,deaths=0;
 let tension=0, sweepCool=0, lastTier='—', trayNo=0;
+let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts}
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[];
+let paused=false;
 let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0;
 let gemBig=[],gemSmall=[];
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -386,33 +425,22 @@ function makeHand(density){
 }
 function weightedShape(density){
   const early=trayNo<=CFG.EARLY_TRAYS;
-  const w=SHAPES.map(s=>(1/(1+s.n*density*3.0))*(s.n===1?CFG.SINGLE_WEIGHT:1)
+  const w=SHAPES.map(s=>(1/(1+s.n*density*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT:1)
     *(early&&!stackable(s)?CFG.EARLY_AWKWARD:1));
   let r=Math.random()*w.reduce((x,y)=>x+y,0);
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
   return SHAPES[0];
 }
 function pickTier(a){
-  if(tension>0.70 && sweepCool<=0) return 'sweep';
-  if(tension>0.25) return 'jackpot';
-  if(tension>0.05) return 'solvable';
+  if(tension>CFG.TIER_SWEEP && sweepCool<=0) return 'sweep';
+  if(tension>CFG.TIER_JACKPOT) return 'jackpot';
+  if(tension>CFG.TIER_SOLVABLE) return 'solvable';
   return 'honest';
 }
-function genTray(){
-  trayNo++;
-  const a0=packGrid(grid);
-  const density=countFlat(a0)/(N*N);
-  let tier=pickTier(a0);
-  sweepCool=Math.max(0,sweepCool-1);
-
-  if(tier==='sweep'){
-    const h=planSweep(a0);
-    if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; return; }
-    tier='jackpot';
-  }
-
+/* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
+function pickHand(a0,density,tier){
   const want = tier==='jackpot'?3 : tier==='solvable'?2 : 0;
-  let bestHand=null,bestScore=-Infinity,bestRough=999;
+  let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<CFG.CANDIDATES;i++){
     const hand=makeHand(density);
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
@@ -420,12 +448,40 @@ function genTray(){
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
-    if(sc>bestScore){ bestScore=sc; bestHand=hand; }
+    if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
     if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
   }
-  if(!bestHand) bestHand=[weightedShape(density),weightedShape(density),weightedShape(density)];
-  commitTray(bestHand,tier.toUpperCase());
+  if(!bestHand){ bestHand=[weightedShape(density),weightedShape(density),weightedShape(density)]; bestEv=null; }
+  return {hand:bestHand,ev:bestEv};
+}
+/* golden hand: a planned sweep if one can be built, else the best jackpot hand.
+   Returns false (and deals nothing) if neither offers a real clear. */
+function genGolden(a0,density){
+  let hand=planSweep(a0), ev=hand&&evalHand(a0,hand,6000);
+  if(hand&&ev.sweep){ sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; }   // same bookkeeping as a normal sweep hand
+  else ({hand,ev}=pickHand(a0,density,'jackpot'));
+  if(!ev||!ev.ok||(!ev.sweep&&ev.lines<1)) return false;
+  commitTray(hand,'GOLDEN·'+(ev.sweep?'SWEEP':'JACKPOT'),{sweep:ev.sweep,lines:ev.lines});
+  return true;
+}
+function genTray(){
+  trayNo++;
+  const a0=packGrid(grid);
+  const density=countFlat(a0)/(N*N);
+  let tier=pickTier(a0);
+  sweepCool=Math.max(0,sweepCool-1);
+  goldenCool=Math.max(0,goldenCool-1);
+
+  if(goldenNext){ goldenNext=false; if(genGolden(a0,density)) return; }
+
+  if(tier==='sweep'){
+    const h=planSweep(a0);
+    if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; return; }
+    tier='jackpot';
+  }
+
+  commitTray(pickHand(a0,density,tier).hand,tier.toUpperCase());
 }
 /* rescue hand: playable, and rich in clears (sweep if one can be built) */
 function genRescue(){
@@ -444,8 +500,17 @@ function genRescue(){
   }
   commitTray(bestHand,'RESCUE');
 }
-function commitTray(shapes,label){
-  tray=shapes.map(s=>({s,gi:(Math.random()*GEMS.length)|0}));
+function pushBanner(txt,sub){   // waits its turn if another banner is still on screen
+  banners.push({t:banners.length?-0.75:0,txt,sub});
+}
+function commitTray(shapes,label,plan){
+  tray=shapes.map(s=>({s,gi:plan?GOLD:(Math.random()*NCOLOR)|0}));
+  golden=plan?{want:plan,got:{lines:0,sweep:false},pts:0}:null;
+  if(plan){
+    goldenCool=CFG.GOLDEN_COOLDOWN;
+    pushBanner('GOLDEN HAND','×'+CFG.GOLDEN_MULT+' if you find it');
+    Sfx.goldenIn();
+  }
   lastTier=label;
   carry=shapes.filter(x=>!stackable(x));
   updateDbg();
@@ -453,7 +518,11 @@ function commitTray(shapes,label){
 function updateDbg(){
   const d=el('dbg');
   d.hidden=!CFG.SHOW_TENSION;
-  if(!d.hidden) d.textContent=`tension ${tension.toFixed(2)} · ${lastTier}`;
+  if(d.hidden) return;
+  const tag=g=>g.sweep?'sweep':g.lines+' lines';
+  const gold=golden?`GOLDEN want ${tag(golden.want)}, got ${tag(golden.got)}, ${golden.pts} pts`
+    :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
+  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold}`;
 }
 
 /* ═══════ layout + tiles ═══════ */
@@ -486,7 +555,7 @@ function jewelTile(size,g){
   const gr=x.createLinearGradient(n[0][0],n[0][1],n[2][0],n[2][1]);
   gr.addColorStop(0,L(18)); gr.addColorStop(1,L(-5));
   x.fillStyle=gr; x.fillRect(n[0][0],n[0][1],S-i*2,S-i*2);
-  x.globalAlpha=.5; x.fillStyle='#fff';
+  x.globalAlpha=g.gold?.8:.5; x.fillStyle='#fff';
   roundPath(x,pad+S*0.3,pad+S*0.29,S*0.22,S*0.13,S*0.065); x.fill();
   x.globalAlpha=1; x.restore();
   roundPath(x,pad,pad,S,S,S*0.25);
@@ -496,7 +565,7 @@ function jewelTile(size,g){
 // Matte, fat corners, soft shadow underneath — no shine anywhere.
 function clayTile(size,g){
   const {cv,x}=newTile(size);
-  const L=d=>`hsl(${g.h} ${Math.round(g.s*0.6)}% ${clamp(61+d,8,94)}%)`;
+  const L=d=>`hsl(${g.h} ${Math.round(g.s*(g.gold?0.92:0.6))}% ${clamp(61+d,8,94)}%)`;
   const pad=size*0.1, S=size-pad*2, R=S*0.34;
   x.save();
   x.shadowColor=`hsla(${g.h} 55% 16% / .5)`;
@@ -646,6 +715,24 @@ const Sfx={
     noiseHit(t,{dur:.01,f0:1500*p,q:1,vol:.04});
     voice(t,{f0:130*p,f1:95*p,dur:.14,vol:.14,bp0:500*p,bp1:250*p,q:2});
   }); },
+  goldenIn(){ play(.05,(t,p)=>{
+    noiseHit(t,{dur:.18,f0:5000*p,f1:11000*p,q:6,vol:.03});
+    [1,1.5,2,3].forEach((m,i)=>{                                        // bright bell run
+      const f=659*p*m;
+      voice(t+i*.06,{f0:f,f1:f*1.005,dur:.5,vol:.06,bp0:f*2,q:2,type:'sine',det:[-3,3],atk:.008});
+    });
+  }); },
+  goldenWin(){ play(.15,(t,p)=>{
+    noiseHit(t,{dur:.02,f0:4000*p,q:.8,vol:.15});
+    voice(t,{f0:130*p,f1:55*p,dur:.7,vol:.5,bp0:300,bp1:100,q:1.2,type:'sine',det:[0]});    // boom
+    [1,1.125,1.25,1.5,1.667,2,2.25,2.5].forEach((m,i)=>{                                   // rising run
+      const f=523*p*m;
+      voice(t+.04+i*.06,{f0:f,f1:f*1.02,dur:.5,vol:.1,bp0:f*2,bp1:f*5,q:3,type:'triangle'});
+    });
+    const top=523*p*2.5;
+    [1,1.25,1.5,2].forEach(m=>voice(t+.55,{f0:top*m/2,f1:top*m/2,dur:1.2,vol:.08,bp0:top*m,bp1:top*m*3,q:3,det:[-12,0,12]}));
+    for(let i=0;i<9;i++) noiseHit(t+.5+i*.08,{dur:.05,f0:(6000+Math.random()*5000)*p,q:10,vol:.05});
+  }); },
   rescue(){ play(0,(t,p)=>{
     noiseHit(t,{dur:.012,f0:4000*p,q:1,vol:.06});
     [523,659,784].forEach((f,i)=>voice(t+i*.07,{f0:f*p,f1:f*p*1.03,dur:i===2?.35:.2,vol:.12,bp0:f*p*2,bp1:f*p*5,q:4,type:'triangle'}));
@@ -683,10 +770,10 @@ function place(idx,r,c){
 
   const {rows,cols}=linesFor(grid);
   const total=rows.length+cols.length;
-  let gained=s.n;
+  let gained=s.n, swept=false;
 
   if(total>0){
-    combo++;
+    combo++; trayCombo=Math.max(trayCombo,combo);
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
     rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:0}));
     cols.forEach(c2=>sweeps.push({horiz:false,idx:c2,t:0}));
@@ -717,7 +804,8 @@ function place(idx,r,c){
     if(!anyLeft){
       const bonus=CFG.SWEEP_BONUS+cleared*CFG.SWEEP_PER_GEM;
       gained+=bonus;
-      banners.push({t:0,txt:'CLEAN SWEEP',sub:'+'+bonus});
+      swept=true; trayHadSweep=true;
+      pushBanner('CLEAN SWEEP','+'+bonus);
       for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
       shake=16*CFG.SHAKE; glowT=1.6;
       Sfx.sweep();
@@ -730,17 +818,39 @@ function place(idx,r,c){
   }
 
   tension=Math.min(1,tension+(1-mobility())*CFG.TENSION_DRIFT);
+
+  if(golden){
+    golden.got.lines+=total; if(swept) golden.got.sweep=true;
+    golden.pts+=gained;
+    if(tray.every(v=>!v)){
+      const hit=golden.want.sweep?golden.got.sweep:golden.got.lines>=golden.want.lines;
+      if(hit){                                         // found it: multiply the whole hand's points
+        const extra=Math.round(golden.pts*(CFG.GOLDEN_MULT-1));
+        gained+=extra;
+        pushBanner('GOLDEN ×'+CFG.GOLDEN_MULT,'+'+extra);
+        for(let k=0;k<5;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
+        for(let k=0;!reduce&&k<16;k++) sparkles.push({x:bx+Math.random()*B,y:by+Math.random()*B,t:Math.random()*0.5});
+        shake=14*CFG.SHAKE; glowT=2; glowH=GEMS[GOLD].h;
+        Sfx.goldenWin();
+      }
+      golden=null;                                     // missed: no penalty, hand just ends
+    }
+  }
   updateDbg();
 
   score+=gained; el('scoreVal').textContent=score;
-  if(tray.every(v=>!v)) genTray();
+  if(tray.every(v=>!v)){
+    goldenNext = CFG.GOLDEN_ON && goldenCool<=0 && (trayHadSweep || trayCombo>=3 || (tension>0.5 && Math.random()<CFG.GOLDEN_CHANCE));
+    trayHadSweep=false; trayCombo=0;
+    genTray();
+  }
   if(!tray.some(v=>v&&fitsAnywhere(v.s,grid))) setTimeout(gameOver,700);
 }
 
 /* ═══════ input ═══════ */
 function slotRect(i){ const w=B/3; return {x:bx+w*i,y:trayY,w,h:trayH}; }
 function onDown(e){
-  if(state!=='play') return;
+  if(state!=='play'||paused) return;
   ac();
   for(let i=0;i<3;i++){
     const R=slotRect(i);
@@ -751,12 +861,12 @@ function onDown(e){
   }
 }
 function onMove(e){
-  if(!drag) return;
+  if(!drag||paused) return;
   drag.vx=drag.vx*0.7+(e.clientX-drag.px)*0.3; drag.px=e.clientX;
   drag.x=e.clientX; drag.y=e.clientY;
 }
 function onUp(){
-  if(!drag) return;
+  if(!drag||paused) return;
   const t=tray[drag.i];
   if(t){
     let g=ghost();
@@ -764,7 +874,7 @@ function onUp(){
     if(g) place(drag.i,g.r,g.c);
     else{
       const s=t.s, R=slotRect(drag.i);
-      ret={i:drag.i,t:0,fx:drag.x-(s.cols*cell)/2,fy:drag.y-cell*1.55-(s.rows*cell)/2,fs:cell,
+      ret={i:drag.i,t:0,fx:drag.x-(s.cols*cell)/2,fy:drag.y-cell*CFG.LIFT-(s.rows*cell)/2,fs:cell,
            tx:R.x+(R.w-s.cols*trayCell)/2,ty:R.y+(R.h-s.rows*trayCell)/2,ts:trayCell};
       Sfx.deny();
     }
@@ -777,7 +887,7 @@ function ghost(){
   const s=t.s;
   // piece position in fractional grid cells
   const fc=(drag.x-(s.cols*cell)/2-bx)/cell;
-  const fr=(drag.y-cell*1.55-(s.rows*cell)/2-by)/cell;
+  const fr=(drag.y-cell*CFG.LIFT-(s.rows*cell)/2-by)/cell;
   const dist=(r,c)=>Math.hypot(r-fr,c-fc);
   let g=null;
   // hysteresis: keep the current ghost until the piece moves well away from it
@@ -823,10 +933,23 @@ function star(x,y,r,a){
   ctx.fill(); ctx.globalAlpha=1;
 }
 
+// golden pieces: a soft pulsing halo behind, and a light band sweeping across the cells
+function goldGlow(cx,cy,r,now,ph){
+  const pulse=reduce?0.6:0.5+0.5*Math.sin(now*0.005+ph);
+  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+  g.addColorStop(0,`rgba(255,206,72,${0.3+0.32*pulse})`); g.addColorStop(1,'rgba(255,206,72,0)');
+  ctx.fillStyle=g; ctx.fillRect(cx-r,cy-r,r*2,r*2);
+}
+function goldShimmer(now,s,dr,dc){
+  if(reduce) return 0;
+  const pos=((now*0.0009)%1)*(s.rows+s.cols+3)-1.5;
+  return Math.max(0,1-Math.abs(dr+dc-pos)/1.2)*0.6;
+}
+
 let last=0;
 function frame(now){
   requestAnimationFrame(frame);
-  const dt=Math.min(2.5,(now-last)/16.67)||1; last=now;
+  const dt=paused?0:Math.min(2.5,(now-last)/16.67)||1; last=now;
   shake*=Math.pow(.85,dt); glowT*=Math.pow(.93,dt);
 
   const bg=ctx.createLinearGradient(0,0,0,H);
@@ -873,7 +996,7 @@ function frame(now){
     } else gem(g.gi,bx+c*cell,by+r*cell,cell,base,1,0);
   }
 
-  if(!reduce && now-lastSpark>CFG.SPARKLE_RATE && state==='play' && CFG.STYLE==='jewel'){
+  if(!reduce && now-lastSpark>CFG.SPARKLE_RATE && state==='play' && !paused && CFG.STYLE==='jewel'){
     lastSpark=now;
     const f=[];
     for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]&&grid[r][c].t>=1) f.push([r,c]);
@@ -949,7 +1072,9 @@ function frame(now){
     const R=slotRect(i),s=t.s;
     const bob=reduce?0:Math.sin(now*0.0022+i*2.1)*cell*0.045;
     const ox=R.x+(R.w-s.cols*trayCell)/2, oy=R.y+(R.h-s.rows*trayCell)/2+bob;
-    for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*trayCell,oy+dr*trayCell,trayCell,1,1,0,true);
+    const gold=t.gi===GOLD;
+    if(gold) goldGlow(ox+s.cols*trayCell/2,oy+s.rows*trayCell/2,Math.max(s.cols,s.rows)*trayCell*0.95+trayCell*0.6,now,i);
+    for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*trayCell,oy+dr*trayCell,trayCell,1,1,gold?goldShimmer(now,s,dr,dc):0,true);
   }
 
   if(ret){
@@ -966,12 +1091,14 @@ function frame(now){
     const t=tray[drag.i],s=t.s;
     drag.g=Math.min(1,drag.g+dt*0.14);
     const sc=1+0.09*easeOutBack(drag.g);
+    const gold=t.gi===GOLD;
     ctx.save();
-    ctx.translate(drag.x,drag.y-cell*1.55);
+    ctx.translate(drag.x,drag.y-cell*CFG.LIFT);
     ctx.rotate(clamp(drag.vx*0.011,-.2,.2)); ctx.scale(sc,sc);
+    if(gold) goldGlow(0,0,Math.max(s.cols,s.rows)*cell*0.95+cell*0.6,now,0);
     ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=18; ctx.shadowOffsetY=8;
     const ox=-(s.cols*cell)/2, oy=-(s.rows*cell)/2;
-    for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*cell,oy+dr*cell,cell,1,1,0);
+    for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*cell,oy+dr*cell,cell,1,1,gold?goldShimmer(now,s,dr,dc):0);
     ctx.restore();
   }
 
@@ -996,6 +1123,7 @@ function frame(now){
   for(let i=banners.length-1;i>=0;i--){
     const b=banners[i]; b.t+=dt*0.009;
     if(b.t>=1){ banners.splice(i,1); continue; }
+    if(b.t<0) continue;
     const sc=0.6+0.4*easeOutBack(Math.min(1,b.t*2.4));
     const a=b.t>0.72?(1-b.t)/0.28:1;
     ctx.save(); ctx.translate(W/2,by+B/2); ctx.scale(sc,sc);
@@ -1016,6 +1144,7 @@ function frame(now){
 /* ═══════ flow ═══════ */
 async function gameOver(){
   if(state!=='play') return;
+  if(paused){ setTimeout(gameOver,300); return; }
   state='over';
   const prevBest=best;
   best=Math.max(best,score); el('bestVal').textContent=best;
@@ -1041,12 +1170,13 @@ async function rescue(){
   rescues--; rescuesUsed++;
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
   Sfx.rescue();
-  combo=0; tension=0.5; genRescue();
+  combo=0; tension=0.5; goldenNext=false; genRescue();
   el('overCard').hidden=true; state='play';
 }
 function start(){
   layout();
   grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
+  golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];drag=null;ret=null;
   el('scoreVal').textContent='0'; el('bestVal').textContent=best;
   genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
@@ -1062,6 +1192,94 @@ el('styClay').onclick=e=>{e.stopPropagation();setStyle('clay');};
 el('startBtn').onclick=e=>{e.stopPropagation();ac();start();};
 el('againBtn').onclick=e=>{e.stopPropagation();start();};
 el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};
+
+/* ═══════ developer panel ═══════
+   Everything is driven by the two tables below — a new toggle or slider is one line. */
+const DEV_TOGGLES=[            // [CFG key, label]
+  ['GOLDEN_ON','Golden Hand'],
+  ['SHOW_TENSION','Debug readout']
+];
+const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
+  ['TENSION_UP','Tension up (no clear)',0,0.5,0.01],
+  ['TENSION_DOWN','Tension down (clear)',0,0.5,0.01],
+  ['TENSION_DRIFT','Tension drift (cramped)',0,0.3,0.01],
+  ['TIER_SOLVABLE','Tier: solvable above',0,1,0.01],
+  ['TIER_JACKPOT','Tier: jackpot above',0,1,0.01],
+  ['TIER_SWEEP','Tier: sweep above',0,1,0.01],
+  ['SMALL_BIAS','Small-piece bias',0,8,0.1],
+  ['SINGLE_WEIGHT','Single-cell weight',0,1,0.05],
+  ['TIDY','Tidiness',0,5,0.1],
+  ['PAIR_CHANCE','Partner-piece chance',0,1,0.05],
+  ['SWEEP_COOLDOWN','Sweep cooldown (trays)',0,10,1],
+  ['SNAP_RADIUS','Snap radius (cells)',0,3,1],
+  ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
+  ['LIFT','Piece lift (cells)',0,3,0.05]
+];
+const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SLIDERS.map(s=>s[0])];
+const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
+const DEV_STORE='crumble.dev';
+function devSave(){
+  try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
+}
+function devLoad(){
+  try{
+    const o=JSON.parse(localStorage.getItem(DEV_STORE)||'{}');
+    for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) CFG[k]=o[k];
+  }catch(e){}
+}
+function devSnippet(){
+  const f=v=>typeof v==='number'?+v.toFixed(4):v;
+  return '// dev panel snapshot — paste over the matching CFG entries\n'+DEV_KEYS.map(k=>`  ${k}: ${f(CFG[k])},`).join('\n');
+}
+function initDev(){
+  el('devBtn').hidden=!CFG.DEV_MODE;
+  if(!CFG.DEV_MODE) return;
+  devLoad();
+  const list=el('devList'), refresh=[];
+  const make=(tag,cls)=>{ const n=document.createElement(tag); if(cls) n.className=cls; return n; };
+  for(const [k,label] of DEV_TOGGLES){
+    const row=make('label','tog'), name=make('span'), inp=make('input');
+    name.textContent=label; inp.type='checkbox';
+    inp.onchange=()=>{ CFG[k]=inp.checked; devSave(); updateDbg(); };
+    refresh.push(()=>{ inp.checked=!!CFG[k]; });
+    row.append(name,inp); list.append(row);
+  }
+  for(const [k,label,min,max,step] of DEV_SLIDERS){
+    const box=make('div'), head=make('div','head'), name=make('span'), out=make('output'), inp=make('input');
+    const dp=(String(step).split('.')[1]||'').length;
+    name.textContent=label;
+    Object.assign(inp,{type:'range',min,max,step});
+    const show=()=>{ out.textContent=(+CFG[k]).toFixed(dp); };
+    inp.oninput=()=>{ CFG[k]=+inp.value; show(); devSave(); };
+    refresh.push(()=>{ inp.value=CFG[k]; show(); });
+    head.append(name,out); box.append(head,inp); list.append(box);
+  }
+  const sync=()=>refresh.forEach(f=>f());
+  el('devBtn').onclick=e=>{
+    e.stopPropagation();
+    paused=true; drag=null; shake=0;          // freeze the game while the panel is up
+    sync(); el('devPanel').hidden=false;
+  };
+  el('devClose').onclick=e=>{ e.stopPropagation(); el('devPanel').hidden=true; paused=false; };
+  el('devReset').onclick=e=>{
+    e.stopPropagation();
+    Object.assign(CFG,DEV_DEFAULTS);
+    try{ localStorage.removeItem(DEV_STORE); }catch(_){}
+    sync(); updateDbg();
+  };
+  el('devCopy').onclick=async e=>{
+    e.stopPropagation();
+    const txt=devSnippet(), btn=e.currentTarget;
+    try{ await navigator.clipboard.writeText(txt); }
+    catch(_){
+      const ta=document.createElement('textarea'); ta.value=txt; document.body.append(ta); ta.select();
+      try{ document.execCommand('copy'); }catch(__){}
+      ta.remove();
+    }
+    btn.textContent='Copied!'; setTimeout(()=>{ btn.textContent='Copy settings'; },1200);
+  };
+}
+initDev();
 
 layout(); grid=empty(); genTray(); updateDbg(); requestAnimationFrame(frame);
 })();
