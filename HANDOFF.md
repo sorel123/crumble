@@ -28,7 +28,7 @@ Top to bottom inside the one `<script>`:
 2. **`GEMS`** — six `{hue, saturation}` pairs. Changing a hue recolors that gem
    everywhere including its facets.
 3. **`Ads`** — three methods, currently faked. The *only* ad code in the file.
-4. **`SHAPES`** — 27 pieces parsed from ASCII art.
+4. **`SHAPES`** — 37 pieces parsed from ASCII art.
 5. **The solver** — `packGrid` / `fitFlat` / `applyFlat` / `evalHand`,
    `planSweep` and friends, then `genTray`.
 6. **Tile renderers** — `jewelTile`, `clayTile`, `buildCache`, `layout`.
@@ -191,6 +191,19 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 | `SHOW_TENSION` | debug readout — off before shipping |
 
 ---
+
+## Open tuning notes (come back to these)
+
+- **Tension is too easy.** After the 71d91ee retune (`TENSION_DOWN` 0.18,
+  jackpot wants 3 lines, thresholds 0.05/0.25/0.70, `SWEEP_COOLDOWN` 3) it plays
+  too generous. Dial back: `TENSION_DOWN` toward 0.25–0.30, jackpot `want` back
+  to 2, `SWEEP_COOLDOWN` back to 4. Change one at a time and watch the debug readout.
+- **L/J pieces vs. density bias.** The 8 L/J orientations (4 cells each) are
+  liked and should stay common. `weightedShape` weights by `1/(1+n*density*3.0)`,
+  so on a crowded board it favors 1–3 cell pieces and L/J get squeezed out. Goal:
+  high density should not always mean small easy pieces. Ideas: exempt L/J from
+  the size penalty, cap the penalty so 4-cell pieces stay at a fixed weight, or
+  bias by "fits somewhere" instead of raw cell count.
 
 ## Known gaps
 
