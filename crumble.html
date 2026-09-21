@@ -15,7 +15,8 @@
   #stage{position:fixed;inset:0}
   canvas{display:block;width:100%;height:100%}
 
-  .hud{position:absolute;top:0;left:0;right:0;height:92px;padding:14px 18px;
+  .hud{position:absolute;top:0;left:0;right:0;height:calc(92px + env(safe-area-inset-top,0px));
+       padding:calc(14px + env(safe-area-inset-top,0px)) 18px 14px;
        display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
   .lbl{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;opacity:.55}
   .score{font-size:38px;font-weight:700;line-height:1;margin-top:1px;
@@ -24,9 +25,11 @@
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--gold)}
   #mute{pointer-events:auto;background:rgba(255,255,255,.09);border:0;color:#fff;
         width:40px;height:40px;border-radius:12px;font-size:17px;cursor:pointer}
-  #dbg{position:absolute;left:18px;top:64px;font-size:11px;font-weight:600;letter-spacing:.06em;
+  #dbg{position:absolute;left:18px;top:calc(64px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
   #dbg[hidden]{display:none}
+  #safe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;
+        padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 
   .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
            justify-content:center;gap:16px;padding:28px;text-align:center;
@@ -65,6 +68,7 @@
 </style>
 </head>
 <body>
+<div id="safe"></div>
 <div id="stage">
   <canvas id="c"></canvas>
 
@@ -169,7 +173,7 @@ const SHAPES=RAW.map(rows=>{
 });
 
 /* ═══════ state ═══════ */
-const cvs=el('c'), ctx=cvs.getContext('2d');
+const cvs=el('c'), ctx=cvs.getContext('2d'), safeProbe=el('safe');
 const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
 let grid,tray,score=0,best=0,combo=0,revives=0,deaths=0;
@@ -431,12 +435,14 @@ function layout(){
   W=cvs.clientWidth; H=cvs.clientHeight;
   cvs.width=Math.round(W*dpr); cvs.height=Math.round(H*dpr);
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  const HUD=92;
-  B=Math.min(W-26,H-HUD-190,520);
+  const cs=getComputedStyle(safeProbe);
+  const insetT=parseFloat(cs.paddingTop)||0, insetB=parseFloat(cs.paddingBottom)||0;
+  const HUD=92+insetT, Hb=H-insetB;
+  B=Math.min(W-26,Hb-HUD-190,520);
   cell=B/N; bx=(W-B)/2;
-  by=HUD+Math.max(8,(H-HUD-B-cell*2.6-24)*0.34);
+  by=HUD+Math.max(8,(Hb-HUD-B-cell*2.6-24)*0.34);
   trayH=cell*2.4;
-  trayY=by+B+Math.max(16,(H-by-B-trayH-14)*0.5);
+  trayY=by+B+Math.max(16,(Hb-by-B-trayH-14)*0.5);
   trayCell=cell*0.56;
   buildCache();
 }
