@@ -165,10 +165,12 @@ const CFG = {
   LINE_POINTS: 10, COMBO_STEP: 0.5,
   SWEEP_BONUS: 300, SWEEP_PER_GEM: 25,
 
-  // golden hand: a bonus tray that pays a multiplier if she finds its planned clear
-  GOLDEN_CHANCE:   0.05, // random roll after a tray when tension > 0.5 (a clean sweep or combo >= 3 always qualifies)
-  GOLDEN_COOLDOWN: 4,    // trays that must pass before another golden hand
-  GOLDEN_MULT:     3,    // multiplier on the points earned by the three golden placements
+  // golden hand: a bonus tray that multiplies the points it earns
+  GOLDEN_COMBO:    2,    // a combo this high (or higher) queues one for the next tray (so does a clean sweep)
+  GOLDEN_CHANCE:   0.10, // random roll after every tray
+  GOLDEN_COOLDOWN: 3,    // trays that must pass before another golden hand
+  GOLDEN_MULT:     3,    // multiplier when she finds it: clears at least (planned lines - 1), min 1 (a planned sweep: 3+ lines)
+  GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
   FREE_RESCUES: 1,       // rescues every run starts with (first one is never behind an ad)
   MAX_RESCUES: 2,        // most rescues one run can use
@@ -181,7 +183,7 @@ const CFG = {
   STAR_CHANCE:   0.08,   // odds each tray carries one, replacing a normal piece
   STAR_COMBO:    4,      // a combo this high (or higher) guarantees one in the next normal tray
 
-  GOLDEN_ON:     true,   // master switch for golden hands
+  GOLDEN_ENABLED: true,  // master switch for golden hands
 
   LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
@@ -539,12 +541,18 @@ function commitTray(shapes,label,plan){
   carry=shapes.filter(x=>!stackable(x));
   updateDbg();
 }
+// forgiving success rule: one line short of the plan is fine (min 1); a planned sweep needs a sweep or 3+ lines
+const goldenNeed=w=>w.sweep?'sweep or 3 lines':Math.max(1,w.lines-1)+' lines';
+function goldenResult(g){         // {hit: found the plan, mult: 1 = missed entirely}
+  const hit=g.want.sweep?(g.got.sweep||g.got.lines>=3):g.got.lines>=Math.max(1,g.want.lines-1);
+  if(hit) return {hit,mult:Math.max(CFG.GOLDEN_MULT,CFG.GOLDEN_PARTIAL)};
+  return {hit,mult:g.got.lines>0||g.got.sweep?CFG.GOLDEN_PARTIAL:1};
+}
 function updateDbg(){
   const d=el('dbg');
   d.hidden=!CFG.SHOW_TENSION;
   if(d.hidden) return;
-  const tag=g=>g.sweep?'sweep':g.lines+' lines';
-  const gold=golden?`GOLDEN want ${tag(golden.want)}, got ${tag(golden.got)}, ${golden.pts} pts`
+  const gold=golden?`GOLDEN plan ${golden.want.sweep?'sweep':golden.want.lines+' lines'}, need ${goldenNeed(golden.want)}, got ${golden.got.sweep?'sweep+':''}${golden.got.lines} lines, ${golden.pts} pts`
     :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
   const star=!CFG.STAR_ENABLED?'star off':starForced?'star guaranteed':'star on';
   d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star}`;
@@ -892,24 +900,30 @@ function place(idx,r,c){
     golden.got.lines+=total; if(swept) golden.got.sweep=true;
     golden.pts+=gained;
     if(tray.every(v=>!v)){
-      const hit=golden.want.sweep?golden.got.sweep:golden.got.lines>=golden.want.lines;
-      if(hit){                                         // found it: multiply the whole hand's points
-        const extra=Math.round(golden.pts*(CFG.GOLDEN_MULT-1));
+      const {hit:full,mult}=goldenResult(golden);
+      if(mult>1){                                      // any clear pays at least the partial multiplier
+        const extra=Math.round(golden.pts*(mult-1));
         gained+=extra;
-        pushBanner('GOLDEN ×'+CFG.GOLDEN_MULT,'+'+extra);
-        for(let k=0;k<5;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
-        for(let k=0;!reduce&&k<16;k++) sparkles.push({x:bx+Math.random()*B,y:by+Math.random()*B,t:Math.random()*0.5});
-        shake=14*CFG.SHAKE; glowT=2; glowH=GEMS[GOLD].h;
-        Sfx.goldenWin();
+        pushBanner('GOLDEN ×'+(+mult.toFixed(1)),'+'+extra);
+        if(full){                                      // found it: the big celebration
+          for(let k=0;k<5;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
+          for(let k=0;!reduce&&k<16;k++) sparkles.push({x:bx+Math.random()*B,y:by+Math.random()*B,t:Math.random()*0.5});
+          shake=14*CFG.SHAKE; glowT=2; Sfx.goldenWin();
+        } else {                                       // partial credit: a smaller version
+          for(let k=0;k<2;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
+          for(let k=0;!reduce&&k<6;k++) sparkles.push({x:bx+Math.random()*B,y:by+Math.random()*B,t:Math.random()*0.5});
+          glowT=1.3; Sfx.goldenIn();
+        }
+        glowH=GEMS[GOLD].h;
       }
-      golden=null;                                     // missed: no penalty, hand just ends
+      golden=null;                                     // a miss costs nothing; the hand just ends
     }
   }
   updateDbg();
 
   score+=gained; el('scoreVal').textContent=score;
   if(tray.every(v=>!v)){
-    goldenNext = CFG.GOLDEN_ON && goldenCool<=0 && (trayHadSweep || trayCombo>=3 || (tension>0.5 && Math.random()<CFG.GOLDEN_CHANCE));
+    goldenNext = CFG.GOLDEN_ENABLED && goldenCool<=0 && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
     trayHadSweep=false; trayCombo=0;
     genTray();
   }
@@ -1294,7 +1308,7 @@ el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};
 /* ═══════ developer panel ═══════
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]
-  ['GOLDEN_ON','Golden Hand'],
+  ['GOLDEN_ENABLED','Golden Hand'],
   ['STAR_ENABLED','Star Gem'],
   ['SHOW_TENSION','Debug readout']
 ];
@@ -1309,6 +1323,11 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SINGLE_WEIGHT','Single-cell weight',0,1,0.05],
   ['TIDY','Tidiness',0,5,0.1],
   ['PAIR_CHANCE','Partner-piece chance',0,1,0.05],
+  ['GOLDEN_COMBO','Golden hand at combo',1,10,1],
+  ['GOLDEN_CHANCE','Golden hand chance (per tray)',0,0.5,0.01],
+  ['GOLDEN_COOLDOWN','Golden hand cooldown (trays)',0,10,1],
+  ['GOLDEN_MULT','Golden multiplier (found it)',1,6,0.5],
+  ['GOLDEN_PARTIAL','Golden multiplier (partial)',1,4,0.5],
   ['STAR_CHANCE','Star gem chance (per tray)',0,0.5,0.01],
   ['STAR_COMBO','Star gem guaranteed at combo',2,10,1],
   ['SWEEP_COOLDOWN','Sweep cooldown (trays)',0,10,1],
