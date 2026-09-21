@@ -1,7 +1,7 @@
 # Crumble — project handoff
 
 A single-file browser puzzle game (Block Blast genre) built for my daughter.
-Everything lives in `crumble.html` — no build step, no dependencies, opens
+Everything lives in `index.html` — no build step, no dependencies, opens
 straight in a browser.
 
 Goal: get it running as an app on an iPhone, add save/resume, then real ads.
@@ -164,7 +164,7 @@ video is the one that actually pays.
 ```
 npm i @capacitor/core @capacitor/cli @capacitor/ios
 npx cap init
-# crumble.html -> www/index.html
+# index.html -> www/index.html
 npx cap add ios && npx cap open ios
 ```
 
@@ -202,6 +202,6 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 
 ## First thing to do in a new session
 
-Open `crumble.html`, read `CFG` and `genTray`, then play a few rounds with the
+Open `index.html`, read `CFG` and `genTray`, then play a few rounds with the
 debug readout visible and judge whether the retune landed before changing
 anything else.
