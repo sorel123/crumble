@@ -125,10 +125,10 @@ const CFG = {
   // difficulty wave
   TENSION_UP:    0.18,   // added each placement that clears nothing
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped
-  TENSION_DOWN:  0.30,   // subtracted when you clear (softer = rolling swell)
-  CANDIDATES:    18,     // random hands tried per tray before settling
+  TENSION_DOWN:  0.18,   // subtracted when you clear (softer = help lingers longer)
+  CANDIDATES:    36,   // random hands tried per tray before settling
   NODE_BUDGET:   2600,   // search cap per hand (raise = smarter, slower)
-  SWEEP_COOLDOWN: 4,     // trays that must pass before another sweep hand
+  SWEEP_COOLDOWN: 3,    // trays that must pass before another sweep hand
   SWEEP_MIN: 6, SWEEP_MAX: 30,  // gem count range where a sweep is plausible
 
   // scoring
@@ -231,11 +231,15 @@ const emptyFlat=a=>{ for(let i=0;i<a.length;i++) if(a[i]) return false; return t
 const countFlat=a=>{ let n=0; for(let i=0;i<a.length;i++) if(a[i]) n++; return n; };
 
 function evalHand(a0,shapes,budget){
-  const res={ok:false,lines:0,sweep:false};
+  const res={ok:false,lines:0,sweep:false,left:N*N};
   let b=budget;
   function dfs(a,order,i,acc){
     if(b<=0||res.sweep) return;
-    if(i===3){ res.ok=true; if(acc>res.lines) res.lines=acc; return; }
+    if(i===3){
+      res.ok=true; if(acc>res.lines) res.lines=acc;
+      const n=countFlat(a); if(n<res.left) res.left=n;
+      return;
+    }
     const s=shapes[order[i]];
     for(let r=0;r<=N-s.rows;r++) for(let c=0;c<=N-s.cols;c++){
       if(b<=0||res.sweep) return;
@@ -243,7 +247,7 @@ function evalHand(a0,shapes,budget){
       b--;
       const {b:a2,lines}=applyFlat(a,s,r,c);
       if(lines&&emptyFlat(a2)){
-        res.sweep=true; res.ok=true; res.lines=Math.max(res.lines,acc+lines); return;
+        res.sweep=true; res.ok=true; res.left=0; res.lines=Math.max(res.lines,acc+lines); return;
       }
       dfs(a2,order,i+1,acc+lines);
     }
@@ -330,15 +334,15 @@ function planSweep(a){
 
 /* ── hand selection ─────────────────────────────────────────── */
 function weightedShape(density){
-  const w=SHAPES.map(s=>1/(1+s.n*density*2.0));
+  const w=SHAPES.map(s=>1/(1+s.n*density*3.0));
   let r=Math.random()*w.reduce((x,y)=>x+y,0);
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
   return SHAPES[0];
 }
 function pickTier(a){
   if(tension>0.70 && sweepCool<=0) return 'sweep';
-  if(tension>0.30) return 'jackpot';
-  if(tension>0.08) return 'solvable';
+  if(tension>0.25) return 'jackpot';
+  if(tension>0.05) return 'solvable';
   return 'honest';
 }
 function genTray(){
@@ -353,7 +357,7 @@ function genTray(){
     tier='jackpot';
   }
 
-  const want = tier==='jackpot'?2 : tier==='solvable'?1 : 0;
+  const want = tier==='jackpot'?3 : tier==='solvable'?2 : 0;
   let bestHand=null,bestScore=-Infinity;
   for(let i=0;i<CFG.CANDIDATES;i++){
     const hand=[weightedShape(density),weightedShape(density),weightedShape(density)];
@@ -361,7 +365,7 @@ function genTray(){
     let sc;
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
     else if(tier==='honest') sc=10;   // neutral — any fully-playable hand is fine
-    else sc=(ev.sweep?60:0)+ev.lines*10;
+    else sc=(ev.sweep?60:0)+ev.lines*10-ev.left*1.5;
     if(sc>bestScore){ bestScore=sc; bestHand=hand; }
     if(ev.ok && (tier==='honest' || ev.lines>=want)) break;
   }

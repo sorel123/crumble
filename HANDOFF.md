@@ -64,10 +64,10 @@ falls when you clear. `pickTier` maps it to what you get served:
 
 | tension | tier | meaning |
 |---|---|---|
-| < 0.18 | honest | any fully-playable hand |
-| 0.18–0.45 | solvable | at least one clear is reachable |
-| 0.45–0.78 | jackpot | two or more clears reachable |
-| > 0.78 | sweep | try to build a board-emptying hand |
+| < 0.05 | honest | any fully-playable hand |
+| 0.05–0.25 | solvable | two or more clears reachable |
+| 0.25–0.70 | jackpot | three or more clears reachable, favors emptier boards |
+| > 0.70 | sweep | try to build a board-emptying hand |
 
 **Clean sweep** hands are built backwards, not found by random search:
 `coverAll` picks rows/columns covering every gem on the board, `targetCells`
@@ -89,7 +89,7 @@ two visual styles (Jewels / Clay, toggled on the start screen), synthesized
 audio with mute, game over detection, faked interstitial and rewarded-video
 flows.
 
-Just retuned for difficulty — `TENSION_UP` 0.18, `TENSION_DOWN` 0.30, tier
+Just retuned for difficulty — `TENSION_UP` 0.18, `TENSION_DOWN` 0.18, tier
 thresholds lowered, honest tier made neutral instead of actively withholding
 clears. **This retune is untested.** Play several rounds watching the debug
 readout: tension should live mostly in the 0.3–0.7 band. Pinned at 1.0 means
