@@ -336,9 +336,9 @@ function weightedShape(density){
   return SHAPES[0];
 }
 function pickTier(a){
-  if(tension>0.78 && sweepCool<=0) return 'sweep';
-  if(tension>0.45) return 'jackpot';
-  if(tension>0.18) return 'solvable';
+  if(tension>0.70 && sweepCool<=0) return 'sweep';
+  if(tension>0.30) return 'jackpot';
+  if(tension>0.08) return 'solvable';
   return 'honest';
 }
 function genTray(){
