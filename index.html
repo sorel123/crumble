@@ -475,34 +475,116 @@ function layout(){
 }
 addEventListener('resize',layout);
 
-/* ═══════ audio ═══════ */
-let actx=null,muted=false;
-function ac(){ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); return actx; }
-function tone(f,dur,type='sine',vol=.14,delay=0,slideTo){
-  if(muted) return;
-  try{
-    const c=ac(),t=c.currentTime+delay;
-    const o=c.createOscillator(),g=c.createGain();
-    o.type=type; o.frequency.setValueAtTime(f,t);
-    if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo,t+dur);
-    g.gain.setValueAtTime(.0001,t);
-    g.gain.exponentialRampToValueAtTime(vol,t+.012);
-    g.gain.exponentialRampToValueAtTime(.0001,t+dur);
-    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur+.03);
-  }catch(e){}
+/* ═══════ audio ═══════
+   Fully synthesized. Chain: voices -> master gain -> compressor -> out,
+   so stacked sounds (a sweep on top of a combo) don't clip. One shared
+   noise buffer is built when the context is created (first user gesture,
+   which browsers require) and reused by every noise hit.
+   ═══════════════════════════════════════════════════════════════ */
+let actx=null,muted=false,master=null,nbuf=null;
+function ac(){
+  if(!actx){
+    actx=new (window.AudioContext||window.webkitAudioContext)();
+    master=actx.createGain(); master.gain.value=.9;
+    const comp=actx.createDynamicsCompressor();
+    comp.threshold.value=-18; comp.knee.value=12; comp.ratio.value=6;
+    comp.attack.value=.003; comp.release.value=.2;
+    master.connect(comp); comp.connect(actx.destination);
+    const len=actx.sampleRate;                       // 1s of white noise
+    nbuf=actx.createBuffer(1,len,actx.sampleRate);
+    const d=nbuf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  }
+  if(actx.state==='suspended') actx.resume();
+  return actx;
 }
-function noise(dur,vol=.1,delay=0){
-  if(muted) return;
-  try{
-    const c=ac(),t=c.currentTime+delay,len=Math.floor(c.sampleRate*dur);
-    const buf=c.createBuffer(1,len,c.sampleRate),d=buf.getChannelData(0);
-    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.4);
-    const src=c.createBufferSource(); src.buffer=buf;
-    const f=c.createBiquadFilter(); f.type='highpass'; f.frequency.value=2400;
-    const g=c.createGain(); g.gain.value=vol;
-    src.connect(f); f.connect(g); g.connect(c.destination); src.start(t);
-  }catch(e){}
+const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger
+const hz=f=>clamp(f,20,12000);
+
+/* filtered noise slice with its own envelope; f0 -> f1 sweeps the filter.
+   Used both as the attack transient on every sound and as bursts/washes. */
+function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass'}){
+  const c=actx, src=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain();
+  src.buffer=nbuf; f.type=type; f.Q.value=q;
+  f.frequency.setValueAtTime(hz(f0),t);
+  if(f1!==f0) f.frequency.exponentialRampToValueAtTime(hz(f1),t+dur);
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol,t+Math.min(.004,dur/3));
+  g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t,Math.random()*(nbuf.duration-dur-.05)); src.stop(t+dur+.01);
 }
+/* 2-3 detuned oscillators with a pitch envelope (f0 -> f1), through a
+   resonant bandpass whose centre also sweeps (bp0 -> bp1). */
+function voice(t,{f0,f1=f0,dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8],atk=.005}){
+  const c=actx, out=c.createGain(), bp=c.createBiquadFilter();
+  bp.type='bandpass'; bp.Q.value=q;
+  bp.frequency.setValueAtTime(hz(bp0),t);
+  bp.frequency.exponentialRampToValueAtTime(hz(bp1),t+dur);
+  out.gain.setValueAtTime(.0001,t);
+  out.gain.exponentialRampToValueAtTime(vol/det.length,t+atk);
+  out.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  bp.connect(out); out.connect(master);
+  for(const cents of det){
+    const o=c.createOscillator();
+    o.type=type; o.detune.value=cents;
+    o.frequency.setValueAtTime(hz(f0),t);
+    o.frequency.exponentialRampToValueAtTime(hz(f1),t+dur);
+    o.connect(bp); o.start(t); o.stop(t+dur+.02);
+  }
+}
+/* run a sound: skip when muted, start the clock at `delay`, never throw */
+function play(delay,fn){
+  if(muted) return;
+  try{ const c=ac(); fn(c.currentTime+delay,jit()); }catch(e){}
+}
+
+const Sfx={
+  pickup(){ play(0,(t,p)=>{
+    noiseHit(t,{dur:.008,f0:7000*p,q:1,vol:.012});
+    voice(t,{f0:880*p,f1:1050*p,dur:.06,vol:.05,bp0:1800*p,q:1.5,type:'triangle',det:[-5,5]});
+  }); },
+  place(){ play(0,(t,p)=>{
+    noiseHit(t,{dur:.012,f0:3200*p,q:.9,vol:.045});                       // click
+    voice(t,{f0:520*p,f1:200*p,dur:.09,vol:.1,bp0:1100*p,bp1:400*p,q:1.4,
+             type:'triangle',det:[-6,0,6],atk:.002});                    // soft tap
+    voice(t,{f0:240*p,f1:150*p,dur:.08,vol:.04,bp0:400,q:.8,type:'sine',det:[0]}); // light body
+  }); },
+  clear(total=1,delay=.1){ play(delay,(t,p)=>{
+    const k=1+.1*(total-1);
+    noiseHit(t,{dur:.01,f0:5000*p,q:1,vol:.05});
+    noiseHit(t,{dur:.24,f0:1400*p*k,f1:7500*p,q:7,vol:.15});             // burst
+    voice(t,{f0:620*p*k,f1:1500*p*k,dur:.26,vol:.09,bp0:900*p*k,bp1:5000*p,q:8});
+  }); },
+  combo(combo=2,total=1,delay=.1){ play(delay,(t,p)=>{
+    const base=Math.min(2100,523*Math.pow(1.26,combo-1))*p;           // rises with combo
+    noiseHit(t,{dur:.012,f0:5000*p,q:1,vol:.07});
+    noiseHit(t,{dur:.3,f0:1200*p,f1:8500*p,q:7,vol:.17});
+    voice(t,{f0:base,f1:base*1.5,dur:.34,vol:.12,bp0:base*1.4,bp1:base*5,q:7});
+    voice(t+.05,{f0:base*1.5,f1:base*2,dur:.3,vol:.09,bp0:base*2,bp1:base*6,q:6,type:'triangle'});
+    voice(t,{f0:base/2,f1:base/2*1.1,dur:.3,vol:.08,bp0:base,q:2,type:'sine',det:[0]}); // body
+  }); },
+  sweep(delay=.1){ play(delay,(t,p)=>{
+    noiseHit(t,{dur:.02,f0:3500*p,q:.8,vol:.2});
+    voice(t,{f0:110*p,f1:38*p,dur:.9,vol:.7,bp0:300,bp1:90,q:1.2,type:'sine',det:[0]});   // sub boom
+    noiseHit(t,{dur:1.1,f0:300*p,f1:9000*p,q:5,vol:.2});                                  // rising wash
+    for(let i=0;i<6;i++){                                                                 // arpeggio
+      const f=392*p*Math.pow(1.2,i);
+      voice(t+.05+i*.07,{f0:f,f1:f*1.04,dur:.4,vol:.12,bp0:f*2,bp1:f*6,q:5,type:'triangle'});
+    }
+    const top=392*p*Math.pow(1.2,5);                                                      // final chord
+    [1,1.25,1.5,2].forEach(m=>voice(t+.5,{f0:top*m/2,f1:top*m/2,dur:1.0,vol:.09,bp0:top*m,bp1:top*m*3,q:3,det:[-12,0,12]}));
+    for(let i=0;i<7;i++) noiseHit(t+.55+i*.09,{dur:.05,f0:(6000+Math.random()*4000)*p,q:10,vol:.05,type:'bandpass'}); // sparkle
+  }); },
+  deny(){ play(0,(t,p)=>{
+    noiseHit(t,{dur:.01,f0:1500*p,q:1,vol:.04});
+    voice(t,{f0:130*p,f1:95*p,dur:.14,vol:.14,bp0:500*p,bp1:250*p,q:2});
+  }); },
+  rescue(){ play(0,(t,p)=>{
+    noiseHit(t,{dur:.012,f0:4000*p,q:1,vol:.06});
+    [523,659,784].forEach((f,i)=>voice(t+i*.07,{f0:f*p,f1:f*p*1.03,dur:i===2?.35:.2,vol:.12,bp0:f*p*2,bp1:f*p*5,q:4,type:'triangle'}));
+  }); }
+};
 el('mute').onclick=e=>{e.stopPropagation();muted=!muted;el('mute').textContent=muted?'🔈':'🔊';};
 
 /* ═══════ game logic ═══════ */
@@ -531,7 +613,7 @@ function place(idx,r,c){
   const t=tray[idx],s=t.s;
   s.cells.forEach(([dr,dc],k)=>{ grid[r+dr][c+dc]={gi:t.gi,t:-k*0.06}; });
   tray[idx]=null;
-  tone(300,.14,'triangle',.12,0,120);
+  Sfx.place();
 
   const {rows,cols}=linesFor(grid);
   const total=rows.length+cols.length;
@@ -559,8 +641,7 @@ function place(idx,r,c){
     waves.push({x:bx+cc0*cell,y:by+cr*cell,t:0});
     glowT=1; glowH=GEMS[lastGi].h;
     shake=Math.min(11,3.5+total*1.8)*CFG.SHAKE;
-    for(let i=0;i<total;i++) tone(523*Math.pow(1.26,i+combo-1),.24,'triangle',.13,.1+i*.055);
-    noise(.3,.07,.12);
+    if(combo>1) Sfx.combo(combo,total); else Sfx.clear(total);
     pops.push({x:bx+cc0*cell,y:by+cr*cell,t:0,txt:'+'+(gained-s.n),
                sub:combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo});
 
@@ -573,8 +654,7 @@ function place(idx,r,c){
       banners.push({t:0,txt:'CLEAN SWEEP',sub:'+'+bonus});
       for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
       shake=16*CFG.SHAKE; glowT=1.6;
-      [0,1,2,3,4,5].forEach(i=>tone(392*Math.pow(1.2,i),.38,'triangle',.14,.05+i*.07));
-      noise(.6,.09,.1);
+      Sfx.sweep();
       tension=0;
     }
     tension=Math.max(0,tension-CFG.TENSION_DOWN);
@@ -600,7 +680,7 @@ function onDown(e){
     const R=slotRect(i);
     if(tray[i]&&e.clientX>=R.x&&e.clientX<=R.x+R.w&&e.clientY>=R.y-12&&e.clientY<=R.y+R.h+12){
       drag={i,x:e.clientX,y:e.clientY,px:e.clientX,vx:0,g:0};
-      tone(720,.07,'triangle',.1); return;
+      Sfx.pickup(); return;
     }
   }
 }
@@ -619,7 +699,7 @@ function onUp(){
       const s=t.s, R=slotRect(drag.i);
       ret={i:drag.i,t:0,fx:drag.x-(s.cols*cell)/2,fy:drag.y-cell*1.55-(s.rows*cell)/2,fs:cell,
            tx:R.x+(R.w-s.cols*trayCell)/2,ty:R.y+(R.h-s.rows*trayCell)/2,ts:trayCell};
-      tone(120,.14,'sawtooth',.07);
+      Sfx.deny();
     }
   }
   drag=null;
@@ -876,7 +956,7 @@ async function rescue(){
   }
   rescues--; rescuesUsed++;
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
-  tone(523,.2,'triangle',.13); tone(659,.2,'triangle',.13,.07); tone(784,.3,'triangle',.13,.14);
+  Sfx.rescue();
   combo=0; tension=0.5; genRescue();
   el('overCard').hidden=true; state='play';
 }
