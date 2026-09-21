@@ -135,7 +135,11 @@ const CFG = {
   LINE_POINTS: 10, COMBO_STEP: 0.5,
   SWEEP_BONUS: 300, SWEEP_PER_GEM: 25,
 
-  MAX_REVIVES: 2, ADS_EVERY: 3,
+  FREE_RESCUES: 1,       // rescues every run starts with (first one is never behind an ad)
+  MAX_RESCUES: 2,        // most rescues one run can use
+  RESCUE_FLOOR: 300,     // offer a rescue only above this score...
+  RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
+  ADS_EVERY: 3,
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
   SHOW_TENSION: true     // set false to hide the debug readout
 };
@@ -182,7 +186,7 @@ const SHAPES=RAW.map(rows=>{
 const cvs=el('c'), ctx=cvs.getContext('2d'), safeProbe=el('safe');
 const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
-let grid,tray,score=0,best=0,combo=0,revives=0,deaths=0;
+let grid,tray,score=0,best=0,combo=0,rescues=0,rescuesUsed=0,deaths=0;
 let tension=0, sweepCool=0, lastTier='—';
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[];
 let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0;
@@ -363,6 +367,23 @@ function genTray(){
   }
   if(!bestHand) bestHand=[weightedShape(density),weightedShape(density),weightedShape(density)];
   commitTray(bestHand,tier.toUpperCase());
+}
+/* rescue hand: playable, and rich in clears (sweep if one can be built) */
+function genRescue(){
+  const a0=packGrid(grid);
+  const density=countFlat(a0)/(N*N);
+  const sw=planSweep(a0);
+  if(sw){ commitTray(sw,'RESCUE·SWEEP'); return; }
+  let bestHand=null,bestScore=-Infinity;
+  for(let i=0;i<CFG.CANDIDATES*8;i++){
+    const hand=[weightedShape(density),weightedShape(density),weightedShape(density)];
+    const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
+    const sc=ev.ok ? 100+(ev.sweep?60:0)+ev.lines*10
+                   : hand.filter(s=>fitsAnywhere(s,grid)).length;
+    if(sc>bestScore){ bestScore=sc; bestHand=hand; }
+    if(ev.ok && ev.lines>=2) break;
+  }
+  commitTray(bestHand,'RESCUE');
 }
 function commitTray(shapes,label){
   tray=shapes.map(s=>({s,gi:(Math.random()*GEMS.length)|0}));
@@ -832,6 +853,7 @@ function frame(now){
 async function gameOver(){
   if(state!=='play') return;
   state='over';
+  const prevBest=best;
   best=Math.max(best,score); el('bestVal').textContent=best;
   deaths++;
   if(deaths%CFG.ADS_EVERY===0) await Ads.showInterstitial();
@@ -839,24 +861,28 @@ async function gameOver(){
   el('overMsg').textContent=score>=1500?'That is a serious run.'
     :score>=600?'Good chains. Save the big shapes for open space.'
     :'Clear rows early — do not let the board fill up.';
-  el('reviveBtn').hidden=revives>=CFG.MAX_REVIVES;
+  const btn=el('reviveBtn');
+  const canRescue=rescuesUsed<CFG.MAX_RESCUES
+    && (score>=CFG.RESCUE_FLOOR || score>=prevBest*CFG.RESCUE_BEST_FRAC) && score>0;
+  btn.hidden=!canRescue;
+  btn.textContent=rescues>0?'Use a rescue':'Watch an ad for a rescue';
   el('overCard').hidden=false;
 }
-async function revive(){
-  if(!await Ads.showRewarded()) return;
-  revives++;
-  grid.map((row,r)=>({r,n:row.filter(v=>v).length}))
-      .sort((a,b)=>b.n-a.n).slice(0,3)
-      .forEach(({r})=>{ for(let c=0;c<N;c++) if(grid[r][c]){
-        shatters.push({r,c,gi:grid[r][c].gi,t:-c*0.05}); grid[r][c]=null; }});
+async function rescue(){
+  if(rescuesUsed>=CFG.MAX_RESCUES) return;
+  if(rescues<=0){
+    if(!await Ads.showRewarded()) return;
+    rescues++;
+  }
+  rescues--; rescuesUsed++;
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
   tone(523,.2,'triangle',.13); tone(659,.2,'triangle',.13,.07); tone(784,.3,'triangle',.13,.14);
-  combo=0; tension=0.2; genTray();
+  combo=0; tension=0.5; genRescue();
   el('overCard').hidden=true; state='play';
 }
 function start(){
   layout();
-  grid=empty(); score=0; combo=0; revives=0; tension=0; sweepCool=0;
+  grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];drag=null;ret=null;
   el('scoreVal').textContent='0'; el('bestVal').textContent=best;
   genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
@@ -871,7 +897,7 @@ el('styJewel').onclick=e=>{e.stopPropagation();setStyle('jewel');};
 el('styClay').onclick=e=>{e.stopPropagation();setStyle('clay');};
 el('startBtn').onclick=e=>{e.stopPropagation();ac();start();};
 el('againBtn').onclick=e=>{e.stopPropagation();start();};
-el('reviveBtn').onclick=e=>{e.stopPropagation();revive();};
+el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};
 
 layout(); grid=empty(); genTray(); updateDbg(); requestAnimationFrame(frame);
 })();
