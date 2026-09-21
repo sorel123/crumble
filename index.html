@@ -176,6 +176,11 @@ const CFG = {
   RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
   ADS_EVERY: 3,
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
+  // star gem: a single-cell piece that clears its whole row and column
+  STAR_ENABLED:  true,   // master switch for star gems
+  STAR_CHANCE:   0.08,   // odds each tray carries one, replacing a normal piece
+  STAR_COMBO:    4,      // a combo this high (or higher) guarantees one in the next normal tray
+
   GOLDEN_ON:     true,   // master switch for golden hands
 
   LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
@@ -190,9 +195,10 @@ const CFG = {
 const GEMS=[
   {h:344,s:88},{h: 32,s:96},{h:150,s:72},
   {h:188,s:85},{h:226,s:88},{h:278,s:82},
-  {h: 47,s:100,gold:true}                 // golden hands only — never dealt in a normal tray
+  {h: 47,s:100,gold:true},                // golden hands only — never dealt in a normal tray
+  {h:255,s:30,star:true}                  // star gem only
 ];
-const GOLD=GEMS.length-1, NCOLOR=GOLD;
+const GOLD=6, STAR_GI=7, NCOLOR=6;        // NCOLOR = the ordinary colours dealt at random
 
 /* ═══════ ADS — the only ad code in the file ═══════ */
 const Ads = {
@@ -230,14 +236,18 @@ const SHAPES=RAW.map(rows=>{
   return {cells,rows:rows.length,cols:rows[0].length,n:cells.length};
 });
 
+// star gem: one cell, but it doesn't rest on the board — it clears its row and column instead
+const STAR={cells:[[0,0]],rows:1,cols:1,n:1,star:true};
+
 /* ═══════ state ═══════ */
 const cvs=el('c'), ctx=cvs.getContext('2d'), safeProbe=el('safe');
 const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
 let grid,tray,score=0,best=0,combo=0,rescues=0,rescuesUsed=0,deaths=0;
 let tension=0, sweepCool=0, lastTier='—', trayNo=0;
+let starForced=false;   // a big combo guaranteed the next normal tray a star gem
 let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts}
-let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[];
+let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blasts=[];
 let paused=false;
 let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0;
 let gemBig=[],gemSmall=[];
@@ -269,6 +279,14 @@ function fitFlat(a,s,r,c){
 }
 function applyFlat(a,s,r,c){
   const b=a.slice();
+  if(s.star){                                   // star: wipes its row and column; each counts as a line if it held a gem
+    let rowHas=0,colHas=0;
+    for(let j=0;j<N;j++) if(b[r*N+j]) rowHas=1;
+    for(let i=0;i<N;i++) if(b[i*N+c]) colHas=1;
+    for(let j=0;j<N;j++) b[r*N+j]=0;
+    for(let i=0;i<N;i++) b[i*N+c]=0;
+    return {b,lines:rowHas+colHas};
+  }
   for(const [dr,dc] of s.cells) b[(r+dr)*N+c+dc]=1;
   const rows=[],cols=[];
   for(let i=0;i<N;i++){let f=1;for(let j=0;j<N;j++) if(!b[i*N+j]){f=0;break;} if(f)rows.push(i);}
@@ -292,7 +310,7 @@ const countFlat=a=>{ let n=0; for(let i=0;i<a.length;i++) if(a[i]) n++; return n
 
 function evalHand(a0,shapes,budget){
   const res={ok:false,lines:0,sweep:false,cleared:0,rough:999};
-  const base=countFlat(a0)+shapes[0].n+shapes[1].n+shapes[2].n;
+  const base=countFlat(a0)+shapes.reduce((n,s)=>n+(s.star?0:s.n),0);   // a star adds no gem to the board
   let b=budget;
   function dfs(a,order,i,acc){
     if(b<=0||res.sweep) return;
@@ -438,11 +456,12 @@ function pickTier(a){
   return 'honest';
 }
 /* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
-function pickHand(a0,density,tier){
+function pickHand(a0,density,tier,withStar){
   const want = tier==='jackpot'?3 : tier==='solvable'?2 : 0;
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<CFG.CANDIDATES;i++){
     const hand=makeHand(density);
+    if(withStar) hand[(Math.random()*3)|0]=STAR;      // graded with the star in it, so the score is honest
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     let sc;
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
@@ -473,6 +492,9 @@ function genTray(){
   sweepCool=Math.max(0,sweepCool-1);
   goldenCool=Math.max(0,goldenCool-1);
 
+  // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
+  const wantStar=CFG.STAR_ENABLED && (starForced || Math.random()<CFG.STAR_CHANCE);
+
   if(goldenNext){ goldenNext=false; if(genGolden(a0,density)) return; }
 
   if(tier==='sweep'){
@@ -481,7 +503,9 @@ function genTray(){
     tier='jackpot';
   }
 
-  commitTray(pickHand(a0,density,tier).hand,tier.toUpperCase());
+  const {hand}=pickHand(a0,density,tier,wantStar);
+  if(hand.includes(STAR)) starForced=false;
+  commitTray(hand,tier.toUpperCase()+(hand.includes(STAR)?'+STAR':''));
 }
 /* rescue hand: playable, and rich in clears (sweep if one can be built) */
 function genRescue(){
@@ -504,7 +528,7 @@ function pushBanner(txt,sub){   // waits its turn if another banner is still on 
   banners.push({t:banners.length?-0.75:0,txt,sub});
 }
 function commitTray(shapes,label,plan){
-  tray=shapes.map(s=>({s,gi:plan?GOLD:(Math.random()*NCOLOR)|0}));
+  tray=shapes.map(s=>({s,gi:s.star?STAR_GI:plan?GOLD:(Math.random()*NCOLOR)|0}));
   golden=plan?{want:plan,got:{lines:0,sweep:false},pts:0}:null;
   if(plan){
     goldenCool=CFG.GOLDEN_COOLDOWN;
@@ -522,7 +546,8 @@ function updateDbg(){
   const tag=g=>g.sweep?'sweep':g.lines+' lines';
   const gold=golden?`GOLDEN want ${tag(golden.want)}, got ${tag(golden.got)}, ${golden.pts} pts`
     :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
-  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold}`;
+  const star=!CFG.STAR_ENABLED?'star off':starForced?'star guaranteed':'star on';
+  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star}`;
 }
 
 /* ═══════ layout + tiles ═══════ */
@@ -539,10 +564,25 @@ function newTile(size){
   const x=cv.getContext('2d'); x.scale(px/size,px/size);
   return {cv,x};
 }
+// prismatic five-point star, used by the star gem (shiny outline in jewel, none in clay)
+function drawStar(x,cx,cy,R,shiny){
+  x.beginPath();
+  for(let k=0;k<10;k++){
+    const a=-Math.PI/2+k*Math.PI/5, rad=k%2?R*0.46:R;
+    k?x.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad):x.moveTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);
+  }
+  x.closePath();
+  const gr=x.createLinearGradient(cx-R,cy-R,cx+R,cy+R);
+  ['#FF8FB8','#FFD98A','#9CF0B5','#8FD8FF','#B79CFF'].forEach((c,k,a)=>gr.addColorStop(k/(a.length-1),c));
+  x.fillStyle=gr; x.fill();
+  x.lineJoin='round'; x.lineWidth=Math.max(1,R*0.12);
+  x.strokeStyle=shiny?'rgba(255,255,255,.95)':'rgba(120,90,170,.3)'; x.stroke();
+}
 // Hard facets: lit top, shadowed bottom, angled sides, specular.
 function jewelTile(size,g){
   const {cv,x}=newTile(size);
-  const L=d=>`hsl(${g.h} ${g.s}% ${clamp(57+d,5,96)}%)`;
+  const L=g.star?d=>`hsl(${g.h} ${g.s}% ${clamp(90+d*.5,40,99)}%)`     // near-white, facets kept subtle
+                 :d=>`hsl(${g.h} ${g.s}% ${clamp(57+d,5,96)}%)`;
   const pad=size*0.055, S=size-pad*2, i=S*0.25;
   const o=[[pad,pad],[pad+S,pad],[pad+S,pad+S],[pad,pad+S]];
   const n=[[pad+i,pad+i],[pad+S-i,pad+i],[pad+S-i,pad+S-i],[pad+i,pad+S-i]];
@@ -555,6 +595,7 @@ function jewelTile(size,g){
   const gr=x.createLinearGradient(n[0][0],n[0][1],n[2][0],n[2][1]);
   gr.addColorStop(0,L(18)); gr.addColorStop(1,L(-5));
   x.fillStyle=gr; x.fillRect(n[0][0],n[0][1],S-i*2,S-i*2);
+  if(g.star) drawStar(x,size/2,size/2,S*0.4,true);
   x.globalAlpha=g.gold?.8:.5; x.fillStyle='#fff';
   roundPath(x,pad+S*0.3,pad+S*0.29,S*0.22,S*0.13,S*0.065); x.fill();
   x.globalAlpha=1; x.restore();
@@ -565,7 +606,7 @@ function jewelTile(size,g){
 // Matte, fat corners, soft shadow underneath — no shine anywhere.
 function clayTile(size,g){
   const {cv,x}=newTile(size);
-  const L=d=>`hsl(${g.h} ${Math.round(g.s*(g.gold?0.92:0.6))}% ${clamp(61+d,8,94)}%)`;
+  const L=d=>`hsl(${g.h} ${Math.round(g.s*(g.gold?0.92:0.6))}% ${clamp((g.star?90:61)+d,8,96)}%)`;
   const pad=size*0.1, S=size-pad*2, R=S*0.34;
   x.save();
   x.shadowColor=`hsla(${g.h} 55% 16% / .5)`;
@@ -576,6 +617,7 @@ function clayTile(size,g){
   const gr=x.createLinearGradient(0,pad,0,pad+S);
   gr.addColorStop(0,L(12)); gr.addColorStop(.58,L(0)); gr.addColorStop(1,L(-10));
   x.fillStyle=gr; x.fillRect(pad,pad,S,S);
+  if(g.star) drawStar(x,size/2,size/2,S*0.4,false);
   x.globalAlpha=.16; x.fillStyle='#fff';
   roundPath(x,pad+S*0.12,pad+S*0.1,S*0.76,S*0.22,S*0.11); x.fill();
   x.globalAlpha=1; x.restore();
@@ -715,6 +757,15 @@ const Sfx={
     noiseHit(t,{dur:.01,f0:1500*p,q:1,vol:.04});
     voice(t,{f0:130*p,f1:95*p,dur:.14,vol:.14,bp0:500*p,bp1:250*p,q:2});
   }); },
+  star(){ play(.02,(t,p)=>{
+    noiseHit(t,{dur:.03,f0:6000*p,q:.8,vol:.12});
+    voice(t,{f0:1400*p,f1:220*p,dur:.28,vol:.11,bp0:3200,bp1:500,q:3,type:'sawtooth'});     // zap
+    [1,1.25,1.5,2,2.5].forEach((m,i)=>{                                                    // glassy rising chime
+      const f=784*p*m;
+      voice(t+.05+i*.045,{f0:f,f1:f*1.01,dur:.45,vol:.07,bp0:f*2,q:2,type:'triangle',det:[-4,4],atk:.006});
+    });
+    for(let i=0;i<6;i++) noiseHit(t+.12+i*.06,{dur:.04,f0:(7000+Math.random()*4000)*p,q:10,vol:.04});
+  }); },
   goldenIn(){ play(.05,(t,p)=>{
     noiseHit(t,{dur:.18,f0:5000*p,f1:11000*p,q:6,vol:.03});
     [1,1.5,2,3].forEach((m,i)=>{                                        // bright bell run
@@ -764,19 +815,36 @@ function mobility(){
 
 function place(idx,r,c){
   const t=tray[idx],s=t.s;
-  s.cells.forEach(([dr,dc],k)=>{ grid[r+dr][c+dc]={gi:t.gi,t:-k*0.06}; });
+  if(!s.star) s.cells.forEach(([dr,dc],k)=>{ grid[r+dr][c+dc]={gi:t.gi,t:-k*0.06}; });   // a star leaves no gem
   tray[idx]=null;
-  Sfx.place();
+  if(!s.star) Sfx.place();
 
-  const {rows,cols}=linesFor(grid);
+  let rows,cols;
+  if(s.star){                                     // its whole row and column, full or not (each counts if it held a gem)
+    rows=grid[r].some(v=>v)?[r]:[];
+    cols=grid.some(row=>row[c])?[c]:[];
+  } else ({rows,cols}=linesFor(grid));
   const total=rows.length+cols.length;
   let gained=s.n, swept=false;
 
+  if(s.star){
+    blasts.push({r,c,t:0});
+    waves.push({x:bx+(c+.5)*cell,y:by+(r+.5)*cell,t:0});
+    for(let k=0;!reduce&&k<10;k++){
+      const along=Math.random()*B, onRow=k%2===0;
+      sparkles.push({x:onRow?bx+along:bx+(c+.5)*cell,y:onRow?by+(r+.5)*cell:by+along,t:Math.random()*0.5});
+    }
+    Sfx.star();
+  }
+
   if(total>0){
     combo++; trayCombo=Math.max(trayCombo,combo);
+    if(CFG.STAR_ENABLED && combo>=CFG.STAR_COMBO) starForced=true;
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
-    rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:0}));
-    cols.forEach(c2=>sweeps.push({horiz:false,idx:c2,t:0}));
+    if(!s.star){                                   // a star gets its own cross-shaped blast instead
+      rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:0}));
+      cols.forEach(c2=>sweeps.push({horiz:false,idx:c2,t:0}));
+    }
 
     const marked=new Map();
     rows.forEach(r2=>{for(let i=0;i<N;i++) marked.set(r2+','+i,i);});
@@ -794,6 +862,7 @@ function place(idx,r,c){
     waves.push({x:bx+cc0*cell,y:by+cr*cell,t:0});
     glowT=1; glowH=GEMS[lastGi].h;
     shake=Math.min(11,3.5+total*1.8)*CFG.SHAKE;
+    if(s.star) shake=Math.max(shake,12*CFG.SHAKE);
     if(combo>1) Sfx.combo(combo,total); else Sfx.clear(total);
     pops.push({x:bx+cc0*cell,y:by+cr*cell,t:0,txt:'+'+(gained-s.n),
                sub:combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo});
@@ -934,10 +1003,10 @@ function star(x,y,r,a){
 }
 
 // golden pieces: a soft pulsing halo behind, and a light band sweeping across the cells
-function goldGlow(cx,cy,r,now,ph){
+function goldGlow(cx,cy,r,now,ph,rgb='255,206,72'){
   const pulse=reduce?0.6:0.5+0.5*Math.sin(now*0.005+ph);
   const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-  g.addColorStop(0,`rgba(255,206,72,${0.3+0.32*pulse})`); g.addColorStop(1,'rgba(255,206,72,0)');
+  g.addColorStop(0,`rgba(${rgb},${0.3+0.32*pulse})`); g.addColorStop(1,`rgba(${rgb},0)`);
   ctx.fillStyle=g; ctx.fillRect(cx-r,cy-r,r*2,r*2);
 }
 function goldShimmer(now,s,dr,dc){
@@ -972,9 +1041,13 @@ function frame(now){
 
   const gh=ghost();
   if(gh){
-    const test=grid.map(row=>row.slice());
-    for(const [dr,dc] of gh.s.cells) test[gh.r+dr][gh.c+dc]=1;
-    const L=linesFor(test);
+    let L;
+    if(gh.s.star) L={rows:[gh.r],cols:[gh.c]};                 // preview the whole cross
+    else{
+      const test=grid.map(row=>row.slice());
+      for(const [dr,dc] of gh.s.cells) test[gh.r+dr][gh.c+dc]=1;
+      L=linesFor(test);
+    }
     const sh=(Math.sin(now*0.006)*0.5+0.5)*0.18+0.14;
     ctx.globalAlpha=sh; ctx.fillStyle='#fff';
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
@@ -1026,6 +1099,28 @@ function frame(now){
     }
   }
 
+  for(let i=blasts.length-1;i>=0;i--){                 // star blast: prismatic beams out along the row and column
+    const b=blasts[i]; b.t+=dt*0.045;
+    if(b.t>=1){ blasts.splice(i,1); continue; }
+    const p=easeOutCubic(b.t), a=(1-b.t)*0.95, reach=p*B*1.25;
+    const cx=bx+(b.c+.5)*cell, cy=by+(b.r+.5)*cell, hue=(b.t*300+200)%360;
+    const th=cell*(1.1-0.6*b.t);
+    const beam=(x0,y0,x1,y1,horiz)=>{
+      const g=horiz?ctx.createLinearGradient(x0,0,x1,0):ctx.createLinearGradient(0,y0,0,y1);
+      g.addColorStop(0,'rgba(255,255,255,0)'); g.addColorStop(.5,`rgba(255,255,255,${a})`); g.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=`hsla(${hue} 100% 70% / ${a*0.5})`;                // colored halo under a white core
+      if(horiz) ctx.fillRect(x0,y0-th*0.9,x1-x0,th*1.8); else ctx.fillRect(x0-th*0.9,y0,th*1.8,y1-y0);
+      ctx.fillStyle=g;
+      if(horiz) ctx.fillRect(x0,y0-th/2,x1-x0,th); else ctx.fillRect(x0-th/2,y0,th,y1-y0);
+    };
+    beam(Math.max(bx,cx-reach),cy,Math.min(bx+B,cx+reach),cy,true);
+    beam(cx,Math.max(by,cy-reach),cx,Math.min(by+B,cy+reach),false);
+    const fr=cell*(0.6+1.6*p), fg=ctx.createRadialGradient(cx,cy,0,cx,cy,fr);
+    fg.addColorStop(0,`rgba(255,255,255,${a})`); fg.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=fg; ctx.fillRect(cx-fr,cy-fr,fr*2,fr*2);
+    ctx.globalAlpha=1;
+  }
+
   for(let i=shatters.length-1;i>=0;i--){
     const s=shatters[i]; s.t+=dt*0.055;
     if(s.t<0){ gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,0); continue; }
@@ -1074,7 +1169,9 @@ function frame(now){
     const ox=R.x+(R.w-s.cols*trayCell)/2, oy=R.y+(R.h-s.rows*trayCell)/2+bob;
     const gold=t.gi===GOLD;
     if(gold) goldGlow(ox+s.cols*trayCell/2,oy+s.rows*trayCell/2,Math.max(s.cols,s.rows)*trayCell*0.95+trayCell*0.6,now,i);
-    for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*trayCell,oy+dr*trayCell,trayCell,1,1,gold?goldShimmer(now,s,dr,dc):0,true);
+    if(s.star) goldGlow(ox+trayCell/2,oy+trayCell/2,trayCell*1.5,now,i,'235,225,255');
+    const pulse=s.star&&!reduce?1+0.08*Math.sin(now*0.004+i*2):1;         // star breathes gently
+    for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*trayCell,oy+dr*trayCell,trayCell,pulse,1,gold?goldShimmer(now,s,dr,dc):0,true);
   }
 
   if(ret){
@@ -1096,6 +1193,7 @@ function frame(now){
     ctx.translate(drag.x,drag.y-cell*CFG.LIFT);
     ctx.rotate(clamp(drag.vx*0.011,-.2,.2)); ctx.scale(sc,sc);
     if(gold) goldGlow(0,0,Math.max(s.cols,s.rows)*cell*0.95+cell*0.6,now,0);
+    else if(s.star) goldGlow(0,0,cell*1.5,now,0,'235,225,255');
     ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=18; ctx.shadowOffsetY=8;
     const ox=-(s.cols*cell)/2, oy=-(s.rows*cell)/2;
     for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*cell,oy+dr*cell,cell,1,1,gold?goldShimmer(now,s,dr,dc):0);
@@ -1176,8 +1274,8 @@ async function rescue(){
 function start(){
   layout();
   grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
-  golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0;
-  shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];drag=null;ret=null;
+  golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false;
+  shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   el('scoreVal').textContent='0'; el('bestVal').textContent=best;
   genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
 }
@@ -1197,6 +1295,7 @@ el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]
   ['GOLDEN_ON','Golden Hand'],
+  ['STAR_ENABLED','Star Gem'],
   ['SHOW_TENSION','Debug readout']
 ];
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
@@ -1210,6 +1309,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SINGLE_WEIGHT','Single-cell weight',0,1,0.05],
   ['TIDY','Tidiness',0,5,0.1],
   ['PAIR_CHANCE','Partner-piece chance',0,1,0.05],
+  ['STAR_CHANCE','Star gem chance (per tray)',0,0.5,0.01],
+  ['STAR_COMBO','Star gem guaranteed at combo',2,10,1],
   ['SWEEP_COOLDOWN','Sweep cooldown (trays)',0,10,1],
   ['SNAP_RADIUS','Snap radius (cells)',0,3,1],
   ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
