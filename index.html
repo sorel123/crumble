@@ -120,6 +120,9 @@
    ═══════════════════════════════════════════════════════════════ */
 const CFG = {
   GRID: 8,
+  SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
+  SNAP_STICKY:   0.6,    // a shown ghost is kept until the piece drifts this many cells from it
+  SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
   STYLE: 'jewel',        // 'jewel' or 'clay' — also switchable on the start screen
 
   // difficulty wave
@@ -756,7 +759,8 @@ function onUp(){
   if(!drag) return;
   const t=tray[drag.i];
   if(t){
-    const g=ghost();
+    let g=ghost();
+    if(!g && drag.last && performance.now()-drag.lastT<=CFG.SNAP_GRACE && canPlace(t.s,drag.last.r,drag.last.c,grid)) g=drag.last;
     if(g) place(drag.i,g.r,g.c);
     else{
       const s=t.s, R=slotRect(drag.i);
@@ -771,9 +775,26 @@ function ghost(){
   if(!drag) return null;
   const t=tray[drag.i]; if(!t) return null;
   const s=t.s;
-  const c=Math.round((drag.x-(s.cols*cell)/2-bx)/cell);
-  const r=Math.round((drag.y-cell*1.55-(s.rows*cell)/2-by)/cell);
-  return canPlace(s,r,c,grid)?{r,c,s}:null;
+  // piece position in fractional grid cells
+  const fc=(drag.x-(s.cols*cell)/2-bx)/cell;
+  const fr=(drag.y-cell*1.55-(s.rows*cell)/2-by)/cell;
+  const dist=(r,c)=>Math.hypot(r-fr,c-fc);
+  let g=null;
+  // hysteresis: keep the current ghost until the piece moves well away from it
+  const cur=drag.gh;
+  if(cur && cur.s===s && dist(cur.r,cur.c)<=CFG.SNAP_STICKY && canPlace(s,cur.r,cur.c,grid)) g=cur;
+  if(!g){
+    // otherwise the closest valid spot within SNAP_RADIUS of the nearest grid position
+    const r0=Math.round(fr), c0=Math.round(fc), R=CFG.SNAP_RADIUS;
+    let best=Infinity;
+    for(let dr=-R;dr<=R;dr++) for(let dc=-R;dc<=R;dc++){
+      const r=r0+dr, c=c0+dc, d=dist(r,c);
+      if(d<best && canPlace(s,r,c,grid)){ best=d; g={r,c,s}; }
+    }
+  }
+  drag.gh=g;
+  if(g){ drag.last=g; drag.lastT=performance.now(); }
+  return g;
 }
 addEventListener('pointerdown',onDown,{passive:true});
 addEventListener('pointermove',onMove,{passive:true});
