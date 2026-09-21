@@ -551,18 +551,24 @@ const Sfx={
     voice(t,{f0:240*p,f1:150*p,dur:.08,vol:.04,bp0:400,q:.8,type:'sine',det:[0]}); // light body
   }); },
   clear(total=1,delay=.1){ play(delay,(t,p)=>{
-    const k=1+.1*(total-1);
-    noiseHit(t,{dur:.01,f0:5000*p,q:1,vol:.05});
-    noiseHit(t,{dur:.24,f0:1400*p*k,f1:7500*p,q:7,vol:.15});             // burst
-    voice(t,{f0:620*p*k,f1:1500*p*k,dur:.26,vol:.09,bp0:900*p*k,bp1:5000*p,q:8});
+    const k=1+.06*(total-1), base=392*p*k;                              // warm G, rises a touch per line
+    noiseHit(t,{dur:.28,f0:500*p,f1:2600*p,q:.7,vol:.035,type:'lowpass'});   // soft whoosh
+    [1,1.25,1.5].forEach((m,i)=>{                                       // quick rising major arpeggio
+      const f=base*m;
+      voice(t+i*.05,{f0:f,f1:f*1.01,dur:.32,vol:.08,bp0:f*1.5,q:.7,type:'triangle',det:[-4,4],atk:.012});
+      voice(t+i*.05,{f0:f*2,f1:f*2,dur:.22,vol:.025,bp0:f*2,q:.7,type:'sine',det:[0],atk:.012});
+    });
+    voice(t,{f0:base/2,f1:base/2,dur:.3,vol:.08,bp0:base,q:.6,type:'sine',det:[0],atk:.01}); // warm body
   }); },
   combo(combo=2,total=1,delay=.1){ play(delay,(t,p)=>{
-    const base=Math.min(2100,523*Math.pow(1.26,combo-1))*p;           // rises with combo
-    noiseHit(t,{dur:.012,f0:5000*p,q:1,vol:.07});
-    noiseHit(t,{dur:.3,f0:1200*p,f1:8500*p,q:7,vol:.17});
-    voice(t,{f0:base,f1:base*1.5,dur:.34,vol:.12,bp0:base*1.4,bp1:base*5,q:7});
-    voice(t+.05,{f0:base*1.5,f1:base*2,dur:.3,vol:.09,bp0:base*2,bp1:base*6,q:6,type:'triangle'});
-    voice(t,{f0:base/2,f1:base/2*1.1,dur:.3,vol:.08,bp0:base,q:2,type:'sine',det:[0]}); // body
+    const base=Math.min(880,330*Math.pow(1.12,combo-1))*p;             // rises with combo, kept mellow
+    noiseHit(t,{dur:.4,f0:400*p,f1:3200*p,q:.7,vol:.04,type:'lowpass'});
+    [1,1.25,1.5,2].forEach((m,i)=>{                                     // rising major arpeggio
+      const f=base*m;
+      voice(t+i*.06,{f0:f,f1:f*1.01,dur:.4,vol:.085,bp0:f*1.5,q:.7,type:'triangle',det:[-4,4],atk:.012});
+      voice(t+i*.06,{f0:f*2,f1:f*2,dur:.28,vol:.025,bp0:f*2,q:.7,type:'sine',det:[0],atk:.012});
+    });
+    voice(t,{f0:base/2,f1:base/2,dur:.45,vol:.1,bp0:base,q:.6,type:'sine',det:[0],atk:.01}); // body
   }); },
   sweep(delay=.1){ play(delay,(t,p)=>{
     noiseHit(t,{dur:.02,f0:3500*p,q:.8,vol:.2});
