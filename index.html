@@ -194,6 +194,13 @@ const CFG = {
   WORLD_ENABLED: true,   // background 'worlds' advance with score; each shifts the gradient, ambient effect and gem hue
   WORLD_EVERY:   1000,   // points between world advances
 
+  // event screen effects — each independently toggleable; none may ever draw over live board gems
+  FX_COMBO_GLOW:     true,   // screen-edge glow in the combo colour, intensifying with the streak
+  FX_GOLD_TINT:      true,   // faint full-screen gold wash while a golden hand is live
+  FX_SWEEP_FX:       true,   // full-screen colour wash + confetti on a clean sweep
+  FX_TENSION_BORDER: true,   // board border glow: calm (cool) -> warm as tension rises
+  FX_PUNCH_ZOOM:     true,   // brief 2-3% punch zoom on a 2+ line clear
+
   SHOW_TENSION: true     // set false to hide the debug readout
 };
 
@@ -356,6 +363,7 @@ let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blasts=[];
 let paused=false;
 let world=0, worldFrom=0, worldT=1, worldLevel=0, ambient=[], ambientOld=[], ambientBurst=0;
+let comboGlowV=0, goldTintV=0, sweepFxT=0, punchT=0, confetti=[];
 let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0;
 let gemBig=[],gemSmall=[];
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -959,6 +967,7 @@ function place(idx,r,c){
 
   if(total>0){
     ambientBurst=1;
+    if(CFG.FX_PUNCH_ZOOM && !reduce && total>=2) punchT=1;
     combo++; trayCombo=Math.max(trayCombo,combo);
     if(CFG.STAR_ENABLED && combo>=CFG.STAR_COMBO) starForced=true;
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
@@ -996,6 +1005,7 @@ function place(idx,r,c){
       gained+=bonus;
       swept=true; trayHadSweep=true;
       ambientBurst=1.8;
+      if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
       pushBanner('CLEAN SWEEP','+'+bonus);
       for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
       shake=16*CFG.SHAKE; glowT=1.6;
@@ -1143,11 +1153,60 @@ function goldShimmer(now,s,dr,dc){
   return Math.max(0,1-Math.abs(dr+dc-pos)/1.2)*0.6;
 }
 
+// screen-edge vignette: bands from each edge only, clamped to stay outside the
+// board panel so it can never draw over live gems, however narrow the layout.
+function edgeGlow(rgb,strength){
+  if(strength<=0.01) return;
+  const base=40+strength*70;
+  const dT=Math.max(0,Math.min(base,by-12));
+  const dB=Math.max(0,Math.min(base,H-(by+B)-12));
+  const dL=Math.max(0,Math.min(base,bx-12));
+  const dR=dL;
+  const mk=(x0,y0,x1,y1)=>{
+    const g=ctx.createLinearGradient(x0,y0,x1,y1);
+    g.addColorStop(0,`rgba(${rgb},${0.5*strength})`); g.addColorStop(1,`rgba(${rgb},0)`);
+    return g;
+  };
+  if(dT>2){ ctx.fillStyle=mk(0,0,0,dT); ctx.fillRect(0,0,W,dT); }
+  if(dB>2){ ctx.fillStyle=mk(0,H,0,H-dB); ctx.fillRect(0,H-dB,W,dB); }
+  if(dL>2){ ctx.fillStyle=mk(0,0,dL,0); ctx.fillRect(0,0,dL,H); }
+  if(dR>2){ ctx.fillStyle=mk(W,0,W-dR,0); ctx.fillRect(W-dR,0,dR,H); }
+}
+// clean-sweep confetti: falls in front, only ever over an already-emptied board
+function spawnConfetti(){
+  if(reduce) return;
+  const cols=['#FFD45C','#FF7BD5','#8FD8FF','#9CF0B5','#FFFFFF'];
+  for(let k=0;k<28;k++) confetti.push({
+    x:Math.random()*W, y:-20-Math.random()*80, vx:(Math.random()-.5)*1.6, vy:1.4+Math.random()*1.8,
+    rot:Math.random()*6.283, vr:(Math.random()-.5)*.3, w:4+Math.random()*4, h:7+Math.random()*6,
+    col:cols[(Math.random()*cols.length)|0], life:1
+  });
+}
+function stepConfetti(dt){
+  for(let i=confetti.length-1;i>=0;i--){
+    const c=confetti[i];
+    c.x+=c.vx*dt; c.y+=c.vy*dt; c.vy+=0.03*dt; c.rot+=c.vr*dt; c.life-=dt*0.012;
+    if(c.life<=0||c.y>H+30){ confetti.splice(i,1); continue; }
+    ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot);
+    ctx.globalAlpha=Math.min(1,c.life*2); ctx.fillStyle=c.col;
+    ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h);
+    ctx.restore();
+  }
+  ctx.globalAlpha=1;
+}
+
 let last=0;
 function frame(now){
   requestAnimationFrame(frame);
   const dt=paused?0:Math.min(2.5,(now-last)/16.67)||1; last=now;
   shake*=Math.pow(.85,dt); glowT*=Math.pow(.93,dt);
+
+  const comboTarget=combo>=2?Math.min(1,(combo-1)/6):0;
+  comboGlowV+=(comboTarget-comboGlowV)*Math.min(1,dt*0.15);
+  const goldTarget=golden?1:0;
+  goldTintV+=(goldTarget-goldTintV)*Math.min(1,dt*0.15);
+  sweepFxT=Math.max(0,sweepFxT-dt/48);
+  punchT=Math.max(0,punchT-dt/22);
 
   stepWorld(dt);
   const hueDeg=CFG.WORLD_ENABLED?currentHueDeg():0;
@@ -1168,12 +1227,33 @@ function frame(now){
   amb.addColorStop(1,'hsla(280 90% 60% / 0)');
   ctx.fillStyle=amb; ctx.fillRect(0,0,W,H);
 
+  // background-layer washes: drawn behind the gems, so they tint the scene without ever sitting over a piece
+  if(CFG.FX_GOLD_TINT && goldTintV>0.02){
+    const pulse=reduce?0.7:0.6+0.4*Math.sin(now*0.004);
+    ctx.globalAlpha=goldTintV*0.09*pulse; ctx.fillStyle='#FFCE48'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
+  }
+  if(CFG.FX_SWEEP_FX && sweepFxT>0){
+    ctx.globalAlpha=sweepFxT*0.4; ctx.fillStyle=`hsl(${glowH} 85% 70%)`; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
+  }
+
   ctx.save();
   if(shake>.2) ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+  if(CFG.FX_PUNCH_ZOOM && punchT>0.01){
+    const pz=1+0.025*punchT;
+    ctx.translate(bx+B/2,by+B/2); ctx.scale(pz,pz); ctx.translate(-(bx+B/2),-(by+B/2));
+  }
   if(hueDeg) ctx.filter=`hue-rotate(${hueDeg.toFixed(1)}deg)`;
 
   ctx.fillStyle='rgba(0,0,0,.34)'; roundPath(ctx,bx-9,by-9,B+18,B+18,20); ctx.fill();
   ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.lineWidth=1.5; ctx.stroke();
+  if(CFG.FX_TENSION_BORDER){                            // board border glow: calm (cool) -> warm as tension climbs
+    const hue=200-185*tension, glowA=0.22+0.5*tension;
+    ctx.save();
+    ctx.shadowColor=`hsla(${hue} 85% 60% / ${glowA})`; ctx.shadowBlur=10+18*tension;
+    ctx.strokeStyle=`hsla(${hue} 85% 65% / ${0.45+0.4*tension})`; ctx.lineWidth=2+2*tension;
+    roundPath(ctx,bx-9,by-9,B+18,B+18,20); ctx.stroke();
+    ctx.restore();
+  }
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
     const p=cell*.055; ctx.fillStyle='rgba(255,255,255,.045)';
     roundPath(ctx,bx+c*cell+p,by+r*cell+p,cell-p*2,cell-p*2,cell*.24); ctx.fill();
@@ -1378,6 +1458,10 @@ function frame(now){
   }
 
   ctx.restore();
+
+  // foreground overlay — screen edges and an already-empty board only, never a live piece
+  if(CFG.FX_COMBO_GLOW && comboGlowV>0.02) edgeGlow(combo>4?'255,123,213':'255,212,92',comboGlowV);
+  if(CFG.FX_SWEEP_FX) stepConfetti(dt);
 }
 
 /* ═══════ flow ═══════ */
@@ -1417,6 +1501,7 @@ function start(){
   grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
+  confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
   el('scoreVal').textContent='0'; el('bestVal').textContent=best;
   genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
@@ -1439,6 +1524,11 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['GOLDEN_ENABLED','Golden Hand'],
   ['STAR_ENABLED','Star Gem'],
   ['WORLD_ENABLED','Worlds'],
+  ['FX_COMBO_GLOW','Combo edge glow'],
+  ['FX_GOLD_TINT','Gold screen tint'],
+  ['FX_SWEEP_FX','Sweep wash + confetti'],
+  ['FX_TENSION_BORDER','Tension border glow'],
+  ['FX_PUNCH_ZOOM','Punch zoom on clears'],
   ['SHOW_TENSION','Debug readout']
 ];
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
