@@ -69,11 +69,19 @@
         font-weight:600;cursor:pointer}
   button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 
-  .styles{display:flex;gap:10px}
-  .styles button{font-family:var(--font);font-size:14px;font-weight:600;color:#fff;
+  .skins{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:min(340px,100%)}
+  .skin-btn{font-family:var(--font);font-size:12.5px;font-weight:600;color:#fff;
         background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.16);
-        border-radius:999px;padding:11px 24px;min-height:46px;cursor:pointer}
-  .styles button[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
+        border-radius:14px;padding:9px 4px;min-height:54px;cursor:pointer;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+  .skin-btn[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
+  .skin-btn:disabled{opacity:.4;cursor:not-allowed}
+  .skin-btn .lock{font-size:10px;font-weight:600;opacity:.85}
+  .motifs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .motifs button{font-family:var(--font);font-size:12.5px;font-weight:600;color:#fff;
+        background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.16);
+        border-radius:999px;padding:8px 16px;min-height:38px;cursor:pointer}
+  .motifs button[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
 
   #adScreen{background:#0B0713;gap:20px}
   .adbox{width:min(320px,86vw);aspect-ratio:4/3;border-radius:18px;display:flex;
@@ -101,10 +109,8 @@
   <div class="overlay" id="startCard">
     <h1 class="title">Crum<em>ble</em></h1>
     <p class="sub">Drag the three shapes onto the board. Fill a whole row or column and it clears. Empty the board for a clean sweep.</p>
-    <div class="styles">
-      <button id="styJewel" aria-pressed="true">Jewels</button>
-      <button id="styClay" aria-pressed="false">Clay</button>
-    </div>
+    <div class="skins" id="skinGrid"></div>
+    <div class="motifs" id="motifRow"></div>
     <button class="cta" id="startBtn">Play</button>
   </div>
 
@@ -145,7 +151,9 @@ const CFG = {
   SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
   SNAP_STICKY:   0.6,    // a shown ghost is kept until the piece drifts this many cells from it
   SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
-  STYLE: 'jewel',        // 'jewel' or 'clay' — also switchable on the start screen
+  STYLE: 'jewel',        // a SKINS id — picked on the skins screen; some are unlockable
+  MOTIF: 'none',         // a MOTIFS id — face motif stamped on every tile, independent of skin
+  UNLOCK_ALL: false,     // dev: pretend every skin is unlocked
 
   // difficulty wave
   TENSION_UP:    0.18,   // added each placement that clears nothing
@@ -685,19 +693,40 @@ function newTile(size){
   const x=cv.getContext('2d'); x.scale(px/size,px/size);
   return {cv,x};
 }
-// prismatic five-point star, used by the star gem (shiny outline in jewel, none in clay)
-function drawStar(x,cx,cy,R,shiny){
+function starPath(x,cx,cy,R){
   x.beginPath();
   for(let k=0;k<10;k++){
     const a=-Math.PI/2+k*Math.PI/5, rad=k%2?R*0.46:R;
     k?x.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad):x.moveTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);
   }
   x.closePath();
+}
+function heartPath(x,cx,cy,R){
+  x.beginPath(); x.moveTo(cx,cy+R*0.85);
+  x.bezierCurveTo(cx-R*1.3,cy+R*0.05, cx-R*0.9,cy-R*0.95, cx,cy-R*0.35);
+  x.bezierCurveTo(cx+R*0.9,cy-R*0.95, cx+R*1.3,cy+R*0.05, cx,cy+R*0.85);
+  x.closePath();
+}
+// prismatic five-point star, used by the star gem (shiny outline in jewel, none in clay)
+function drawStar(x,cx,cy,R,shiny){
+  starPath(x,cx,cy,R);
   const gr=x.createLinearGradient(cx-R,cy-R,cx+R,cy+R);
   ['#FF8FB8','#FFD98A','#9CF0B5','#8FD8FF','#B79CFF'].forEach((c,k,a)=>gr.addColorStop(k/(a.length-1),c));
   x.fillStyle=gr; x.fill();
   x.lineJoin='round'; x.lineWidth=Math.max(1,R*0.12);
   x.strokeStyle=shiny?'rgba(255,255,255,.95)':'rgba(120,90,170,.3)'; x.stroke();
+}
+// face motif: a plain translucent stamp, same on every skin/colour so it never fights the gem underneath
+function stampMotif(cv,size,motif){
+  if(motif==='none') return;
+  const x=cv.getContext('2d'), cx=size/2, cy=size/2, R=size*0.24;
+  x.save();
+  x.globalAlpha=.55; x.fillStyle='rgba(255,255,255,.92)';
+  x.strokeStyle='rgba(0,0,0,.22)'; x.lineWidth=Math.max(1,size*0.02);
+  if(motif==='circle'){ x.beginPath(); x.arc(cx,cy,R,0,6.283); x.fill(); x.stroke(); }
+  else if(motif==='star'){ starPath(x,cx,cy,R); x.fill(); x.stroke(); }
+  else if(motif==='heart'){ heartPath(x,cx,cy,R); x.fill(); x.stroke(); }
+  x.restore();
 }
 // Hard facets: lit top, shadowed bottom, angled sides, specular.
 function jewelTile(size,g){
@@ -744,10 +773,101 @@ function clayTile(size,g){
   x.globalAlpha=1; x.restore();
   return cv;
 }
+// Glossy near-circle with a candy-stripe twist and a bright gloss highlight.
+function candyTile(size,g){
+  const {cv,x}=newTile(size);
+  const L=d=>`hsl(${g.h} ${g.s}% ${clamp((g.star?88:58)+d,8,97)}%)`;
+  const pad=size*0.07, S=size-pad*2, R=S*0.5, cx=pad+S/2, cy=pad+S/2;
+  x.save();
+  x.shadowColor='rgba(0,0,0,.35)'; x.shadowBlur=size*0.08; x.shadowOffsetY=size*0.04;
+  x.beginPath(); x.arc(cx,cy,R,0,6.283); x.fillStyle=L(0); x.fill();
+  x.restore();
+  x.save(); x.beginPath(); x.arc(cx,cy,R,0,6.283); x.clip();
+  x.translate(cx,cy); x.rotate(-0.6);
+  x.fillStyle=`hsla(${g.h} ${g.s}% 90% / .35)`;
+  for(let i=-2;i<=2;i++) x.fillRect(i*S*0.32-S*0.07,-S,S*0.13,S*2);
+  x.rotate(0.6); x.translate(-cx,-cy);
+  const gr=x.createRadialGradient(cx-S*0.15,cy-S*0.2,1,cx-S*0.15,cy-S*0.2,S*0.5);
+  gr.addColorStop(0,'rgba(255,255,255,.85)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=gr; x.beginPath(); x.arc(cx,cy,R,0,6.283); x.fill();
+  if(g.star) drawStar(x,size/2,size/2,S*0.32,true);
+  x.restore();
+  x.beginPath(); x.arc(cx,cy,R,0,6.283);
+  x.strokeStyle=L(-18); x.lineWidth=Math.max(1,size*0.03); x.stroke();
+  return cv;
+}
+// Translucent slab: a soft colour tint, a diagonal glossy streak, thin bright edge.
+function glassTile(size,g){
+  const {cv,x}=newTile(size);
+  const pad=size*0.08, S=size-pad*2, R=S*0.22;
+  roundPath(x,pad,pad,S,S,R);
+  const grad=x.createLinearGradient(pad,pad,pad+S,pad+S);
+  grad.addColorStop(0,`hsla(${g.h} ${g.s}% 75% / .55)`); grad.addColorStop(1,`hsla(${g.h} ${g.s}% 45% / .35)`);
+  x.fillStyle=grad; x.fill();
+  x.save(); roundPath(x,pad,pad,S,S,R); x.clip();
+  x.fillStyle='rgba(255,255,255,.5)'; x.beginPath();
+  x.moveTo(pad+S*0.1,pad+S*0.85); x.lineTo(pad+S*0.4,pad+S*0.1);
+  x.lineTo(pad+S*0.55,pad+S*0.1); x.lineTo(pad+S*0.25,pad+S*0.85); x.closePath(); x.fill();
+  if(g.star) drawStar(x,size/2,size/2,S*0.34,true);
+  x.restore();
+  roundPath(x,pad,pad,S,S,R);
+  x.strokeStyle=`hsla(${g.h} 40% 95% / .8)`; x.lineWidth=Math.max(1,size*0.035); x.stroke();
+  return cv;
+}
+// Dark tile, glowing outline in the gem's own hue — a sign-tube look.
+function neonTile(size,g){
+  const {cv,x}=newTile(size);
+  const pad=size*0.1, S=size-pad*2, R=S*0.22;
+  x.fillStyle='rgba(10,8,18,.92)'; roundPath(x,pad,pad,S,S,R); x.fill();
+  x.save();
+  x.shadowColor=`hsl(${g.h} 100% 60%)`; x.shadowBlur=size*0.22;
+  x.strokeStyle=`hsl(${g.h} 100% ${g.star?85:62}%)`; x.lineWidth=Math.max(1.5,size*0.045);
+  roundPath(x,pad,pad,S,S,R); x.stroke(); x.stroke();
+  x.restore();
+  x.save(); roundPath(x,pad,pad,S,S,R); x.clip();
+  const inner=x.createRadialGradient(size/2,size/2,0,size/2,size/2,S*0.6);
+  inner.addColorStop(0,`hsla(${g.h} 100% 60% / .28)`); inner.addColorStop(1,'hsla(0 0% 0% / 0)');
+  x.fillStyle=inner; x.fillRect(pad,pad,S,S);
+  if(g.star) drawStar(x,size/2,size/2,S*0.3,true);
+  x.restore();
+  return cv;
+}
+// Chunky retro blocks — flat colour, hard edges, a light/dark bevel pair.
+function pixelTile(size,g){
+  const {cv,x}=newTile(size);
+  x.imageSmoothingEnabled=false;
+  const L=d=>`hsl(${g.h} ${g.s}% ${clamp((g.star?85:55)+d,8,95)}%)`;
+  const px=Math.max(4,Math.round(size/8)), cells=Math.round(size/px);
+  for(let ry=0;ry<cells;ry++) for(let rx=0;rx<cells;rx++){
+    const lo=rx===0||ry===0, hi=rx===cells-1||ry===cells-1;
+    x.fillStyle=L(lo?16:hi?-16:0);
+    x.fillRect(rx*px,ry*px,px,px);
+  }
+  if(g.star) drawStar(x,size/2,size/2,size*0.28,true);
+  return cv;
+}
+const SKINS=[
+  {id:'jewel', name:'Jewels', render:jewelTile, unlock:0},
+  {id:'clay',  name:'Clay',   render:clayTile,  unlock:0},
+  {id:'candy', name:'Candy',  render:candyTile, unlock:400},
+  {id:'glass', name:'Glass',  render:glassTile, unlock:900},
+  {id:'neon',  name:'Neon',   render:neonTile,  unlock:1600},
+  {id:'pixel', name:'Pixel',  render:pixelTile, unlock:2500}
+];
+const MOTIFS=[
+  {id:'none',  name:'None'},
+  {id:'heart', name:'Heart'},
+  {id:'star',  name:'Star'},
+  {id:'circle',name:'Circle'}
+];
 function buildCache(){
-  const f=CFG.STYLE==='clay'?clayTile:jewelTile;
-  gemBig=GEMS.map(g=>f(cell,g));
-  gemSmall=GEMS.map(g=>f(trayCell,g));
+  const skin=SKINS.find(s=>s.id===CFG.STYLE)||SKINS[0];
+  gemBig=GEMS.map(g=>skin.render(cell,g));
+  gemSmall=GEMS.map(g=>skin.render(trayCell,g));
+  if(CFG.MOTIF!=='none'){
+    gemBig.forEach(cv=>stampMotif(cv,cell,CFG.MOTIF));
+    gemSmall.forEach(cv=>stampMotif(cv,trayCell,CFG.MOTIF));
+  }
 }
 function layout(){
   dpr=Math.min(devicePixelRatio||1,2);
@@ -1471,12 +1591,14 @@ async function gameOver(){
   state='over';
   const prevBest=best;
   best=Math.max(best,score); el('bestVal').textContent=best;
+  const newSkins=checkUnlocks();
   deaths++;
   if(deaths%CFG.ADS_EVERY===0) await Ads.showInterstitial();
   el('overScore').textContent=score;
-  el('overMsg').textContent=score>=1500?'That is a serious run.'
+  el('overMsg').textContent=(newSkins.length?'New skin unlocked: '+newSkins.join(', ')+'! ':'')
+    +(score>=1500?'That is a serious run.'
     :score>=600?'Good chains. Save the big shapes for open space.'
-    :'Clear rows early — do not let the board fill up.';
+    :'Clear rows early — do not let the board fill up.');
   const btn=el('reviveBtn');
   const canRescue=rescuesUsed<CFG.MAX_RESCUES
     && (score>=CFG.RESCUE_FLOOR || score>=prevBest*CFG.RESCUE_BEST_FRAC) && score>0;
@@ -1506,14 +1628,59 @@ function start(){
   el('scoreVal').textContent='0'; el('bestVal').textContent=best;
   genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
 }
-function setStyle(s){
-  CFG.STYLE=s;
-  el('styJewel').setAttribute('aria-pressed',String(s==='jewel'));
-  el('styClay').setAttribute('aria-pressed',String(s==='clay'));
-  buildCache();
+/* ═══════ skins — unlockable tile styles + face motif, persisted in localStorage ═══════ */
+const SKIN_STORE='crumble.skins';
+let unlocked=new Set(SKINS.filter(s=>s.unlock<=0).map(s=>s.id));
+function isUnlocked(id){ return CFG.UNLOCK_ALL || unlocked.has(id); }
+function saveSkinSave(){
+  try{ localStorage.setItem(SKIN_STORE,JSON.stringify({unlocked:[...unlocked],style:CFG.STYLE,motif:CFG.MOTIF})); }catch(e){}
 }
-el('styJewel').onclick=e=>{e.stopPropagation();setStyle('jewel');};
-el('styClay').onclick=e=>{e.stopPropagation();setStyle('clay');};
+function loadSkinSave(){
+  try{
+    const o=JSON.parse(localStorage.getItem(SKIN_STORE)||'{}');
+    if(Array.isArray(o.unlocked)) o.unlocked.forEach(id=>{ if(SKINS.some(s=>s.id===id)) unlocked.add(id); });
+    if(typeof o.style==='string' && unlocked.has(o.style)) CFG.STYLE=o.style;
+    if(typeof o.motif==='string' && MOTIFS.some(m=>m.id===o.motif)) CFG.MOTIF=o.motif;
+  }catch(e){}
+}
+// call whenever `best` changes; returns the names of any skins newly earned
+function checkUnlocks(){
+  const news=[];
+  for(const s of SKINS) if(!unlocked.has(s.id) && best>=s.unlock){ unlocked.add(s.id); news.push(s.name); }
+  if(news.length){ saveSkinSave(); renderSkins(); }
+  return news;
+}
+function setSkin(id){ if(!isUnlocked(id)) return; CFG.STYLE=id; buildCache(); renderSkins(); saveSkinSave(); }
+function setMotif(id){ CFG.MOTIF=id; buildCache(); renderMotifs(); saveSkinSave(); }
+function renderSkins(){
+  el('skinGrid').querySelectorAll('button').forEach(b=>{
+    const s=SKINS.find(x=>x.id===b.dataset.id), ok=isUnlocked(s.id);
+    b.disabled=!ok; b.setAttribute('aria-pressed',String(CFG.STYLE===s.id));
+    const old=b.querySelector('.lock'); if(old) old.remove();
+    if(!ok){ const l=document.createElement('span'); l.className='lock'; l.textContent=s.unlock+' pts'; b.append(l); }
+  });
+}
+function renderMotifs(){
+  el('motifRow').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(CFG.MOTIF===b.dataset.id)));
+}
+function buildSkinsUI(){
+  const grid=el('skinGrid');
+  SKINS.forEach(s=>{
+    const b=document.createElement('button');
+    b.className='skin-btn'; b.type='button'; b.dataset.id=s.id;
+    b.append(Object.assign(document.createElement('span'),{textContent:s.name}));
+    b.onclick=e=>{ e.stopPropagation(); setSkin(s.id); };
+    grid.append(b);
+  });
+  const row=el('motifRow');
+  MOTIFS.forEach(m=>{
+    const b=document.createElement('button');
+    b.type='button'; b.textContent=m.name; b.dataset.id=m.id;
+    b.onclick=e=>{ e.stopPropagation(); setMotif(m.id); };
+    row.append(b);
+  });
+  renderSkins(); renderMotifs();
+}
 el('startBtn').onclick=e=>{e.stopPropagation();ac();start();};
 el('againBtn').onclick=e=>{e.stopPropagation();start();};
 el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};
@@ -1524,6 +1691,7 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['GOLDEN_ENABLED','Golden Hand'],
   ['STAR_ENABLED','Star Gem'],
   ['WORLD_ENABLED','Worlds'],
+  ['UNLOCK_ALL','Unlock all skins'],
   ['FX_COMBO_GLOW','Combo edge glow'],
   ['FX_GOLD_TINT','Gold screen tint'],
   ['FX_SWEEP_FX','Sweep wash + confetti'],
@@ -1580,7 +1748,7 @@ function initDev(){
   for(const [k,label] of DEV_TOGGLES){
     const row=make('label','tog'), name=make('span'), inp=make('input');
     name.textContent=label; inp.type='checkbox';
-    inp.onchange=()=>{ CFG[k]=inp.checked; devSave(); updateDbg(); };
+    inp.onchange=()=>{ CFG[k]=inp.checked; devSave(); updateDbg(); if(k==='UNLOCK_ALL') renderSkins(); };
     refresh.push(()=>{ inp.checked=!!CFG[k]; });
     row.append(name,inp); list.append(row);
   }
@@ -1605,7 +1773,7 @@ function initDev(){
     e.stopPropagation();
     Object.assign(CFG,DEV_DEFAULTS);
     try{ localStorage.removeItem(DEV_STORE); }catch(_){}
-    sync(); updateDbg();
+    sync(); updateDbg(); renderSkins();
   };
   el('devCopy').onclick=async e=>{
     e.stopPropagation();
@@ -1619,6 +1787,7 @@ function initDev(){
     btn.textContent='Copied!'; setTimeout(()=>{ btn.textContent='Copy settings'; },1200);
   };
 }
+loadSkinSave(); buildSkinsUI();
 initDev();
 
 layout(); grid=empty(); resetWorld(); genTray(); updateDbg(); requestAnimationFrame(frame);
