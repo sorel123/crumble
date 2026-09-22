@@ -44,6 +44,15 @@
   #devList input[type=checkbox]{width:22px;height:22px;accent-color:var(--gold)}
   .devbtns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
   .devbtns button{font-size:14px;padding:10px 18px;min-height:44px}
+  #devList .devhead{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+       opacity:.55;margin-top:6px;border-top:1px solid rgba(255,255,255,.1);padding-top:12px}
+  #devList .devhead:first-child{border-top:0;margin-top:0;padding-top:0}
+  .choices{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .choices button{font-family:var(--font);font-size:13px;font-weight:600;color:#fff;
+       background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.16);
+       border-radius:999px;padding:7px 16px;min-height:38px;cursor:pointer}
+  .choices button[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
+  .choices .play{padding:7px 12px;font-size:15px}
   #safe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;
         padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 
@@ -228,6 +237,12 @@ const CFG = {
   FX_SWEEP_FX:       true,   // full-screen colour wash + confetti on a clean sweep
   FX_TENSION_BORDER: true,   // board border glow: calm (cool) -> warm as tension rises
   FX_PUNCH_ZOOM:     true,   // brief 2-3% punch zoom on a 2+ line clear
+
+  // sound — variant + volume for the two most-heard effects, set on the settings panel
+  SND_PICKUP:     'plastic',  // 'plastic' | 'wood' | 'magnet'
+  SND_PLACE:      'plastic',
+  SND_PICKUP_VOL: 1,
+  SND_PLACE_VOL:  1,
 
   SHOW_TENSION: true     // set false to hide the debug readout
 };
@@ -1179,13 +1194,16 @@ function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass'}){
   src.connect(f); f.connect(g); g.connect(master);
   src.start(t,Math.random()*(nbuf.duration-dur-.05)); src.stop(t+dur+.01);
 }
-/* 2-3 detuned oscillators with a pitch envelope (f0 -> f1), through a
-   resonant bandpass whose centre also sweeps (bp0 -> bp1). */
-function voice(t,{f0,f1=f0,dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8],atk=.005}){
+/* 2-3 detuned oscillators with a pitch envelope (f0 -> f1 over `pdur`),
+   through a resonant bandpass whose centre also sweeps (bp0 -> bp1 over
+   `pdur`). `dur` is the amplitude decay and can outlast the pitch move —
+   a short, sharp pitch drop under a longer ring (pdur defaults to dur,
+   which is every existing caller's behaviour, unchanged). */
+function voice(t,{f0,f1=f0,dur,pdur=dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8],atk=.005}){
   const c=actx, out=c.createGain(), bp=c.createBiquadFilter();
   bp.type='bandpass'; bp.Q.value=q;
   bp.frequency.setValueAtTime(hz(bp0),t);
-  bp.frequency.exponentialRampToValueAtTime(hz(bp1),t+dur);
+  bp.frequency.exponentialRampToValueAtTime(hz(bp1),t+pdur);
   out.gain.setValueAtTime(.0001,t);
   out.gain.exponentialRampToValueAtTime(vol/det.length,t+atk);
   out.gain.exponentialRampToValueAtTime(.0001,t+dur);
@@ -1194,7 +1212,7 @@ function voice(t,{f0,f1=f0,dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8],
     const o=c.createOscillator();
     o.type=type; o.detune.value=cents;
     o.frequency.setValueAtTime(hz(f0),t);
-    o.frequency.exponentialRampToValueAtTime(hz(f1),t+dur);
+    o.frequency.exponentialRampToValueAtTime(hz(f1),t+pdur);
     o.connect(bp); o.start(t); o.stop(t+dur+.02);
   }
 }
@@ -1204,17 +1222,56 @@ function play(delay,fn){
   try{ const c=ac(); fn(c.currentTime+delay,jit()); }catch(e){}
 }
 
+/* place: a physical snap, not a tonal sweep — sharp click, short sine body
+   (pitch drops a touch, ~1.15x -> 1x, well inside the amplitude decay),
+   a material 'tock', and an optional quieter latch click just after.
+   Three variants with a distinct material character; volume and choice
+   both come from CFG, set on the settings panel and auditioned there. */
+const PLACE_VARIANTS={
+  plastic:(t,p,pm,vol)=>{                                    // A: bright, tight
+    const bf=200*pm;
+    noiseHit(t,{dur:.003,f0:5200*p,type:'highpass',vol:.05*vol});
+    voice(t,{f0:bf*1.15,f1:bf,pdur:.025,dur:.065,vol:.11*vol,bp0:bf*1.3,q:2,type:'sine',det:[0],atk:.002});
+    noiseHit(t,{dur:.025,f0:1300*p,q:6,vol:.05*vol,type:'bandpass'});
+    noiseHit(t+.012,{dur:.006,f0:6000*p,type:'highpass',vol:.018*vol});
+  },
+  wood:(t,p,pm,vol)=>{                                        // B: warmer, woodier tock
+    const bf=170*pm;
+    noiseHit(t,{dur:.004,f0:4200*p,type:'highpass',vol:.035*vol});
+    voice(t,{f0:bf*1.12,f1:bf,pdur:.025,dur:.08,vol:.1*vol,bp0:bf*1.2,q:2,type:'sine',det:[0],atk:.003});
+    noiseHit(t,{dur:.03,f0:750*p,q:5,vol:.06*vol,type:'bandpass'});
+    noiseHit(t+.014,{dur:.01,f0:900*p,q:4,vol:.02*vol,type:'bandpass'});
+  },
+  magnet:(t,p,pm,vol)=>{                                      // C: duller, deeper thunk
+    const bf=150*pm;
+    noiseHit(t,{dur:.004,f0:4000*p,type:'highpass',vol:.022*vol});
+    voice(t,{f0:bf*1.1,f1:bf,pdur:.025,dur:.09,vol:.1*vol,bp0:bf,q:1.5,type:'sine',det:[0],atk:.004});
+    noiseHit(t,{dur:.03,f0:500*p,q:4,vol:.045*vol,type:'bandpass'});
+    noiseHit(t+.016,{dur:.014,f0:600*p,q:3,vol:.014*vol,type:'bandpass'});
+  }
+};
+/* pickup: softer and quieter than place, under 50ms total — an airy lift
+   (a bandpass noise sweep) plus a tiny soft pluck. Same three characters. */
+const PICKUP_VARIANTS={
+  plastic:(t,p,vol)=>{                                        // A: light
+    noiseHit(t,{dur:.04,f0:1500*p,f1:3000*p,q:1.2,vol:.02*vol,type:'bandpass'});
+    voice(t,{f0:1100*p,dur:.03,vol:.045*vol,bp0:1800*p,q:2,type:'sine',det:[0],atk:.004});
+  },
+  wood:(t,p,vol)=>{                                           // B: soft breath, lower pluck
+    noiseHit(t,{dur:.045,f0:1200*p,f1:2400*p,q:1,vol:.018*vol,type:'bandpass'});
+    voice(t,{f0:850*p,dur:.032,vol:.04*vol,bp0:1300*p,q:1.5,type:'sine',det:[0],atk:.005});
+  },
+  magnet:(t,p,vol)=>{                                         // C: hover pulse, tiny wobble
+    noiseHit(t,{dur:.04,f0:1700*p,f1:2800*p,q:1.5,vol:.016*vol,type:'bandpass'});
+    voice(t,{f0:1300*p,f1:1250*p,pdur:.03,dur:.028,vol:.035*vol,bp0:1300*p,q:2,type:'sine',det:[0],atk:.003});
+  }
+};
 const Sfx={
-  pickup(){ play(0,(t,p)=>{
-    noiseHit(t,{dur:.008,f0:7000*p,q:1,vol:.012});
-    voice(t,{f0:880*p,f1:1050*p,dur:.06,vol:.05,bp0:1800*p,q:1.5,type:'triangle',det:[-5,5]});
-  }); },
-  place(){ play(0,(t,p)=>{
-    noiseHit(t,{dur:.012,f0:3200*p,q:.9,vol:.045});                       // click
-    voice(t,{f0:520*p,f1:200*p,dur:.09,vol:.1,bp0:1100*p,bp1:400*p,q:1.4,
-             type:'triangle',det:[-6,0,6],atk:.002});                    // soft tap
-    voice(t,{f0:240*p,f1:150*p,dur:.08,vol:.04,bp0:400,q:.8,type:'sine',det:[0]}); // light body
-  }); },
+  pickup(){ play(0,(t,p)=>PICKUP_VARIANTS[CFG.SND_PICKUP](t,p,CFG.SND_PICKUP_VOL)); },
+  place(n=1){                                    // n = piece cell count — bigger pieces land a touch lower
+    const pm=Math.pow(0.97,Math.max(0,n-1));
+    play(0,(t,p)=>PLACE_VARIANTS[CFG.SND_PLACE](t,p,pm,CFG.SND_PLACE_VOL));
+  },
   clear(total=1,delay=.1){ play(delay,(t,p)=>{
     const k=1+.06*(total-1), base=392*p*k;                              // warm G, rises a touch per line
     noiseHit(t,{dur:.28,f0:500*p,f1:2600*p,q:.7,vol:.035,type:'lowpass'});   // soft whoosh
@@ -1353,7 +1410,7 @@ function place(idx,r,c){
   const t=tray[idx],s=t.s;
   if(!s.star) s.cells.forEach(([dr,dc],k)=>{ grid[r+dr][c+dc]={gi:t.gi,t:-k*0.06}; });   // a star leaves no gem
   tray[idx]=null;
-  if(!s.star) Sfx.place();
+  if(!s.star) Sfx.place(s.n);
 
   let rows,cols;
   if(s.star){                                     // its whole row and column, full or not (each counts if it held a gem)
@@ -2042,7 +2099,14 @@ const DEV_TOGGLES=[            // [CFG key, label]
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
 const DEV_ACTIONS=Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]);
+const SOUND_OPTIONS=[{value:'plastic',label:'Plastic'},{value:'wood',label:'Wood'},{value:'magnet',label:'Magnet'}];
+const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
+  ['SND_PICKUP','Pickup sound',SOUND_OPTIONS,()=>{ ac(); Sfx.pickup(); }],
+  ['SND_PLACE','Place sound',SOUND_OPTIONS,()=>{ ac(); Sfx.place(1); }]
+];
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
+  ['SND_PICKUP_VOL','Pickup volume',0,1.5,0.05],
+  ['SND_PLACE_VOL','Place volume',0,1.5,0.05],
   ['TRANSFORM_PLACEMENTS','Transform length (placements)',1,15,1],
   ['TRANSFORM_MULT','Transform score multiplier',1,4,0.1],
   ['TRANSFORM_COOLDOWN','Transform cooldown (trays)',0,15,1],
@@ -2069,7 +2133,7 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
   ['LIFT','Piece lift (cells)',0,3,0.05]
 ];
-const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SLIDERS.map(s=>s[0])];
+const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
 const DEV_STORE='crumble.dev';
 function devSave(){
@@ -2082,7 +2146,7 @@ function devLoad(){
   }catch(e){}
 }
 function devSnippet(){
-  const f=v=>typeof v==='number'?+v.toFixed(4):v;
+  const f=v=>typeof v==='number'?+v.toFixed(4):typeof v==='string'?JSON.stringify(v):v;
   return '// dev panel snapshot — paste over the matching CFG entries\n'+DEV_KEYS.map(k=>`  ${k}: ${f(CFG[k])},`).join('\n');
 }
 function initDev(){
@@ -2109,6 +2173,22 @@ function initDev(){
     actions.append(b);
   }
   list.append(actions);
+  const soundHead=make('div','devhead'); soundHead.textContent='Sound'; list.append(soundHead);
+  for(const [k,label,options,audition] of DEV_CHOICES){
+    const box=make('div'), head=make('div','head'), name=make('span'), row=make('div','choices');
+    name.textContent=label; head.append(name); box.append(head);
+    const btns=options.map(o=>{
+      const b=make('button'); b.type='button'; b.textContent=o.label;
+      b.onclick=e=>{ e.stopPropagation(); CFG[k]=o.value; devSave(); btns.forEach(x=>x.setAttribute('aria-pressed',String(x===b))); };
+      row.append(b); return b;
+    });
+    const play=make('button','play'); play.type='button'; play.textContent='▶';
+    play.setAttribute('aria-label','Play '+label);
+    play.onclick=e=>{ e.stopPropagation(); audition(); };
+    row.append(play);
+    box.append(row); list.append(box);
+    refresh.push(()=>{ btns.forEach((b,i)=>b.setAttribute('aria-pressed',String(CFG[k]===options[i].value))); });
+  }
   for(const [k,label,min,max,step] of DEV_SLIDERS){
     const box=make('div'), head=make('div','head'), name=make('span'), out=make('output'), inp=make('input');
     const dp=(String(step).split('.')[1]||'').length;
