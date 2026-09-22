@@ -217,9 +217,10 @@ const CFG = {
 
   // transformations — achievement-triggered event looks (own world + own tile skin), temporary
   TRANSFORM_ENABLED:    true,  // master switch
-  TRANSFORM_PLACEMENTS: 6,     // how many placements one lasts
+  TRANSFORM_PLACEMENTS: 9,     // how many placements one lasts
   TRANSFORM_MULT:       1.5,   // score multiplier while active
-  MYSTERY_CHANCE:       0.03,  // odds a fresh tray triggers a random one anyway
+  TRANSFORM_COOLDOWN:   5,     // trays that must pass after one ends before another can start
+  MYSTERY_CHANCE:       0.015, // odds a fresh tray triggers a random one anyway (blocked by the cooldown too)
 
   // event screen effects — each independently toggleable; none may ever draw over live board gems
   FX_COMBO_GLOW:     true,   // screen-edge glow in the combo colour, intensifying with the streak
@@ -412,7 +413,7 @@ function resetWorld(){
   curWorld=CFG.HOME_WORLD; curSkin=CFG.STYLE;
   buildCache();                     // curSkin may have just changed (a fresh run can follow a skin pick)
   ambient=spawnAmbient(worldDef(curWorld).effect); ambientOld=[]; ambientBurst=0;
-  bgFrom=curWorld; bgT=1; flip=null; transform=null; lightningT=0;
+  bgFrom=curWorld; bgT=1; flip=null; transform=null; transformCool=0; lightningT=0;
   renderPips();
 }
 function startFlip(toWorld,toSkin){
@@ -486,7 +487,7 @@ let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blas
 let paused=false;
 let curWorld='night', curSkin='jewel', bgFrom='night', bgT=1, flip=null;
 let ambient=[], ambientOld=[], ambientBurst=0, lightningT=0;
-let transform=null, discoveredWorlds=new Set();
+let transform=null, transformCool=0, discoveredWorlds=new Set();
 let comboGlowV=0, goldTintV=0, sweepFxT=0, punchT=0, confetti=[];
 let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0;
 let gemBig=[],gemSmall=[];
@@ -732,6 +733,7 @@ function genTray(){
   let tier=pickTier(a0);
   sweepCool=Math.max(0,sweepCool-1);
   goldenCool=Math.max(0,goldenCool-1);
+  transformCool=Math.max(0,transformCool-1);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
   const wantStar=CFG.STAR_ENABLED && (starForced || Math.random()<CFG.STAR_CHANCE);
@@ -1011,13 +1013,15 @@ function goldVaultTile(size,g){
   x.globalAlpha=.5; x.fillStyle='#fff';
   roundPath(x,pad+S*0.3,pad+S*0.29,S*0.22,S*0.13,S*0.065); x.fill();
   x.globalAlpha=1; x.restore();
-  x.fillStyle='#FFD45C';
-  const k=S*0.22;
+  x.globalAlpha=.8; x.fillStyle='#FFD45C';                 // small corner accents, not a full ring
+  const k=S*0.13;
   [[pad,pad,1,1],[pad+S,pad,-1,1],[pad+S,pad+S,-1,-1],[pad,pad+S,1,-1]].forEach(([cx,cy,sx,sy])=>{
     x.beginPath(); x.moveTo(cx,cy); x.lineTo(cx+sx*k,cy); x.lineTo(cx,cy+sy*k); x.closePath(); x.fill();
   });
+  x.globalAlpha=.6;
   roundPath(x,pad,pad,S,S,S*0.25);
-  x.strokeStyle='#FFD45C'; x.lineWidth=Math.max(1.5,size*0.045); x.stroke();
+  x.strokeStyle='#FFD45C'; x.lineWidth=Math.max(1,size*0.025); x.stroke();
+  x.globalAlpha=1;
   return cv;
 }
 // Volcano: a richer, darker fill in the gem's hue, a heat-glow rim, bright cracks.
@@ -1046,21 +1050,27 @@ function volcanoTile(size,g){
 function starfieldTile(size,g){
   const {cv,x}=newTile(size);
   const pad=size*0.08, S=size-pad*2, R=S*0.24;
-  x.fillStyle='rgba(6,6,20,.94)'; roundPath(x,pad,pad,S,S,R); x.fill();
+  x.fillStyle='rgba(4,4,16,.96)'; roundPath(x,pad,pad,S,S,R); x.fill();
   x.save(); roundPath(x,pad,pad,S,S,R); x.clip();
-  const gr=x.createRadialGradient(size/2,size/2,0,size/2,size/2,S*0.55);
-  gr.addColorStop(0,`hsla(${g.h} 90% ${g.star?85:62}% / .8)`); gr.addColorStop(1,'hsla(0 0% 0% / 0)');
+  const gr=x.createRadialGradient(size/2,size/2,0,size/2,size/2,S*0.62);
+  gr.addColorStop(0,`hsla(${g.h} 95% ${g.star?88:68}% / 1)`);
+  gr.addColorStop(.5,`hsla(${g.h} 95% ${g.star?80:58}% / .55)`);
+  gr.addColorStop(1,'hsla(0 0% 0% / 0)');
   x.fillStyle=gr; x.fillRect(pad,pad,S,S);
   x.fillStyle='#fff';
-  for(let k=0;k<9;k++){
-    const px=pad+Math.random()*S, py=pad+Math.random()*S, r=0.5+Math.random()*0.9;
-    x.globalAlpha=0.4+Math.random()*0.5; x.beginPath(); x.arc(px,py,r,0,6.283); x.fill();
+  for(let k=0;k<14;k++){
+    const px=pad+Math.random()*S, py=pad+Math.random()*S, r=0.5+Math.random()*1.3;
+    x.globalAlpha=0.5+Math.random()*0.5; x.beginPath(); x.arc(px,py,r,0,6.283); x.fill();
   }
   x.globalAlpha=1;
+  drawStar(x,size*0.28,size*0.26,S*0.09,true);       // one small twinkle for sparkle, on top of the glow
   if(g.star) drawStar(x,size/2,size/2,S*0.3,true);
   x.restore();
+  x.save();
+  x.shadowColor=`hsl(${g.h} 95% 65%)`; x.shadowBlur=size*0.16;
   roundPath(x,pad,pad,S,S,R);
-  x.strokeStyle=`hsl(${g.h} 90% 70%)`; x.lineWidth=Math.max(1,size*0.03); x.stroke();
+  x.strokeStyle=`hsl(${g.h} 95% 75%)`; x.lineWidth=Math.max(1.2,size*0.035); x.stroke(); x.stroke();
+  x.restore();
   return cv;
 }
 // Storm: a stormy slab with a hue-tinted lightning-bolt accent.
@@ -1307,6 +1317,7 @@ function mobility(){
 // ═══ transformations — achievement-triggered event looks (own world + own tile skin) ═══
 function triggerTransform(id){
   if(!CFG.TRANSFORM_ENABLED) return;
+  if(!transform && transformCool>0) return;   // quiet period after one ends — makes the next feel earned
   const first=!discoveredWorlds.has(id);
   transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
   startFlip(id,TRANSFORMS[id].skin);
@@ -1322,6 +1333,7 @@ function triggerTransform(id){
 }
 function endTransform(){
   transform=null;
+  transformCool=CFG.TRANSFORM_COOLDOWN;
   startFlip(CFG.HOME_WORLD,CFG.STYLE);
   renderPips();
 }
@@ -1367,8 +1379,8 @@ function place(idx,r,c){
     if(s.star && total>=2) triggerTransform('starfield');
     combo++; trayCombo=Math.max(trayCombo,combo);
     if(CFG.STAR_ENABLED && combo>=CFG.STAR_COMBO) starForced=true;
-    if(combo>=4) triggerTransform('volcano');
-    if(combo>=5) triggerTransform('storm');
+    if(combo>=5) triggerTransform('volcano');
+    if(combo>=7) triggerTransform('storm');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
     if(!s.star){                                   // a star gets its own cross-shaped blast instead
       rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:0}));
@@ -1634,7 +1646,8 @@ function frame(now){
   ctx.fillStyle=amb; ctx.fillRect(0,0,W,H);
 
   // background-layer washes: drawn behind the gems, so they tint the scene without ever sitting over a piece
-  if(CFG.FX_GOLD_TINT && goldTintV>0.02){
+  if(CFG.FX_GOLD_TINT && goldTintV>0.02 && !(transform&&transform.id==='goldvault')){  // Gold Vault's own look already reads gold — don't double it
+
     const pulse=reduce?0.7:0.6+0.4*Math.sin(now*0.004);
     ctx.globalAlpha=goldTintV*0.09*pulse; ctx.fillStyle='#FFCE48'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
   }
@@ -2028,10 +2041,11 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['SHOW_TENSION','Debug readout']
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
-const DEV_ACTIONS=Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>triggerTransform(id)]);
+const DEV_ACTIONS=Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]);
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['TRANSFORM_PLACEMENTS','Transform length (placements)',1,15,1],
   ['TRANSFORM_MULT','Transform score multiplier',1,4,0.1],
+  ['TRANSFORM_COOLDOWN','Transform cooldown (trays)',0,15,1],
   ['MYSTERY_CHANCE','Mystery trigger chance (per tray)',0,0.3,0.01],
   ['TENSION_UP','Tension up (no clear)',0,0.5,0.01],
   ['TENSION_DOWN','Tension down (clear)',0,0.5,0.01],
