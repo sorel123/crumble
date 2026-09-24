@@ -182,9 +182,9 @@ const CFG = {
   UNLOCK_ALL_WORLDS: false, // dev: every world selectable regardless of discovery
 
   // difficulty wave
-  TENSION_UP:    0.18,   // added each placement that clears nothing
+  TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped
-  TENSION_DOWN:  0.18,   // subtracted when you clear (softer = help lingers longer)
+  TENSION_DOWN:  0.30,   // subtracted when you clear (a clear releases the tension — the wave's downswing)
   CANDIDATES:    36,   // random hands tried per tray before settling
   NODE_BUDGET:   2600,   // search cap per hand (raise = smarter, slower)
   SWEEP_COOLDOWN: 3,    // trays that must pass before another sweep hand
@@ -200,9 +200,9 @@ const CFG = {
   SWEEP_BONUS: 300, SWEEP_PER_GEM: 25,
 
   // golden hand: a bonus tray that multiplies the points it earns
-  GOLDEN_COMBO:    2,    // a combo this high (or higher) queues one for the next tray (so does a clean sweep)
-  GOLDEN_CHANCE:   0.10, // random roll after every tray
-  GOLDEN_COOLDOWN: 3,    // trays that must pass before another golden hand
+  GOLDEN_COMBO:    4,    // a combo this high (or higher) queues one for the next tray (so does a clean sweep)
+  GOLDEN_CHANCE:   0.04, // random roll after every tray
+  GOLDEN_COOLDOWN: 8,    // trays that must pass before another golden hand
   GOLDEN_MULT:     3,    // multiplier when she finds it: clears at least (planned lines - 1), min 1 (a planned sweep: 3+ lines)
   GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
@@ -214,22 +214,22 @@ const CFG = {
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
   // star gem: a single-cell piece that clears its whole row and column
   STAR_ENABLED:  true,   // master switch for star gems
-  STAR_CHANCE:   0.08,   // odds each tray carries one, replacing a normal piece
-  STAR_COMBO:    4,      // a combo this high (or higher) guarantees one in the next normal tray
+  STAR_CHANCE:   0.035,  // odds each tray carries one, replacing a normal piece
+  STAR_COMBO:    6,      // a combo this high (or higher) guarantees one in the next normal tray
 
   GOLDEN_ENABLED: true,  // master switch for golden hands
 
   LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
-  TIER_SOLVABLE: 0.05,   // tension above this deals 'solvable' hands (2+ lines)
-  TIER_JACKPOT:  0.25,   // ...above this 'jackpot' hands (3+ lines)
-  TIER_SWEEP:    0.70,   // ...above this a planned clean sweep (when off cooldown)
+  TIER_SOLVABLE: 0.20,   // tension above this deals 'solvable' hands (2+ lines); below it, honest hands
+  TIER_JACKPOT:  0.50,   // ...above this 'jackpot' hands (3+ lines)
+  TIER_SWEEP:    0.85,   // ...above this a planned clean sweep (when off cooldown)
 
   // transformations — achievement-triggered event looks (own world + own tile skin), temporary
   TRANSFORM_ENABLED:    true,  // master switch
   TRANSFORM_PLACEMENTS: 9,     // how many placements one lasts
   TRANSFORM_MULT:       1.5,   // score multiplier while active
-  TRANSFORM_COOLDOWN:   5,     // trays that must pass after one ends before another can start
+  TRANSFORM_COOLDOWN:   8,     // trays that must pass after one ends before another can start
   MYSTERY_CHANCE:       0.015, // odds a fresh tray triggers a random one anyway (blocked by the cooldown too)
 
   // event screen effects — each independently toggleable; none may ever draw over live board gems
@@ -760,7 +760,7 @@ function genTray(){
   transformCool=Math.max(0,transformCool-1);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
-  const wantStar=CFG.STAR_ENABLED && (starForced || Math.random()<CFG.STAR_CHANCE);
+  const wantStar=CFG.STAR_ENABLED && !transform && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
 
   if(goldenNext){ goldenNext=false; if(genGolden(a0,density)) return; }
 
@@ -1802,7 +1802,8 @@ function place(idx,r,c){
 
   score+=gained; el('scoreVal').textContent=score;
   if(tray.every(v=>!v)){
-    goldenNext = CFG.GOLDEN_ENABLED && goldenCool<=0 && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
+    goldenNext = CFG.GOLDEN_ENABLED && goldenCool<=0 && !transform      // a live transformation already is the moment
+      && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
     trayHadSweep=false; trayCombo=0;
     genTray();
   }
@@ -2488,7 +2489,7 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
-const DEV_STORE='crumble.dev';
+const DEV_STORE='crumble.dev.2';   // bumped for the ebb-and-flow retune, so older saved tuning doesn't override the new defaults
 function devSave(){
   try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
 }

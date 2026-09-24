@@ -67,10 +67,16 @@ falls when you clear. `pickTier` maps it to what you get served:
 
 | tension | tier | meaning |
 |---|---|---|
-| < 0.05 | honest | any fully-playable hand |
-| 0.05–0.25 | solvable | two or more clears reachable |
-| 0.25–0.70 | jackpot | three or more clears reachable, favors emptier boards |
-| > 0.70 | sweep | try to build a board-emptying hand |
+| < 0.20 | honest | any fully-playable hand |
+| 0.20–0.50 | solvable | two or more clears reachable |
+| 0.50–0.85 | jackpot | three or more clears reachable, favors emptier boards |
+| > 0.85 | sweep | try to build a board-emptying hand |
+
+Retuned 2026-09-24 for ebb and flow (`TENSION_UP` 0.10, `TENSION_DOWN` 0.30): measured
+with bot players, a strong player now sees ~48% honest / 38% solvable / 10% jackpot
+trays instead of ~75% jackpot, while a struggling player still gets jackpot help on
+~40% of trays. Golden hands and star gems are each ~1 in 33 trays, and neither is
+dealt while a transformation is live (one spotlight at a time).
 
 **Clean sweep** hands are built backwards, not found by random search:
 `coverAll` picks rows/columns covering every gem on the board, `targetCells`
@@ -197,10 +203,10 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 
 ## Open tuning notes (come back to these)
 
-- **Tension is too easy.** After the 71d91ee retune (`TENSION_DOWN` 0.18,
-  jackpot wants 3 lines, thresholds 0.05/0.25/0.70, `SWEEP_COOLDOWN` 3) it plays
-  too generous. Dial back: `TENSION_DOWN` toward 0.25–0.30, jackpot `want` back
-  to 2, `SWEEP_COOLDOWN` back to 4. Change one at a time and watch the debug readout.
+- **Tension was too easy — addressed 2026-09-24.** The help tiers were pinned
+  (jackpot on ~75% of trays). Now `TENSION_DOWN` 0.30, `TENSION_UP` 0.10 and
+  thresholds 0.20/0.50/0.85, so help builds and releases in waves. Needs a real
+  playtest; if it now feels too hard, lower `TIER_JACKPOT` first.
 - **L/J pieces vs. density bias.** The 8 L/J orientations (4 cells each) are
   liked and should stay common. `weightedShape` weights by `1/(1+n*density*3.0)`,
   so on a crowded board it favors 1–3 cell pieces and L/J get squeezed out. Goal:
