@@ -244,6 +244,7 @@ const CFG = {
   SND_PLACE:      'plastic',
   SND_PICKUP_VOL: 1,
   SND_PLACE_VOL:  1,
+  PHONE_SPEAKER:  matchMedia('(pointer:coarse)').matches,   // cut the bass a phone speaker can't play (it just distorts); on by default on touch devices
 
   SHOW_TENSION: true     // set false to hide the debug readout
 };
@@ -1211,7 +1212,7 @@ function buildBoardBg(){
    noise buffer is built when the context is created (first user gesture,
    which browsers require) and reused by every noise hit.
    ═══════════════════════════════════════════════════════════════ */
-let actx=null,muted=false,master=null,nbuf=null,revIn=null;
+let actx=null,muted=false,master=null,nbuf=null,revIn=null,setSpeaker=()=>{};
 /* The whole chain, built on whatever context it's handed (the live one, or an
    offline one for rendering/tests): sounds -> master -> soft high-shelf ->
    safety limiter -> out, plus a small reverb send any sound can feed via
@@ -1222,7 +1223,11 @@ function buildChain(c){
   const lim=c.createDynamicsCompressor();                            // a safety limiter only — it should almost never act.
   lim.threshold.value=-3; lim.knee.value=0; lim.ratio.value=20;      // (a real compressor here also adds automatic makeup
   lim.attack.value=.002; lim.release.value=.12;                      //  gain, which is what squashed the mix)
-  m.connect(tame); tame.connect(lim); lim.connect(c.destination);
+  const hp1=c.createBiquadFilter(), hp2=c.createBiquadFilter();   // phone-speaker mode: bass below ~220Hz can't be played
+  for(const h of [hp1,hp2]){ h.type='highpass'; h.Q.value=.7; }    // by a tiny speaker — fed to one, it just buzzes and
+  const setSpeaker=on=>{ for(const h of [hp1,hp2]) h.frequency.value=on?220:10; };   // distorts, like a blown speaker
+  setSpeaker(CFG.PHONE_SPEAKER);
+  m.connect(hp1); hp1.connect(hp2); hp2.connect(tame); tame.connect(lim); lim.connect(c.destination);
   const len=Math.floor(c.sampleRate*1.0), ir=c.createBuffer(2,len,c.sampleRate), fade=c.sampleRate*.006;
   for(let ch=0;ch<2;ch++){                                           // a small, dark room — a touch of air, not a hall
     const d=ir.getChannelData(ch);
@@ -1235,10 +1240,10 @@ function buildChain(c){
   rin.connect(conv); conv.connect(dark); dark.connect(thin); thin.connect(lim);
   const nb=c.createBuffer(1,c.sampleRate,c.sampleRate), nd=nb.getChannelData(0);
   for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;             // 1s of white noise, shared by every noise hit
-  return {master:m,revIn:rin,nbuf:nb};
+  return {master:m,revIn:rin,nbuf:nb,setSpeaker};
 }
 function ac(){
-  if(!actx){ actx=new (window.AudioContext||window.webkitAudioContext)(); ({master,revIn,nbuf}=buildChain(actx)); }
+  if(!actx){ actx=new (window.AudioContext||window.webkitAudioContext)(); ({master,revIn,nbuf,setSpeaker}=buildChain(actx)); }
   if(actx.state==='suspended') actx.resume().catch(()=>{});
   return actx;
 }
@@ -1320,6 +1325,16 @@ function bell(t,{f,dur=.9,vol=.08,wet=.25,kind='glock',atk=.003}){
    sounds that overlap — a clear, a praise sting, a combo — are consonant */
 const PENTA=[0,2,4,7,9];
 const note=step=>392*Math.pow(2,(Math.floor(step/5)*12+PENTA[((step%5)+5)%5])/12);      // step 0 = G4
+/* speaker test (settings panel): plain steady tones to pin down distortion.
+   'clean' goes straight to the output, bypassing everything this game does —
+   if that one sounds blown out, the problem is the device, not the sounds. */
+function testTone(kind){
+  const c=ac(), t=c.currentTime+.03, o=c.createOscillator(), g=c.createGain();
+  o.frequency.value=kind==='low'?150:440;
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.2,t+.03);
+  g.gain.setValueAtTime(.2,t+.7); g.gain.linearRampToValueAtTime(0,t+.75);
+  o.connect(g); g.connect(kind==='clean'?c.destination:master); o.start(t); o.stop(t+.8);
+}
 /* run a sound: skip when muted, start the clock at `delay`, never throw */
 function play(delay,fn){
   if(muted) return;
@@ -2242,6 +2257,9 @@ const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
   ['SND_PICKUP','Pickup sound',SOUND_OPTIONS,()=>{ ac(); Sfx.pickup(); }],
   ['SND_PLACE','Place sound',SOUND_OPTIONS,()=>{ ac(); Sfx.place(1); }]
 ];
+const DEV_SOUND_TOGGLES=[       // shown in the Sound section
+  ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
+];
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SND_PICKUP_VOL','Pickup volume',0,1.5,0.05],
   ['SND_PLACE_VOL','Place volume',0,1.5,0.05],
@@ -2271,7 +2289,7 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
   ['LIFT','Piece lift (cells)',0,3,0.05]
 ];
-const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
+const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
 const DEV_STORE='crumble.dev';
 function devSave(){
@@ -2312,6 +2330,23 @@ function initDev(){
   }
   list.append(actions);
   const soundHead=make('div','devhead'); soundHead.textContent='Sound'; list.append(soundHead);
+  for(const [k,label] of DEV_SOUND_TOGGLES){
+    const row=make('label','tog'), name=make('span'), inp=make('input');
+    name.textContent=label; inp.type='checkbox';
+    inp.onchange=()=>{ CFG[k]=inp.checked; devSave(); setSpeaker(CFG.PHONE_SPEAKER); };
+    refresh.push(()=>{ inp.checked=!!CFG[k]; });
+    row.append(name,inp); list.append(row);
+  }
+  {                                                // speaker test: which of these sound distorted tells us why
+    const box=make('div'), head=make('div','head'), name=make('span'), rate=make('output'), row=make('div','choices');
+    name.textContent='Speaker test'; head.append(name,rate); box.append(head);
+    for(const [kind,label] of [['clean','Plain tone'],['chain','Through game'],['low','Low tone']]){
+      const b=make('button'); b.type='button'; b.textContent='▶ '+label;
+      b.onclick=e=>{ e.stopPropagation(); testTone(kind); rate.textContent=actx.sampleRate+' Hz · '+actx.state; };
+      row.append(b);
+    }
+    box.append(row); list.append(box);
+  }
   for(const [k,label,options,audition] of DEV_CHOICES){
     const box=make('div'), head=make('div','head'), name=make('span'), row=make('div','choices');
     name.textContent=label; head.append(name); box.append(head);
@@ -2348,7 +2383,7 @@ function initDev(){
     e.stopPropagation();
     Object.assign(CFG,DEV_DEFAULTS);
     try{ localStorage.removeItem(DEV_STORE); }catch(_){}
-    sync(); updateDbg(); renderSkins(); renderWorlds();
+    sync(); updateDbg(); renderSkins(); renderWorlds(); setSpeaker(CFG.PHONE_SPEAKER);
   };
   el('devCopy').onclick=async e=>{
     e.stopPropagation();
