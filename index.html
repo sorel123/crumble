@@ -1214,27 +1214,25 @@ function buildBoardBg(){
 let actx=null,muted=false,master=null,nbuf=null,revIn=null;
 /* The whole chain, built on whatever context it's handed (the live one, or an
    offline one for rendering/tests): sounds -> master -> soft high-shelf ->
-   compressor -> out, plus a reverb send that any sound can feed via `wet`.
-   The reverb is a synthetic room — decaying stereo noise — so it costs no
-   file and gives the musical sounds some air instead of sitting bone-dry. */
+   safety limiter -> out, plus a small reverb send any sound can feed via
+   `wet` (a synthetic room — decaying stereo noise — so it costs no file). */
 function buildChain(c){
-  const m=c.createGain(); m.gain.value=1;
-  const sub=c.createBiquadFilter(); sub.type='highpass'; sub.frequency.value=90; sub.Q.value=.7;   // sub-bass a phone speaker can't play
-  const tame=c.createBiquadFilter(); tame.type='highshelf'; tame.frequency.value=7500; tame.gain.value=-5;
-  const comp=c.createDynamicsCompressor();
-  comp.threshold.value=-14; comp.knee.value=10; comp.ratio.value=3.5;
-  comp.attack.value=.004; comp.release.value=.18;
-  m.connect(sub); sub.connect(tame); tame.connect(comp); comp.connect(c.destination);
-  const len=Math.floor(c.sampleRate*1.5), ir=c.createBuffer(2,len,c.sampleRate), fade=c.sampleRate*.006;
-  for(let ch=0;ch<2;ch++){
+  const m=c.createGain(); m.gain.value=.8;                           // headroom: peaks sit well under full scale
+  const tame=c.createBiquadFilter(); tame.type='highshelf'; tame.frequency.value=7000; tame.gain.value=-5;
+  const lim=c.createDynamicsCompressor();                            // a safety limiter only — it should almost never act.
+  lim.threshold.value=-3; lim.knee.value=0; lim.ratio.value=20;      // (a real compressor here also adds automatic makeup
+  lim.attack.value=.002; lim.release.value=.12;                      //  gain, which is what squashed the mix)
+  m.connect(tame); tame.connect(lim); lim.connect(c.destination);
+  const len=Math.floor(c.sampleRate*1.0), ir=c.createBuffer(2,len,c.sampleRate), fade=c.sampleRate*.006;
+  for(let ch=0;ch<2;ch++){                                           // a small, dark room — a touch of air, not a hall
     const d=ir.getChannelData(ch);
-    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3.4)*(i<fade?i/fade:1);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,4.5)*(i<fade?i/fade:1);
   }
   const conv=c.createConvolver(); conv.buffer=ir;
-  const rin=c.createGain(), dark=c.createBiquadFilter();
-  dark.type='lowpass'; dark.frequency.value=4800;                  // a darker tail sits behind the dry sound
-  const thin=c.createBiquadFilter(); thin.type='highpass'; thin.frequency.value=250;   // and no low-end mud
-  rin.connect(conv); conv.connect(dark); dark.connect(thin); thin.connect(comp);
+  const rin=c.createGain(); rin.gain.value=.35;
+  const dark=c.createBiquadFilter(); dark.type='lowpass'; dark.frequency.value=3500;
+  const thin=c.createBiquadFilter(); thin.type='highpass'; thin.frequency.value=150;
+  rin.connect(conv); conv.connect(dark); dark.connect(thin); thin.connect(lim);
   const nb=c.createBuffer(1,c.sampleRate,c.sampleRate), nd=nb.getChannelData(0);
   for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;             // 1s of white noise, shared by every noise hit
   return {master:m,revIn:rin,nbuf:nb};
@@ -1253,13 +1251,13 @@ function send(node,wet){                             // dry to master, plus `wet
 
 /* filtered noise slice with its own envelope; f0 -> f1 sweeps the filter.
    Used both as the attack transient on every sound and as bursts/washes. */
-function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass',wet=0}){
+function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass',wet=0,atk=Math.min(.004,dur/3)}){
   const c=actx, src=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain();
   src.buffer=nbuf; f.type=type; f.Q.value=q;
   f.frequency.setValueAtTime(hz(f0),t);
   if(f1!==f0) f.frequency.exponentialRampToValueAtTime(hz(f1),t+dur);
   g.gain.setValueAtTime(.0001,t);
-  g.gain.exponentialRampToValueAtTime(vol,t+Math.min(.004,dur/3));
+  g.gain.exponentialRampToValueAtTime(vol,t+atk);
   g.gain.exponentialRampToValueAtTime(.0001,t+dur);
   src.connect(f); f.connect(g); send(g,wet);
   src.loop=true;                                                    // a long hit just wraps the 1s buffer
@@ -1298,13 +1296,13 @@ function tone(t,{f0,f1=f0,pdur=.03,dur=.1,vol=.1,atk=.002,type='sine',wet=0}){
 }
 function boom(t,vol,wet=.1){
   tone(t,{f0:130,f1:62,pdur:.25,dur:.55,vol,wet});
-  tone(t,{f0:260,f1:124,pdur:.25,dur:.4,vol:vol*.5});
-  tone(t,{f0:390,f1:186,pdur:.25,dur:.3,vol:vol*.28});
+  tone(t,{f0:260,f1:124,pdur:.25,dur:.4,vol:vol*.3});             // a little harmonic so a phone still hears it
+  tone(t,{f0:390,f1:186,pdur:.25,dur:.3,vol:vol*.12});
 }
 /* a struck bell: pure sine partials, each with its own exponential decay.
    glock = bright inharmonic chime; marimba = rounder, woody, short. */
 const BELLS={            // [frequency ratio, amplitude, share of the note's decay]
-  glock:  [[1,1,1],[2,.14,.55],[2.76,.16,.45],[5.4,.05,.25]],
+  glock:  [[1,1,1],[2,.12,.55],[2.76,.09,.4],[5.4,.03,.22]],
   marimba:[[1,1,1],[3.99,.28,.3],[10.1,.07,.1]]
 };
 function bell(t,{f,dur=.9,vol=.08,wet=.25,kind='glock',atk=.003}){
@@ -1318,42 +1316,39 @@ function bell(t,{f,dur=.9,vol=.08,wet=.25,kind='glock',atk=.003}){
     o.connect(g); g.connect(out); o.start(t); o.stop(t+d+.02);
   }
 }
-/* everything musical sits on one C-major pentatonic scale, so any two
+/* everything musical sits on one major pentatonic scale, so any two
    sounds that overlap — a clear, a praise sting, a combo — are consonant */
 const PENTA=[0,2,4,7,9];
-const note=step=>523.25*Math.pow(2,(Math.floor(step/5)*12+PENTA[((step%5)+5)%5])/12);   // step 0 = C5
+const note=step=>392*Math.pow(2,(Math.floor(step/5)*12+PENTA[((step%5)+5)%5])/12);      // step 0 = G4
 /* run a sound: skip when muted, start the clock at `delay`, never throw */
 function play(delay,fn){
   if(muted) return;
   try{ const c=ac(); fn(c.currentTime+delay,jit()); }catch(e){}
 }
 
-/* place + pickup: heard on every single move, so they're soft and short —
-   no noise clicks or noise 'tocks' at all (on a phone speaker those
-   transients read as a loud tick-tock). Each is a couple of sine tones
-   with a gentle 4-6ms attack, a small pitch settle, and energy kept in
-   the 250-800Hz range a phone plays without sounding harsh. Bigger
-   pieces land a touch lower. Ids kept from earlier versions so saved
-   choices still map; 'off' silences one entirely. */
+/* place + pickup: heard on every single move, so they're soft taps — a
+   puff of low-passed noise (the 'felt' of the contact) under a quiet round
+   tone, 6-10ms attacks so nothing snaps, and nothing much above ~1kHz.
+   Bigger pieces land a touch lower. Ids kept so saved choices still map. */
 const PLACE_VARIANTS={
   plastic:(t,p,pm,vol)=>{                                    // Pop: light and round
-    tone(t,{f0:620*p*pm,f1:500*p*pm,pdur:.02,dur:.07,vol:.065*vol,atk:.004});
-    tone(t,{f0:250*p*pm,f1:210*p*pm,pdur:.03,dur:.08,vol:.05*vol,atk:.005});
+    noiseHit(t,{dur:.035,f0:1100*pm,type:'lowpass',q:.7,vol:.14*vol,atk:.006});
+    tone(t,{f0:340*p*pm,f1:318*p*pm,pdur:.03,dur:.07,vol:.07*vol,atk:.008});
   },
   wood:(t,p,pm,vol)=>{                                        // Knock: muted, woody
-    tone(t,{f0:430*p*pm,f1:360*p*pm,pdur:.02,dur:.06,vol:.072*vol,atk:.004});
-    tone(t,{f0:185*p*pm,f1:150*p*pm,pdur:.03,dur:.08,vol:.052*vol,atk:.005});
+    noiseHit(t,{dur:.04,f0:800*pm,type:'lowpass',q:.7,vol:.15*vol,atk:.006});
+    tone(t,{f0:245*p*pm,f1:230*p*pm,pdur:.03,dur:.08,vol:.08*vol,atk:.008});
   },
   magnet:(t,p,pm,vol)=>{                                      // Thunk: deep and soft
-    tone(t,{f0:330*p*pm,f1:280*p*pm,pdur:.025,dur:.09,vol:.09*vol,atk:.006});
-    tone(t,{f0:140*p*pm,f1:120*p*pm,pdur:.03,dur:.1,vol:.06*vol,atk:.006});
+    noiseHit(t,{dur:.05,f0:550*pm,type:'lowpass',q:.7,vol:.16*vol,atk:.008});
+    tone(t,{f0:165*p*pm,f1:152*p*pm,pdur:.035,dur:.1,vol:.1*vol,atk:.01});
   },
   off:()=>{}
 };
-const PICKUP_VARIANTS={                                       // a single soft tone, well under the place sound
-  plastic:(t,p,vol)=>tone(t,{f0:760*p,f1:800*p,pdur:.03,dur:.04,vol:.03*vol,atk:.006}),
-  wood:(t,p,vol)=>tone(t,{f0:600*p,f1:630*p,pdur:.03,dur:.04,vol:.03*vol,atk:.006}),
-  magnet:(t,p,vol)=>tone(t,{f0:520*p,f1:540*p,pdur:.03,dur:.045,vol:.032*vol,atk:.007}),
+const PICKUP_VARIANTS={                                       // one soft, low tone — barely there
+  plastic:(t,p,vol)=>tone(t,{f0:520*p,dur:.045,vol:.03*vol,atk:.01}),
+  wood:(t,p,vol)=>tone(t,{f0:440*p,dur:.045,vol:.032*vol,atk:.01}),
+  magnet:(t,p,vol)=>tone(t,{f0:380*p,dur:.05,vol:.034*vol,atk:.012}),
   off:()=>{}
 };
 const Sfx={
@@ -1369,7 +1364,7 @@ const Sfx={
     const s0=Math.min(8,combo-1), n=Math.min(6,1+total);
     noiseHit(t,{dur:.22,f0:900,f1:4500,q:.7,vol:.018,type:'bandpass',wet:.25});        // soft air
     for(let i=0;i<n;i++) bell(t+i*.055,{f:note(s0+i*2),dur:.9,vol:.07,wet:.3});
-    bell(t,{f:note(s0)/2,dur:.45,vol:.08,wet:.12,kind:'marimba'});                      // low warmth under it
+    bell(t,{f:note(s0)/2,dur:.5,vol:.12,wet:.1,kind:'marimba'});                        // low warmth under it
   }); },
   combo(combo=2,total=1,delay=.07){
     this.clear(total,delay,combo);
@@ -1383,7 +1378,7 @@ const Sfx={
     for(let i=0;i<run;i++) bell(t+i*.045,{f:note(5+i),dur:.35,vol:.045,wet:.3});
     const tc=t+run*.045, chord=tier>=3?[5,7,8,10]:tier>=2?[5,7,8]:[5,8];
     chord.forEach((st,i)=>bell(tc+i*.014,{f:note(st),dur:1.1+tier*.25,vol:.06,wet:.38}));
-    bell(tc,{f:note(0),dur:.7,vol:.07,wet:.2,kind:'marimba'});
+    bell(tc,{f:note(0)/2,dur:.8,vol:.1,wet:.15,kind:'marimba'});
     if(tier>=3) for(let i=0;i<6+tier*2;i++)
       noiseHit(tc+.05+i*.055,{dur:.04,f0:6500+Math.random()*3000,q:9,vol:.016,wet:.45});
     if(tier>=4) boom(tc,.2);
@@ -1398,12 +1393,11 @@ const Sfx={
     for(let i=0;i<8;i++) noiseHit(tc+.06+i*.08,{dur:.045,f0:6500+Math.random()*3500,q:10,vol:.018,wet:.5});
   }); },
   deny(){ play(0,(t,p)=>{
-    noiseHit(t,{dur:.01,f0:1500*p,q:1,vol:.05});
-    tone(t,{f0:175*p,f1:125*p,pdur:.09,dur:.13,vol:.22});                     // a soft 'nope', not a buzz
-    tone(t+.07,{f0:150*p,f1:110*p,pdur:.08,dur:.1,vol:.14});
+    tone(t,{f0:175*p,f1:125*p,pdur:.09,dur:.13,vol:.1,atk:.006});             // a soft 'nope', not a buzz
+    tone(t+.07,{f0:150*p,f1:110*p,pdur:.08,dur:.1,vol:.07,atk:.006});
   }); },
   star(){ play(.02,t=>{
-    noiseHit(t,{dur:.14,f0:6000,f1:1200,q:2,vol:.05,wet:.3});                                // zap: a falling noise sweep
+    noiseHit(t,{dur:.14,f0:3500,f1:900,q:2,vol:.035,wet:.2});                                // zap: a falling noise sweep
     [0,2,4,7,9].forEach((st,i)=>bell(t+.04+i*.04,{f:note(st+5),dur:.6,vol:.05,wet:.35}));   // glassy rising chime
     for(let i=0;i<5;i++) noiseHit(t+.12+i*.06,{dur:.04,f0:7000+Math.random()*3000,q:10,vol:.016,wet:.4});
   }); },
