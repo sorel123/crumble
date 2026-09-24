@@ -31,7 +31,7 @@
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--gold)}
   #mute,#devBtn{pointer-events:auto;background:rgba(255,255,255,.09);border:0;color:#fff;
         width:40px;height:40px;border-radius:12px;font-size:17px;cursor:pointer}
-  #dbg{position:absolute;left:18px;top:calc(64px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
+  #dbg{position:absolute;left:18px;top:calc(100px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
   #dbg[hidden]{display:none}
   #devPanel{justify-content:flex-start;gap:12px;padding:calc(18px + env(safe-area-inset-top,0px)) 16px calc(18px + env(safe-area-inset-bottom,0px))}
@@ -92,7 +92,8 @@
         border-radius:999px;padding:8px 16px;min-height:38px;cursor:pointer}
   .motifs button[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
 
-  .pips{display:flex;gap:5px;margin-top:6px}
+  .pips{display:flex;gap:5px;margin-top:6px;align-items:center}
+  .pips .mult{font-size:12px;font-weight:700;color:var(--gold);margin-left:4px;line-height:1}
   .pips[hidden]{display:none}
   .pips .pip{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.22)}
   .pips .pip.on{background:#FFD45C;box-shadow:0 0 8px rgba(255,212,92,.9)}
@@ -421,7 +422,7 @@ function stepAmbient(list,effect,dt,boost,alphaMul,respawn){
 /* ── flip transition: a diagonal card-flip wave across the board, then the
    tray, swapping from one world+skin to another. All timings in frames
    (~60/s). Skipped (snapped instantly) under prefers-reduced-motion.    */
-const FLIP_WAVE=40, FLIP_CELL=22, FLIP_GAP=10, FLIP_STAGGER=8, FLIP_TRAY=20;
+const FLIP_WAVE=28, FLIP_CELL=16, FLIP_GAP=6, FLIP_STAGGER=5, FLIP_TRAY=14;
 const FLIP_BG_DUR=FLIP_WAVE+FLIP_CELL;
 const FLIP_TOTAL=FLIP_WAVE+FLIP_CELL+FLIP_GAP+2*FLIP_STAGGER+FLIP_TRAY;
 function resetWorld(){
@@ -499,6 +500,7 @@ let tension=0, sweepCool=0, lastTier='—', trayNo=0;
 let starForced=false;   // a big combo guaranteed the next normal tray a star gem
 let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts}
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blasts=[];
+let praises=[],bursts=[],lineFlashes=[];
 let paused=false;
 let curWorld='night', curSkin='jewel', bgFrom='night', bgT=1, flip=null;
 let ambient=[], ambientOld=[], ambientBurst=0, lightningT=0;
@@ -527,67 +529,72 @@ function packGrid(g){
   for(let r=0;r<N;r++) for(let c=0;c<N;c++) a[r*N+c]=g[r][c]?1:0;
   return a;
 }
-function fitFlat(a,s,r,c){
-  if(r<0||c<0||r+s.rows>N||c+s.cols>N) return false;
-  for(const [dr,dc] of s.cells) if(a[(r+dr)*N+c+dc]) return false;
-  return true;
-}
-function applyFlat(a,s,r,c){
-  const b=a.slice();
-  if(s.star){                                   // star: wipes its row and column; each counts as a line if it held a gem
-    let rowHas=0,colHas=0;
-    for(let j=0;j<N;j++) if(b[r*N+j]) rowHas=1;
-    for(let i=0;i<N;i++) if(b[i*N+c]) colHas=1;
-    for(let j=0;j<N;j++) b[r*N+j]=0;
-    for(let i=0;i<N;i++) b[i*N+c]=0;
-    return {b,lines:rowHas+colHas};
+/* The search runs on a bitboard: 64 cells as two 32-bit ints (rows 0-3
+   in lo, rows 4-7 in hi), so a fit test is two ANDs and a placement is
+   two ORs — no allocation per node. Same DFS order and node budget as
+   the array version it replaced, so it returns identical answers, just
+   ~20x faster (a tray refill used to cost a visible frame on a phone). */
+const pop32=x=>{ x-=(x>>>1)&0x55555555; x=(x&0x33333333)+((x>>>2)&0x33333333); return (((x+(x>>>4))&0x0F0F0F0F)*0x01010101)>>>24; };
+function packBits(a){ let lo=0,hi=0; for(let i=0;i<32;i++){ if(a[i]) lo|=1<<i; if(a[i+32]) hi|=1<<i; } return [lo,hi]; }
+function placeMasks(s){                      // every legal (r,c) for a shape, in the solver's scan order, cached on the shape
+  if(s._pm) return s._pm;
+  const out=[];
+  for(let r=0;r<=N-s.rows;r++) for(let c=0;c<=N-s.cols;c++){
+    let lo=0,hi=0;
+    for(const [dr,dc] of s.cells){ const i=(r+dr)*N+c+dc; if(i<32) lo|=1<<i; else hi|=1<<(i-32); }
+    out.push({r,c,lo,hi});
   }
-  for(const [dr,dc] of s.cells) b[(r+dr)*N+c+dc]=1;
-  const rows=[],cols=[];
-  for(let i=0;i<N;i++){let f=1;for(let j=0;j<N;j++) if(!b[i*N+j]){f=0;break;} if(f)rows.push(i);}
-  for(let j=0;j<N;j++){let f=1;for(let i=0;i<N;i++) if(!b[i*N+j]){f=0;break;} if(f)cols.push(j);}
-  for(const i of rows) for(let j=0;j<N;j++) b[i*N+j]=0;
-  for(const j of cols) for(let i=0;i<N;i++) b[i*N+j]=0;
-  return {b,lines:rows.length+cols.length};
+  return (s._pm=out);
 }
-// edges between filled and empty cells: low = compact block, high = ragged/holey
-function roughFlat(a){
-  let n=0;
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    const i=r*N+c;
-    if(c<N-1&&a[i]!==a[i+1]) n++;
-    if(r<N-1&&a[i]!==a[i+N]) n++;
+const COL=0x01010101;
+function roughBits(lo,hi){                   // filled/empty edges: low = compact, high = ragged
+  return pop32((lo^(lo>>>1))&0x7F7F7F7F)+pop32((hi^(hi>>>1))&0x7F7F7F7F)
+       + pop32((lo^(lo>>>8))&0x00FFFFFF)+pop32((hi^(hi>>>8))&0x00FFFFFF)
+       + pop32(((lo>>>24)^hi)&0xFF);
+}
+let _lo=0,_hi=0;                             // applyBits' result board (avoids allocating a pair per node)
+function applyBits(lo,hi,s,m){               // returns lines cleared; new board left in _lo/_hi
+  if(s.star){                                // star: wipes its row and column; each counts if it held a gem
+    const r=m.r,c=m.c, rm=0xFF<<((r&3)*8), cm=COL<<c;
+    const rowHas=(r<4?lo&rm:hi&rm)?1:0, colHas=((lo&cm)|(hi&cm))?1:0;
+    if(r<4) lo&=~rm; else hi&=~rm;
+    _lo=lo&~cm; _hi=hi&~cm; return rowHas+colHas;
   }
-  return n;
+  lo|=m.lo; hi|=m.hi;
+  let clo=0,chi=0,n=0;
+  for(let r=0;r<4;r++){ const rm=0xFF<<(r*8); if((lo&rm)===rm){ clo|=rm; n++; } if((hi&rm)===rm){ chi|=rm; n++; } }
+  for(let c=0;c<8;c++){ const cm=COL<<c; if((lo&cm)===cm&&(hi&cm)===cm){ clo|=cm; chi|=cm; n++; } }
+  _lo=lo&~clo; _hi=hi&~chi; return n;
 }
-const emptyFlat=a=>{ for(let i=0;i<a.length;i++) if(a[i]) return false; return true; };
 const countFlat=a=>{ let n=0; for(let i=0;i<a.length;i++) if(a[i]) n++; return n; };
 
 function evalHand(a0,shapes,budget){
   const res={ok:false,lines:0,sweep:false,cleared:0,rough:999};
   const base=countFlat(a0)+shapes.reduce((n,s)=>n+(s.star?0:s.n),0);   // a star adds no gem to the board
+  const [lo0,hi0]=packBits(a0);
+  const pm=shapes.map(placeMasks);
   let b=budget;
-  function dfs(a,order,i,acc){
+  function dfs(lo,hi,order,i,acc){
     if(b<=0||res.sweep) return;
     if(i===3){
       res.ok=true; if(acc>res.lines) res.lines=acc;
-      const cl=base-countFlat(a); if(cl>res.cleared) res.cleared=cl;
-      const rg=roughFlat(a); if(rg<res.rough) res.rough=rg;
+      const cl=base-pop32(lo)-pop32(hi); if(cl>res.cleared) res.cleared=cl;
+      const rg=roughBits(lo,hi); if(rg<res.rough) res.rough=rg;
       return;
     }
-    const s=shapes[order[i]];
-    for(let r=0;r<=N-s.rows;r++) for(let c=0;c<=N-s.cols;c++){
+    const k=order[i], s=shapes[k];
+    for(const m of pm[k]){
       if(b<=0||res.sweep) return;
-      if(!fitFlat(a,s,r,c)) continue;
+      if((lo&m.lo)||(hi&m.hi)) continue;
       b--;
-      const {b:a2,lines}=applyFlat(a,s,r,c);
-      if(lines&&emptyFlat(a2)){
+      const lines=applyBits(lo,hi,s,m), nlo=_lo, nhi=_hi;
+      if(lines&&!nlo&&!nhi){
         res.sweep=true; res.ok=true; res.cleared=base; res.rough=0; res.lines=Math.max(res.lines,acc+lines); return;
       }
-      dfs(a2,order,i+1,acc+lines);
+      dfs(nlo,nhi,order,i+1,acc+lines);
     }
   }
-  for(const p of PERMS){ dfs(a0,p,0,0); if(res.sweep) break; }
+  for(const p of PERMS){ dfs(lo0,hi0,p,0,0); if(res.sweep) break; }
   return res;
 }
 
@@ -783,7 +790,35 @@ function genRescue(){
   commitTray(bestHand,'RESCUE');
 }
 function pushBanner(txt,sub){   // waits its turn if another banner is still on screen
-  banners.push({t:banners.length?-0.75:0,txt,sub});
+  banners.push({t:banners.length?-0.55:0,txt,sub});
+}
+/* praise: a big word for a multi-line clear or a long combo — the bigger the
+   moment, the bigger the word. A clean sweep has its own banner instead. */
+const PRAISE=[
+  null,
+  {words:['GOOD JOB!','NICE!'],        a:'#C8FFB8', b:'#26B865'},
+  {words:['GREAT!','SUPER!'],          a:'#C2F3FF', b:'#3478FF'},
+  {words:['AMAZING!','FANTASTIC!'],    a:'#FFD0F4', b:'#A64BFF'},
+  {words:['INCREDIBLE!','LEGENDARY!'], a:'#FFF7B0', b:'#FF6A2B'}
+];
+function praiseTier(lines,combo){
+  const byLines=lines>=5?4:lines>=4?3:lines>=3?2:lines>=2?1:0;
+  const byCombo=combo>=8?4:combo>=6?3:combo>=4?2:combo>=3?1:0;
+  return Math.max(byLines,byCombo);
+}
+function praise(lines,combo){
+  const tier=praiseTier(lines,combo); if(!tier) return;
+  const P=PRAISE[tier], word=P.words[(Math.random()*P.words.length)|0];
+  praises.length=0;                                 // newest wins — words never stack up
+  praises.push({t:0,tier,word,a:P.a,b:P.b});
+  const x=W/2, y=by+B*0.3;
+  for(let k=0;!reduce&&k<8+tier*6;k++){
+    const ang=Math.random()*6.283, sp=2.5+Math.random()*(3+tier*1.6);
+    bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.75,life:1,
+      r:cell*(0.1+Math.random()*0.13),col:Math.random()<.5?P.a:P.b});
+  }
+  if(tier>=3) waves.push({x,y,t:0});
+  Sfx.praise(tier);
 }
 function commitTray(shapes,label,plan){
   tray=shapes.map(s=>({s,gi:s.star?STAR_GI:plan?GOLD:(Math.random()*NCOLOR)|0}));
@@ -1150,10 +1185,25 @@ function layout(){
   by=HUD+Math.max(8,(Hb-HUD-B-cell*2.6-24)*0.34);
   trayH=cell*2.4;
   trayY=by+B+Math.max(16,(Hb-by-B-trayH-14)*0.5);
-  trayCell=cell*0.56;
+  trayCell=cell*0.66;                         // the size most tray pieces show at; long ones shrink to fit (trayFit)
   buildCache();
+  buildBoardBg();
 }
 addEventListener('resize',layout);
+/* the board panel and its 64 empty-cell slots never change between layouts,
+   so they're drawn once here instead of as 65 path fills every frame */
+let boardBg=null;
+function buildBoardBg(){
+  const pad=9, w=B+pad*2, cv=document.createElement('canvas');
+  cv.width=Math.round(w*dpr); cv.height=Math.round(w*dpr);
+  const x=cv.getContext('2d'); x.scale(dpr,dpr);
+  x.fillStyle='rgba(0,0,0,.34)'; roundPath(x,0,0,w,w,20); x.fill();
+  x.strokeStyle='rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
+  x.fillStyle='rgba(255,255,255,.045)';
+  const p=cell*.055;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){ roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.24); x.fill(); }
+  boardBg={cv,pad,w};
+}
 
 /* ═══════ audio ═══════
    Fully synthesized. Chain: voices -> master gain -> compressor -> out,
@@ -1161,29 +1211,47 @@ addEventListener('resize',layout);
    noise buffer is built when the context is created (first user gesture,
    which browsers require) and reused by every noise hit.
    ═══════════════════════════════════════════════════════════════ */
-let actx=null,muted=false,master=null,nbuf=null;
-function ac(){
-  if(!actx){
-    actx=new (window.AudioContext||window.webkitAudioContext)();
-    master=actx.createGain(); master.gain.value=.9;
-    const comp=actx.createDynamicsCompressor();
-    comp.threshold.value=-18; comp.knee.value=12; comp.ratio.value=6;
-    comp.attack.value=.003; comp.release.value=.2;
-    master.connect(comp); comp.connect(actx.destination);
-    const len=actx.sampleRate;                       // 1s of white noise
-    nbuf=actx.createBuffer(1,len,actx.sampleRate);
-    const d=nbuf.getChannelData(0);
-    for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+let actx=null,muted=false,master=null,nbuf=null,revIn=null;
+/* The whole chain, built on whatever context it's handed (the live one, or an
+   offline one for rendering/tests): sounds -> master -> soft high-shelf ->
+   compressor -> out, plus a reverb send that any sound can feed via `wet`.
+   The reverb is a synthetic room — decaying stereo noise — so it costs no
+   file and gives the musical sounds some air instead of sitting bone-dry. */
+function buildChain(c){
+  const m=c.createGain(); m.gain.value=1;
+  const tame=c.createBiquadFilter(); tame.type='highshelf'; tame.frequency.value=7500; tame.gain.value=-5;
+  const comp=c.createDynamicsCompressor();
+  comp.threshold.value=-14; comp.knee.value=10; comp.ratio.value=3.5;
+  comp.attack.value=.004; comp.release.value=.18;
+  m.connect(tame); tame.connect(comp); comp.connect(c.destination);
+  const len=Math.floor(c.sampleRate*1.5), ir=c.createBuffer(2,len,c.sampleRate), fade=c.sampleRate*.006;
+  for(let ch=0;ch<2;ch++){
+    const d=ir.getChannelData(ch);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3.4)*(i<fade?i/fade:1);
   }
-  if(actx.state==='suspended') actx.resume();
+  const conv=c.createConvolver(); conv.buffer=ir;
+  const rin=c.createGain(), dark=c.createBiquadFilter();
+  dark.type='lowpass'; dark.frequency.value=4800;                  // a darker tail sits behind the dry sound
+  rin.connect(conv); conv.connect(dark); dark.connect(comp);
+  const nb=c.createBuffer(1,c.sampleRate,c.sampleRate), nd=nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;             // 1s of white noise, shared by every noise hit
+  return {master:m,revIn:rin,nbuf:nb};
+}
+function ac(){
+  if(!actx){ actx=new (window.AudioContext||window.webkitAudioContext)(); ({master,revIn,nbuf}=buildChain(actx)); }
+  if(actx.state==='suspended') actx.resume().catch(()=>{});
   return actx;
 }
-const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger
+const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger — physical sounds only, never musical ones
 const hz=f=>clamp(f,20,12000);
+function send(node,wet){                             // dry to master, plus `wet` of it into the reverb
+  node.connect(master);
+  if(wet){ const w=actx.createGain(); w.gain.value=wet; node.connect(w); w.connect(revIn); }
+}
 
 /* filtered noise slice with its own envelope; f0 -> f1 sweeps the filter.
    Used both as the attack transient on every sound and as bursts/washes. */
-function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass'}){
+function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass',wet=0}){
   const c=actx, src=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain();
   src.buffer=nbuf; f.type=type; f.Q.value=q;
   f.frequency.setValueAtTime(hz(f0),t);
@@ -1191,15 +1259,14 @@ function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass'}){
   g.gain.setValueAtTime(.0001,t);
   g.gain.exponentialRampToValueAtTime(vol,t+Math.min(.004,dur/3));
   g.gain.exponentialRampToValueAtTime(.0001,t+dur);
-  src.connect(f); f.connect(g); g.connect(master);
+  src.connect(f); f.connect(g); send(g,wet);
   src.start(t,Math.random()*(nbuf.duration-dur-.05)); src.stop(t+dur+.01);
 }
 /* 2-3 detuned oscillators with a pitch envelope (f0 -> f1 over `pdur`),
    through a resonant bandpass whose centre also sweeps (bp0 -> bp1 over
    `pdur`). `dur` is the amplitude decay and can outlast the pitch move —
-   a short, sharp pitch drop under a longer ring (pdur defaults to dur,
-   which is every existing caller's behaviour, unchanged). */
-function voice(t,{f0,f1=f0,dur,pdur=dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8],atk=.005}){
+   a short, sharp pitch drop under a longer ring (pdur defaults to dur). */
+function voice(t,{f0,f1=f0,dur,pdur=dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8],atk=.005,wet=0}){
   const c=actx, out=c.createGain(), bp=c.createBiquadFilter();
   bp.type='bandpass'; bp.Q.value=q;
   bp.frequency.setValueAtTime(hz(bp0),t);
@@ -1207,7 +1274,7 @@ function voice(t,{f0,f1=f0,dur,pdur=dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=
   out.gain.setValueAtTime(.0001,t);
   out.gain.exponentialRampToValueAtTime(vol/det.length,t+atk);
   out.gain.exponentialRampToValueAtTime(.0001,t+dur);
-  bp.connect(out); out.connect(master);
+  bp.connect(out); send(out,wet);
   for(const cents of det){
     const o=c.createOscillator();
     o.type=type; o.detune.value=cents;
@@ -1216,6 +1283,37 @@ function voice(t,{f0,f1=f0,dur,pdur=dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=
     o.connect(bp); o.start(t); o.stop(t+dur+.02);
   }
 }
+/* a clean hit: one oscillator, optional small pitch drop, and a natural
+   exponential decay (setTarget, ~-35dB by `dur`) — no filter in the way, so
+   a short thump actually reaches its level instead of being smeared out */
+function tone(t,{f0,f1=f0,pdur=.03,dur=.1,vol=.1,atk=.002,type='sine',wet=0}){
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type=type; o.frequency.setValueAtTime(hz(f0),t);
+  if(f1!==f0) o.frequency.exponentialRampToValueAtTime(hz(f1),t+pdur);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+atk); g.gain.setTargetAtTime(0,t+atk,dur/4);
+  o.connect(g); send(g,wet); o.start(t); o.stop(t+atk+dur*1.4+.02);
+}
+/* a struck bell: pure sine partials, each with its own exponential decay.
+   glock = bright inharmonic chime; marimba = rounder, woody, short. */
+const BELLS={            // [frequency ratio, amplitude, share of the note's decay]
+  glock:  [[1,1,1],[2.76,.32,.5],[5.4,.13,.3],[8.93,.05,.18]],
+  marimba:[[1,1,1],[3.99,.28,.3],[10.1,.07,.1]]
+};
+function bell(t,{f,dur=.9,vol=.08,wet=.25,kind='glock',atk=.003}){
+  const c=actx, out=c.createGain(); out.gain.value=vol; send(out,wet);
+  for(const [ratio,amp,share] of BELLS[kind]){
+    const fr=f*ratio; if(fr>14000) continue;
+    const o=c.createOscillator(), g=c.createGain(), d=dur*share;
+    o.type='sine'; o.frequency.value=fr;
+    g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(amp,t+atk);
+    g.gain.exponentialRampToValueAtTime(.0001,t+d);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t+d+.02);
+  }
+}
+/* everything musical sits on one C-major pentatonic scale, so any two
+   sounds that overlap — a clear, a praise sting, a combo — are consonant */
+const PENTA=[0,2,4,7,9];
+const note=step=>523.25*Math.pow(2,(Math.floor(step/5)*12+PENTA[((step%5)+5)%5])/12);   // step 0 = C5
 /* run a sound: skip when muted, start the clock at `delay`, never throw */
 function play(delay,fn){
   if(muted) return;
@@ -1224,46 +1322,50 @@ function play(delay,fn){
 
 /* place: a physical snap, not a tonal sweep — sharp click, short sine body
    (pitch drops a touch, ~1.15x -> 1x, well inside the amplitude decay),
-   a material 'tock', and an optional quieter latch click just after.
-   Three variants with a distinct material character; volume and choice
-   both come from CFG, set on the settings panel and auditioned there. */
+   a material 'tock' with a tiny tuned core, and a quieter latch click just
+   after. Three variants with a distinct material character; volume and
+   choice both come from CFG, set on the settings panel and auditioned there. */
 const PLACE_VARIANTS={
-  plastic:(t,p,pm,vol)=>{                                    // A: bright, tight
+  plastic:(t,p,pm,vol)=>{                                    // A: bright, tight snap
     const bf=200*pm;
-    noiseHit(t,{dur:.003,f0:5200*p,type:'highpass',vol:.05*vol});
-    voice(t,{f0:bf*1.15,f1:bf,pdur:.025,dur:.065,vol:.11*vol,bp0:bf*1.3,q:2,type:'sine',det:[0],atk:.002});
-    noiseHit(t,{dur:.025,f0:1300*p,q:6,vol:.05*vol,type:'bandpass'});
-    noiseHit(t+.012,{dur:.006,f0:6000*p,type:'highpass',vol:.018*vol});
+    noiseHit(t,{dur:.004,f0:4800*p,type:'highpass',vol:.05*vol});                    // sharp click
+    tone(t,{f0:bf*1.15,f1:bf,pdur:.025,dur:.065,vol:.34*vol,atk:.0015,wet:.04});     // body
+    tone(t,{f0:1250*p*pm,dur:.022,vol:.09*vol,atk:.001});                           // tock: a tiny tuned core...
+    noiseHit(t,{dur:.025,f0:1250*p,q:6,vol:.4*vol,type:'bandpass'});                 // ...wrapped in material noise
+    noiseHit(t+.012,{dur:.006,f0:5200*p,type:'highpass',vol:.02*vol});               // latch
   },
   wood:(t,p,pm,vol)=>{                                        // B: warmer, woodier tock
-    const bf=170*pm;
-    noiseHit(t,{dur:.004,f0:4200*p,type:'highpass',vol:.035*vol});
-    voice(t,{f0:bf*1.12,f1:bf,pdur:.025,dur:.08,vol:.1*vol,bp0:bf*1.2,q:2,type:'sine',det:[0],atk:.003});
-    noiseHit(t,{dur:.03,f0:750*p,q:5,vol:.06*vol,type:'bandpass'});
-    noiseHit(t+.014,{dur:.01,f0:900*p,q:4,vol:.02*vol,type:'bandpass'});
+    const bf=175*pm;
+    noiseHit(t,{dur:.005,f0:3600*p,type:'highpass',vol:.035*vol});
+    tone(t,{f0:bf*1.12,f1:bf,pdur:.025,dur:.085,vol:.34*vol,atk:.002,wet:.05});
+    tone(t,{f0:740*p*pm,dur:.04,vol:.13*vol,atk:.001});                             // hollow wood-block note
+    tone(t,{f0:740*p*pm*3.9,dur:.012,vol:.03*vol,atk:.001});                         // its bright overtone
+    noiseHit(t,{dur:.03,f0:740*p,q:5,vol:.35*vol,type:'bandpass'});
+    noiseHit(t+.014,{dur:.01,f0:900*p,q:4,vol:.1*vol,type:'bandpass'});
   },
-  magnet:(t,p,pm,vol)=>{                                      // C: duller, deeper thunk
+  magnet:(t,p,pm,vol)=>{                                      // C: soft, deep thunk
     const bf=150*pm;
-    noiseHit(t,{dur:.004,f0:4000*p,type:'highpass',vol:.022*vol});
-    voice(t,{f0:bf*1.1,f1:bf,pdur:.025,dur:.09,vol:.1*vol,bp0:bf,q:1.5,type:'sine',det:[0],atk:.004});
-    noiseHit(t,{dur:.03,f0:500*p,q:4,vol:.045*vol,type:'bandpass'});
-    noiseHit(t+.016,{dur:.014,f0:600*p,q:3,vol:.014*vol,type:'bandpass'});
+    noiseHit(t,{dur:.006,f0:3200*p,type:'highpass',vol:.02*vol});
+    tone(t,{f0:bf*1.1,f1:bf,pdur:.025,dur:.11,vol:.38*vol,atk:.003,wet:.05});
+    tone(t,{f0:480*p*pm,dur:.035,vol:.08*vol,atk:.002});
+    noiseHit(t,{dur:.03,f0:480*p,q:4,vol:.3*vol,type:'bandpass'});
+    noiseHit(t+.016,{dur:.014,f0:600*p,q:3,vol:.08*vol,type:'bandpass'});
   }
 };
 /* pickup: softer and quieter than place, under 50ms total — an airy lift
    (a bandpass noise sweep) plus a tiny soft pluck. Same three characters. */
 const PICKUP_VARIANTS={
   plastic:(t,p,vol)=>{                                        // A: light
-    noiseHit(t,{dur:.04,f0:1500*p,f1:3000*p,q:1.2,vol:.02*vol,type:'bandpass'});
-    voice(t,{f0:1100*p,dur:.03,vol:.045*vol,bp0:1800*p,q:2,type:'sine',det:[0],atk:.004});
+    noiseHit(t,{dur:.04,f0:1500*p,f1:3000*p,q:1.2,vol:.16*vol,type:'bandpass'});
+    tone(t,{f0:1100*p,dur:.03,vol:.13*vol,atk:.003});
   },
   wood:(t,p,vol)=>{                                           // B: soft breath, lower pluck
-    noiseHit(t,{dur:.045,f0:1200*p,f1:2400*p,q:1,vol:.018*vol,type:'bandpass'});
-    voice(t,{f0:850*p,dur:.032,vol:.04*vol,bp0:1300*p,q:1.5,type:'sine',det:[0],atk:.005});
+    noiseHit(t,{dur:.045,f0:1200*p,f1:2400*p,q:1,vol:.15*vol,type:'bandpass'});
+    tone(t,{f0:850*p,dur:.032,vol:.13*vol,atk:.004});
   },
   magnet:(t,p,vol)=>{                                         // C: hover pulse, tiny wobble
-    noiseHit(t,{dur:.04,f0:1700*p,f1:2800*p,q:1.5,vol:.016*vol,type:'bandpass'});
-    voice(t,{f0:1300*p,f1:1250*p,pdur:.03,dur:.028,vol:.035*vol,bp0:1300*p,q:2,type:'sine',det:[0],atk:.003});
+    noiseHit(t,{dur:.04,f0:1700*p,f1:2800*p,q:1.5,vol:.13*vol,type:'bandpass'});
+    tone(t,{f0:1300*p,f1:1240*p,pdur:.03,dur:.03,vol:.12*vol,atk:.003});
   }
 };
 const Sfx={
@@ -1272,79 +1374,68 @@ const Sfx={
     const pm=Math.pow(0.97,Math.max(0,n-1));
     play(0,(t,p)=>PLACE_VARIANTS[CFG.SND_PLACE](t,p,pm,CFG.SND_PLACE_VOL));
   },
-  clear(total=1,delay=.1){ play(delay,(t,p)=>{
-    const k=1+.06*(total-1), base=392*p*k;                              // warm G, rises a touch per line
-    noiseHit(t,{dur:.28,f0:500*p,f1:2600*p,q:.7,vol:.035,type:'lowpass'});   // soft whoosh
-    [1,1.25,1.5].forEach((m,i)=>{                                       // quick rising major arpeggio
-      const f=base*m;
-      voice(t+i*.05,{f0:f,f1:f*1.01,dur:.32,vol:.08,bp0:f*1.5,q:.7,type:'triangle',det:[-4,4],atk:.012});
-      voice(t+i*.05,{f0:f*2,f1:f*2,dur:.22,vol:.025,bp0:f*2,q:.7,type:'sine',det:[0],atk:.012});
-    });
-    voice(t,{f0:base/2,f1:base/2,dur:.3,vol:.08,bp0:base,q:.6,type:'sine',det:[0],atk:.01}); // warm body
+  /* a line clear: a quick bell arpeggio — one line rings two notes, each
+     extra line adds another, and each link in a combo starts a step higher,
+     so a streak climbs the scale */
+  clear(total=1,delay=.07,combo=1){ play(delay,t=>{
+    const s0=Math.min(8,combo-1), n=Math.min(6,1+total);
+    noiseHit(t,{dur:.22,f0:900,f1:4500,q:.7,vol:.018,type:'bandpass',wet:.25});        // soft air
+    for(let i=0;i<n;i++) bell(t+i*.055,{f:note(s0+i*2),dur:.9,vol:.07,wet:.3});
+    bell(t,{f:note(s0)/2,dur:.45,vol:.08,wet:.12,kind:'marimba'});                      // low warmth under it
   }); },
-  combo(combo=2,total=1,delay=.1){ play(delay,(t,p)=>{
-    const base=Math.min(880,330*Math.pow(1.12,combo-1))*p;             // rises with combo, kept mellow
-    noiseHit(t,{dur:.4,f0:400*p,f1:3200*p,q:.7,vol:.04,type:'lowpass'});
-    [1,1.25,1.5,2].forEach((m,i)=>{                                     // rising major arpeggio
-      const f=base*m;
-      voice(t+i*.06,{f0:f,f1:f*1.01,dur:.4,vol:.085,bp0:f*1.5,q:.7,type:'triangle',det:[-4,4],atk:.012});
-      voice(t+i*.06,{f0:f*2,f1:f*2,dur:.28,vol:.025,bp0:f*2,q:.7,type:'sine',det:[0],atk:.012});
-    });
-    voice(t,{f0:base/2,f1:base/2,dur:.45,vol:.1,bp0:base,q:.6,type:'sine',det:[0],atk:.01}); // body
+  combo(combo=2,total=1,delay=.07){
+    this.clear(total,delay,combo);
+    play(delay+.03,t=>{ for(let i=0;i<Math.min(6,combo);i++)                          // a sparkle that grows with the streak
+      noiseHit(t+i*.035,{dur:.035,f0:6500+i*500,q:10,vol:.014,wet:.35}); });
+  },
+  /* praise sting — the answer to a big clear: a quick run up into a chord,
+     bigger and longer each tier. Lands just after the clear's own notes. */
+  praise(tier){ play(.2,t=>{
+    const run=[0,2,3,5,7][tier];
+    for(let i=0;i<run;i++) bell(t+i*.045,{f:note(5+i),dur:.35,vol:.045,wet:.3});
+    const tc=t+run*.045, chord=tier>=3?[5,7,8,10]:tier>=2?[5,7,8]:[5,8];
+    chord.forEach((st,i)=>bell(tc+i*.014,{f:note(st),dur:1.1+tier*.25,vol:.06,wet:.38}));
+    bell(tc,{f:note(0),dur:.7,vol:.07,wet:.2,kind:'marimba'});
+    if(tier>=3) for(let i=0;i<6+tier*2;i++)
+      noiseHit(tc+.05+i*.055,{dur:.04,f0:6500+Math.random()*3000,q:9,vol:.016,wet:.45});
+    if(tier>=4) voice(tc,{f0:130,f1:62,dur:.7,vol:.22,bp0:260,q:.8,type:'sine',det:[0],wet:.1});
   }); },
-  sweep(delay=.1){ play(delay,(t,p)=>{
-    noiseHit(t,{dur:.02,f0:3500*p,q:.8,vol:.2});
-    voice(t,{f0:110*p,f1:38*p,dur:.9,vol:.7,bp0:300,bp1:90,q:1.2,type:'sine',det:[0]});   // sub boom
-    noiseHit(t,{dur:1.1,f0:300*p,f1:9000*p,q:5,vol:.2});                                  // rising wash
-    for(let i=0;i<6;i++){                                                                 // arpeggio
-      const f=392*p*Math.pow(1.2,i);
-      voice(t+.05+i*.07,{f0:f,f1:f*1.04,dur:.4,vol:.12,bp0:f*2,bp1:f*6,q:5,type:'triangle'});
-    }
-    const top=392*p*Math.pow(1.2,5);                                                      // final chord
-    [1,1.25,1.5,2].forEach(m=>voice(t+.5,{f0:top*m/2,f1:top*m/2,dur:1.0,vol:.09,bp0:top*m,bp1:top*m*3,q:3,det:[-12,0,12]}));
-    for(let i=0;i<7;i++) noiseHit(t+.55+i*.09,{dur:.05,f0:(6000+Math.random()*4000)*p,q:10,vol:.05,type:'bandpass'}); // sparkle
+  sweep(delay=.1){ play(delay,t=>{
+    voice(t,{f0:110,f1:40,dur:.9,vol:.45,bp0:260,bp1:90,q:1,type:'sine',det:[0],wet:.1});   // sub boom
+    noiseHit(t,{dur:1.0,f0:400,f1:7000,q:1.5,vol:.05,wet:.4});                              // rising wash
+    for(let i=0;i<8;i++) bell(t+.04+i*.06,{f:note(i),dur:.5,vol:.05,wet:.35});               // run up two octaves
+    const tc=t+.52;
+    [5,7,8,10,12].forEach((st,i)=>bell(tc+i*.015,{f:note(st),dur:1.8,vol:.055,wet:.45}));
+    bell(tc,{f:note(0)/2,dur:1,vol:.08,wet:.2,kind:'marimba'});
+    for(let i=0;i<8;i++) noiseHit(tc+.06+i*.08,{dur:.045,f0:6500+Math.random()*3500,q:10,vol:.018,wet:.5});
   }); },
   deny(){ play(0,(t,p)=>{
-    noiseHit(t,{dur:.01,f0:1500*p,q:1,vol:.04});
-    voice(t,{f0:130*p,f1:95*p,dur:.14,vol:.14,bp0:500*p,bp1:250*p,q:2});
+    noiseHit(t,{dur:.01,f0:1500*p,q:1,vol:.05});
+    tone(t,{f0:175*p,f1:125*p,pdur:.09,dur:.13,vol:.22});                     // a soft 'nope', not a buzz
+    tone(t+.07,{f0:150*p,f1:110*p,pdur:.08,dur:.1,vol:.14});
   }); },
-  star(){ play(.02,(t,p)=>{
-    noiseHit(t,{dur:.03,f0:6000*p,q:.8,vol:.12});
-    voice(t,{f0:1400*p,f1:220*p,dur:.28,vol:.11,bp0:3200,bp1:500,q:3,type:'sawtooth'});     // zap
-    [1,1.25,1.5,2,2.5].forEach((m,i)=>{                                                    // glassy rising chime
-      const f=784*p*m;
-      voice(t+.05+i*.045,{f0:f,f1:f*1.01,dur:.45,vol:.07,bp0:f*2,q:2,type:'triangle',det:[-4,4],atk:.006});
-    });
-    for(let i=0;i<6;i++) noiseHit(t+.12+i*.06,{dur:.04,f0:(7000+Math.random()*4000)*p,q:10,vol:.04});
+  star(){ play(.02,t=>{
+    noiseHit(t,{dur:.14,f0:6000,f1:1200,q:2,vol:.05,wet:.3});                                // zap: a falling noise sweep
+    [0,2,4,7,9].forEach((st,i)=>bell(t+.04+i*.04,{f:note(st+5),dur:.6,vol:.05,wet:.35}));   // glassy rising chime
+    for(let i=0;i<5;i++) noiseHit(t+.12+i*.06,{dur:.04,f0:7000+Math.random()*3000,q:10,vol:.016,wet:.4});
   }); },
-  goldenIn(){ play(.05,(t,p)=>{
-    noiseHit(t,{dur:.18,f0:5000*p,f1:11000*p,q:6,vol:.03});
-    [1,1.5,2,3].forEach((m,i)=>{                                        // bright bell run
-      const f=659*p*m;
-      voice(t+i*.06,{f0:f,f1:f*1.005,dur:.5,vol:.06,bp0:f*2,q:2,type:'sine',det:[-3,3],atk:.008});
-    });
+  goldenIn(){ play(.05,t=>{
+    noiseHit(t,{dur:.18,f0:5000,f1:10000,q:6,vol:.02,wet:.4});
+    [5,8,10,13].forEach((st,i)=>bell(t+i*.06,{f:note(st),dur:.7,vol:.05,wet:.4}));          // bright bell run
   }); },
-  goldenWin(){ play(.15,(t,p)=>{
-    noiseHit(t,{dur:.02,f0:4000*p,q:.8,vol:.15});
-    voice(t,{f0:130*p,f1:55*p,dur:.7,vol:.5,bp0:300,bp1:100,q:1.2,type:'sine',det:[0]});    // boom
-    [1,1.125,1.25,1.5,1.667,2,2.25,2.5].forEach((m,i)=>{                                   // rising run
-      const f=523*p*m;
-      voice(t+.04+i*.06,{f0:f,f1:f*1.02,dur:.5,vol:.1,bp0:f*2,bp1:f*5,q:3,type:'triangle'});
-    });
-    const top=523*p*2.5;
-    [1,1.25,1.5,2].forEach(m=>voice(t+.55,{f0:top*m/2,f1:top*m/2,dur:1.2,vol:.08,bp0:top*m,bp1:top*m*3,q:3,det:[-12,0,12]}));
-    for(let i=0;i<9;i++) noiseHit(t+.5+i*.08,{dur:.05,f0:(6000+Math.random()*5000)*p,q:10,vol:.05});
+  goldenWin(){ play(.15,t=>{
+    voice(t,{f0:130,f1:58,dur:.7,vol:.3,bp0:260,bp1:100,q:1,type:'sine',det:[0],wet:.1});    // boom
+    for(let i=0;i<8;i++) bell(t+.04+i*.055,{f:note(3+i),dur:.5,vol:.05,wet:.35});           // rising run
+    const tc=t+.5;
+    [5,7,8,10,13].forEach((st,i)=>bell(tc+i*.015,{f:note(st),dur:1.9,vol:.055,wet:.45}));
+    for(let i=0;i<9;i++) noiseHit(tc+.05+i*.07,{dur:.045,f0:6500+Math.random()*3500,q:10,vol:.018,wet:.5});
   }); },
-  rescue(){ play(0,(t,p)=>{
-    noiseHit(t,{dur:.012,f0:4000*p,q:1,vol:.06});
-    [523,659,784].forEach((f,i)=>voice(t+i*.07,{f0:f*p,f1:f*p*1.03,dur:i===2?.35:.2,vol:.12,bp0:f*p*2,bp1:f*p*5,q:4,type:'triangle'}));
+  rescue(){ play(0,t=>{
+    [0,2,4].forEach((st,i)=>bell(t+i*.07,{f:note(st+5),dur:i===2?.9:.4,vol:.06,wet:.3}));
   }); },
-  transformShift(){ play(0,(t,p)=>{
-    noiseHit(t,{dur:.5,f0:800*p,f1:4000*p,q:2,vol:.03,type:'lowpass'});
-    [1,1.33,1.6].forEach((m,i)=>{
-      const f=440*p*m;
-      voice(t+i*.09,{f0:f,f1:f*1.02,dur:.55,vol:.06,bp0:f*1.6,q:2,type:'sine',det:[-4,4],atk:.01});
-    });
+  transformShift(){ play(0,t=>{
+    noiseHit(t,{dur:.5,f0:600,f1:5000,q:1.2,vol:.03,wet:.45});                                // whoosh
+    [0,4,7,10].forEach((st,i)=>bell(t+.08+i*.07,{f:note(st+2),dur:1,vol:.05,wet:.45}));
   }); }
 };
 el('mute').onclick=e=>{e.stopPropagation();muted=!muted;el('mute').textContent=muted?'🔈':'🔊';};
@@ -1379,13 +1470,8 @@ function triggerTransform(id){
   transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
   startFlip(id,TRANSFORMS[id].skin);
   Sfx.transformShift();
-  if(first){
-    discoveredWorlds.add(id);
-    saveSkinSave();
-    pushBanner('NEW WORLD','DISCOVERED: '+TRANSFORMS[id].name.toUpperCase());
-    renderWorlds();
-  }
-  pushBanner(TRANSFORMS[id].name.toUpperCase(),'×'+CFG.TRANSFORM_MULT+' SCORE');
+  if(first){ discoveredWorlds.add(id); saveSkinSave(); renderWorlds(); }
+  pushBanner(TRANSFORMS[id].name.toUpperCase(),first?'New world discovered!':'×'+CFG.TRANSFORM_MULT+' SCORE');
   renderPips();
 }
 function endTransform(){
@@ -1395,14 +1481,17 @@ function endTransform(){
   renderPips();
 }
 function renderPips(){
-  const box=el('transformPips');
+  const box=el('transformPips'), n=CFG.TRANSFORM_PLACEMENTS;
   if(!transform){ box.hidden=true; return; }
   box.hidden=false;
-  if(box.childElementCount!==CFG.TRANSFORM_PLACEMENTS){
-    box.innerHTML='';
-    for(let i=0;i<CFG.TRANSFORM_PLACEMENTS;i++) box.append(document.createElement('div'));
+  if(box.dataset.n!==String(n)){                    // n pips, then the multiplier label
+    box.innerHTML=''; box.dataset.n=n;
+    for(let i=0;i<n;i++) box.append(document.createElement('div'));
+    const m=document.createElement('span'); m.className='mult'; box.append(m);
   }
-  [...box.children].forEach((d,i)=>{ d.className='pip'+(i<transform.remaining?' on':''); });
+  const kids=[...box.children];
+  for(let i=0;i<n;i++) kids[i].className='pip'+(i<transform.remaining?' on':'');
+  kids[n].textContent='×'+CFG.TRANSFORM_MULT;
 }
 function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
@@ -1459,11 +1548,16 @@ function place(idx,r,c){
     const cr=r+s.rows/2, cc0=c+s.cols/2;
     waves.push({x:bx+cc0*cell,y:by+cr*cell,t:0});
     glowT=1; glowH=GEMS[lastGi].h;
+    if(!s.star){                                   // each cleared line flares in the colour it was cleared with
+      const k=Math.min(1.7,0.8+0.3*total);
+      rows.forEach(r2=>lineFlashes.push({horiz:true,idx:r2,t:0,hue:glowH,k}));
+      cols.forEach(c2=>lineFlashes.push({horiz:false,idx:c2,t:0,hue:glowH,k}));
+    }
     shake=Math.min(11,3.5+total*1.8)*CFG.SHAKE;
     if(s.star) shake=Math.max(shake,12*CFG.SHAKE);
     if(combo>1) Sfx.combo(combo,total); else Sfx.clear(total);
     pops.push({x:bx+cc0*cell,y:by+cr*cell,t:0,txt:'+'+(gained-s.n),
-               sub:combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo});
+               sub:combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
     // clean sweep — board completely emptied
     let anyLeft=false;
@@ -1474,13 +1568,14 @@ function place(idx,r,c){
       swept=true; trayHadSweep=true;
       ambientBurst=1.8;
       if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
+      pushBanner('CLEAN SWEEP','+'+bonus);         // the achievement first, then the world it earns
       triggerTransform('rainbow');
-      pushBanner('CLEAN SWEEP','+'+bonus);
       for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
       shake=16*CFG.SHAKE; glowT=1.6;
       Sfx.sweep();
       tension=0;
     }
+    if(!swept) praise(total,combo);
     tension=Math.max(0,tension-CFG.TENSION_DOWN);
   } else {
     combo=0;
@@ -1526,6 +1621,8 @@ function place(idx,r,c){
 }
 
 /* ═══════ input ═══════ */
+// a tray piece's cell size: as big as trayCell allows, but a 5-long bar still fits its slot
+const trayFit=s=>Math.min(trayCell,(B/3)*0.9/s.cols,trayH*0.9/s.rows);
 function slotRect(i){ const w=B/3; return {x:bx+w*i,y:trayY,w,h:trayH}; }
 function onDown(e){
   if(state!=='play'||paused) return;
@@ -1553,7 +1650,7 @@ function onUp(){
     else{
       const s=t.s, R=slotRect(drag.i);
       ret={i:drag.i,t:0,fx:drag.x-(s.cols*cell)/2,fy:drag.y-cell*CFG.LIFT-(s.rows*cell)/2,fs:cell,
-           tx:R.x+(R.w-s.cols*trayCell)/2,ty:R.y+(R.h-s.rows*trayCell)/2,ts:trayCell};
+           tx:R.x+(R.w-s.cols*trayFit(s))/2,ty:R.y+(R.h-s.rows*trayFit(s))/2,ts:trayFit(s)};
       Sfx.deny();
     }
   }
@@ -1618,6 +1715,16 @@ function goldGlow(cx,cy,r,now,ph,rgb='255,206,72'){
   const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
   g.addColorStop(0,`rgba(${rgb},${0.3+0.32*pulse})`); g.addColorStop(1,`rgba(${rgb},0)`);
   ctx.fillStyle=g; ctx.fillRect(cx-r,cy-r,r*2,r*2);
+}
+// a lifted piece's drop shadow, rendered with shadowBlur once into its own canvas
+function pieceShadow(s){
+  const pad=24, w=s.cols*cell+pad*2, h=s.rows*cell+pad*2, cv=document.createElement('canvas');
+  cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  const x=cv.getContext('2d'); x.scale(dpr,dpr);
+  x.shadowColor='rgba(0,0,0,.55)'; x.shadowBlur=18; x.shadowOffsetX=0; x.fillStyle='rgba(0,0,0,.55)';
+  x.translate(-1000,0); x.shadowOffsetX=1000*dpr;                 // draw the shape off-canvas so only its shadow lands
+  for(const [dr,dc] of s.cells){ roundPath(x,pad+dc*cell+cell*.08,pad+dr*cell+cell*.08,cell*.84,cell*.84,cell*.22); x.fill(); }
+  return {cv,pad,w,h};
 }
 function goldShimmer(now,s,dr,dc){
   if(reduce) return 0;
@@ -1722,19 +1829,13 @@ function frame(now){
     ctx.translate(bx+B/2,by+B/2); ctx.scale(pz,pz); ctx.translate(-(bx+B/2),-(by+B/2));
   }
 
-  ctx.fillStyle='rgba(0,0,0,.34)'; roundPath(ctx,bx-9,by-9,B+18,B+18,20); ctx.fill();
-  ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.drawImage(boardBg.cv,bx-boardBg.pad,by-boardBg.pad,boardBg.w,boardBg.w);
   if(CFG.FX_TENSION_BORDER){                            // board border glow: calm (cool) -> warm as tension climbs
-    const hue=200-185*tension, glowA=0.22+0.5*tension;
-    ctx.save();
-    ctx.shadowColor=`hsla(${hue} 85% 60% / ${glowA})`; ctx.shadowBlur=10+18*tension;
-    ctx.strokeStyle=`hsla(${hue} 85% 65% / ${0.45+0.4*tension})`; ctx.lineWidth=2+2*tension;
-    roundPath(ctx,bx-9,by-9,B+18,B+18,20); ctx.stroke();
-    ctx.restore();
-  }
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    const p=cell*.055; ctx.fillStyle='rgba(255,255,255,.045)';
-    roundPath(ctx,bx+c*cell+p,by+r*cell+p,cell-p*2,cell-p*2,cell*.24); ctx.fill();
+    const hue=200-185*tension, a=0.45+0.4*tension;       // layered strokes fake the glow — shadowBlur every frame is slow on iOS
+    roundPath(ctx,bx-9,by-9,B+18,B+18,20);
+    ctx.strokeStyle=`hsla(${hue} 85% 62% / ${a*0.12})`; ctx.lineWidth=12+14*tension; ctx.stroke();
+    ctx.strokeStyle=`hsla(${hue} 85% 62% / ${a*0.28})`; ctx.lineWidth=5+6*tension;  ctx.stroke();
+    ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;      ctx.lineWidth=2+2*tension;  ctx.stroke();
   }
 
   const gh=ghost();
@@ -1852,6 +1953,19 @@ function frame(now){
   }
   ctx.globalAlpha=1;
 
+  if(lineFlashes.length){                          // cleared lines flare, additively, in their gem colour
+    ctx.globalCompositeOperation='lighter';
+    for(let i=lineFlashes.length-1;i>=0;i--){
+      const f=lineFlashes[i]; f.t+=dt*0.05;
+      if(f.t>=1){ lineFlashes.splice(i,1); continue; }
+      const a=(1-f.t)*(1-f.t)*0.5*f.k, grow=cell*(0.1+0.55*easeOutCubic(f.t));
+      ctx.fillStyle=`hsla(${f.hue} 100% 66% / ${a})`;
+      if(f.horiz) ctx.fillRect(bx-4,by+f.idx*cell-grow/2,B+8,cell+grow);
+      else ctx.fillRect(bx+f.idx*cell-grow/2,by-4,cell+grow,B+8);
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+
   for(let i=waves.length-1;i>=0;i--){
     const w=waves[i]; w.t+=dt*0.05;
     if(w.t<0) continue;
@@ -1868,10 +1982,10 @@ function frame(now){
     if(ret&&ret.i===i) continue;
     const R=slotRect(i),s=t.s;
     const bob=reduce?0:Math.sin(now*0.0022+i*2.1)*cell*0.045;
-    const ox=R.x+(R.w-s.cols*trayCell)/2, oy=R.y+(R.h-s.rows*trayCell)/2+bob;
+    const tc=trayFit(s), ox=R.x+(R.w-s.cols*tc)/2, oy=R.y+(R.h-s.rows*tc)/2+bob;
     const gold=t.gi===GOLD;
-    if(gold) goldGlow(ox+s.cols*trayCell/2,oy+s.rows*trayCell/2,Math.max(s.cols,s.rows)*trayCell*0.95+trayCell*0.6,now,i);
-    if(s.star) goldGlow(ox+trayCell/2,oy+trayCell/2,trayCell*1.5,now,i,'235,225,255');
+    if(gold) goldGlow(ox+s.cols*tc/2,oy+s.rows*tc/2,Math.max(s.cols,s.rows)*tc*0.95+tc*0.6,now,i);
+    if(s.star) goldGlow(ox+tc/2,oy+tc/2,tc*1.5,now,i,'235,225,255');
     const pulse=s.star&&!reduce?1+0.08*Math.sin(now*0.004+i*2):1;         // star breathes gently
     let tp=1, trSrc;                                                     // tray flips after the board, staggered per slot
     if(flip){
@@ -1881,7 +1995,7 @@ function frame(now){
     }
     const tsq=tp<1?(tp<0.5?1-tp*2:(tp-0.5)*2):1;
     for(const [dr,dc] of s.cells)
-      gem(t.gi,ox+dc*trayCell,oy+dr*trayCell,trayCell,pulse*tsq,1,gold?goldShimmer(now,s,dr,dc):0,true,pulse,trSrc);
+      gem(t.gi,ox+dc*tc,oy+dr*tc,tc,pulse*tsq,1,gold?goldShimmer(now,s,dr,dc):0,true,pulse,trSrc);
   }
 
   if(ret){
@@ -1904,8 +2018,9 @@ function frame(now){
     ctx.rotate(clamp(drag.vx*0.011,-.2,.2)); ctx.scale(sc,sc);
     if(gold) goldGlow(0,0,Math.max(s.cols,s.rows)*cell*0.95+cell*0.6,now,0);
     else if(s.star) goldGlow(0,0,cell*1.5,now,0,'235,225,255');
-    ctx.shadowColor='rgba(0,0,0,.55)'; ctx.shadowBlur=18; ctx.shadowOffsetY=8;
     const ox=-(s.cols*cell)/2, oy=-(s.rows*cell)/2;
+    if(!drag.shadow) drag.shadow=pieceShadow(s);                 // blurred once per drag, not every frame
+    ctx.drawImage(drag.shadow.cv,ox-drag.shadow.pad,oy-drag.shadow.pad+8,drag.shadow.w,drag.shadow.h);
     for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*cell,oy+dr*cell,cell,1,1,gold?goldShimmer(now,s,dr,dc):0);
     ctx.restore();
   }
@@ -1915,34 +2030,74 @@ function frame(now){
     if(p.t>=1){ pops.splice(i,1); continue; }
     const sc=0.5+0.5*easeOutBack(Math.min(1,p.t*3.2));
     const rise=easeOutCubic(p.t)*cell*1.5, a=1-Math.pow(p.t,2.6);
-    ctx.save(); ctx.translate(p.x,p.y-rise); ctx.scale(sc,sc);
-    ctx.globalAlpha=a; ctx.textAlign='center';
-    ctx.shadowColor='rgba(0,0,0,.6)'; ctx.shadowBlur=10;
+    const fs=Math.round(cell*0.62*(1+0.14*Math.min(4,(p.lines||1)-1)));
+    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif';
+    const half=ctx.measureText(p.txt).width/2+fs*0.2;            // keep a popup from an edge column on screen
+    ctx.save(); ctx.translate(clamp(p.x,half+6,W-half-6),p.y-rise); ctx.scale(sc,sc);
+    ctx.globalAlpha=a; ctx.textAlign='center'; ctx.lineJoin='round';
+    ctx.lineWidth=fs*0.18; ctx.strokeStyle='rgba(24,8,40,.85)'; ctx.strokeText(p.txt,0,0);
     ctx.fillStyle=p.combo>3?'#FF7BD5':p.combo>1?'#FFD45C':'#FFFFFF';
-    ctx.font='700 '+Math.round(cell*0.66)+'px "Fredoka",Verdana,sans-serif';
     ctx.fillText(p.txt,0,0);
     if(p.sub){
-      ctx.fillStyle='#fff'; ctx.font='600 '+Math.round(cell*0.3)+'px "Fredoka",Verdana,sans-serif';
-      ctx.fillText(p.sub,0,cell*0.42);
+      const ss=Math.round(cell*0.3);
+      ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
+      ctx.lineWidth=ss*0.28; ctx.strokeText(p.sub,0,cell*0.44);
+      ctx.fillStyle='#fff'; ctx.fillText(p.sub,0,cell*0.44);
     }
     ctx.restore(); ctx.globalAlpha=1;
   }
 
+  for(let i=bursts.length-1;i>=0;i--){             // praise stars
+    const b=bursts[i];
+    b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=Math.pow(.94,dt); b.vy=b.vy*Math.pow(.94,dt)+0.04*dt; b.life-=dt*0.022;
+    if(b.life<=0){ bursts.splice(i,1); continue; }
+    const r=b.r*(0.5+0.5*b.life);
+    ctx.globalAlpha=Math.min(1,b.life*1.6); ctx.fillStyle=b.col;
+    ctx.beginPath(); ctx.moveTo(b.x,b.y-r);
+    ctx.quadraticCurveTo(b.x,b.y,b.x+r,b.y); ctx.quadraticCurveTo(b.x,b.y,b.x,b.y+r);
+    ctx.quadraticCurveTo(b.x,b.y,b.x-r,b.y); ctx.quadraticCurveTo(b.x,b.y,b.x,b.y-r); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  for(let i=praises.length-1;i>=0;i--){            // the praise word: pops in, holds, lifts away
+    const p=praises[i]; p.t+=dt*0.019;
+    if(p.t>=1){ praises.splice(i,1); continue; }
+    const pin=Math.min(1,p.t/0.2), out=p.t>0.72?(p.t-0.72)/0.28:0;
+    let size=Math.round(Math.min(W*0.13,cell*1.1)*(1+0.1*(p.tier-1)));
+    ctx.save();
+    ctx.font='700 '+size+'px "Fredoka",Verdana,sans-serif';
+    const fit=Math.min(1,W*0.88/ctx.measureText(p.word).width);   // long words shrink to fit the screen
+    const sc=(reduce?1:0.3+0.7*easeOutBack(pin))*fit;
+    ctx.translate(W/2,by+B*0.3-out*cell*0.9);
+    if(!reduce) ctx.rotate(Math.sin(p.t*18)*0.05*(1-pin));
+    ctx.scale(sc,sc);
+    ctx.globalAlpha=1-out; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+    ctx.lineWidth=size*0.3; ctx.strokeStyle=p.b; ctx.globalAlpha=(1-out)*0.35; ctx.strokeText(p.word,0,0);  // soft coloured halo
+    ctx.globalAlpha=1-out;
+    ctx.lineWidth=size*0.16; ctx.strokeStyle='rgba(28,8,46,.92)'; ctx.strokeText(p.word,0,0);
+    const g=ctx.createLinearGradient(0,-size*0.45,0,size*0.45);
+    g.addColorStop(0,'#FFFFFF'); g.addColorStop(0.28,p.a); g.addColorStop(1,p.b);
+    ctx.fillStyle=g; ctx.fillText(p.word,0,0);
+    ctx.restore();
+  }
+
   for(let i=banners.length-1;i>=0;i--){
-    const b=banners[i]; b.t+=dt*0.009;
+    const b=banners[i]; b.t+=dt*0.013;
     if(b.t>=1){ banners.splice(i,1); continue; }
     if(b.t<0) continue;
     const sc=0.6+0.4*easeOutBack(Math.min(1,b.t*2.4));
     const a=b.t>0.72?(1-b.t)/0.28:1;
     ctx.save(); ctx.translate(W/2,by+B/2); ctx.scale(sc,sc);
-    ctx.globalAlpha=a; ctx.textAlign='center';
-    ctx.shadowColor='rgba(255,212,92,.8)'; ctx.shadowBlur=26;
-    ctx.fillStyle='#FFD45C';
-    ctx.font='700 '+Math.round(Math.min(W*0.13,62))+'px "Fredoka",Verdana,sans-serif';
-    ctx.fillText(b.txt,0,0);
-    ctx.shadowBlur=8; ctx.fillStyle='#fff';
-    ctx.font='700 '+Math.round(Math.min(W*0.07,34))+'px "Fredoka",Verdana,sans-serif';
-    ctx.fillText(b.sub,0,Math.min(W*0.1,48));
+    ctx.globalAlpha=a; ctx.textAlign='center'; ctx.lineJoin='round';
+    const bs=Math.round(Math.min(W*0.13,62));
+    ctx.font='700 '+bs+'px "Fredoka",Verdana,sans-serif';
+    const bfit=Math.min(1,W*0.9/ctx.measureText(b.txt).width); ctx.scale(bfit,bfit);
+    ctx.globalAlpha=a*0.3; ctx.lineWidth=bs*0.34; ctx.strokeStyle='#FFB020'; ctx.strokeText(b.txt,0,0);
+    ctx.globalAlpha=a; ctx.lineWidth=bs*0.16; ctx.strokeStyle='rgba(40,14,50,.92)'; ctx.strokeText(b.txt,0,0);
+    ctx.fillStyle='#FFD45C'; ctx.fillText(b.txt,0,0);
+    const ss=Math.round(Math.min(W*0.07,34));
+    ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
+    ctx.lineWidth=ss*0.22; ctx.strokeText(b.sub,0,Math.min(W*0.1,48));
+    ctx.fillStyle='#fff'; ctx.fillText(b.sub,0,Math.min(W*0.1,48));
     ctx.restore(); ctx.globalAlpha=1;
   }
 
@@ -1992,6 +2147,7 @@ function start(){
   grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
+  praises=[];bursts=[];lineFlashes=[];
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
   el('scoreVal').textContent='0'; el('bestVal').textContent=best;

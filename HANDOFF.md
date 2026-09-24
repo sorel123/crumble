@@ -29,10 +29,10 @@ Top to bottom inside the one `<script>`:
    everywhere including its facets.
 3. **`Ads`** — three methods, currently faked. The *only* ad code in the file.
 4. **`SHAPES`** — 37 pieces parsed from ASCII art.
-5. **The solver** — `packGrid` / `fitFlat` / `applyFlat` / `evalHand`,
+5. **The solver** — `packGrid` / `placeMasks` / `applyBits` / `evalHand`,
    `planSweep` and friends, then `genTray`.
 6. **Tile renderers** — `jewelTile`, `clayTile`, `buildCache`, `layout`.
-7. **Audio** — `tone`, `noise`.
+7. **Audio** — `buildChain` (master, compressor, reverb send), primitives `noiseHit` / `voice` / `tone` / `bell`, then `Sfx`.
 8. **Game logic** — `place`, `linesFor`, `mobility`.
 9. **Input** — pointer handlers, `ghost`.
 10. **`frame`** — the whole render loop, drawn in layers.
@@ -47,7 +47,7 @@ Top to bottom inside the one `<script>`:
 Tray pieces are not picked independently. `genTray` generates candidate hands,
 scores each with `evalHand`, and serves the best fit for the current tier.
 
-`evalHand` packs the board into a `Uint8Array(64)` and runs DFS over **all six
+`evalHand` packs the board into a bitboard (two 32-bit ints, rows 0-3 and 4-7) and runs DFS over **all six
 orderings** of the three pieces and every legal position, **applying line
 clears between placements**. That's the important part — it finds hands that
 only work in one specific sequence (piece 1 clears a row, which opens the space
