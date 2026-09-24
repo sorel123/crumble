@@ -240,7 +240,7 @@ const CFG = {
   FX_PUNCH_ZOOM:     true,   // brief 2-3% punch zoom on a 2+ line clear
 
   // sound — variant + volume for the two most-heard effects, set on the settings panel
-  SND_PICKUP:     'plastic',  // 'plastic' | 'wood' | 'magnet'
+  SND_PICKUP:     'plastic',  // 'plastic' (Pop) | 'wood' (Knock) | 'magnet' (Thunk) | 'off'
   SND_PLACE:      'plastic',
   SND_PICKUP_VOL: 1,
   SND_PLACE_VOL:  1,
@@ -1328,56 +1328,33 @@ function play(delay,fn){
   try{ const c=ac(); fn(c.currentTime+delay,jit()); }catch(e){}
 }
 
-/* place: a physical snap, not a tonal sweep — sharp click, short sine body
-   (pitch drops a touch, ~1.15x -> 1x, well inside the amplitude decay),
-   a material 'tock' with a tiny tuned core, and a quieter latch click just
-   after. Three variants with a distinct material character; volume and
-   choice both come from CFG, set on the settings panel and auditioned there. */
+/* place + pickup: heard on every single move, so they're soft and short —
+   no noise clicks or noise 'tocks' at all (on a phone speaker those
+   transients read as a loud tick-tock). Each is a couple of sine tones
+   with a gentle 4-6ms attack, a small pitch settle, and energy kept in
+   the 250-800Hz range a phone plays without sounding harsh. Bigger
+   pieces land a touch lower. Ids kept from earlier versions so saved
+   choices still map; 'off' silences one entirely. */
 const PLACE_VARIANTS={
-  plastic:(t,p,pm,vol)=>{                                    // A: bright, tight snap
-    const bf=200*pm;
-    noiseHit(t,{dur:.004,f0:4500*p,type:'highpass',vol:.018*vol});                   // sharp click
-    tone(t,{f0:bf*1.15,f1:bf,pdur:.025,dur:.065,vol:.26*vol,atk:.002,wet:.04});      // body...
-    tone(t,{f0:bf*2.3,f1:bf*2,pdur:.025,dur:.05,vol:.09*vol,atk:.002});              // ...and its octave, which a phone can play
-    tone(t,{f0:1150*p*pm,dur:.02,vol:.045*vol,atk:.002});                           // tock: a tiny tuned core...
-    noiseHit(t,{dur:.025,f0:1150*p,q:6,vol:.18*vol,type:'bandpass'});                // ...wrapped in material noise
-    noiseHit(t+.012,{dur:.006,f0:5000*p,type:'highpass',vol:.008*vol});              // latch
+  plastic:(t,p,pm,vol)=>{                                    // Pop: light and round
+    tone(t,{f0:620*p*pm,f1:500*p*pm,pdur:.02,dur:.07,vol:.065*vol,atk:.004});
+    tone(t,{f0:250*p*pm,f1:210*p*pm,pdur:.03,dur:.08,vol:.05*vol,atk:.005});
   },
-  wood:(t,p,pm,vol)=>{                                        // B: warmer, woodier tock
-    const bf=175*pm;
-    noiseHit(t,{dur:.005,f0:3600*p,type:'highpass',vol:.014*vol});
-    tone(t,{f0:bf*1.12,f1:bf,pdur:.025,dur:.085,vol:.26*vol,atk:.002,wet:.05});
-    tone(t,{f0:bf*2.24,f1:bf*2,pdur:.025,dur:.06,vol:.1*vol,atk:.002});
-    tone(t,{f0:700*p*pm,dur:.04,vol:.08*vol,atk:.002});                              // hollow wood-block note
-    tone(t,{f0:700*p*pm*3.9,dur:.012,vol:.012*vol,atk:.001});                         // its bright overtone
-    noiseHit(t,{dur:.03,f0:700*p,q:5,vol:.16*vol,type:'bandpass'});
-    noiseHit(t+.014,{dur:.01,f0:900*p,q:4,vol:.05*vol,type:'bandpass'});
+  wood:(t,p,pm,vol)=>{                                        // Knock: muted, woody
+    tone(t,{f0:430*p*pm,f1:360*p*pm,pdur:.02,dur:.06,vol:.072*vol,atk:.004});
+    tone(t,{f0:185*p*pm,f1:150*p*pm,pdur:.03,dur:.08,vol:.052*vol,atk:.005});
   },
-  magnet:(t,p,pm,vol)=>{                                      // C: soft, deep thunk
-    const bf=150*pm;
-    noiseHit(t,{dur:.006,f0:3200*p,type:'highpass',vol:.008*vol});
-    tone(t,{f0:bf*1.1,f1:bf,pdur:.025,dur:.11,vol:.28*vol,atk:.003,wet:.05});
-    tone(t,{f0:bf*2.2,f1:bf*2,pdur:.025,dur:.08,vol:.11*vol,atk:.003});
-    tone(t,{f0:460*p*pm,dur:.035,vol:.06*vol,atk:.002});
-    noiseHit(t,{dur:.03,f0:460*p,q:4,vol:.14*vol,type:'bandpass'});
-    noiseHit(t+.016,{dur:.014,f0:600*p,q:3,vol:.04*vol,type:'bandpass'});
-  }
+  magnet:(t,p,pm,vol)=>{                                      // Thunk: deep and soft
+    tone(t,{f0:330*p*pm,f1:280*p*pm,pdur:.025,dur:.09,vol:.09*vol,atk:.006});
+    tone(t,{f0:140*p*pm,f1:120*p*pm,pdur:.03,dur:.1,vol:.06*vol,atk:.006});
+  },
+  off:()=>{}
 };
-/* pickup: softer and quieter than place, under 50ms total — an airy lift
-   (a bandpass noise sweep) plus a tiny soft pluck. Same three characters. */
-const PICKUP_VARIANTS={
-  plastic:(t,p,vol)=>{                                        // A: light
-    noiseHit(t,{dur:.04,f0:1400*p,f1:2600*p,q:1.2,vol:.07*vol,type:'bandpass'});
-    tone(t,{f0:1100*p,dur:.03,vol:.06*vol,atk:.004});
-  },
-  wood:(t,p,vol)=>{                                           // B: soft breath, lower pluck
-    noiseHit(t,{dur:.045,f0:1100*p,f1:2200*p,q:1,vol:.065*vol,type:'bandpass'});
-    tone(t,{f0:850*p,dur:.032,vol:.06*vol,atk:.005});
-  },
-  magnet:(t,p,vol)=>{                                         // C: hover pulse, tiny wobble
-    noiseHit(t,{dur:.04,f0:1500*p,f1:2500*p,q:1.5,vol:.055*vol,type:'bandpass'});
-    tone(t,{f0:1300*p,f1:1240*p,pdur:.03,dur:.03,vol:.055*vol,atk:.004});
-  }
+const PICKUP_VARIANTS={                                       // a single soft tone, well under the place sound
+  plastic:(t,p,vol)=>tone(t,{f0:760*p,f1:800*p,pdur:.03,dur:.04,vol:.03*vol,atk:.006}),
+  wood:(t,p,vol)=>tone(t,{f0:600*p,f1:630*p,pdur:.03,dur:.04,vol:.03*vol,atk:.006}),
+  magnet:(t,p,vol)=>tone(t,{f0:520*p,f1:540*p,pdur:.03,dur:.045,vol:.032*vol,atk:.007}),
+  off:()=>{}
 };
 const Sfx={
   pickup(){ play(0,(t,p)=>PICKUP_VARIANTS[CFG.SND_PICKUP](t,p,CFG.SND_PICKUP_VOL*.7)); },   // stays under place
@@ -2266,7 +2243,7 @@ const DEV_TOGGLES=[            // [CFG key, label]
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
 const DEV_ACTIONS=Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]);
-const SOUND_OPTIONS=[{value:'plastic',label:'Plastic'},{value:'wood',label:'Wood'},{value:'magnet',label:'Magnet'}];
+const SOUND_OPTIONS=[{value:'plastic',label:'Pop'},{value:'wood',label:'Knock'},{value:'magnet',label:'Thunk'},{value:'off',label:'Off'}];
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
   ['SND_PICKUP','Pickup sound',SOUND_OPTIONS,()=>{ ac(); Sfx.pickup(); }],
   ['SND_PLACE','Place sound',SOUND_OPTIONS,()=>{ ac(); Sfx.place(1); }]
