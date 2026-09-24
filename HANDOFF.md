@@ -14,7 +14,10 @@ Goal: get it running as an app on an iPhone, add save/resume, then real ads.
   split. No framework, no bundler. It should keep working by double-clicking it.
 - Vanilla JS + canvas. Only external resource is the Fredoka font from Google
   Fonts, and it degrades fine if that fails to load.
-- Audio is synthesized with WebAudio — no sound files, keep it that way.
+- Audio: recorded CC0 sound effects and jingles from Kenney (kenney.nl), trimmed,
+  normalized and embedded as base64 MP3 in `SAMPLES`, so it's still one file. The
+  original synthesized sounds are kept as the 'Original' set (and the later bells
+  as 'Bells'), all switchable under Settings → Sound.
 - No `localStorage` calls exist yet (the preview environment it was built in
   blocked them). Adding them is a task below, not a bug.
 
@@ -32,7 +35,7 @@ Top to bottom inside the one `<script>`:
 5. **The solver** — `packGrid` / `placeMasks` / `applyBits` / `evalHand`,
    `planSweep` and friends, then `genTray`.
 6. **Tile renderers** — `jewelTile`, `clayTile`, `buildCache`, `layout`.
-7. **Audio** — `buildChain` (master, compressor, reverb send), primitives `noiseHit` / `voice` / `tone` / `bell`, then `Sfx`.
+7. **Audio** — `buildChain` (buses), the synth sets (`BELLS_SFX`, `ORIG_SFX`), the recorded bank (`SAMPLES`, `smp`, `recordedSet`), then the `Sfx` dispatcher the game calls.
 8. **Game logic** — `place`, `linesFor`, `mobility`.
 9. **Input** — pointer handlers, `ghost`.
 10. **`frame`** — the whole render loop, drawn in layers.
