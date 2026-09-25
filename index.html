@@ -1730,7 +1730,7 @@ function place(idx,r,c){
       const [rr,cc]=key.split(',').map(Number);
       const g=grid[rr][cc]; if(!g) return;
       lastGi=g.gi; cleared++;
-      shatters.push({r:rr,c:cc,gi:g.gi,t:-(0.14+along*0.035)});
+      shatters.push({r:rr,c:cc,gi:g.gi,t:-(0.03+along*0.022)});   // a quick wave along the line
       grid[rr][cc]=null;
     });
 
@@ -1744,7 +1744,7 @@ function place(idx,r,c){
     }
     shake=Math.min(11,3.5+total*1.8)*CFG.SHAKE;
     if(s.star) shake=Math.max(shake,12*CFG.SHAKE);
-    if(combo>1) Sfx.combo(combo,total); else Sfx.clear(total);
+    if(combo>1) Sfx.combo(combo,total,.02); else Sfx.clear(total,.02);   // on the beat with the (now quick) visual
     pops.push({x:bx+cc0*cell,y:by+cr*cell,t:0,txt:'+'+(gained-s.n),
                sub:combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
@@ -2083,7 +2083,7 @@ function frame(now){
   }
 
   for(let i=sweeps.length-1;i>=0;i--){
-    const s=sweeps[i]; s.t+=dt*0.07;
+    const s=sweeps[i]; s.t+=dt*0.11;
     if(s.t>=1){ sweeps.splice(i,1); continue; }
     const p=easeOutCubic(s.t), a=(1-s.t)*0.85;
     if(s.horiz){
@@ -2120,7 +2120,7 @@ function frame(now){
   }
 
   for(let i=shatters.length-1;i>=0;i--){
-    const s=shatters[i]; s.t+=dt*0.055;
+    const s=shatters[i]; s.t+=dt*0.09;
     if(s.t<0){ gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,0); continue; }
     if(s.t>=1){
       const g=GEMS[s.gi], cx=bx+(s.c+.5)*cell, cy=by+(s.r+.5)*cell;
@@ -2139,7 +2139,7 @@ function frame(now){
 
   for(let i=shards.length-1;i>=0;i--){
     const b=shards[i];
-    b.vy+=.4*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt; b.life-=.021*dt;
+    b.vy+=.4*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt; b.life-=.03*dt;
     if(b.life<=0){ shards.splice(i,1); continue; }
     ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.rot);
     ctx.globalAlpha=Math.max(0,b.life); ctx.fillStyle=b.col;
@@ -2151,7 +2151,7 @@ function frame(now){
   if(lineFlashes.length){                          // cleared lines flare, additively, in their gem colour
     ctx.globalCompositeOperation='lighter';
     for(let i=lineFlashes.length-1;i>=0;i--){
-      const f=lineFlashes[i]; f.t+=dt*0.05;
+      const f=lineFlashes[i]; f.t+=dt*0.075;
       if(f.t>=1){ lineFlashes.splice(i,1); continue; }
       const a=(1-f.t)*(1-f.t)*0.5*f.k, grow=cell*(0.1+0.55*easeOutCubic(f.t));
       ctx.fillStyle=`hsla(${f.hue} 100% 66% / ${a})`;
