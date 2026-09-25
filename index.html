@@ -508,7 +508,7 @@ let curWorld='night', curSkin='jewel', bgFrom='night', bgT=1, flip=null;
 let ambient=[], ambientOld=[], ambientBurst=0, lightningT=0;
 let transform=null, transformCool=0, discoveredWorlds=new Set();
 let comboGlowV=0, goldTintV=0, sweepFxT=0, punchT=0, confetti=[];
-let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0;
+let shake=0,glowT=0,glowH=280,drag=null,ret=null,state='idle',lastSpark=0,shownScore=0;
 let gemBig=[],gemSmall=[];
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -905,10 +905,10 @@ function jewelTile(size,g){
   const {cv,x}=newTile(size);
   const L=g.star?d=>`hsl(${g.h} ${g.s}% ${clamp(90+d*.5,40,99)}%)`     // near-white, facets kept subtle
                  :d=>`hsl(${g.h} ${g.s}% ${clamp(57+d,5,96)}%)`;
-  const pad=size*0.055, S=size-pad*2, i=S*0.25;
+  const pad=size*0.03, S=size-pad*2, i=S*0.22;                        // tight: nearly fills its cell
   const o=[[pad,pad],[pad+S,pad],[pad+S,pad+S],[pad,pad+S]];
   const n=[[pad+i,pad+i],[pad+S-i,pad+i],[pad+S-i,pad+S-i],[pad+i,pad+S-i]];
-  x.save(); roundPath(x,pad,pad,S,S,S*0.25); x.clip();
+  x.save(); roundPath(x,pad,pad,S,S,S*0.14); x.clip();
   x.fillStyle=L(0); x.fillRect(pad,pad,S,S);
   const face=(a,b,c,d,dl)=>{ x.beginPath(); x.moveTo(a[0],a[1]); x.lineTo(b[0],b[1]);
     x.lineTo(c[0],c[1]); x.lineTo(d[0],d[1]); x.closePath(); x.fillStyle=L(dl); x.fill(); };
@@ -921,7 +921,7 @@ function jewelTile(size,g){
   x.globalAlpha=g.gold?.8:.5; x.fillStyle='#fff';
   roundPath(x,pad+S*0.3,pad+S*0.29,S*0.22,S*0.13,S*0.065); x.fill();
   x.globalAlpha=1; x.restore();
-  roundPath(x,pad,pad,S,S,S*0.25);
+  roundPath(x,pad,pad,S,S,S*0.14);
   x.strokeStyle=L(26); x.lineWidth=Math.max(1,size*0.035); x.stroke();
   return cv;
 }
@@ -1202,8 +1202,8 @@ function buildBoardBg(){
   x.fillStyle='rgba(0,0,0,.34)'; roundPath(x,0,0,w,w,20); x.fill();
   x.strokeStyle='rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
   x.fillStyle='rgba(255,255,255,.045)';
-  const p=cell*.055;
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++){ roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.24); x.fill(); }
+  const p=cell*.03;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){ roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.14); x.fill(); }
   boardBg={cv,pad,w};
 }
 
@@ -1686,7 +1686,7 @@ function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
-  if(!s.star) s.cells.forEach(([dr,dc],k)=>{ grid[r+dr][c+dc]={gi:t.gi,t:-k*0.06}; });   // a star leaves no gem
+  if(!s.star) s.cells.forEach(([dr,dc])=>{ grid[r+dr][c+dc]={gi:t.gi,t:1,f:1}; });   // lands instantly (f = a brief glint); a star leaves no gem
   tray[idx]=null;
   if(!s.star) Sfx.place(s.n);
 
@@ -1800,7 +1800,7 @@ function place(idx,r,c){
   if(transform) gained=Math.round(gained*CFG.TRANSFORM_MULT);
   updateDbg(); renderPips();
 
-  score+=gained; el('scoreVal').textContent=score;
+  score+=gained;                                     // the HUD counts up to it (frame)
   if(tray.every(v=>!v)){
     goldenNext = CFG.GOLDEN_ENABLED && goldenCool<=0 && !transform      // a live transformation already is the moment
       && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
@@ -1975,6 +1975,10 @@ function frame(now){
   const goldTarget=golden?1:0;
   goldTintV+=(goldTarget-goldTintV)*Math.min(1,dt*0.15);
   sweepFxT=Math.max(0,sweepFxT-dt/48);
+  if(shownScore!==score){                          // quick count-up: closes ~20% of the gap a frame, always at least 1
+    shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*0.2*dt))):score;
+    el('scoreVal').textContent=shownScore;
+  }
   punchT=Math.max(0,punchT-dt/22);
 
   stepFlip(dt);
@@ -2043,7 +2047,7 @@ function frame(now){
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
     for(const [dr,dc] of gh.s.cells)
-      gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,.92,.4,0);
+      gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,.45,0);
   }
 
   const claySquash=curSkin==='clay';
@@ -2051,6 +2055,7 @@ function frame(now){
     const g=grid[r][c]; if(!g) continue;
     if(g.t<1) g.t=Math.min(1,g.t+dt*0.085);
     if(g.t<=0) continue;
+    if(g.f>0) g.f=Math.max(0,g.f-dt*0.14);            // the landing glint, gone in ~7 frames
     const base=0.5+0.5*easeOutBack(g.t);
     const fp=flip?clamp((flip.t-(r+c)/(2*(N-1))*FLIP_WAVE)/FLIP_CELL,0,1):1;
     if(flip && fp<1){                              // mid-flip: squash to a line, swap texture, unsquash
@@ -2059,7 +2064,7 @@ function frame(now){
     } else if(claySquash&&g.t<1){
       const q=Math.sin(g.t*Math.PI)*0.17;
       gem(g.gi,bx+c*cell,by+r*cell,cell,base*(1+q),1,0,false,base*(1-q));
-    } else gem(g.gi,bx+c*cell,by+r*cell,cell,base,1,0);
+    } else gem(g.gi,bx+c*cell,by+r*cell,cell,base,1,g.f?g.f*g.f*0.45:0);
   }
 
   if(!reduce && now-lastSpark>CFG.SPARKLE_RATE && state==='play' && !paused && curSkin==='jewel'){
@@ -2189,7 +2194,7 @@ function frame(now){
   }
 
   if(ret){
-    ret.t=Math.min(1,ret.t+dt*0.1);
+    ret.t=Math.min(1,ret.t+dt*0.18);
     const e=easeOutBack(ret.t), t=tray[ret.i];
     if(t){
       const x=ret.fx+(ret.tx-ret.fx)*e, y=ret.fy+(ret.ty-ret.fy)*e, sz=ret.fs+(ret.ts-ret.fs)*e;
@@ -2200,12 +2205,9 @@ function frame(now){
 
   if(drag&&tray[drag.i]){
     const t=tray[drag.i],s=t.s;
-    drag.g=Math.min(1,drag.g+dt*0.14);
-    const sc=1+0.09*easeOutBack(drag.g);
     const gold=t.gi===GOLD;
     ctx.save();
-    ctx.translate(drag.x,drag.y-cell*CFG.LIFT);
-    ctx.rotate(clamp(drag.vx*0.011,-.2,.2)); ctx.scale(sc,sc);
+    ctx.translate(drag.x,drag.y-cell*CFG.LIFT);                 // rigid under the finger: no grow-in, no tilt
     if(gold) goldGlow(0,0,Math.max(s.cols,s.rows)*cell*0.95+cell*0.6,now,0);
     else if(s.star) goldGlow(0,0,cell*1.5,now,0,'235,225,255');
     const ox=-(s.cols*cell)/2, oy=-(s.rows*cell)/2;
@@ -2340,7 +2342,7 @@ function start(){
   praises=[];bursts=[];lineFlashes=[];
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
-  el('scoreVal').textContent='0'; el('bestVal').textContent=best;
+  shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
   genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
 }
 /* ═══════ skins + worlds — unlockable/discoverable, persisted in localStorage ═══════ */
