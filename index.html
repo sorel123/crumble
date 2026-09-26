@@ -14,10 +14,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --gold:#FFD45C; --ink:#2A1444; --font:"Fredoka","Trebuchet MS",Verdana,system-ui,sans-serif; }
+  :root{ --gold:#FFD45C; --ink:#2A1444; --font:"Fredoka","Trebuchet MS",Verdana,system-ui,sans-serif;
+    /* theme tokens — Night by default; applyTheme() rewrites them for the light themes */
+    --bg:#150B26; --fg:#fff; --btn:rgba(255,255,255,.09); --chip:rgba(255,255,255,.08); --chip-line:rgba(255,255,255,.16);
+    --ghost-line:rgba(255,255,255,.3); --sel-fg:var(--gold); --sel-bg:rgba(255,212,92,.16); --best:var(--gold);
+    --glow:rgba(255,212,92,.35); --pip:rgba(255,255,255,.22); --divider:rgba(255,255,255,.1);
+    --overlay:radial-gradient(120% 90% at 50% 40%,rgba(45,20,74,.78),rgba(12,6,22,.96)); --accent:var(--gold); }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;overflow:hidden;background:#150B26}
-  body{font-family:var(--font);touch-action:none;user-select:none;color:#fff}
+  html,body{height:100%;overflow:hidden;background:var(--bg)}
+  body{font-family:var(--font);touch-action:none;user-select:none;color:var(--fg)}
   #stage{position:fixed;inset:0}
   canvas{display:block;width:100%;height:100%}
 
@@ -26,10 +31,10 @@
        display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
   .lbl{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;opacity:.55}
   .score{font-size:38px;font-weight:700;line-height:1;margin-top:1px;
-         text-shadow:0 0 18px rgba(255,212,92,.35)}
+         text-shadow:0 0 18px var(--glow)}
   .right{text-align:right;display:flex;gap:14px;align-items:flex-start}
-  .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--gold)}
-  #mute,#devBtn{pointer-events:auto;background:rgba(255,255,255,.09);border:0;color:#fff;
+  .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--best)}
+  #mute,#setBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
         width:40px;height:40px;border-radius:12px;font-size:17px;cursor:pointer}
   #dbg{position:absolute;left:18px;top:calc(100px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
@@ -45,25 +50,25 @@
   .devbtns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
   .devbtns button{font-size:14px;padding:10px 18px;min-height:44px}
   #devList .devhead{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-       opacity:.55;margin-top:6px;border-top:1px solid rgba(255,255,255,.1);padding-top:12px}
+       opacity:.55;margin-top:6px;border-top:1px solid var(--divider);padding-top:12px}
   #devList .devhead:first-child{border-top:0;margin-top:0;padding-top:0}
   .choices{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .choices button{font-family:var(--font);font-size:13px;font-weight:600;color:#fff;
-       background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.16);
+  .choices button{font-family:var(--font);font-size:13px;font-weight:600;color:var(--fg);
+       background:var(--chip);border:2px solid var(--chip-line);
        border-radius:999px;padding:7px 16px;min-height:38px;cursor:pointer}
-  .choices button[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
+  .choices button[aria-pressed="true"]{background:var(--sel-bg);border-color:var(--gold);color:var(--sel-fg)}
   .choices .play{padding:7px 12px;font-size:15px}
   #safe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;
         padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 
   .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
            justify-content:center;gap:16px;padding:28px;text-align:center;
-           background:radial-gradient(120% 90% at 50% 40%,rgba(45,20,74,.78),rgba(12,6,22,.96));
+           background:var(--overlay);
            backdrop-filter:blur(5px)}
   .overlay[hidden]{display:none}
   .title{font-size:clamp(46px,15vw,78px);font-weight:700;line-height:.92;letter-spacing:-.03em;
          text-shadow:0 0 40px rgba(255,212,92,.3)}
-  .title em{font-style:normal;color:var(--gold)}
+  .title em{font-style:normal;color:var(--accent)}
   .sub{font-size:15px;font-weight:500;opacity:.82;max-width:26ch;line-height:1.5}
   .eyebrow{font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;opacity:.6}
   .big{font-size:clamp(56px,19vw,92px);font-weight:700;line-height:1;color:var(--gold);
@@ -73,33 +78,42 @@
         min-height:56px;cursor:pointer;box-shadow:0 5px 0 #C9941A,0 8px 24px rgba(255,193,46,.3);
         transition:transform .08s,box-shadow .08s}
   button.cta:active{transform:translateY(4px);box-shadow:0 1px 0 #C9941A}
-  button.ghost{background:transparent;color:#fff;box-shadow:none;border:2px solid rgba(255,255,255,.3);
+  button.ghost{background:transparent;color:var(--fg);box-shadow:none;border:2px solid var(--ghost-line);
         font-size:15px;padding:12px 26px;min-height:48px;border-radius:999px;font-family:var(--font);
         font-weight:600;cursor:pointer}
-  button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+  button:focus-visible{outline:3px solid var(--fg);outline-offset:3px}
 
   .skins{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:min(340px,100%)}
-  .skin-btn{font-family:var(--font);font-size:12.5px;font-weight:600;color:#fff;
-        background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.16);
+  .skin-btn{font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--fg);
+        background:var(--chip);border:2px solid var(--chip-line);
         border-radius:14px;padding:9px 4px;min-height:54px;cursor:pointer;
         display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
-  .skin-btn[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
+  .skin-btn[aria-pressed="true"]{background:var(--sel-bg);border-color:var(--gold);color:var(--sel-fg)}
   .skin-btn:disabled{opacity:.4;cursor:not-allowed}
   .skin-btn .lock{font-size:10px;font-weight:600;opacity:.85}
   .motifs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-  .motifs button{font-family:var(--font);font-size:12.5px;font-weight:600;color:#fff;
-        background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.16);
+  .motifs button{font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--fg);
+        background:var(--chip);border:2px solid var(--chip-line);
         border-radius:999px;padding:8px 16px;min-height:38px;cursor:pointer}
-  .motifs button[aria-pressed="true"]{background:rgba(255,212,92,.16);border-color:var(--gold);color:var(--gold)}
+  .motifs button[aria-pressed="true"]{background:var(--sel-bg);border-color:var(--gold);color:var(--sel-fg)}
 
   .pips{display:flex;gap:5px;margin-top:6px;align-items:center}
   .pips .mult{font-size:12px;font-weight:700;color:var(--gold);margin-left:4px;line-height:1}
   .pips[hidden]{display:none}
-  .pips .pip{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.22)}
+  .pips .pip{width:8px;height:8px;border-radius:50%;background:var(--pip)}
   .pips .pip.on{background:#FFD45C;box-shadow:0 0 8px rgba(255,212,92,.9)}
 
-  #startCard{overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .section-lbl{align-self:flex-start;margin:-6px 0 -6px 2px}
+  /* the player's settings panel */
+  #setPanel{justify-content:flex-start;gap:12px;padding:calc(18px + env(safe-area-inset-top,0px)) 16px calc(18px + env(safe-area-inset-bottom,0px))}
+  #setList{flex:1 1 auto;min-height:0;width:min(380px,100%);overflow-y:auto;touch-action:pan-y;
+           display:flex;flex-direction:column;align-items:center;gap:12px;padding:2px 4px 8px}
+  .setgroup{align-self:stretch;text-align:left;font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+            margin-top:10px;padding-top:14px;border-top:1px solid var(--divider)}
+  .setgroup:first-child{margin-top:0;padding-top:0;border-top:0}
+  .section-lbl{align-self:flex-start;margin:-4px 0 -6px 2px}
+  #setList .tog{align-self:stretch;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:600;padding:4px 2px}
+  #setList input[type=checkbox]{width:24px;height:24px;accent-color:var(--gold)}
+  .setnote{font-size:13px;opacity:.65}
 
   #adScreen{background:#0B0713;gap:20px}
   .adbox{width:min(320px,86vw);aspect-ratio:4/3;border-radius:18px;display:flex;
@@ -120,7 +134,7 @@
     </div>
     <div class="right">
       <div><div class="lbl">Best</div><div class="best" id="bestVal">0</div></div>
-      <button id="devBtn" aria-label="Developer settings" hidden>⚙️</button>
+      <button id="setBtn" aria-label="Settings">⚙️</button>
       <button id="mute" aria-label="Toggle sound">🔊</button>
     </div>
   </div>
@@ -129,13 +143,32 @@
   <div class="overlay" id="startCard">
     <h1 class="title">Crum<em>ble</em></h1>
     <p class="sub">Drag the three shapes onto the board. Fill a whole row or column and it clears. Empty the board for a clean sweep.</p>
-    <p class="lbl section-lbl">World</p>
-    <div class="skins" id="worldGrid"></div>
-    <p class="lbl section-lbl">Skin</p>
-    <div class="skins" id="skinGrid"></div>
-    <p class="lbl section-lbl">Motif</p>
-    <div class="motifs" id="motifRow"></div>
     <button class="cta" id="startBtn">Play</button>
+    <button class="ghost" id="startSettings">Settings</button>
+  </div>
+
+  <div class="overlay" id="setPanel" hidden>
+    <p class="eyebrow">Settings</p>
+    <div id="setList">
+      <p class="setgroup">Look</p>
+      <p class="lbl section-lbl">Theme</p>
+      <div class="skins" id="themeGrid"></div>
+      <p class="lbl section-lbl">World</p>
+      <div class="skins" id="worldGrid"></div>
+      <p class="lbl section-lbl">Skin</p>
+      <div class="skins" id="skinGrid"></div>
+      <p class="lbl section-lbl">Motif</p>
+      <div class="motifs" id="motifRow"></div>
+      <p class="setgroup">Sound</p>
+      <label class="tog"><span>Sound effects</span><input type="checkbox" id="sndOn"></label>
+      <p class="lbl section-lbl">Sound style</p>
+      <div class="motifs" id="sndSetRow"></div>
+    </div>
+    <p class="setnote">Saved as your default for every game.</p>
+    <div class="devbtns">
+      <button class="ghost" id="adminBtn" hidden>Admin</button>
+      <button class="cta" id="setDone">Done</button>
+    </div>
   </div>
 
   <div class="overlay" id="overCard" hidden>
@@ -154,7 +187,7 @@
   </div>
 
   <div class="overlay" id="devPanel" hidden>
-    <p class="eyebrow">Developer settings · game paused</p>
+    <p class="eyebrow">Admin · game paused</p>
     <div id="devList"></div>
     <div class="devbtns">
       <button class="ghost" id="devReset">Reset to defaults</button>
@@ -175,7 +208,8 @@ const CFG = {
   SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
   SNAP_STICKY:   0.6,    // a shown ghost is kept until the piece drifts this many cells from it
   SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
-  STYLE: 'jewel',        // a SKINS id — picked on the skins screen; some are unlockable
+  THEME: 'night',        // a THEMES id — Night, or one of the light modes (Settings → Look)
+  STYLE: 'jewel',        // a SKINS id — picked in Settings; some are unlockable
   MOTIF: 'none',         // a MOTIFS id — face motif stamped on every tile, independent of skin
   UNLOCK_ALL: false,     // dev: pretend every skin is unlocked
   HOME_WORLD: 'night',   // a HOME_WORLDS id, or a discovered TRANSFORMS id — her default background
@@ -292,6 +326,35 @@ function worldDef(id){    // resolves a HOME_WORLDS id or a TRANSFORMS id to {to
   return HOME_WORLDS.find(w=>w.id===id) || HOME_WORLDS[0];
 }
 function hex2rgb(h){ const n=parseInt(h.slice(1),16); return [n>>16&255,n>>8&255,n&255]; }
+/* ── themes: Night (the dark look, where each world brings its own sky) or a
+   light mode. A light theme swaps the page tokens (text, buttons, overlays),
+   the board panel, and the sky; worlds keep their ambient effects, and a
+   transformation still takes over the sky while it lasts. */
+const THEMES=[
+  {id:'night',    name:'Night'},
+  {id:'daylight', name:'Daylight',     light:true, top:'#EEF6FF', bot:'#C6DCF6', panel:'rgba(255,255,255,.62)', stroke:'rgba(40,70,120,.14)', slot:'rgba(60,100,170,.11)', ink:'#22324F'},
+  {id:'cotton',   name:'Cotton Candy', light:true, top:'#FFEAF4', bot:'#E3D6FF', panel:'rgba(255,255,255,.58)', stroke:'rgba(120,70,150,.14)', slot:'rgba(150,90,175,.11)', ink:'#4B2B61'},
+  {id:'mint',     name:'Mint',         light:true, top:'#EAFFF7', bot:'#C4ECDD', panel:'rgba(255,255,255,.58)', stroke:'rgba(30,100,80,.14)', slot:'rgba(40,120,95,.11)', ink:'#1D4A3D'},
+  {id:'paper',    name:'Paper',        light:true, top:'#FFF4DE', bot:'#EED6A6', panel:'rgba(214,180,128,.95)', stroke:'rgba(90,55,20,.28)', slot:'rgba(90,55,20,.17)', ink:'#5A3A17'}
+];
+const theme=()=>THEMES.find(t=>t.id===CFG.THEME)||THEMES[0];
+const rgba=(hex,a)=>{ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; };
+function bgOf(id){                      // the sky: a light theme's own gradient, except during a transformation
+  const t=theme(); return t.light&&!TRANSFORMS[id]?{top:t.top,bottom:t.bot}:worldDef(id);
+}
+function applyTheme(){
+  const t=theme(), st=document.documentElement.style;
+  const v=t.light?{
+    '--bg':t.bot, '--fg':t.ink, '--btn':rgba(t.ink,.08), '--chip':'rgba(255,255,255,.55)', '--chip-line':rgba(t.ink,.16),
+    '--ghost-line':rgba(t.ink,.3), '--sel-fg':'#9A6400', '--sel-bg':'rgba(255,196,46,.28)', '--best':'#B7790A',
+    '--glow':'transparent', '--pip':rgba(t.ink,.2), '--divider':rgba(t.ink,.12), '--accent':'#E39200',
+    '--overlay':`radial-gradient(120% 90% at 50% 40%,${rgba(t.top,.86)},${rgba(t.bot,.97)})`
+  }:{};
+  for(const k of ['--bg','--fg','--btn','--chip','--chip-line','--ghost-line','--sel-fg','--sel-bg','--best','--glow','--pip','--divider','--overlay','--accent'])
+    v[k]?st.setProperty(k,v[k]):st.removeProperty(k);          // Night: fall back to the stylesheet's own values
+  const mc=document.querySelector('meta[name=theme-color]'); if(mc) mc.content=t.light?t.bot:'#150B26';
+  if(boardBg) buildBoardBg();
+}
 function lerpCol(a,b,t){
   const A=hex2rgb(a),B2=hex2rgb(b);
   return `rgb(${Math.round(A[0]+(B2[0]-A[0])*t)},${Math.round(A[1]+(B2[1]-A[1])*t)},${Math.round(A[2]+(B2[2]-A[2])*t)})`;
@@ -1199,9 +1262,10 @@ function buildBoardBg(){
   const pad=9, w=B+pad*2, cv=document.createElement('canvas');
   cv.width=Math.round(w*dpr); cv.height=Math.round(w*dpr);
   const x=cv.getContext('2d'); x.scale(dpr,dpr);
-  x.fillStyle='rgba(0,0,0,.34)'; roundPath(x,0,0,w,w,20); x.fill();
-  x.strokeStyle='rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
-  x.fillStyle='rgba(255,255,255,.045)';
+  const t=theme();
+  x.fillStyle=t.light?t.panel:'rgba(0,0,0,.34)'; roundPath(x,0,0,w,w,20); x.fill();
+  x.strokeStyle=t.light?t.stroke:'rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
+  x.fillStyle=t.light?t.slot:'rgba(255,255,255,.045)';
   const p=cell*.03;
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.14); x.fill(); }
   boardBg={cv,pad,w};
@@ -1627,7 +1691,12 @@ const Sfx={
 };
 for(const fn of ['clear','combo','praise','sweep','deny','star','goldenIn','goldenWin','rescue','transformShift'])
   Sfx[fn]=(...a)=>{ ac(); const set=SOUND_SETS[CFG.SND_SET]||SOUND_SETS.original; set[fn]&&set[fn](...a); };
-el('mute').onclick=e=>{e.stopPropagation();muted=!muted;el('mute').textContent=muted?'🔈':'🔊';};
+function setMuted(on,save=true){
+  muted=on; el('mute').textContent=muted?'🔈':'🔊';
+  const box=el('sndOn'); if(box) box.checked=!muted;
+  if(save) saveSkinSave();
+}
+el('mute').onclick=e=>{ e.stopPropagation(); setMuted(!muted); };
 
 /* ═══════ game logic ═══════ */
 const empty=()=>Array.from({length:N},()=>Array(N).fill(null));
@@ -1982,9 +2051,9 @@ function frame(now){
   punchT=Math.max(0,punchT-dt/22);
 
   stepFlip(dt);
-  const [bgTop,bgBot]=bgT>=1 ? [worldDef(curWorld).top,worldDef(curWorld).bottom]
-    : [lerpCol(worldDef(bgFrom).top,worldDef(curWorld).top,easeOutCubic(bgT)),
-       lerpCol(worldDef(bgFrom).bottom,worldDef(curWorld).bottom,easeOutCubic(bgT))];
+  const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
+    : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
+       lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
   const bg=ctx.createLinearGradient(0,0,0,H);
   bg.addColorStop(0,bgTop); bg.addColorStop(1,bgBot);
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
@@ -2042,7 +2111,7 @@ function frame(now){
       L=linesFor(test);
     }
     const sh=(Math.sin(now*0.006)*0.5+0.5)*0.18+0.14;
-    ctx.globalAlpha=sh; ctx.fillStyle='#fff';
+    ctx.globalAlpha=sh; ctx.fillStyle=theme().light?'#FFB020':'#fff';
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
@@ -2354,7 +2423,8 @@ function isWorldUnlocked(id){ return !TRANSFORMS[id] || CFG.UNLOCK_ALL_WORLDS ||
 function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
-    homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds]
+    homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds],
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -2366,6 +2436,9 @@ function loadSkinSave(){
     if(typeof o.motif==='string' && MOTIFS.some(m=>m.id===o.motif)) CFG.MOTIF=o.motif;
     if(typeof o.homeWorld==='string' && isWorldUnlocked(o.homeWorld)
       && (HOME_WORLDS.some(w=>w.id===o.homeWorld)||TRANSFORMS[o.homeWorld])) CFG.HOME_WORLD=o.homeWorld;
+    if(THEMES.some(t=>t.id===o.theme)) CFG.THEME=o.theme;
+    if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
+    if(typeof o.muted==='boolean') setMuted(o.muted,false);
   }catch(e){}
 }
 // call whenever `best` changes; returns the names of any skins newly earned
@@ -2375,12 +2448,16 @@ function checkUnlocks(){
   if(news.length){ saveSkinSave(); renderSkins(); }
   return news;
 }
-function setSkin(id){ if(!isUnlocked(id)) return; CFG.STYLE=id; curSkin=id; buildCache(); renderSkins(); saveSkinSave(); }
+function setSkin(id){
+  if(!isUnlocked(id)) return;
+  CFG.STYLE=id; if(!transform){ curSkin=id; buildCache(); }       // mid-transformation it applies when that ends
+  renderSkins(); saveSkinSave();
+}
 function setMotif(id){ CFG.MOTIF=id; buildCache(); renderMotifs(); saveSkinSave(); }
 function setWorld(id){
   if(!isWorldUnlocked(id)) return;
-  CFG.HOME_WORLD=id; curWorld=id;
-  ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1;
+  CFG.HOME_WORLD=id;
+  if(!transform){ curWorld=id; ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1; }
   renderWorlds(); saveSkinSave();
 }
 function renderSkins(){
@@ -2426,6 +2503,33 @@ function buildSkinsUI(){
   });
   renderWorlds(); renderSkins(); renderMotifs();
 }
+/* ═══════ the player's Settings: look + sound, saved as her defaults.
+   (The admin panel — tuning, testing — opens from its footer in dev mode.) */
+const SOUND_STYLES=[['original','Original'],['strings','Strings'],['steel','Steel drum'],['bells','Bells']];
+function renderThemes(){
+  el('themeGrid').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(CFG.THEME===b.dataset.id)));
+}
+function renderSndSet(){
+  el('sndSetRow').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(CFG.SND_SET===b.dataset.id)));
+}
+function buildSettingsUI(){
+  const make=(label,id,fn)=>{ const b=document.createElement('button'); b.type='button'; b.dataset.id=id;
+    b.textContent=label; b.onclick=e=>{ e.stopPropagation(); fn(id); }; return b; };
+  for(const t of THEMES) el('themeGrid').append(Object.assign(make(t.name,t.id,id=>{
+    CFG.THEME=id; applyTheme(); renderThemes(); saveSkinSave(); }),{className:'skin-btn'}));
+  for(const [id,label] of SOUND_STYLES) el('sndSetRow').append(make(label,id,v=>{
+    CFG.SND_SET=v; renderSndSet(); saveSkinSave(); ac(); setTimeout(()=>Sfx.clear(1,0,1),60); }));   // a quick taste of the style
+  el('sndOn').onchange=()=>setMuted(!el('sndOn').checked);
+  renderThemes(); renderSndSet(); el('sndOn').checked=!muted;
+}
+function openSettings(){
+  if(state==='play'){ paused=true; drag=null; shake=0; }           // the game waits while Settings is open
+  renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted;
+  el('setPanel').hidden=false;
+}
+el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };
+el('startSettings').onclick=e=>{ e.stopPropagation(); openSettings(); };
+el('setDone').onclick=e=>{ e.stopPropagation(); el('setPanel').hidden=true; paused=false; };
 el('startBtn').onclick=e=>{e.stopPropagation();ac();start();};
 el('againBtn').onclick=e=>{e.stopPropagation();start();};
 el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};
@@ -2449,8 +2553,6 @@ const DEV_TOGGLES=[            // [CFG key, label]
 const DEV_ACTIONS=Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]);
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
-  ['SND_SET','Game sounds',opt(['strings','Strings'],['steel','Steel drum'],['original','Original'],['bells','Bells']),
-    ()=>{ Sfx.clear(1,0,1); setTimeout(()=>Sfx.praise(3),600); }],
   ['SND_PICKUP','Pickup sound',opt(['slide','Slide'],['soft','Soft'],['swish','Swish'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.pickup(),60); }],
   ['SND_PLACE','Place sound',opt(['drop','Drop'],['wood','Wood'],['soft','Soft'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.place(1),60); }]
 ];
@@ -2507,7 +2609,7 @@ function devSnippet(){
   return '// dev panel snapshot — paste over the matching CFG entries\n'+DEV_KEYS.map(k=>`  ${k}: ${f(CFG[k])},`).join('\n');
 }
 function initDev(){
-  el('devBtn').hidden=!CFG.DEV_MODE;
+  el('adminBtn').hidden=!CFG.DEV_MODE;                   // the admin panel is reached from Settings, in dev mode only
   if(!CFG.DEV_MODE) return;
   devLoad();
   const list=el('devList'), refresh=[];
@@ -2586,10 +2688,10 @@ function initDev(){
     head.append(name,out); box.append(head,inp); list.append(box);
   }
   const sync=()=>refresh.forEach(f=>f());
-  el('devBtn').onclick=e=>{
+  el('adminBtn').onclick=e=>{
     e.stopPropagation();
     paused=true; drag=null; shake=0;          // freeze the game while the panel is up
-    sync(); el('devPanel').hidden=false;
+    el('setPanel').hidden=true; sync(); el('devPanel').hidden=false;
   };
   el('devClose').onclick=e=>{ e.stopPropagation(); el('devPanel').hidden=true; paused=false; };
   el('devReset').onclick=e=>{
@@ -2610,7 +2712,7 @@ function initDev(){
     btn.textContent='Copied!'; setTimeout(()=>{ btn.textContent='Copy settings'; },1200);
   };
 }
-loadSkinSave(); buildSkinsUI();
+loadSkinSave(); applyTheme(); buildSkinsUI(); buildSettingsUI();
 initDev();
 
 layout(); grid=empty(); resetWorld(); genTray(); updateDbg(); requestAnimationFrame(frame);

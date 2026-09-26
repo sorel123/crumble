@@ -39,7 +39,7 @@ Top to bottom inside the one `<script>`:
 8. **Game logic** — `place`, `linesFor`, `mobility`.
 9. **Input** — pointer handlers, `ghost`.
 10. **`frame`** — the whole render loop, drawn in layers.
-11. **Flow** — `gameOver`, `revive`, `start`, button wiring.
+11. **Flow** — `gameOver`, `rescue`, `start`, then the player's **Settings** (look: theme / world / skin / motif; sound on/off and style — saved as her defaults) and the **Admin** panel (all tuning and test tools, reached from Settings' footer only when `CFG.DEV_MODE` is on).
 
 ---
 
