@@ -43,6 +43,52 @@ Top to bottom inside the one `<script>`:
 
 ---
 
+## The juice layer (2026-10-30, `juice` branch)
+
+The feel pass that chases Block Blast's snappiness. All of it is in `place()`
+and `frame()`, every piece has an `FX_*` switch in `CFG` (and the Admin panel),
+and all of it respects `prefers-reduced-motion`.
+
+**A line clear is now a timeline, in frames** (`CLEAR_BLINK`, `CLEAR_STAGGER`):
+
+1. The whole line blinks white in unison (on 3, off 2, on) — about 7 frames.
+2. Each gem pops (swells 40%, whites out) with a delay proportional to its
+   distance from where the piece landed, so the pop radiates outward.
+3. On popping, the gem becomes a **chunk** — a whole rounded block in its colour,
+   flung away from the placed piece, tumbling and shrinking, gone in ~half a
+   second — plus three white specks. (The old triangular shards are gone.)
+4. Shake, punch zoom, the light sweep, the line flare, the score popup and the
+   sound all wait for the blink to end (`hitWait`), so they hit on the pop.
+
+**Score orbs** (`FX_SCORE_ORBS`): every cleared gem sends a glowing orb on a
+bezier to the score counter (`stepOrbs`). The HUD number holds (`scoreHold`)
+until the first orb lands, then counts up fast and bumps (`.score.bump`, CSS).
+
+**Placement** (`FX_LAND_BUMP`): a landed piece squashes wide-and-short and
+springs back over ~8 frames (`g.l` on the cell), with a spreading outline ring
+and a little sideways dust. **Pickup** (`FX_PICKUP_GROW`): the piece grows from
+tray size to board size and lifts over ~5 frames (`drag.g`), then stays rigid.
+
+**Line preview** (`FX_LINE_PREVIEW`): lines the held piece would clear light up
+in the piece's own colour, under and (additively, faintly) over the gems in it.
+
+**Praise** starts at combo ×2 now (was ×3). **Point popups** are ~45% bigger,
+slam in with overshoot and are gone in ~1.3 s.
+
+**NEW BEST!** fires the moment a run passes the old best (once per run,
+`bestBeaten`): banner, confetti, rings, and the Best counter then follows live.
+
+**Banners are a real queue** — only the head runs, the next starts when it is
+nearly gone. (Before, "CLEAN SWEEP" and "RAINBOW" drew on top of each other.)
+
+Board: empty cells are a little brighter with a shallow inset shadow, so the
+grid reads at a glance.
+
+Tune first: `CLEAR_BLINK` (lower = snappier, 0 = no blink), chunk speed/gravity
+in the `chunks` loop, `ORB_MS` (orb flight time).
+
+---
+
 ## The two non-obvious systems
 
 ### Hand solver
