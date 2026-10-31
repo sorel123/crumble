@@ -89,6 +89,31 @@ in the `chunks` loop, `ORB_MS` (orb flight time).
 
 ---
 
+## Kid-feedback pass (2026-10-30 night) — "doesn't snap, blocks aren't solid, too much work"
+
+- **Magnet snap** (`FX_MAGNET`): the held piece is drawn at `drag.mx/my`, which
+  glides (≈55%/frame) to the slot it will land in whenever `ghost()` has one, and
+  back to floating above the finger when it doesn't. No separate ghost is drawn
+  with the magnet on; the lift shadow fades as it seats (`drag.snapK`). This is
+  the single biggest feel change — Block Blast does exactly this.
+- **Solid blocks**: `blockTile` is now edge-to-edge (pad 0, hairline seam), board
+  slots nearly gap-free (`p = cell*.025`). Defaults are now **Classic + Blocks**;
+  `lookV:2` in the skin save migrates every phone to that once (Settings still
+  changes it; Night + Jewels remain selectable).
+- **Guided hands** (`GUIDE`): `evalHand` now also reports `imm` (most lines one
+  piece can clear *right now*, no sequence) and `immPieces`. Hand scoring adds
+  `GUIDE*(imm*9 + immPieces*5 + 3 per 5+ cell piece)`, and the early-break wants
+  `imm>0`. `TIER_SOLVABLE` is 0 (no 'honest' tier any more), `TIER_JACKPOT` 0.30.
+  On random 40%-full boards: hands with an immediate clear went 55% → 85%,
+  ~5.5 ms per tray.
+- Every clear gets a word now (`PRAISE[0]` = GOOD!/NICE!, smaller, no sound)
+  and one firework; a combo still gets the slam.
+- Perf: the sky gradient is cached per colour pair (`skyFill`) and the board
+  glow is a cached half-res radial sprite (`glowSprite`) — the two full-screen
+  gradients that were rebuilt every frame are gone.
+
+---
+
 ## Performance rule: no `strokeText` on the live canvas (2026-10-30)
 
 The first version of the celebration drew ~30 outlined texts per frame and the

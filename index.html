@@ -211,8 +211,8 @@ const CFG = {
   SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
   SNAP_STICKY:   0.6,    // a shown ghost is kept until the piece drifts this many cells from it
   SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
-  THEME: 'night',        // a THEMES id — Night, or one of the light modes (Settings → Look)
-  STYLE: 'jewel',        // a SKINS id — picked in Settings; some are unlockable
+  THEME: 'classic',      // a THEMES id — Classic (steel sky, navy board) by default; Night and the light modes in Settings → Look
+  STYLE: 'blocks',       // a SKINS id — Blocks (edge-to-edge, bevelled) by default; picked in Settings; some are unlockable
   MOTIF: 'none',         // a MOTIFS id — face motif stamped on every tile, independent of skin
   UNLOCK_ALL: false,     // dev: pretend every skin is unlocked
   HOME_WORLD: 'night',   // a HOME_WORLDS id, or a discovered TRANSFORMS id — her default background
@@ -255,6 +255,8 @@ const CFG = {
   FX_LAND_BUMP:   true,   // a placed piece thumps in (quick squash + ring) instead of appearing
   FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
+  FX_MAGNET:      true,   // the held piece glides into the slot it will land in (no separate ghost) — the "snap"
+  GUIDE:          1.0,    // how much hand choice favours pieces that clear something RIGHT NOW, no sequence needed (0 = off)
   CLEAR_STYLE:    'squash', // 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
@@ -282,8 +284,8 @@ const CFG = {
 
   LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
-  TIER_SOLVABLE: 0.15,   // tension above this deals 'solvable' hands (2+ lines); below it, honest hands
-  TIER_JACKPOT:  0.40,   // ...above this 'jackpot' hands (3+ lines)
+  TIER_SOLVABLE: 0.0,    // tension above this deals 'solvable' hands (2+ lines); at 0 there are no 'honest' hands — every tray can clear
+  TIER_JACKPOT:  0.30,   // ...above this 'jackpot' hands (3+ lines)
   TIER_SWEEP:    0.85,   // ...above this a planned clean sweep (when off cooldown)
 
   // transformations — achievement-triggered event looks (own world + own tile skin), temporary
@@ -698,6 +700,13 @@ function evalHand(a0,shapes,budget){
     }
   }
   for(const p of PERMS){ dfs(lo0,hi0,p,0,0); if(res.sweep) break; }
+  // 'guide': what clears RIGHT NOW with one obvious drop, no sequence — the easy, relaxing kind of hand
+  res.imm=0; res.immPieces=0;
+  for(let k=0;k<3;k++){
+    let best=0;
+    for(const m of pm[k]){ if((lo0&m.lo)||(hi0&m.hi)) continue; const l=applyBits(lo0,hi0,shapes[k],m); if(l>best) best=l; }
+    if(best){ res.immPieces++; if(best>res.imm) res.imm=best; }
+  }
   return res;
 }
 
@@ -821,7 +830,7 @@ function weightedShape(density){
 function pickTier(a){
   if(tension>CFG.TIER_SWEEP && sweepCool<=0) return 'sweep';
   if(tension>CFG.TIER_JACKPOT) return 'jackpot';
-  if(tension>CFG.TIER_SOLVABLE) return 'solvable';
+  if(tension>=CFG.TIER_SOLVABLE) return 'solvable';
   return 'honest';
 }
 /* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
@@ -837,8 +846,9 @@ function pickHand(a0,density,tier,withStar){
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough
       +(bigMode?hand.reduce((a,s)=>a+s.n,0)*1.5:0);   // Blast Round: among playable clearing hands, prefer the chunkiest pieces
+    if(ev.ok) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
-    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough) break;
+    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough && (!CFG.GUIDE||ev.imm>0)) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
   }
   if(!bestHand){ bestHand=[weightedShape(density),weightedShape(density),weightedShape(density)]; bestEv=null; }
@@ -915,7 +925,8 @@ function pushBanner(txt,sub,col){   // queued: one on screen at a time, the next
 /* praise: a big word for a multi-line clear or a long combo — the bigger the
    moment, the bigger the word. A clean sweep has its own banner instead. */
 const PRAISE=[
-  null,
+  {words:['GOOD!','NICE!'],            a:'#FFFFFF', b:'#4FC3F7'},        // tier 0: a single line, no streak — still a word
+
   {words:['GOOD JOB!','NICE!'],        a:'#C8FFB8', b:'#26B865'},
   {words:['GREAT!','SUPER!'],          a:'#C2F3FF', b:'#3478FF'},
   {words:['AMAZING!','FANTASTIC!'],    a:'#FFD0F4', b:'#A64BFF'},
@@ -927,18 +938,18 @@ function praiseTier(lines,combo){
   return Math.max(byLines,byCombo);
 }
 function praise(lines,combo){
-  const tier=praiseTier(lines,combo); if(!tier) return;
+  const tier=praiseTier(lines,combo);
   const P=PRAISE[tier], word=P.words[(Math.random()*P.words.length)|0];
   praises.length=0;                                 // newest wins — words never stack up
   praises.push({t:0,tier,word,a:P.a,b:P.b});
   const x=W/2, y=by+B*0.3;
-  for(let k=0;!reduce&&k<8+tier*6;k++){
+  for(let k=0;!reduce&&k<6+tier*6;k++){
     const ang=Math.random()*6.283, sp=2.5+Math.random()*(3+tier*1.6);
     bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.75,life:1,
       r:cell*(0.1+Math.random()*0.13),col:Math.random()<.5?P.a:P.b});
   }
   if(tier>=3) waves.push({x,y,t:0});
-  Sfx.praise(tier);
+  if(tier) Sfx.praise(tier);
 }
 function commitTray(shapes,label,plan){
   tray=shapes.map(s=>({s,gi:s.star?STAR_GI:plan?GOLD:(Math.random()*NCOLOR)|0}));
@@ -1047,7 +1058,7 @@ function jewelTile(size,g){
 function blockTile(size,g){
   const {cv,x}=newTile(size);
   const L=d=>`hsl(${g.h} ${Math.min(96,g.s+4)}% ${clamp((g.star?88:57)+d,6,97)}%)`;
-  const pad=size*0.035, S=size-pad*2, b=S*0.17, r=S*0.09;
+  const pad=0, S=size, b=S*0.16, r=S*0.05;                                             // edge to edge: a filled row reads as one solid bar
   x.save(); roundPath(x,pad,pad,S,S,r); x.clip();
   x.fillStyle=L(17); x.fillRect(pad,pad,S,S);                                        // light bevel (top + left)
   x.fillStyle=L(-16); x.beginPath(); x.moveTo(pad+S,pad); x.lineTo(pad+S,pad+S); x.lineTo(pad,pad+S);   // dark bevel (right + bottom)
@@ -1056,7 +1067,7 @@ function blockTile(size,g){
   x.globalAlpha=.2; x.fillStyle='#fff'; x.fillRect(pad+b,pad+b,S-2*b,(S-2*b)*0.3); x.globalAlpha=1;   // gloss
   if(g.star) drawStar(x,size/2,size/2,S*0.36,true);
   x.restore();
-  roundPath(x,pad,pad,S,S,r); x.strokeStyle=L(-28); x.lineWidth=Math.max(1,size*0.03); x.stroke();
+  roundPath(x,pad+0.5,pad+0.5,S-1,S-1,r); x.strokeStyle=L(-30); x.lineWidth=1; x.stroke();      // a hairline seam, not a gap
   return cv;
 }
 // Matte, fat corners, soft shadow underneath — no shine anywhere.
@@ -1338,10 +1349,10 @@ function buildBoardBg(){
   const t=theme();
   x.fillStyle=t.light?t.panel:'rgba(0,0,0,.34)'; roundPath(x,0,0,w,w,20); x.fill();
   x.strokeStyle=t.light?t.stroke:'rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
-  const p=cell*.04;
+  const p=cell*.025;
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
     x.fillStyle=t.light?t.slot:'rgba(255,255,255,.055)';
-    roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.16); x.fill();
+    roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.1); x.fill();
     if(!t.light){ x.fillStyle='rgba(0,0,0,.14)'; roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell*.22,cell*.16); x.fill(); }  // a shallow inset shadow
   }
   boardBg={cv,pad,w};
@@ -1973,7 +1984,7 @@ function place(idx,r,c){
       slams.push({t:-(reduce?0:maxDelay+7),txt:'COMBO '+combo,n:combo});
       if(!reduce) for(let k=0;k<Math.min(5,1+combo);k++) spawnFirework(bx+B*(0.15+0.7*Math.random()),by+B*(0.1+0.5*Math.random()),null,maxDelay+7+k*4);
       if(combo>=3) borderFlash={t:-(maxDelay+7),col:combo>=5?'255,123,213':'255,212,92'};
-    } else if(!reduce && total>=2) spawnFirework(bx+cc0*cell,by+cr*cell,null,maxDelay+6);
+    } else if(!reduce) spawnFirework(bx+cc0*cell,by+Math.min(cr,N-1.5)*cell,null,maxDelay+6);   // even a single clear gets a burst
 
     waves.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.07});
     glowT=1; glowH=GEMS[lastGi].h;
@@ -2075,7 +2086,9 @@ function onDown(e){
   for(let i=0;i<3;i++){
     const R=slotRect(i);
     if(tray[i]&&e.clientX>=R.x&&e.clientX<=R.x+R.w&&e.clientY>=R.y-12&&e.clientY<=R.y+R.h+12){
-      drag={i,x:e.clientX,y:e.clientY,px:e.clientX,vx:0,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(tray[i].s)/cell};
+      const R0=slotRect(i), s0=tray[i].s, tc0=trayFit(s0);
+      drag={i,x:e.clientX,y:e.clientY,px:e.clientX,vx:0,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:tc0/cell,
+            mx:R0.x+R0.w/2,my:R0.y+R0.h/2,snapK:0};      // mx/my: where the piece is drawn (glides to the finger or into its slot)
       Sfx.pickup(); return;
     }
   }
@@ -2196,6 +2209,24 @@ function edgeGlow(rgb,strength){
   if(dL>2){ ctx.fillStyle=mk(0,0,dL,0); ctx.fillRect(0,0,dL,H); }
   if(dR>2){ ctx.fillStyle=mk(W,0,W-dR,0); ctx.fillRect(W-dR,0,dR,H); }
 }
+// the sky gradient and the board glow are rebuilt only when their colours change — not per frame
+let _sky=null;
+function skyFill(top,bot){
+  if(_sky&&_sky.top===top&&_sky.bot===bot&&_sky.H===H) return _sky.g;
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,top); g.addColorStop(1,bot);
+  _sky={top,bot,H,g}; return g;
+}
+const GLOWS=new Map();
+function glowSprite(hue){
+  hue=Math.round(hue/10)*10;
+  let sp=GLOWS.get(hue); if(sp&&sp.r===B*0.95) return sp;
+  const r=B*0.95, cv=document.createElement('canvas'); cv.width=cv.height=Math.max(1,Math.round(r*2*dpr*0.5));   // half-res is plenty for a soft glow
+  const x=cv.getContext('2d'); x.scale(dpr*0.5,dpr*0.5);
+  const g=x.createRadialGradient(r,r,0,r,r,r); g.addColorStop(0,`hsla(${hue} 90% 60% / 1)`); g.addColorStop(1,`hsla(${hue} 90% 60% / 0)`);
+  x.fillStyle=g; x.fillRect(0,0,r*2,r*2);
+  sp={cv,r}; if(GLOWS.size>40) GLOWS.clear(); GLOWS.set(hue,sp); return sp;
+}
+
 /* text sprites. Every overlay word (popups, tags, COMBO, COLOR GONE, praise, banners) is
    rasterised ONCE — strokes, gradients and all — into its own little canvas, then blitted
    each frame with a transform. strokeText every frame is the single thing that makes iOS
@@ -2280,9 +2311,7 @@ function frame(now){
   const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
     : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
        lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
-  const bg=ctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0,bgTop); bg.addColorStop(1,bgBot);
-  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=skyFill(bgTop,bgBot); ctx.fillRect(0,0,W,H);     // gradient object cached per colour pair (a new one each frame is slow on iOS)
 
   ambientBurst*=Math.pow(.88,dt);
   const aboost=1+ambientBurst*1.8;
@@ -2293,10 +2322,7 @@ function frame(now){
   lightningT=Math.max(0,lightningT-dt/10);
   if(lightningT>0.01){ ctx.globalAlpha=lightningT*0.5; ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
 
-  const amb=ctx.createRadialGradient(W/2,by+B/2,0,W/2,by+B/2,B*0.95);
-  amb.addColorStop(0,`hsla(${glowH} 90% 60% / ${0.10+glowT*0.34})`);
-  amb.addColorStop(1,'hsla(280 90% 60% / 0)');
-  ctx.fillStyle=amb; ctx.fillRect(0,0,W,H);
+  { const gl=glowSprite(glowH); ctx.globalAlpha=0.10+glowT*0.34; ctx.drawImage(gl.cv,W/2-gl.r,by+B/2-gl.r,gl.r*2,gl.r*2); ctx.globalAlpha=1; }   // cached radial glow, one blit
 
   // background-layer washes: drawn behind the gems, so they tint the scene without ever sitting over a piece
   if(CFG.FX_GOLD_TINT && goldTintV>0.02 && !(transform&&transform.id==='goldvault')){  // Gold Vault's own look already reads gold — don't double it
@@ -2353,7 +2379,7 @@ function frame(now){
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
-    for(const [dr,dc] of gh.s.cells)
+    if(!CFG.FX_MAGNET) for(const [dr,dc] of gh.s.cells)      // with the magnet on, the piece itself sits in the slot — no ghost needed
       gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,CFG.FX_LINE_PREVIEW?.9:.5,0);
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
@@ -2576,13 +2602,19 @@ function frame(now){
     ctx.save();
     drag.g=Math.min(1,drag.g+dt*0.2);                            // grows from tray size to board size over ~5 frames, lifting as it goes
     const gk=easeOutBack(drag.g), gs=drag.s0+(1-drag.s0)*gk;
-    ctx.translate(drag.x,drag.y-cell*CFG.LIFT*easeOutCubic(drag.g));
+    // the magnet: when there's a slot to land in, the piece glides INTO it (that's the snap); otherwise it floats above the finger
+    const snapped=CFG.FX_MAGNET&&gh&&drag.g>=1;
+    const txp=snapped?bx+gh.c*cell+s.cols*cell/2:drag.x, typ=snapped?by+gh.r*cell+s.rows*cell/2:drag.y-cell*CFG.LIFT*easeOutCubic(drag.g);
+    const k=reduce?1:1-Math.pow(0.45,dt);
+    drag.mx+=(txp-drag.mx)*k; drag.my+=(typ-drag.my)*k;
+    drag.snapK+=((snapped?1:0)-drag.snapK)*k;
+    ctx.translate(drag.mx,drag.my);
     ctx.scale(gs,gs);                                            // then rigid under the finger: no tilt
     if(gold) goldGlow(0,0,Math.max(s.cols,s.rows)*cell*0.95+cell*0.6,now,0);
     else if(s.star) goldGlow(0,0,cell*1.5,now,0,'235,225,255');
     const ox=-(s.cols*cell)/2, oy=-(s.rows*cell)/2;
     if(!drag.shadow) drag.shadow=pieceShadow(s);                 // blurred once per drag, not every frame
-    ctx.drawImage(drag.shadow.cv,ox-drag.shadow.pad,oy-drag.shadow.pad+8,drag.shadow.w,drag.shadow.h);
+    if(drag.snapK<0.95){ ctx.globalAlpha=1-drag.snapK; ctx.drawImage(drag.shadow.cv,ox-drag.shadow.pad,oy-drag.shadow.pad+8,drag.shadow.w,drag.shadow.h); ctx.globalAlpha=1; }   // the lift shadow fades as it seats
     for(const [dr,dc] of s.cells) gem(t.gi,ox+dc*cell,oy+dr*cell,cell,1,1,gold?goldShimmer(now,s,dr,dc):0);
     ctx.restore();
   }
@@ -2661,7 +2693,7 @@ function frame(now){
     const p=praises[i]; p.t+=dt*0.024;
     if(p.t>=1){ praises.splice(i,1); continue; }
     const pin=Math.min(1,p.t/0.2), out=p.t>0.72?(p.t-0.72)/0.28:0;
-    const size=Math.round(Math.min(W*0.13,cell*1.1)*(1+0.1*(p.tier-1))), tw=textW(p.word,size);
+    const size=Math.round(Math.min(W*0.13,cell*1.1)*(p.tier?1+0.1*(p.tier-1):0.8)), tw=textW(p.word,size);
     const fit=Math.min(1,W*0.88/tw);                                 // long words shrink to fit the screen
     const sc=(reduce?1:0.3+0.7*easeOutBack(pin))*fit;
     const sp=sprite('praise|'+p.word+'|'+size+'|'+p.a+p.b, tw+size*0.7, size*1.6, x=>
@@ -2793,7 +2825,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds],
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, lookV:2
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -2806,6 +2838,7 @@ function loadSkinSave(){
     if(typeof o.homeWorld==='string' && isWorldUnlocked(o.homeWorld)
       && (HOME_WORLDS.some(w=>w.id===o.homeWorld)||TRANSFORMS[o.homeWorld])) CFG.HOME_WORLD=o.homeWorld;
     if(THEMES.some(t=>t.id===o.theme)) CFG.THEME=o.theme;
+    if(o.lookV!==2){ CFG.THEME='classic'; CFG.STYLE='blocks'; }   // 2026-10-30: everyone gets the new look once; Settings still changes it
     if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
   }catch(e){}
@@ -2922,6 +2955,7 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['FX_PICKUP_GROW','Pickup grow-in'],
   ['FX_LINE_PREVIEW','Coloured line preview'],
   ['FX_CELL_TAGS','Point tags on cleared cells'],
+  ['FX_MAGNET','Magnet snap while dragging'],
   ['FX_COMBO_SLAM','COMBO slam + fireworks'],
   ['BLAST_ENABLED','Blast Round'],
   ['SHOW_TENSION','Debug readout']
@@ -2977,11 +3011,12 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['BLAST_MULT','Blast: score multiplier',1,4,0.5],
   ['METER_LINE','Blast meter per line',0.02,0.5,0.01],
   ['METER_DRAIN','Blast meter drain (per frame)',0,0.004,0.0001],
-  ['BIG_CAP','Big-piece bias cap (cells)',1,9,1]
+  ['BIG_CAP','Big-piece bias cap (cells)',1,9,1],
+  ['GUIDE','Guided hands (obvious drops)',0,3,0.1]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
-const DEV_STORE='crumble.dev.3';   // bumped for the Blast Round + tier retune, so older saved tuning doesn't override the new defaults
+const DEV_STORE='crumble.dev.4';   // bumped for the Blast Round + tier retune, so older saved tuning doesn't override the new defaults
 function devSave(){
   try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
 }
