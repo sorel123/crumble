@@ -89,6 +89,19 @@ in the `chunks` loop, `ORB_MS` (orb flight time).
 
 ---
 
+## Performance rule: no `strokeText` on the live canvas (2026-10-30)
+
+The first version of the celebration drew ~30 outlined texts per frame and the
+iPhone crawled. iOS Safari re-strokes glyph outlines on every `strokeText`, so
+**every overlay word is now a sprite**: `sprite(key,w,h,draw)` rasterises it
+once (strokes, gradients, all) into its own canvas and `blit()` draws it each
+frame with scale/rotation/alpha. `outlined()` and `vgrad()` are the helpers used
+inside `draw`. The cache (`SPRITES`) is cleared on relayout and capped at 160.
+If you add a new word to the screen, build it this way. Fireworks are plain
+squares for the same reason, and the particle count is capped.
+
+---
+
 ## Matching Block Blast's beat (2026-10-30, from a 60 fps screen recording)
 
 Measured from Jay's recording of Block Blast (frames in `tools/` are not kept;

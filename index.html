@@ -1323,6 +1323,7 @@ function layout(){
   trayH=cell*2.4;
   trayY=by+B+Math.max(16,(Hb-by-B-trayH-14)*0.5);
   trayCell=cell*0.66;                         // the size most tray pieces show at; long ones shrink to fit (trayFit)
+  SPRITES.clear();
   buildCache();
   buildBoardBg();
 }
@@ -2195,13 +2196,42 @@ function edgeGlow(rgb,strength){
   if(dL>2){ ctx.fillStyle=mk(0,0,dL,0); ctx.fillRect(0,0,dL,H); }
   if(dR>2){ ctx.fillStyle=mk(W,0,W-dR,0); ctx.fillRect(W-dR,0,dR,H); }
 }
+/* text sprites. Every overlay word (popups, tags, COMBO, COLOR GONE, praise, banners) is
+   rasterised ONCE — strokes, gradients and all — into its own little canvas, then blitted
+   each frame with a transform. strokeText every frame is the single thing that makes iOS
+   Safari crawl, so nothing below this line calls it on the live canvas. */
+const SPRITES=new Map();
+const FONT=px=>'700 '+px+'px "Fredoka",Verdana,sans-serif';
+const mctx=document.createElement('canvas').getContext('2d');
+function textW(txt,px){ mctx.font=FONT(px); return mctx.measureText(txt).width; }
+function sprite(key,w,h,draw){                       // draw(x) renders centred on (0,0) with middle baseline
+  let sp=SPRITES.get(key); if(sp) return sp;
+  w=Math.ceil(w); h=Math.ceil(h);
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(w*dpr)); cv.height=Math.max(1,Math.round(h*dpr));
+  const x=cv.getContext('2d'); x.scale(dpr,dpr); x.translate(w/2,h/2);
+  x.textAlign='center'; x.textBaseline='middle'; x.lineJoin='round';
+  draw(x);
+  sp={cv,w,h}; if(SPRITES.size>160) SPRITES.clear(); SPRITES.set(key,sp); return sp;
+}
+function blit(sp,x,y,sc=1,alpha=1,rot=0){
+  ctx.save(); ctx.translate(x,y); if(rot) ctx.rotate(rot); if(sc!==1) ctx.scale(sc,sc);
+  ctx.globalAlpha=alpha; ctx.drawImage(sp.cv,-sp.w/2,-sp.h/2,sp.w,sp.h); ctx.restore(); ctx.globalAlpha=1;
+}
+function outlined(x,txt,px,fill,strokes,dx=0,dy=0){   // strokes: [[width, colour, alpha?], ...] outermost first, then the fill
+  x.font=FONT(px);
+  for(const [w,col,a] of strokes){ x.globalAlpha=a===undefined?1:a; x.lineWidth=w; x.strokeStyle=col; x.strokeText(txt,dx,dy); }
+  x.globalAlpha=1; x.fillStyle=fill; x.fillText(txt,dx,dy);
+}
+function vgrad(x,y0,y1,stops){ const g=x.createLinearGradient(0,y0,0,y1); stops.forEach(([o,c])=>g.addColorStop(o,c)); return g; }
+
 // a firework: a fountain of little stars in yellow / green / pink / blue from one point (drawn by the bursts loop)
 const FIRE_COLS=['#FFE45C','#7CF59A','#FF8AD8','#8FD8FF'];
 function spawnFirework(x,y,col,delay=0){
+  if(bursts.length>140) return;                                    // enough on screen already
   const c=col||FIRE_COLS[(Math.random()*FIRE_COLS.length)|0];
   for(let k=0;k<16;k++){
     const ang=Math.random()*6.283, sp=1.5+Math.random()*4.5;
-    bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.8-1,life:1,wait:delay,r:cell*(0.07+Math.random()*0.1),col:Math.random()<.8?c:'#fff'});
+    bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.8-1,life:1,wait:delay,r:cell*(0.06+Math.random()*0.08),col:Math.random()<.8?c:'#fff',sq:true});
   }
 }
 // clean-sweep confetti: falls in front, only ever over an already-emptied board
@@ -2563,23 +2593,15 @@ function frame(now){
     if(p.t>=1){ pops.splice(i,1); continue; }
     const sc=0.3+0.7*easeOutBack(Math.min(1,p.t*4));            // slams in, then drifts up and fades
     const rise=easeOutCubic(p.t)*cell*1.2, a=1-Math.pow(p.t,3);
-    const fs=Math.round(cell*0.9*(1+0.12*Math.min(4,(p.lines||1)-1))*(p.combo>1?1.1:1));
-    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif';
-    const half=ctx.measureText(p.txt).width/2+fs*0.2;            // keep a popup from an edge column on screen
-    ctx.save(); ctx.translate(clamp(p.x,half+6,W-half-6),p.y-rise); ctx.scale(sc,sc);
-    ctx.globalAlpha=a; ctx.textAlign='center'; ctx.lineJoin='round';
-    ctx.lineWidth=fs*0.18; ctx.strokeStyle='rgba(24,8,40,.85)'; ctx.strokeText(p.txt,0,0);
+    const fs=Math.round(cell*0.9*(1+0.12*Math.min(4,(p.lines||1)-1))*(p.combo>1?1.1:1)), ss=Math.round(cell*0.42);
     const col=p.combo>3?'#FF7BD5':p.combo>1?'#FFD45C':'#FFFFFF';
-    const tg=ctx.createLinearGradient(0,-fs*0.8,0,fs*0.1);          // white-hot top, colour below
-    tg.addColorStop(0,'#FFFFFF'); tg.addColorStop(1,col);
-    ctx.fillStyle=tg; ctx.fillText(p.txt,0,0);
-    if(p.sub){
-      const ss=Math.round(cell*0.42);
-      ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
-      ctx.lineWidth=ss*0.28; ctx.strokeText(p.sub,0,cell*0.55);
-      ctx.fillStyle=col; ctx.fillText(p.sub,0,cell*0.55);
-    }
-    ctx.restore(); ctx.globalAlpha=1;
+    const sp=sprite('pop|'+p.txt+'|'+p.sub+'|'+fs+'|'+col, Math.max(textW(p.txt,fs),p.sub?textW(p.sub,ss):0)+fs*0.6, fs*1.3+(p.sub?ss*1.5:0), x=>{
+      const dy=p.sub?-ss*0.75:0;
+      outlined(x,p.txt,fs,vgrad(x,dy-fs*0.5,dy+fs*0.4,[[0,'#FFFFFF'],[1,col]]),[[fs*0.18,'rgba(24,8,40,.85)']],0,dy);   // white-hot top, colour below
+      if(p.sub) outlined(x,p.sub,ss,col,[[ss*0.28,'rgba(24,8,40,.85)']],0,dy+fs*0.55+ss*0.45);
+    });
+    const half=sp.w/2;                                                  // keep a popup from an edge column on screen
+    blit(sp,clamp(p.x,half+6,W-half-6),p.y-rise,sc,a);
   }
 
   for(let i=tags.length-1;i>=0;i--){               // per-cell point tags: pop in, sit, lift away
@@ -2587,30 +2609,25 @@ function frame(now){
     if(g.t<0) continue;
     if(g.t>=38){ tags.splice(i,1); continue; }
     const pin=Math.min(1,g.t/5), out=g.t>26?(g.t-26)/12:0, fs=Math.round(cell*0.42);
-    ctx.save(); ctx.translate(g.x,g.y-out*cell*0.5); ctx.scale(0.4+0.6*easeOutBack(pin),0.4+0.6*easeOutBack(pin));
-    ctx.globalAlpha=1-out; ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
-    ctx.lineWidth=fs*0.22; ctx.strokeStyle='rgba(40,16,10,.85)'; ctx.strokeText(g.txt,0,0);
-    ctx.fillStyle='#FFB347'; ctx.fillText(g.txt,0,0);
-    ctx.restore();
+    const sp=sprite('tag|'+g.txt+'|'+fs, textW(g.txt,fs)+fs*0.5, fs*1.4, x=>outlined(x,g.txt,fs,'#FFB347',[[fs*0.22,'rgba(40,16,10,.85)']]));
+    blit(sp,g.x,g.y-out*cell*0.5,0.4+0.6*easeOutBack(pin),1-out);
   }
   for(let i=bands.length-1;i>=0;i--){              // COLOR GONE: a dark band across the board with the words in the lost colours
     const b=bands[i]; b.t+=dt;
     if(b.t<0) continue;
     if(b.t>=80){ bands.splice(i,1); continue; }
     const pin=Math.min(1,b.t/6), out=b.t>66?(b.t-66)/14:0, y=by+B*0.46, h=cell*1.15;
-    ctx.save(); ctx.globalAlpha=(1-out);
-    ctx.fillStyle='rgba(12,8,30,.55)'; ctx.fillRect(bx-9,y-h/2,B+18,h);
-    const fs=Math.round(Math.min(W*0.095,cell*0.95));
-    ctx.translate(W/2,y); ctx.scale(0.5+0.5*easeOutBack(pin),0.5+0.5*easeOutBack(pin));
-    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
-    const tw=ctx.measureText(b.txt).width, tg=ctx.createLinearGradient(-tw/2,0,tw/2,0);
-    const hs=b.hues.length?b.hues:[320]; hs.forEach((hh,k)=>tg.addColorStop(hs.length>1?k/(hs.length-1):0.5,`hsl(${hh} 95% 72%)`));
-    if(hs.length===1){ tg.addColorStop(0,`hsl(${hs[0]} 95% 80%)`); tg.addColorStop(1,`hsl(${(hs[0]+60)%360} 95% 72%)`); }
-    ctx.lineWidth=fs*0.18; ctx.strokeStyle='rgba(20,8,40,.9)'; ctx.strokeText(b.txt,0,0);
-    ctx.fillStyle=tg; ctx.fillText(b.txt,0,0);
-    const ss=Math.round(fs*0.45); ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
-    ctx.lineWidth=ss*0.25; ctx.strokeText(b.sub,tw/2+ss*0.9,-fs*0.25); ctx.fillStyle='#FFB347'; ctx.fillText(b.sub,tw/2+ss*0.9,-fs*0.25);
-    ctx.restore();
+    ctx.globalAlpha=(1-out); ctx.fillStyle='rgba(12,8,30,.55)'; ctx.fillRect(bx-9,y-h/2,B+18,h); ctx.globalAlpha=1;
+    const fs=Math.round(Math.min(W*0.095,cell*0.95)), ss=Math.round(fs*0.45);
+    const tw=textW(b.txt,fs), sw=textW(b.sub,ss), side=ss*0.9+sw+fs*0.3;   // the bonus sits to the right; pad both sides so the words stay centred
+    const sp=sprite('band|'+b.txt+'|'+b.sub+'|'+b.hues.join(',')+'|'+fs, tw+side*2, fs*1.5, x=>{
+      const tg=x.createLinearGradient(-tw/2,0,tw/2,0), hs=b.hues.length?b.hues:[320];
+      hs.forEach((hh,k)=>tg.addColorStop(hs.length>1?k/(hs.length-1):0.5,`hsl(${hh} 95% 72%)`));
+      if(hs.length===1){ tg.addColorStop(0,`hsl(${hs[0]} 95% 80%)`); tg.addColorStop(1,`hsl(${(hs[0]+60)%360} 95% 72%)`); }
+      outlined(x,b.txt,fs,tg,[[fs*0.18,'rgba(20,8,40,.9)']]);
+      outlined(x,b.sub,ss,'#FFB347',[[ss*0.25,'rgba(20,8,40,.9)']],tw/2+ss*0.9+sw/2,-fs*0.25);
+    });
+    blit(sp,W/2,y,0.5+0.5*easeOutBack(pin),1-out);
   }
   for(let i=slams.length-1;i>=0;i--){              // COMBO n: slams in oversized, holds, zips out
     const p=slams[i]; p.t+=dt;
@@ -2618,24 +2635,14 @@ function frame(now){
     if(p.t>=48){ slams.splice(i,1); continue; }
     const pin=Math.min(1,p.t/6), out=p.t>40?(p.t-40)/8:0;
     const sc=(1.7-0.7*easeOutCubic(pin))*(1-0.5*out);
-    const fs=Math.round(Math.min(W*0.15,cell*1.35)*(1+0.05*Math.min(6,p.n-2)));
-    ctx.save(); ctx.translate(W/2,by+B*0.66); ctx.rotate(-0.06+0.06*pin); ctx.scale(sc,sc);
-    ctx.globalAlpha=Math.min(1,pin*1.5)*(1-out); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
-    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif';
-    const word='COMBO ', num=String(p.n), ww=ctx.measureText(word).width;
-    ctx.font='700 '+Math.round(fs*1.35)+'px "Fredoka",Verdana,sans-serif'; const nw=ctx.measureText(num).width;
-    const x0=-(ww+nw)/2;
-    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif'; ctx.textAlign='left';
-    ctx.lineWidth=fs*0.3; ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.strokeText(word,x0,0);
-    ctx.lineWidth=fs*0.16; ctx.strokeStyle='rgba(40,20,60,.95)'; ctx.strokeText(word,x0,0);
-    const g1=ctx.createLinearGradient(0,-fs*0.5,0,fs*0.5); g1.addColorStop(0,'#FFFFFF'); g1.addColorStop(0.35,'#FFE66B'); g1.addColorStop(1,'#FFA726');
-    ctx.fillStyle=g1; ctx.fillText(word,x0,0);
-    ctx.font='700 '+Math.round(fs*1.35)+'px "Fredoka",Verdana,sans-serif';
-    ctx.lineWidth=fs*0.36; ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.strokeText(num,x0+ww,fs*0.05);
-    ctx.lineWidth=fs*0.2; ctx.strokeStyle='rgba(40,20,60,.95)'; ctx.strokeText(num,x0+ww,fs*0.05);
-    const g2=ctx.createLinearGradient(0,-fs*0.7,0,fs*0.6); g2.addColorStop(0,'#FFFFFF'); g2.addColorStop(0.3,p.n>=5?'#FF9CE0':'#FFE66B'); g2.addColorStop(1,p.n>=5?'#E040A0':'#FF8F1F');
-    ctx.fillStyle=g2; ctx.fillText(num,x0+ww,fs*0.05);
-    ctx.restore();
+    const fs=Math.round(Math.min(W*0.15,cell*1.35)*(1+0.05*Math.min(6,p.n-2))), nfs=Math.round(fs*1.35);
+    const word='COMBO ', num=String(p.n), ww=textW(word,fs), nw=textW(num,nfs);
+    const sp=sprite('slam|'+num+'|'+fs, ww+nw+fs*0.9, nfs*1.5, x=>{
+      x.textAlign='left'; const x0=-(ww+nw)/2;
+      outlined(x,word,fs,vgrad(x,-fs*0.5,fs*0.5,[[0,'#FFFFFF'],[0.35,'#FFE66B'],[1,'#FFA726']]),[[fs*0.3,'rgba(255,255,255,.35)'],[fs*0.16,'rgba(40,20,60,.95)']],x0,0);
+      outlined(x,num,nfs,vgrad(x,-fs*0.7,fs*0.6,[[0,'#FFFFFF'],[0.3,p.n>=5?'#FF9CE0':'#FFE66B'],[1,p.n>=5?'#E040A0':'#FF8F1F']]),[[fs*0.36,'rgba(255,255,255,.35)'],[fs*0.2,'rgba(40,20,60,.95)']],x0+ww,fs*0.05);
+    });
+    blit(sp,W/2,by+B*0.66,sc,Math.min(1,pin*1.5)*(1-out),-0.06+0.06*pin);
   }
   for(let i=bursts.length-1;i>=0;i--){             // praise stars + fireworks
     const b=bursts[i];
@@ -2644,6 +2651,7 @@ function frame(now){
     if(b.life<=0){ bursts.splice(i,1); continue; }
     const r=b.r*(0.5+0.5*Math.min(1,b.life));
     ctx.globalAlpha=Math.min(1,b.life*1.6); ctx.fillStyle=b.col;
+    if(b.sq){ ctx.fillRect(b.x-r*0.7,b.y-r*0.7,r*1.4,r*1.4); continue; }      // fireworks: plain squares (cheap on iOS)
     ctx.beginPath(); ctx.moveTo(b.x,b.y-r);
     ctx.quadraticCurveTo(b.x,b.y,b.x+r,b.y); ctx.quadraticCurveTo(b.x,b.y,b.x,b.y+r);
     ctx.quadraticCurveTo(b.x,b.y,b.x-r,b.y); ctx.quadraticCurveTo(b.x,b.y,b.x,b.y-r); ctx.fill();
@@ -2653,22 +2661,12 @@ function frame(now){
     const p=praises[i]; p.t+=dt*0.024;
     if(p.t>=1){ praises.splice(i,1); continue; }
     const pin=Math.min(1,p.t/0.2), out=p.t>0.72?(p.t-0.72)/0.28:0;
-    let size=Math.round(Math.min(W*0.13,cell*1.1)*(1+0.1*(p.tier-1)));
-    ctx.save();
-    ctx.font='700 '+size+'px "Fredoka",Verdana,sans-serif';
-    const fit=Math.min(1,W*0.88/ctx.measureText(p.word).width);   // long words shrink to fit the screen
+    const size=Math.round(Math.min(W*0.13,cell*1.1)*(1+0.1*(p.tier-1))), tw=textW(p.word,size);
+    const fit=Math.min(1,W*0.88/tw);                                 // long words shrink to fit the screen
     const sc=(reduce?1:0.3+0.7*easeOutBack(pin))*fit;
-    ctx.translate(W/2,by+B*0.27-out*cell*0.9);
-    if(!reduce) ctx.rotate(Math.sin(p.t*18)*0.05*(1-pin));
-    ctx.scale(sc,sc);
-    ctx.globalAlpha=1-out; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
-    ctx.lineWidth=size*0.3; ctx.strokeStyle=p.b; ctx.globalAlpha=(1-out)*0.35; ctx.strokeText(p.word,0,0);  // soft coloured halo
-    ctx.globalAlpha=1-out;
-    ctx.lineWidth=size*0.16; ctx.strokeStyle='rgba(28,8,46,.92)'; ctx.strokeText(p.word,0,0);
-    const g=ctx.createLinearGradient(0,-size*0.45,0,size*0.45);
-    g.addColorStop(0,'#FFFFFF'); g.addColorStop(0.28,p.a); g.addColorStop(1,p.b);
-    ctx.fillStyle=g; ctx.fillText(p.word,0,0);
-    ctx.restore();
+    const sp=sprite('praise|'+p.word+'|'+size+'|'+p.a+p.b, tw+size*0.7, size*1.6, x=>
+      outlined(x,p.word,size,vgrad(x,-size*0.45,size*0.45,[[0,'#FFFFFF'],[0.28,p.a],[1,p.b]]),[[size*0.3,p.b,0.35],[size*0.16,'rgba(28,8,46,.92)']]));   // soft coloured halo, dark edge, bright fill
+    blit(sp,W/2,by+B*0.27-out*cell*0.9,sc,1-out,reduce?0:Math.sin(p.t*18)*0.05*(1-pin));
   }
 
   for(let i=0;i<banners.length;i++){               // head banner runs; the one behind it starts once the head is fading
@@ -2678,19 +2676,14 @@ function frame(now){
     if(b.t>=1){ banners.splice(i,1); i--; continue; }
     const sc=0.6+0.4*easeOutBack(Math.min(1,b.t*2.4));
     const a=b.t>0.8?(1-b.t)/0.2:1;
-    ctx.save(); ctx.translate(W/2,by+B/2); ctx.scale(sc,sc);
-    ctx.globalAlpha=a; ctx.textAlign='center'; ctx.lineJoin='round';
-    const bs=Math.round(Math.min(W*0.13,62));
-    ctx.font='700 '+bs+'px "Fredoka",Verdana,sans-serif';
-    const bfit=Math.min(1,W*0.9/ctx.measureText(b.txt).width); ctx.scale(bfit,bfit);
-    ctx.globalAlpha=a*0.3; ctx.lineWidth=bs*0.34; ctx.strokeStyle='#FFB020'; ctx.strokeText(b.txt,0,0);
-    ctx.globalAlpha=a; ctx.lineWidth=bs*0.16; ctx.strokeStyle='rgba(40,14,50,.92)'; ctx.strokeText(b.txt,0,0);
-    ctx.fillStyle=b.col; ctx.fillText(b.txt,0,0);
-    const ss=Math.round(Math.min(W*0.07,34));
-    ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
-    ctx.lineWidth=ss*0.22; ctx.strokeText(b.sub,0,Math.min(W*0.1,48));
-    ctx.fillStyle='#fff'; ctx.fillText(b.sub,0,Math.min(W*0.1,48));
-    ctx.restore(); ctx.globalAlpha=1;
+    const bs=Math.round(Math.min(W*0.13,62)), ss=Math.round(Math.min(W*0.07,34)), gap=Math.min(W*0.1,48);
+    const tw=textW(b.txt,bs), bfit=Math.min(1,W*0.9/tw);
+    const sp=sprite('banner|'+b.txt+'|'+b.sub+'|'+b.col+'|'+bs, Math.max(tw,textW(b.sub,ss))+bs*0.8, bs*1.4+(b.sub?gap+ss:0), x=>{
+      const dy=b.sub?-(gap+ss)/2+bs*0.1:0;
+      outlined(x,b.txt,bs,b.col,[[bs*0.34,'#FFB020',0.3],[bs*0.16,'rgba(40,14,50,.92)']],0,dy);
+      if(b.sub) outlined(x,b.sub,ss,'#fff',[[ss*0.22,'rgba(40,14,50,.92)']],0,dy+gap);
+    });
+    blit(sp,W/2,by+B/2,sc*bfit,a);
   }
 
   ctx.restore();
@@ -2732,10 +2725,9 @@ function stepOrbs(now,dt){
       ctx.globalAlpha=f*0.35; ctx.fillStyle=`hsl(${g.h} ${g.s}% 70%)`;
       ctx.beginPath(); ctx.arc(o.trail[k],o.trail[k+1],r*f*0.8,0,6.283); ctx.fill();
     }
-    const gl=ctx.createRadialGradient(x,y,0,x,y,r*2.4);
-    gl.addColorStop(0,`hsla(${g.h} ${g.s}% 75% / .9)`); gl.addColorStop(1,`hsla(${g.h} ${g.s}% 75% / 0)`);
-    ctx.globalAlpha=1; ctx.fillStyle=gl; ctx.fillRect(x-r*2.4,y-r*2.4,r*4.8,r*4.8);
-    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x,y,r*0.55,0,6.283); ctx.fill();
+    ctx.globalAlpha=0.35; ctx.fillStyle=`hsl(${g.h} ${g.s}% 75%)`; ctx.beginPath(); ctx.arc(x,y,r*1.9,0,6.283); ctx.fill();   // halo
+    ctx.globalAlpha=0.8; ctx.beginPath(); ctx.arc(x,y,r*1.1,0,6.283); ctx.fill();
+    ctx.globalAlpha=1; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x,y,r*0.55,0,6.283); ctx.fill();
   }
   ctx.restore();
   if(bumpUntil && now>bumpUntil){ el('scoreVal').classList.remove('bump'); bumpUntil=0; }
