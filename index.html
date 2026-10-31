@@ -209,7 +209,7 @@ const CFG = {
   GRID: 8,
   DEV_MODE: true,        // shows the gear + developer panel; set false before release (also ignores saved panel overrides)
   SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
-  SNAP_STICKY:   0.6,    // a shown ghost is kept until the piece drifts this many cells from it
+  SNAP_STICKY:   0.5,    // a shown ghost is kept until the piece drifts this many cells from it (0.5 = always the nearest slot)
   SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
   THEME: 'classic',      // a THEMES id — Classic (steel sky, navy board) by default; Night and the light modes in Settings → Look
   STYLE: 'blocks',       // a SKINS id — Blocks (edge-to-edge, bevelled) by default; picked in Settings; some are unlockable
@@ -255,7 +255,8 @@ const CFG = {
   FX_LAND_BUMP:   true,   // a placed piece thumps in (quick squash + ring) instead of appearing
   FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
-  FX_MAGNET:      true,   // the held piece glides into the slot it will land in (no separate ghost) — the "snap"
+  FX_MAGNET:      true,   // the held piece seats into the slot it will land in when the finger is right over it — the "snap"
+  MAGNET_REACH:   0.6,    // seat only when the slot is within this many cells of the finger; farther valid slots just show a ghost
   GUIDE:          1.0,    // how much hand choice favours pieces that clear something RIGHT NOW, no sequence needed (0 = off)
   CLEAR_STYLE:    'squash', // 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
@@ -2136,7 +2137,7 @@ function ghost(){
     }
   }
   drag.gh=g;
-  if(g){ drag.last=g; drag.lastT=performance.now(); }
+  if(g){ g.d=dist(g.r,g.c); drag.last=g; drag.lastT=performance.now(); }   // d: cells between the finger's spot and the slot
   return g;
 }
 addEventListener('pointerdown',onDown,{passive:true});
@@ -2379,8 +2380,8 @@ function frame(now){
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
-    if(!CFG.FX_MAGNET) for(const [dr,dc] of gh.s.cells)      // with the magnet on, the piece itself sits in the slot — no ghost needed
-      gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,CFG.FX_LINE_PREVIEW?.9:.5,0);
+    if(!CFG.FX_MAGNET || gh.d>CFG.MAGNET_REACH)                // seated pieces need no ghost; a slot the finger isn't over yet gets one
+      for(const [dr,dc] of gh.s.cells) gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,.5,0);
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 
@@ -2603,9 +2604,9 @@ function frame(now){
     drag.g=Math.min(1,drag.g+dt*0.2);                            // grows from tray size to board size over ~5 frames, lifting as it goes
     const gk=easeOutBack(drag.g), gs=drag.s0+(1-drag.s0)*gk;
     // the magnet: when there's a slot to land in, the piece glides INTO it (that's the snap); otherwise it floats above the finger
-    const snapped=CFG.FX_MAGNET&&gh&&drag.g>=1;
+    const snapped=CFG.FX_MAGNET&&gh&&gh.d<=CFG.MAGNET_REACH&&drag.g>=1;
     const txp=snapped?bx+gh.c*cell+s.cols*cell/2:drag.x, typ=snapped?by+gh.r*cell+s.rows*cell/2:drag.y-cell*CFG.LIFT*easeOutCubic(drag.g);
-    const k=reduce?1:1-Math.pow(0.45,dt);
+    const k=reduce?1:1-Math.pow(snapped?0.35:0.12,dt);         // tight on the finger; a short glide into the slot
     drag.mx+=(txp-drag.mx)*k; drag.my+=(typ-drag.my)*k;
     drag.snapK+=((snapped?1:0)-drag.snapK)*k;
     ctx.translate(drag.mx,drag.my);
@@ -3012,7 +3013,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['METER_LINE','Blast meter per line',0.02,0.5,0.01],
   ['METER_DRAIN','Blast meter drain (per frame)',0,0.004,0.0001],
   ['BIG_CAP','Big-piece bias cap (cells)',1,9,1],
-  ['GUIDE','Guided hands (obvious drops)',0,3,0.1]
+  ['GUIDE','Guided hands (obvious drops)',0,3,0.1],
+  ['MAGNET_REACH','Magnet reach (cells)',0.3,1.5,0.05]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
