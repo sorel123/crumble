@@ -31,7 +31,10 @@
        display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
   .lbl{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;opacity:.55}
   .score{font-size:38px;font-weight:700;line-height:1;margin-top:1px;
-         text-shadow:0 0 18px var(--glow)}
+         text-shadow:0 0 18px var(--glow);transform-origin:0 60%;transition:transform .13s cubic-bezier(.2,1.8,.4,1)}
+  .score.bump{transform:scale(1.22)}
+  .best{transition:transform .13s cubic-bezier(.2,1.8,.4,1)}
+  .best.bump{transform:scale(1.3)}
   .right{text-align:right;display:flex;gap:14px;align-items:flex-start}
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--best)}
   #mute,#setBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
@@ -246,6 +249,14 @@ const CFG = {
   RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
   ADS_EVERY: 3,
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
+  // juice — the feel layer (all toggleable from the Admin panel)
+  FX_CHUNKS:      true,   // cleared gems burst outward as whole blocks (not slivers), away from where you placed
+  FX_SCORE_ORBS:  true,   // every cleared gem sends a glowing orb to the score, which bumps when they land
+  FX_LAND_BUMP:   true,   // a placed piece thumps in (quick squash + ring) instead of appearing
+  FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
+  FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
+  CLEAR_BLINK:    7,      // frames the whole line flashes white before the pop sweeps along it
+  CLEAR_STAGGER:  0.9,    // frames of delay per cell of distance from the placed piece (the pop radiates outward)
   // star gem: a single-cell piece that clears its whole row and column
   STAR_ENABLED:  true,   // master switch for star gems
   STAR_CHANCE:   0.035,  // odds each tray carries one, replacing a normal piece
@@ -566,6 +577,8 @@ let starForced=false;   // a big combo guaranteed the next normal tray a star ge
 let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts}
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blasts=[];
 let praises=[],bursts=[],lineFlashes=[];
+let chunks=[],orbs=[],rings=[],dust=[];      // juice: block chunks, score orbs, landing rings, landing dust
+let scoreHold=0, bestBeaten=false, hitWait=0;           // score count-up waits for the first orb; NEW BEST fires once a run
 let paused=false;
 let curWorld='night', curSkin='jewel', bgFrom='night', bgT=1, flip=null;
 let ambient=[], ambientOld=[], ambientBurst=0, lightningT=0;
@@ -854,8 +867,8 @@ function genRescue(){
   }
   commitTray(bestHand,'RESCUE');
 }
-function pushBanner(txt,sub){   // waits its turn if another banner is still on screen
-  banners.push({t:banners.length?-0.55:0,txt,sub});
+function pushBanner(txt,sub,col){   // queued: one on screen at a time, the next starts as this one fades (frame)
+  banners.push({t:0,txt,sub,col:col||'#FFD45C'});
 }
 /* praise: a big word for a multi-line clear or a long combo — the bigger the
    moment, the bigger the word. A clean sweep has its own banner instead. */
@@ -868,7 +881,7 @@ const PRAISE=[
 ];
 function praiseTier(lines,combo){
   const byLines=lines>=5?4:lines>=4?3:lines>=3?2:lines>=2?1:0;
-  const byCombo=combo>=8?4:combo>=6?3:combo>=4?2:combo>=3?1:0;
+  const byCombo=combo>=8?4:combo>=6?3:combo>=4?2:combo>=2?1:0;
   return Math.max(byLines,byCombo);
 }
 function praise(lines,combo){
@@ -1265,9 +1278,12 @@ function buildBoardBg(){
   const t=theme();
   x.fillStyle=t.light?t.panel:'rgba(0,0,0,.34)'; roundPath(x,0,0,w,w,20); x.fill();
   x.strokeStyle=t.light?t.stroke:'rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
-  x.fillStyle=t.light?t.slot:'rgba(255,255,255,.045)';
-  const p=cell*.03;
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++){ roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.14); x.fill(); }
+  const p=cell*.04;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    x.fillStyle=t.light?t.slot:'rgba(255,255,255,.07)';
+    roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.16); x.fill();
+    if(!t.light){ x.fillStyle='rgba(0,0,0,.18)'; roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell*.22,cell*.16); x.fill(); }  // a shallow inset shadow
+  }
   boardBg={cv,pad,w};
 }
 
@@ -1755,7 +1771,16 @@ function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
-  if(!s.star) s.cells.forEach(([dr,dc])=>{ grid[r+dr][c+dc]={gi:t.gi,t:1,f:1}; });   // lands instantly (f = a brief glint); a star leaves no gem
+  const bump=CFG.FX_LAND_BUMP&&!reduce;
+  if(!s.star) s.cells.forEach(([dr,dc])=>{ grid[r+dr][c+dc]={gi:t.gi,t:1,f:1,l:bump?1:0}; });   // f = a brief glint, l = the landing thump; a star leaves no gem
+  if(bump){                                        // the thump: a ring spreads out from under the piece, dust kicks out sideways
+    const px=bx+c*cell, py=by+r*cell, pw=s.cols*cell, ph=s.rows*cell;
+    rings.push({x:px,y:py,w:pw,h:ph,t:0});
+    for(let k=0;k<6;k++){
+      const left=k%2===0, yy=py+ph-cell*0.15-Math.random()*ph*0.5;
+      dust.push({x:left?px+cell*0.1:px+pw-cell*0.1,y:yy,vx:(left?-1:1)*(1.2+Math.random()*2),vy:-(0.4+Math.random()*1.2),r:cell*(0.05+Math.random()*0.05),life:1});
+    }
+  }
   tray[idx]=null;
   if(!s.star) Sfx.place(s.n);
 
@@ -1780,6 +1805,7 @@ function place(idx,r,c){
   if(total>0){
     ambientBurst=1;
     if(CFG.FX_PUNCH_ZOOM && !reduce && total>=2) punchT=1;
+    hitWait=reduce?0:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
     if(s.star && total>=2) triggerTransform('starfield');
     combo++; trayCombo=Math.max(trayCombo,combo);
     if(CFG.STAR_ENABLED && combo>=CFG.STAR_COMBO) starForced=true;
@@ -1787,34 +1813,44 @@ function place(idx,r,c){
     if(combo>=7) triggerTransform('storm');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
     if(!s.star){                                   // a star gets its own cross-shaped blast instead
-      rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:0}));
-      cols.forEach(c2=>sweeps.push({horiz:false,idx:c2,t:0}));
+      const st=-(reduce?0:CFG.CLEAR_BLINK)*0.16;        // sweeps start with the pop, not the blink
+      rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:st}));
+      cols.forEach(c2=>sweeps.push({horiz:false,idx:c2,t:st}));
     }
 
+    const cr=r+s.rows/2, cc0=c+s.cols/2;         // where the piece landed: the clear radiates out from here
     const marked=new Map();
     rows.forEach(r2=>{for(let i=0;i<N;i++) marked.set(r2+','+i,i);});
     cols.forEach(c2=>{for(let i=0;i<N;i++) marked.set(i+','+c2,i);});
-    let lastGi=t.gi, cleared=0;
+    let lastGi=t.gi, cleared=0, maxDelay=0;
     marked.forEach((along,key)=>{
       const [rr,cc]=key.split(',').map(Number);
       const g=grid[rr][cc]; if(!g) return;
       lastGi=g.gi; cleared++;
-      shatters.push({r:rr,c:cc,gi:g.gi,t:-(0.03+along*0.022)});   // a quick wave along the line
+      // the whole line blinks white together, then the pop sweeps outward from the placed piece
+      const d=Math.hypot(rr+0.5-cr,cc+0.5-cc0);
+      const delay=(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;
+      maxDelay=Math.max(maxDelay,delay);
+      shatters.push({r:rr,c:cc,gi:g.gi,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
+      if(CFG.FX_SCORE_ORBS && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
+        dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
     });
+    if(CFG.FX_SCORE_ORBS && !reduce) scoreHold=Math.max(scoreHold,performance.now()+(maxDelay+5)/60*1000+ORB_MS*0.8);
 
-    const cr=r+s.rows/2, cc0=c+s.cols/2;
-    waves.push({x:bx+cc0*cell,y:by+cr*cell,t:0});
+    waves.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.07});
     glowT=1; glowH=GEMS[lastGi].h;
     if(!s.star){                                   // each cleared line flares in the colour it was cleared with
       const k=Math.min(1.7,0.8+0.3*total);
-      rows.forEach(r2=>lineFlashes.push({horiz:true,idx:r2,t:0,hue:glowH,k}));
-      cols.forEach(c2=>lineFlashes.push({horiz:false,idx:c2,t:0,hue:glowH,k}));
+      const ft=-(reduce?0:CFG.CLEAR_BLINK)*0.075;
+      rows.forEach(r2=>lineFlashes.push({horiz:true,idx:r2,t:ft,hue:glowH,k}));
+      cols.forEach(c2=>lineFlashes.push({horiz:false,idx:c2,t:ft,hue:glowH,k}));
     }
     shake=Math.min(11,3.5+total*1.8)*CFG.SHAKE;
     if(s.star) shake=Math.max(shake,12*CFG.SHAKE);
-    if(combo>1) Sfx.combo(combo,total,.02); else Sfx.clear(total,.02);   // on the beat with the (now quick) visual
-    pops.push({x:bx+cc0*cell,y:by+cr*cell,t:0,txt:'+'+(gained-s.n),
+    const beat=(reduce?0:CFG.CLEAR_BLINK)/60+.02;                        // lands as the blink turns into the pop
+    if(combo>1) Sfx.combo(combo,total,beat); else Sfx.clear(total,beat);
+    pops.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n),
                sub:combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
     // clean sweep — board completely emptied
@@ -1870,6 +1906,12 @@ function place(idx,r,c){
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
+  if(!bestBeaten && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
+    bestBeaten=true;
+    pushBanner('NEW BEST!','',"#8FF7FF");
+    if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
+    glowT=Math.max(glowT,1.4); Sfx.praise(3);
+  }
   if(tray.every(v=>!v)){
     goldenNext = CFG.GOLDEN_ENABLED && goldenCool<=0 && !transform      // a live transformation already is the moment
       && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
@@ -1889,7 +1931,7 @@ function onDown(e){
   for(let i=0;i<3;i++){
     const R=slotRect(i);
     if(tray[i]&&e.clientX>=R.x&&e.clientX<=R.x+R.w&&e.clientY>=R.y-12&&e.clientY<=R.y+R.h+12){
-      drag={i,x:e.clientX,y:e.clientY,px:e.clientX,vx:0,g:0};
+      drag={i,x:e.clientX,y:e.clientY,px:e.clientX,vx:0,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(tray[i].s)/cell};
       Sfx.pickup(); return;
     }
   }
@@ -2037,18 +2079,20 @@ let last=0;
 function frame(now){
   requestAnimationFrame(frame);
   const dt=paused?0:Math.min(2.5,(now-last)/16.67)||1; last=now;
-  shake*=Math.pow(.85,dt); glowT*=Math.pow(.93,dt);
+  if(hitWait>0) hitWait-=dt; else shake*=Math.pow(.85,dt);
+  glowT*=Math.pow(.93,dt);
 
   const comboTarget=combo>=2?Math.min(1,(combo-1)/6):0;
   comboGlowV+=(comboTarget-comboGlowV)*Math.min(1,dt*0.15);
   const goldTarget=golden?1:0;
   goldTintV+=(goldTarget-goldTintV)*Math.min(1,dt*0.15);
   sweepFxT=Math.max(0,sweepFxT-dt/48);
-  if(shownScore!==score){                          // quick count-up: closes ~20% of the gap a frame, always at least 1
-    shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*0.2*dt))):score;
+  if(bestBeaten && shownScore>best){ best=shownScore; const bv=el('bestVal'); bv.textContent=best; if(!bv.classList.contains('bump')){ bv.classList.add('bump'); setTimeout(()=>bv.classList.remove('bump'),140); } }
+  if(shownScore!==score && now>=scoreHold){         // quick count-up (held until the first score orb lands): ~30% of the gap a frame, at least 1
+    shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*0.3*dt))):score;
     el('scoreVal').textContent=shownScore;
   }
-  punchT=Math.max(0,punchT-dt/22);
+  if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
   stepFlip(dt);
   const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
@@ -2086,8 +2130,8 @@ function frame(now){
   }
 
   ctx.save();
-  if(shake>.2) ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
-  if(CFG.FX_PUNCH_ZOOM && punchT>0.01){
+  if(shake>.2 && hitWait<=0) ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+  if(CFG.FX_PUNCH_ZOOM && punchT>0.01 && hitWait<=0){
     const pz=1+0.025*punchT;
     ctx.translate(bx+B/2,by+B/2); ctx.scale(pz,pz); ctx.translate(-(bx+B/2),-(by+B/2));
   }
@@ -2110,13 +2154,16 @@ function frame(now){
       for(const [dr,dc] of gh.s.cells) test[gh.r+dr][gh.c+dc]=1;
       L=linesFor(test);
     }
-    const sh=(Math.sin(now*0.006)*0.5+0.5)*0.18+0.14;
-    ctx.globalAlpha=sh; ctx.fillStyle=theme().light?'#FFB020':'#fff';
+    const pulse=Math.sin(now*0.008)*0.5+0.5, hue=GEMS[tray[drag.i].gi].h;
+    if(CFG.FX_LINE_PREVIEW){                      // the lines about to clear light up in the held piece's colour
+      ctx.globalAlpha=0.3+0.2*pulse; ctx.fillStyle=`hsl(${hue} 90% ${theme().light?55:70}%)`;
+    } else { ctx.globalAlpha=0.14+0.18*pulse; ctx.fillStyle=theme().light?'#FFB020':'#fff'; }
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
     for(const [dr,dc] of gh.s.cells)
-      gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,.45,0);
+      gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,.5,0);
+    gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 
   const claySquash=curSkin==='clay';
@@ -2133,8 +2180,32 @@ function frame(now){
     } else if(claySquash&&g.t<1){
       const q=Math.sin(g.t*Math.PI)*0.17;
       gem(g.gi,bx+c*cell,by+r*cell,cell,base*(1+q),1,0,false,base*(1-q));
+    } else if(g.l>0){                               // landing thump: wide-and-short on impact, springs back over ~8 frames
+      g.l=Math.max(0,g.l-dt*0.13);
+      const q=Math.sin(g.l*Math.PI)*0.16;
+      gem(g.gi,bx+c*cell,by+r*cell,cell,base*(1+q),1,g.f?g.f*g.f*0.45:0,false,base*(1-q*0.7));
     } else gem(g.gi,bx+c*cell,by+r*cell,cell,base,1,g.f?g.f*g.f*0.45:0);
   }
+
+  if(gh && gh.lines && CFG.FX_LINE_PREVIEW && (gh.lines.rows.length||gh.lines.cols.length)){
+    ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.16+0.12*gh.pulse; ctx.fillStyle=`hsl(${gh.hue} 90% 70%)`;
+    gh.lines.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
+    gh.lines.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+  }
+  for(let i=rings.length-1;i>=0;i--){                 // landing ring: an outline that spreads out and fades
+    const g=rings[i]; g.t+=dt*0.1;
+    if(g.t>=1){ rings.splice(i,1); continue; }
+    const e=easeOutCubic(g.t), grow=cell*0.55*e;
+    ctx.globalAlpha=(1-g.t)*0.5; ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(1,cell*0.1*(1-g.t));
+    roundPath(ctx,g.x-grow,g.y-grow,g.w+grow*2,g.h+grow*2,cell*0.3); ctx.stroke();
+  }
+  for(let i=dust.length-1;i>=0;i--){                  // landing dust
+    const d=dust[i]; d.x+=d.vx*dt; d.y+=d.vy*dt; d.vy+=0.12*dt; d.vx*=Math.pow(.9,dt); d.life-=dt*0.07;
+    if(d.life<=0){ dust.splice(i,1); continue; }
+    ctx.globalAlpha=d.life*0.7; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(d.x,d.y,d.r*d.life,0,6.283); ctx.fill();
+  }
+  ctx.globalAlpha=1;
 
   if(!reduce && now-lastSpark>CFG.SPARKLE_RATE && state==='play' && !paused && curSkin==='jewel'){
     lastSpark=now;
@@ -2152,7 +2223,8 @@ function frame(now){
   }
 
   for(let i=sweeps.length-1;i>=0;i--){
-    const s=sweeps[i]; s.t+=dt*0.11;
+    const s=sweeps[i]; s.t+=dt*0.16;
+    if(s.t<0) continue;
     if(s.t>=1){ sweeps.splice(i,1); continue; }
     const p=easeOutCubic(s.t), a=(1-s.t)*0.85;
     if(s.horiz){
@@ -2188,32 +2260,51 @@ function frame(now){
     ctx.globalAlpha=1;
   }
 
+  /* line clear, in frames: the whole line blinks white (on-off-on), then each gem pops —
+     a fast scale-up that turns into a whole block flung away from where the piece landed */
+  const POP=7;
   for(let i=shatters.length-1;i>=0;i--){
-    const s=shatters[i]; s.t+=dt*0.09;
-    if(s.t<0){ gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,0); continue; }
-    if(s.t>=1){
+    const s=shatters[i]; s.t+=dt;
+    if(s.t<0){                                       // blink phase, timed from the clear itself so the line flashes in unison
+      const since=s.t-s.t0, on=since<3||since>=5;
+      gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,on?0.95:0.15); continue;
+    }
+    if(s.t>=POP){
       const g=GEMS[s.gi], cx=bx+(s.c+.5)*cell, cy=by+(s.r+.5)*cell;
-      for(let k=0;k<(reduce?3:CFG.SHARDS);k++){
-        const a=Math.random()*6.283,sp=1.6+Math.random()*5;
-        shards.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2.4,
-          r:cell*(.09+Math.random()*.16),rot:Math.random()*6.283,
-          vr:(Math.random()-.5)*.34,life:1,
-          col:`hsl(${g.h} ${g.s}% ${46+Math.random()*30}%)`});
+      if(CFG.FX_CHUNKS && !reduce){
+        const ang=Math.atan2(cy-s.oy,cx-s.ox)+(Math.random()-.5)*.5;   // away from the placed piece
+        const sp=4.5+Math.random()*4;
+        chunks.push({x:cx,y:cy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-3,rot:(Math.random()-.5)*.4,
+          vr:(Math.random()-.5)*.5,sz:cell*.86,life:1,gi:s.gi,
+          col:`hsl(${g.h} ${g.s}% 60%)`,hi:`hsl(${g.h} ${g.s}% 84%)`});
+      }
+      for(let k=0;k<(reduce?1:3);k++){                     // a few bright specks per gem
+        const a=Math.random()*6.283,sp=2+Math.random()*4;
+        shards.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,r:cell*(.05+Math.random()*.08),life:1});
       }
       shatters.splice(i,1); continue;
     }
-    const e=Math.sin(s.t*Math.PI*0.5);
-    gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1+0.34*e,1-s.t*s.t,e);
+    const p=s.t/POP, e=easeOutCubic(p);                 // the pop: swells and whites out
+    gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1+0.42*e,1-p*p,0.6+0.4*e);
   }
 
-  for(let i=shards.length-1;i>=0;i--){
-    const b=shards[i];
-    b.vy+=.4*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt; b.life-=.03*dt;
-    if(b.life<=0){ shards.splice(i,1); continue; }
+  for(let i=chunks.length-1;i>=0;i--){                 // flung blocks: tumble, shrink, fade — gone in ~half a second
+    const b=chunks[i];
+    b.vy+=.42*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt; b.life-=.045*dt;
+    if(b.life<=0){ chunks.splice(i,1); continue; }
+    const sz=b.sz*(0.35+0.65*b.life);
     ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.rot);
-    ctx.globalAlpha=Math.max(0,b.life); ctx.fillStyle=b.col;
-    ctx.beginPath(); ctx.moveTo(0,-b.r); ctx.lineTo(b.r*.86,b.r*.5);
-    ctx.lineTo(-b.r*.86,b.r*.5); ctx.closePath(); ctx.fill(); ctx.restore();
+    ctx.globalAlpha=Math.min(1,b.life*1.8);
+    ctx.fillStyle=b.col; roundPath(ctx,-sz/2,-sz/2,sz,sz,sz*.22); ctx.fill();
+    ctx.fillStyle=b.hi; ctx.globalAlpha=Math.min(1,b.life*1.8)*.7;
+    roundPath(ctx,-sz/2+sz*.14,-sz/2+sz*.12,sz*.72,sz*.3,sz*.14); ctx.fill();
+    ctx.restore();
+  }
+  for(let i=shards.length-1;i>=0;i--){                 // specks
+    const b=shards[i];
+    b.vy+=.3*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=.05*dt;
+    if(b.life<=0){ shards.splice(i,1); continue; }
+    star(b.x,b.y,b.r*(0.4+0.6*b.life)*2,Math.max(0,b.life));
   }
   ctx.globalAlpha=1;
 
@@ -2221,6 +2312,7 @@ function frame(now){
     ctx.globalCompositeOperation='lighter';
     for(let i=lineFlashes.length-1;i>=0;i--){
       const f=lineFlashes[i]; f.t+=dt*0.075;
+      if(f.t<0) continue;
       if(f.t>=1){ lineFlashes.splice(i,1); continue; }
       const a=(1-f.t)*(1-f.t)*0.5*f.k, grow=cell*(0.1+0.55*easeOutCubic(f.t));
       ctx.fillStyle=`hsla(${f.hue} 100% 66% / ${a})`;
@@ -2231,7 +2323,7 @@ function frame(now){
   }
 
   for(let i=waves.length-1;i>=0;i--){
-    const w=waves[i]; w.t+=dt*0.05;
+    const w=waves[i]; w.t+=dt*0.07;
     if(w.t<0) continue;
     if(w.t>=1){ waves.splice(i,1); continue; }
     ctx.globalAlpha=(1-w.t)*0.5; ctx.strokeStyle='#fff';
@@ -2276,7 +2368,10 @@ function frame(now){
     const t=tray[drag.i],s=t.s;
     const gold=t.gi===GOLD;
     ctx.save();
-    ctx.translate(drag.x,drag.y-cell*CFG.LIFT);                 // rigid under the finger: no grow-in, no tilt
+    drag.g=Math.min(1,drag.g+dt*0.2);                            // grows from tray size to board size over ~5 frames, lifting as it goes
+    const gk=easeOutBack(drag.g), gs=drag.s0+(1-drag.s0)*gk;
+    ctx.translate(drag.x,drag.y-cell*CFG.LIFT*easeOutCubic(drag.g));
+    ctx.scale(gs,gs);                                            // then rigid under the finger: no tilt
     if(gold) goldGlow(0,0,Math.max(s.cols,s.rows)*cell*0.95+cell*0.6,now,0);
     else if(s.star) goldGlow(0,0,cell*1.5,now,0,'235,225,255');
     const ox=-(s.cols*cell)/2, oy=-(s.rows*cell)/2;
@@ -2287,23 +2382,26 @@ function frame(now){
   }
 
   for(let i=pops.length-1;i>=0;i--){
-    const p=pops[i]; p.t+=dt*0.017;
+    const p=pops[i]; p.t+=dt*0.026;
+    if(p.t<0) continue;
     if(p.t>=1){ pops.splice(i,1); continue; }
-    const sc=0.5+0.5*easeOutBack(Math.min(1,p.t*3.2));
-    const rise=easeOutCubic(p.t)*cell*1.5, a=1-Math.pow(p.t,2.6);
-    const fs=Math.round(cell*0.62*(1+0.14*Math.min(4,(p.lines||1)-1)));
+    const sc=0.3+0.7*easeOutBack(Math.min(1,p.t*4));            // slams in, then drifts up and fades
+    const rise=easeOutCubic(p.t)*cell*1.2, a=1-Math.pow(p.t,3);
+    const fs=Math.round(cell*0.9*(1+0.12*Math.min(4,(p.lines||1)-1))*(p.combo>1?1.1:1));
     ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif';
     const half=ctx.measureText(p.txt).width/2+fs*0.2;            // keep a popup from an edge column on screen
     ctx.save(); ctx.translate(clamp(p.x,half+6,W-half-6),p.y-rise); ctx.scale(sc,sc);
     ctx.globalAlpha=a; ctx.textAlign='center'; ctx.lineJoin='round';
     ctx.lineWidth=fs*0.18; ctx.strokeStyle='rgba(24,8,40,.85)'; ctx.strokeText(p.txt,0,0);
-    ctx.fillStyle=p.combo>3?'#FF7BD5':p.combo>1?'#FFD45C':'#FFFFFF';
-    ctx.fillText(p.txt,0,0);
+    const col=p.combo>3?'#FF7BD5':p.combo>1?'#FFD45C':'#FFFFFF';
+    const tg=ctx.createLinearGradient(0,-fs*0.8,0,fs*0.1);          // white-hot top, colour below
+    tg.addColorStop(0,'#FFFFFF'); tg.addColorStop(1,col);
+    ctx.fillStyle=tg; ctx.fillText(p.txt,0,0);
     if(p.sub){
-      const ss=Math.round(cell*0.3);
+      const ss=Math.round(cell*0.42);
       ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
-      ctx.lineWidth=ss*0.28; ctx.strokeText(p.sub,0,cell*0.44);
-      ctx.fillStyle='#fff'; ctx.fillText(p.sub,0,cell*0.44);
+      ctx.lineWidth=ss*0.28; ctx.strokeText(p.sub,0,cell*0.55);
+      ctx.fillStyle=col; ctx.fillText(p.sub,0,cell*0.55);
     }
     ctx.restore(); ctx.globalAlpha=1;
   }
@@ -2320,7 +2418,7 @@ function frame(now){
   }
   ctx.globalAlpha=1;
   for(let i=praises.length-1;i>=0;i--){            // the praise word: pops in, holds, lifts away
-    const p=praises[i]; p.t+=dt*0.019;
+    const p=praises[i]; p.t+=dt*0.024;
     if(p.t>=1){ praises.splice(i,1); continue; }
     const pin=Math.min(1,p.t/0.2), out=p.t>0.72?(p.t-0.72)/0.28:0;
     let size=Math.round(Math.min(W*0.13,cell*1.1)*(1+0.1*(p.tier-1)));
@@ -2341,12 +2439,13 @@ function frame(now){
     ctx.restore();
   }
 
-  for(let i=banners.length-1;i>=0;i--){
-    const b=banners[i]; b.t+=dt*0.013;
-    if(b.t>=1){ banners.splice(i,1); continue; }
-    if(b.t<0) continue;
+  for(let i=0;i<banners.length;i++){               // head banner runs; the one behind it starts once the head is fading
+    const b=banners[i];
+    if(i>0 && banners[i-1].t<0.97) break;
+    b.t+=dt*0.017;
+    if(b.t>=1){ banners.splice(i,1); i--; continue; }
     const sc=0.6+0.4*easeOutBack(Math.min(1,b.t*2.4));
-    const a=b.t>0.72?(1-b.t)/0.28:1;
+    const a=b.t>0.8?(1-b.t)/0.2:1;
     ctx.save(); ctx.translate(W/2,by+B/2); ctx.scale(sc,sc);
     ctx.globalAlpha=a; ctx.textAlign='center'; ctx.lineJoin='round';
     const bs=Math.round(Math.min(W*0.13,62));
@@ -2354,7 +2453,7 @@ function frame(now){
     const bfit=Math.min(1,W*0.9/ctx.measureText(b.txt).width); ctx.scale(bfit,bfit);
     ctx.globalAlpha=a*0.3; ctx.lineWidth=bs*0.34; ctx.strokeStyle='#FFB020'; ctx.strokeText(b.txt,0,0);
     ctx.globalAlpha=a; ctx.lineWidth=bs*0.16; ctx.strokeStyle='rgba(40,14,50,.92)'; ctx.strokeText(b.txt,0,0);
-    ctx.fillStyle='#FFD45C'; ctx.fillText(b.txt,0,0);
+    ctx.fillStyle=b.col; ctx.fillText(b.txt,0,0);
     const ss=Math.round(Math.min(W*0.07,34));
     ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
     ctx.lineWidth=ss*0.22; ctx.strokeText(b.sub,0,Math.min(W*0.1,48));
@@ -2367,7 +2466,49 @@ function frame(now){
   // foreground overlay — screen edges and an already-empty board only, never a live piece
   if(CFG.FX_COMBO_GLOW && comboGlowV>0.02) edgeGlow(combo>4?'255,123,213':'255,212,92',comboGlowV);
   if(CFG.FX_SWEEP_FX) stepConfetti(dt);
+  stepOrbs(now,dt);
 }
+
+/* score orbs: one per cleared gem. Each kicks out from the line (away from the placed
+   piece), then curves up to the score counter, which bumps as they land. The HUD number
+   holds still until the first one arrives, so the points visibly travel. */
+const ORB_MS=430;
+let orbTarget=null, orbTargetAt=0, bumpUntil=0;
+function stepOrbs(now,dt){
+  if(!orbs.length) return;
+  if(now-orbTargetAt>500){ const r=el('scoreVal').getBoundingClientRect(); orbTarget={x:r.left+r.width/2,y:r.top+r.height/2}; orbTargetAt=now; }
+  const T=orbTarget, sec=dt/60;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for(let i=orbs.length-1;i>=0;i--){
+    const o=orbs[i];
+    if(o.t<0){ o.t+=sec; continue; }                       // waiting for its gem to pop
+    if(!o.sx){ o.sx=o.x; o.sy=o.y; o.cx=o.x+Math.cos(o.dir)*cell*1.6; o.cy=o.y+Math.sin(o.dir)*cell*1.6-cell*1.2; }
+    o.t+=sec*1000/ORB_MS;
+    if(o.t>=1){                                             // landed: bump the counter, free the count-up
+      orbs.splice(i,1);
+      bumpUntil=now+140; el('scoreVal').classList.add('bump');
+      if(scoreHold>now) scoreHold=now;
+      sparkles.push({x:T.x+(Math.random()-.5)*30,y:T.y+(Math.random()-.5)*16,t:0.1});
+      continue;
+    }
+    const u=easeInOutQuad(o.t), v=1-u;                      // quadratic bezier: start -> kick-out control -> counter
+    const x=v*v*o.sx+2*v*u*o.cx+u*u*T.x, y=v*v*o.sy+2*v*u*o.cy+u*u*T.y;
+    o.trail.push(x,y); if(o.trail.length>10) o.trail.splice(0,2);
+    const g=GEMS[o.gi], r=cell*0.2*(1-0.35*o.t);
+    for(let k=0;k<o.trail.length;k+=2){                     // trail
+      const f=(k/2+1)/(o.trail.length/2+1);
+      ctx.globalAlpha=f*0.35; ctx.fillStyle=`hsl(${g.h} ${g.s}% 70%)`;
+      ctx.beginPath(); ctx.arc(o.trail[k],o.trail[k+1],r*f*0.8,0,6.283); ctx.fill();
+    }
+    const gl=ctx.createRadialGradient(x,y,0,x,y,r*2.4);
+    gl.addColorStop(0,`hsla(${g.h} ${g.s}% 75% / .9)`); gl.addColorStop(1,`hsla(${g.h} ${g.s}% 75% / 0)`);
+    ctx.globalAlpha=1; ctx.fillStyle=gl; ctx.fillRect(x-r*2.4,y-r*2.4,r*4.8,r*4.8);
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x,y,r*0.55,0,6.283); ctx.fill();
+  }
+  ctx.restore();
+  if(bumpUntil && now>bumpUntil){ el('scoreVal').classList.remove('bump'); bumpUntil=0; }
+}
+const easeInOutQuad=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
 
 /* ═══════ flow ═══════ */
 async function gameOver(){
@@ -2409,6 +2550,7 @@ function start(){
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];
+  chunks=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
@@ -2547,6 +2689,11 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['FX_SWEEP_FX','Sweep wash + confetti'],
   ['FX_TENSION_BORDER','Tension border glow'],
   ['FX_PUNCH_ZOOM','Punch zoom on clears'],
+  ['FX_CHUNKS','Clears burst into blocks'],
+  ['FX_SCORE_ORBS','Score orbs fly to counter'],
+  ['FX_LAND_BUMP','Landing thump'],
+  ['FX_PICKUP_GROW','Pickup grow-in'],
+  ['FX_LINE_PREVIEW','Coloured line preview'],
   ['SHOW_TENSION','Debug readout']
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
@@ -2589,7 +2736,9 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SWEEP_COOLDOWN','Sweep cooldown (trays)',0,10,1],
   ['SNAP_RADIUS','Snap radius (cells)',0,3,1],
   ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
-  ['LIFT','Piece lift (cells)',0,3,0.05]
+  ['LIFT','Piece lift (cells)',0,3,0.05],
+  ['CLEAR_BLINK','Clear: blink frames',0,14,1],
+  ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
