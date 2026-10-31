@@ -257,6 +257,18 @@ const CFG = {
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
   CLEAR_BLINK:    7,      // frames the whole line flashes white before the pop sweeps along it
   CLEAR_STAGGER:  0.9,    // frames of delay per cell of distance from the placed piece (the pop radiates outward)
+
+  // Blast Round — the bonus round. A meter fills with clears (and drains while you dawdle);
+  // full = a timed round of big-piece sweep/jackpot hands, a hot new look, and doubled points.
+  BLAST_ENABLED:  true,
+  BLAST_SECONDS:  20,     // round length when it starts
+  BLAST_ADD:      2.5,    // seconds added per line cleared during the round (capped at BLAST_SECONDS)
+  BLAST_MULT:     2,      // score multiplier during the round
+  METER_LINE:     0.14,   // meter gained per line cleared
+  METER_COMBO:    0.06,   // extra per clear while on a combo
+  METER_IDLE:     2500,   // ms without a clear before the meter starts draining
+  METER_DRAIN:    0.0004, // meter lost per frame once draining (~40 s from full to empty)
+  BIG_CAP:        4,      // the crowded-board small-piece bias stops growing past this many cells, so 5-9 cell pieces keep coming
   // star gem: a single-cell piece that clears its whole row and column
   STAR_ENABLED:  true,   // master switch for star gems
   STAR_CHANCE:   0.035,  // odds each tray carries one, replacing a normal piece
@@ -266,8 +278,8 @@ const CFG = {
 
   LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
-  TIER_SOLVABLE: 0.20,   // tension above this deals 'solvable' hands (2+ lines); below it, honest hands
-  TIER_JACKPOT:  0.50,   // ...above this 'jackpot' hands (3+ lines)
+  TIER_SOLVABLE: 0.15,   // tension above this deals 'solvable' hands (2+ lines); below it, honest hands
+  TIER_JACKPOT:  0.40,   // ...above this 'jackpot' hands (3+ lines)
   TIER_SWEEP:    0.85,   // ...above this a planned clean sweep (when off cooldown)
 
   // transformations — achievement-triggered event looks (own world + own tile skin), temporary
@@ -332,7 +344,9 @@ const TRANSFORMS={
   storm:    {name:'Storm',      world:{top:'#232B38',bottom:'#0C1016',effect:'storm',flash:true},   skin:'storm'}
 };
 const TRANSFORM_IDS=Object.keys(TRANSFORMS);
-function worldDef(id){    // resolves a HOME_WORLDS id or a TRANSFORMS id to {top,bottom,effect,flash?}
+const BLAST_WORLD={top:'#6A0F3A',bottom:'#1C0412',effect:'sparks'};   // the Blast Round sky: hot magenta, rising sparks
+function worldDef(id){    // resolves a HOME_WORLDS id, a TRANSFORMS id, or 'blast' to {top,bottom,effect,flash?}
+  if(id==='blast') return BLAST_WORLD;
   const t=TRANSFORMS[id]; if(t) return t.world;
   return HOME_WORLDS.find(w=>w.id===id) || HOME_WORLDS[0];
 }
@@ -351,7 +365,7 @@ const THEMES=[
 const theme=()=>THEMES.find(t=>t.id===CFG.THEME)||THEMES[0];
 const rgba=(hex,a)=>{ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; };
 function bgOf(id){                      // the sky: a light theme's own gradient, except during a transformation
-  const t=theme(); return t.light&&!TRANSFORMS[id]?{top:t.top,bottom:t.bot}:worldDef(id);
+  const t=theme(); return t.light&&!TRANSFORMS[id]&&id!=='blast'?{top:t.top,bottom:t.bot}:worldDef(id);
 }
 function applyTheme(){
   const t=theme(), st=document.documentElement.style;
@@ -579,6 +593,7 @@ let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blas
 let praises=[],bursts=[],lineFlashes=[];
 let chunks=[],orbs=[],rings=[],dust=[];      // juice: block chunks, score orbs, landing rings, landing dust
 let scoreHold=0, bestBeaten=false, hitWait=0;           // score count-up waits for the first orb; NEW BEST fires once a run
+let blastMeter=0, blast=null, lastClearAt=0, bigMode=false, hudH=92;   // blast = live round {t (ms left), pts, lines}
 let paused=false;
 let curWorld='night', curSkin='jewel', bgFrom='night', bgT=1, flip=null;
 let ambient=[], ambientOld=[], ambientBurst=0, lightningT=0;
@@ -783,7 +798,11 @@ function makeHand(density){
 }
 function weightedShape(density){
   const early=trayNo<=CFG.EARLY_TRAYS;
-  const w=SHAPES.map(s=>(1/(1+s.n*density*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT:1)
+  // crowded boards favour small pieces, but the penalty is capped at BIG_CAP cells so the big ones never vanish;
+  // in bigMode (Blast Round hands) the crowd penalty is nearly off and 5+ cell pieces are pushed hard
+  const dens=bigMode?density*0.2:density;
+  const w=SHAPES.map(s=>(1/(1+Math.min(s.n,CFG.BIG_CAP)*dens*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT*(bigMode?0.3:1):1)
+    *(bigMode&&s.n>=5?2.5:1)
     *(early&&!stackable(s)?CFG.EARLY_AWKWARD:1));
   let r=Math.random()*w.reduce((x,y)=>x+y,0);
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
@@ -806,7 +825,8 @@ function pickHand(a0,density,tier,withStar){
     let sc;
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
-    else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
+    else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough
+      +(bigMode?hand.reduce((a,s)=>a+s.n,0)*1.5:0);   // Blast Round: among playable clearing hands, prefer the chunkiest pieces
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
     if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
@@ -836,9 +856,21 @@ function genTray(){
   transformCool=Math.max(0,transformCool-1);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
-  const wantStar=CFG.STAR_ENABLED && !transform && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
+  const wantStar=CFG.STAR_ENABLED && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
 
-  if(goldenNext){ goldenNext=false; if(genGolden(a0,density)) return; }
+  if(goldenNext && !blast){ goldenNext=false; if(genGolden(a0,density)) return; }
+
+  if(blast){                                        // Blast Round: a sweep if one can be built, else the best big-piece jackpot hand
+    const h=planSweep(a0);
+    if(h){ commitTray(h,'BLAST·SWEEP'); return; }
+    bigMode=true;
+    const saved=CFG.CANDIDATES; CFG.CANDIDATES=Math.max(saved,60);
+    let r=pickHand(a0,density,'jackpot');
+    CFG.CANDIDATES=saved; bigMode=false;
+    if(!r.ev||!r.ev.ok) r=pickHand(a0,density,'jackpot');   // big pieces don't fit this board: fall back to a normal jackpot hand
+    commitTray(r.hand,'BLAST·'+(r.ev&&r.ev.ok?'BIG':'JACKPOT'));
+    return;
+  }
 
   if(tier==='sweep'){
     const h=planSweep(a0);
@@ -924,7 +956,7 @@ function updateDbg(){
   const gold=golden?`GOLDEN plan ${golden.want.sweep?'sweep':golden.want.lines+' lines'}, need ${goldenNeed(golden.want)}, got ${golden.got.sweep?'sweep+':''}${golden.got.lines} lines, ${golden.pts} pts`
     :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
   const star=!CFG.STAR_ENABLED?'star off':starForced?'star guaranteed':'star on';
-  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star}`;
+  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star} · meter ${blastMeter.toFixed(2)}`;
 }
 
 /* ═══════ layout + tiles ═══════ */
@@ -1257,7 +1289,7 @@ function layout(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const cs=getComputedStyle(safeProbe);
   const insetT=parseFloat(cs.paddingTop)||0, insetB=parseFloat(cs.paddingBottom)||0;
-  const HUD=92+insetT, Hb=H-insetB;
+  const HUD=92+insetT, Hb=H-insetB; hudH=HUD;
   B=Math.min(W-26,Hb-HUD-190,520);
   cell=B/N; bx=(W-B)/2;
   by=HUD+Math.max(8,(Hb-HUD-B-cell*2.6-24)*0.34);
@@ -1280,9 +1312,9 @@ function buildBoardBg(){
   x.strokeStyle=t.light?t.stroke:'rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
   const p=cell*.04;
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    x.fillStyle=t.light?t.slot:'rgba(255,255,255,.07)';
+    x.fillStyle=t.light?t.slot:'rgba(255,255,255,.055)';
     roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.16); x.fill();
-    if(!t.light){ x.fillStyle='rgba(0,0,0,.18)'; roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell*.22,cell*.16); x.fill(); }  // a shallow inset shadow
+    if(!t.light){ x.fillStyle='rgba(0,0,0,.14)'; roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell*.22,cell*.16); x.fill(); }  // a shallow inset shadow
   }
   boardBg={cv,pad,w};
 }
@@ -1738,7 +1770,7 @@ function mobility(){
 
 // ═══ transformations — achievement-triggered event looks (own world + own tile skin) ═══
 function triggerTransform(id){
-  if(!CFG.TRANSFORM_ENABLED) return;
+  if(!CFG.TRANSFORM_ENABLED || blast) return;    // a Blast Round owns the screen while it runs
   if(!transform && transformCool>0) return;   // quiet period after one ends — makes the next feel earned
   const first=!discoveredWorlds.has(id);
   transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
@@ -1753,6 +1785,56 @@ function endTransform(){
   transformCool=CFG.TRANSFORM_COOLDOWN;
   startFlip(CFG.HOME_WORLD,CFG.STYLE);
   renderPips();
+}
+/* ═══════ Blast Round ═══════
+   The meter (drawn as a bar by the board) fills with clears and drains after a pause.
+   Full: the look flips hot (rainbow gems, magenta sky), every tray is a sweep or a
+   big-piece jackpot hand, points double, and a timer runs that clears extend. */
+function startBlast(){
+  blastMeter=0;
+  blast={t:CFG.BLAST_SECONDS*1000,pts:0,lines:0};
+  startFlip('blast','rainbow');
+  pushBanner('BLAST ROUND','×'+CFG.BLAST_MULT+' · clear fast!','#FF7BD5');
+  if(!reduce){ spawnConfetti(); for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14}); }
+  shake=Math.max(shake,12*CFG.SHAKE); glowT=1.8; glowH=320;
+  Sfx.goldenWin();
+  genTray();                                        // the leftover pieces are replaced by a blast hand right away
+}
+function endBlast(){
+  const b=blast; blast=null;
+  if(b.pts>0) pushBanner('BLAST OVER','+'+b.pts+' · '+b.lines+' lines','#FF7BD5');
+  startFlip(transform?transform.id:CFG.HOME_WORLD,transform?TRANSFORMS[transform.id].skin:CFG.STYLE);
+  Sfx.praise(b.lines>=6?3:2);
+}
+// the bar by the board: the meter filling (gold) in normal play, the timer draining (hot) during a round
+function drawBlastBar(now){
+  if(!CFG.BLAST_ENABLED) return;
+  const above=by-hudH>=26, h=6, y=above?by-14:by+B+10, x0=bx+4, w=B-8;
+  const f=blast?clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1):blastMeter;
+  if(!blast && f<0.01) return;
+  const urgent=blast&&blast.t<5000, pulse=0.5+0.5*Math.sin(now*(urgent?0.02:0.006));
+  roundPath(ctx,x0,y,w,h,h/2); ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fill();
+  const g=ctx.createLinearGradient(x0,0,x0+w,0);
+  if(blast){ g.addColorStop(0,'#FF7BD5'); g.addColorStop(1,urgent?'#FF3B3B':'#FFB020'); }
+  else { g.addColorStop(0,'#FFB020'); g.addColorStop(1,'#FFE07A'); }
+  ctx.save(); roundPath(ctx,x0,y,w,h,h/2); ctx.clip();
+  ctx.fillStyle=g; ctx.globalAlpha=blast?0.75+0.25*pulse:0.85; ctx.fillRect(x0,y,w*f,h);
+  ctx.globalAlpha=0.35*pulse; ctx.fillStyle='#fff'; ctx.fillRect(x0+w*f-10,y,10,h);   // glowing tip
+  ctx.restore(); ctx.globalAlpha=1;
+  ctx.font='700 11px "Fredoka",Verdana,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle=blast?'#FF9DE3':'rgba(255,212,92,.85)';
+  const label=blast?('BLAST  '+Math.ceil(blast.t/1000)+'s'):(f>=1?'BLAST READY!':'BLAST');
+  ctx.fillText(label,x0,above?y-4:y+h+13);
+  if(!blast&&f>=1){ ctx.globalAlpha=0.4+0.4*pulse; ctx.fillStyle='#fff'; ctx.fillText(label,x0,above?y-4:y+h+13); ctx.globalAlpha=1; }
+}
+function stepBlast(now,dt){
+  if(!CFG.BLAST_ENABLED || state!=='play' || paused) return;
+  if(blast){
+    blast.t-=dt*16.67;
+    if(blast.t<=0) endBlast();
+  } else if(blastMeter>0 && blastMeter<1 && now-lastClearAt>CFG.METER_IDLE){
+    blastMeter=Math.max(0,blastMeter-CFG.METER_DRAIN*dt);    // dawdle and it slips away
+  }
 }
 function renderPips(){
   const box=el('transformPips'), n=CFG.TRANSFORM_PLACEMENTS;
@@ -1871,6 +1953,9 @@ function place(idx,r,c){
     }
     if(!swept) praise(total,combo);
     tension=Math.max(0,tension-CFG.TENSION_DOWN);
+    lastClearAt=performance.now();
+    if(blast){ blast.t=Math.min(CFG.BLAST_SECONDS*1000,blast.t+total*CFG.BLAST_ADD*1000+(swept?5000:0)); blast.lines+=total; }
+    else if(CFG.BLAST_ENABLED) blastMeter=Math.min(1,swept?1:blastMeter+total*CFG.METER_LINE+(combo>1?CFG.METER_COMBO:0));
   } else {
     combo=0;
     tension=Math.min(1,tension+CFG.TENSION_UP);
@@ -1903,9 +1988,11 @@ function place(idx,r,c){
     }
   }
   if(transform) gained=Math.round(gained*CFG.TRANSFORM_MULT);
+  if(blast){ gained=Math.round(gained*CFG.BLAST_MULT); blast.pts+=gained; }
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
+  if(!blast && CFG.BLAST_ENABLED && blastMeter>=1 && !transform) startBlast();   // deals a fresh big-piece tray itself
   if(!bestBeaten && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
     bestBeaten=true;
     pushBanner('NEW BEST!','',"#8FF7FF");
@@ -2094,7 +2181,7 @@ function frame(now){
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
-  stepFlip(dt);
+  stepFlip(dt); stepBlast(now,dt);
   const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
     : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
        lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
@@ -2137,7 +2224,13 @@ function frame(now){
   }
 
   ctx.drawImage(boardBg.cv,bx-boardBg.pad,by-boardBg.pad,boardBg.w,boardBg.w);
-  if(CFG.FX_TENSION_BORDER){                            // board border glow: calm (cool) -> warm as tension climbs
+  drawBlastBar(now);
+  if(blast && !reduce){                                  // the round's own border: hot and pulsing
+    const p=0.5+0.5*Math.sin(now*(blast.t<5000?0.02:0.005));
+    roundPath(ctx,bx-9,by-9,B+18,B+18,20);
+    ctx.strokeStyle=`rgba(255,123,213,${0.25+0.35*p})`; ctx.lineWidth=10+8*p; ctx.stroke();
+    ctx.strokeStyle=`rgba(255,255,255,${0.5+0.4*p})`; ctx.lineWidth=2.5; ctx.stroke();
+  } else if(CFG.FX_TENSION_BORDER){                            // board border glow: calm (cool) -> warm as tension climbs
     const hue=200-185*tension, a=0.45+0.4*tension;       // layered strokes fake the glow — shadowBlur every frame is slow on iOS
     roundPath(ctx,bx-9,by-9,B+18,B+18,20);
     ctx.strokeStyle=`hsla(${hue} 85% 62% / ${a*0.12})`; ctx.lineWidth=12+14*tension; ctx.stroke();
@@ -2156,7 +2249,7 @@ function frame(now){
     }
     const pulse=Math.sin(now*0.008)*0.5+0.5, hue=GEMS[tray[drag.i].gi].h;
     if(CFG.FX_LINE_PREVIEW){                      // the lines about to clear light up in the held piece's colour
-      ctx.globalAlpha=0.3+0.2*pulse; ctx.fillStyle=`hsl(${hue} 90% ${theme().light?55:70}%)`;
+      ctx.globalAlpha=0.2+0.12*pulse; ctx.fillStyle=`hsl(${hue} 90% ${theme().light?55:70}%)`;
     } else { ctx.globalAlpha=0.14+0.18*pulse; ctx.fillStyle=theme().light?'#FFB020':'#fff'; }
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
@@ -2188,7 +2281,7 @@ function frame(now){
   }
 
   if(gh && gh.lines && CFG.FX_LINE_PREVIEW && (gh.lines.rows.length||gh.lines.cols.length)){
-    ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.16+0.12*gh.pulse; ctx.fillStyle=`hsl(${gh.hue} 90% 70%)`;
+    ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.08+0.07*gh.pulse; ctx.fillStyle=`hsl(${gh.hue} 90% 70%)`;
     gh.lines.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     gh.lines.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
@@ -2515,6 +2608,7 @@ async function gameOver(){
   if(state!=='play') return;
   if(paused){ setTimeout(gameOver,300); return; }
   state='over';
+  blast=null;                                        // the round dies with the run; resetWorld() restores the look on restart
   const prevBest=best;
   best=Math.max(best,score); el('bestVal').textContent=best;
   const newSkins=checkUnlocks();
@@ -2551,6 +2645,7 @@ function start(){
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];
   chunks=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
+  blast=null; blastMeter=0; lastClearAt=performance.now(); bigMode=false;
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
@@ -2694,10 +2789,12 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['FX_LAND_BUMP','Landing thump'],
   ['FX_PICKUP_GROW','Pickup grow-in'],
   ['FX_LINE_PREVIEW','Coloured line preview'],
+  ['BLAST_ENABLED','Blast Round'],
   ['SHOW_TENSION','Debug readout']
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
-const DEV_ACTIONS=Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]);
+const DEV_ACTIONS=[['Blast Round',()=>{ if(!blast){ if(transform) endTransform(); startBlast(); } }],
+  ...Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }])];
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
   ['SND_PICKUP','Pickup sound',opt(['slide','Slide'],['soft','Soft'],['swish','Swish'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.pickup(),60); }],
@@ -2738,11 +2835,17 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
   ['LIFT','Piece lift (cells)',0,3,0.05],
   ['CLEAR_BLINK','Clear: blink frames',0,14,1],
-  ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1]
+  ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1],
+  ['BLAST_SECONDS','Blast: round length (s)',8,40,1],
+  ['BLAST_ADD','Blast: seconds per line',0,6,0.5],
+  ['BLAST_MULT','Blast: score multiplier',1,4,0.5],
+  ['METER_LINE','Blast meter per line',0.02,0.5,0.01],
+  ['METER_DRAIN','Blast meter drain (per frame)',0,0.004,0.0001],
+  ['BIG_CAP','Big-piece bias cap (cells)',1,9,1]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
-const DEV_STORE='crumble.dev.2';   // bumped for the ebb-and-flow retune, so older saved tuning doesn't override the new defaults
+const DEV_STORE='crumble.dev.3';   // bumped for the Blast Round + tier retune, so older saved tuning doesn't override the new defaults
 function devSave(){
   try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
 }

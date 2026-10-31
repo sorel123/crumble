@@ -89,6 +89,41 @@ in the `chunks` loop, `ORB_MS` (orb flight time).
 
 ---
 
+## Blast Round (2026-10-30)
+
+The bonus round, and the answer to "I want chains built to clear the board,
+with big pieces, and a reason to move fast."
+
+- **Meter** (`blastMeter`, the thin bar by the board): `METER_LINE` per line
+  cleared, `METER_COMBO` extra on a combo, a clean sweep fills it outright.
+  After `METER_IDLE` ms without a clear it drains at `METER_DRAIN` per frame —
+  dawdle and it slips away. That drain is the "move fast" pressure; tune it
+  first if it feels mean.
+- **Full → `startBlast()`**: look flips to the `blast` world (hot magenta,
+  sparks) with the rainbow skin, banner, confetti, the leftover tray is
+  replaced by a blast hand, and a timer starts at `BLAST_SECONDS`. Each line
+  adds `BLAST_ADD` s (a sweep +5 s), capped at the start length. Points
+  ×`BLAST_MULT`.
+- **Blast hands** (`genTray`, `if(blast)`): a planned sweep if one can be
+  built (no cooldown), else `pickHand('jackpot')` in `bigMode` — the crowd
+  penalty nearly off, 5+ cell pieces ×2.5 in the draw, 60 candidates, and a
+  per-cell bonus in the hand score so the chunkiest *playable clearing* hand
+  wins. If no big hand is playable it falls back to a normal jackpot hand.
+- **Ends** when the timer hits 0 (`stepBlast`): "BLAST OVER +pts · n lines",
+  look flips home (or back to a live transformation). Game over kills it
+  silently. No golden hand, star, or transformation can start during a round;
+  a round can't start while a transformation is live (the meter waits at 1).
+- Admin panel: a "Blast Round" button triggers one instantly; sliders for all
+  of the above.
+
+Also in this pass: `TIER_SOLVABLE` 0.20→0.15 and `TIER_JACKPOT` 0.50→0.40
+(helpful hands come sooner), and `BIG_CAP` — the crowded-board small-piece
+bias stops growing past 4 cells, so 5–9 cell pieces keep showing up in normal
+play too. Empty cells and the coloured line preview were dimmed from the first
+juice pass (too bright on the phone).
+
+---
+
 ## The two non-obvious systems
 
 ### Hand solver
