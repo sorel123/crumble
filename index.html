@@ -255,8 +255,24 @@ const CFG = {
   FX_LAND_BUMP:   true,   // a placed piece thumps in (quick squash + ring) instead of appearing
   FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
-  CLEAR_BLINK:    7,      // frames the whole line flashes white before the pop sweeps along it
-  CLEAR_STAGGER:  0.9,    // frames of delay per cell of distance from the placed piece (the pop radiates outward)
+  CLEAR_STYLE:    'squash', // 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
+  CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
+  CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
+  FX_CELL_TAGS:   true,   // a little point value appears on every cleared cell
+  FX_COMBO_SLAM:  true,   // headline "COMBO n" slams in on every consecutive clear, with fireworks
+  COLOR_GONE_BONUS: 60,   // points per colour wiped off the board by a clear ("COLOR GONE!")
+
+  // Blast Round — the bonus round. A meter fills with clears (and drains while you dawdle);
+  // full = a timed round of big-piece sweep/jackpot hands, a hot new look, and doubled points.
+  BLAST_ENABLED:  true,
+  BLAST_SECONDS:  20,     // round length when it starts
+  BLAST_ADD:      2.5,    // seconds added per line cleared during the round (capped at BLAST_SECONDS)
+  BLAST_MULT:     2,      // score multiplier during the round
+  METER_LINE:     0.14,   // meter gained per line cleared
+  METER_COMBO:    0.06,   // extra per clear while on a combo
+  METER_IDLE:     2500,   // ms without a clear before the meter starts draining
+  METER_DRAIN:    0.0004, // meter lost per frame once draining (~40 s from full to empty)
+  BIG_CAP:        4,      // the crowded-board small-piece bias stops growing past this many cells, so 5-9 cell pieces keep coming
   // star gem: a single-cell piece that clears its whole row and column
   STAR_ENABLED:  true,   // master switch for star gems
   STAR_CHANCE:   0.035,  // odds each tray carries one, replacing a normal piece
@@ -266,8 +282,8 @@ const CFG = {
 
   LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
-  TIER_SOLVABLE: 0.20,   // tension above this deals 'solvable' hands (2+ lines); below it, honest hands
-  TIER_JACKPOT:  0.50,   // ...above this 'jackpot' hands (3+ lines)
+  TIER_SOLVABLE: 0.15,   // tension above this deals 'solvable' hands (2+ lines); below it, honest hands
+  TIER_JACKPOT:  0.40,   // ...above this 'jackpot' hands (3+ lines)
   TIER_SWEEP:    0.85,   // ...above this a planned clean sweep (when off cooldown)
 
   // transformations — achievement-triggered event looks (own world + own tile skin), temporary
@@ -332,7 +348,9 @@ const TRANSFORMS={
   storm:    {name:'Storm',      world:{top:'#232B38',bottom:'#0C1016',effect:'storm',flash:true},   skin:'storm'}
 };
 const TRANSFORM_IDS=Object.keys(TRANSFORMS);
-function worldDef(id){    // resolves a HOME_WORLDS id or a TRANSFORMS id to {top,bottom,effect,flash?}
+const BLAST_WORLD={top:'#6A0F3A',bottom:'#1C0412',effect:'sparks'};   // the Blast Round sky: hot magenta, rising sparks
+function worldDef(id){    // resolves a HOME_WORLDS id, a TRANSFORMS id, or 'blast' to {top,bottom,effect,flash?}
+  if(id==='blast') return BLAST_WORLD;
   const t=TRANSFORMS[id]; if(t) return t.world;
   return HOME_WORLDS.find(w=>w.id===id) || HOME_WORLDS[0];
 }
@@ -346,16 +364,21 @@ const THEMES=[
   {id:'daylight', name:'Daylight',     light:true, top:'#EEF6FF', bot:'#C6DCF6', panel:'rgba(255,255,255,.62)', stroke:'rgba(40,70,120,.14)', slot:'rgba(60,100,170,.11)', ink:'#22324F'},
   {id:'cotton',   name:'Cotton Candy', light:true, top:'#FFEAF4', bot:'#E3D6FF', panel:'rgba(255,255,255,.58)', stroke:'rgba(120,70,150,.14)', slot:'rgba(150,90,175,.11)', ink:'#4B2B61'},
   {id:'mint',     name:'Mint',         light:true, top:'#EAFFF7', bot:'#C4ECDD', panel:'rgba(255,255,255,.58)', stroke:'rgba(30,100,80,.14)', slot:'rgba(40,120,95,.11)', ink:'#1D4A3D'},
-  {id:'paper',    name:'Paper',        light:true, top:'#FFF4DE', bot:'#EED6A6', panel:'rgba(214,180,128,.95)', stroke:'rgba(90,55,20,.28)', slot:'rgba(90,55,20,.17)', ink:'#5A3A17'}
+  {id:'paper',    name:'Paper',        light:true, top:'#FFF4DE', bot:'#EED6A6', panel:'rgba(214,180,128,.95)', stroke:'rgba(90,55,20,.28)', slot:'rgba(90,55,20,.17)', ink:'#5A3A17'},
+  // Classic: the steel-blue sky / navy board of the arcade block games — light sky, but white UI text like Night
+  {id:'classic',  name:'Classic',      light:true, whiteInk:true, top:'#7E9FBA', bot:'#587A97', panel:'rgba(40,54,76,.97)', stroke:'rgba(255,255,255,.10)', slot:'rgba(255,255,255,.065)', ink:'#FFFFFF'}
 ];
 const theme=()=>THEMES.find(t=>t.id===CFG.THEME)||THEMES[0];
 const rgba=(hex,a)=>{ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; };
 function bgOf(id){                      // the sky: a light theme's own gradient, except during a transformation
-  const t=theme(); return t.light&&!TRANSFORMS[id]?{top:t.top,bottom:t.bot}:worldDef(id);
+  const t=theme(); return t.light&&!TRANSFORMS[id]&&id!=='blast'?{top:t.top,bottom:t.bot}:worldDef(id);
 }
 function applyTheme(){
   const t=theme(), st=document.documentElement.style;
-  const v=t.light?{
+  const v=t.whiteInk?{                                            // Classic: Night's white UI on its own sky
+    '--bg':t.bot, '--glow':'rgba(255,255,255,.25)', '--btn':'rgba(20,32,50,.28)', '--chip':'rgba(20,32,50,.28)', '--divider':'rgba(255,255,255,.18)',
+    '--overlay':`radial-gradient(120% 90% at 50% 40%,${rgba('#3B4F6B',.86)},${rgba('#22304A',.97)})`
+  }:t.light?{
     '--bg':t.bot, '--fg':t.ink, '--btn':rgba(t.ink,.08), '--chip':'rgba(255,255,255,.55)', '--chip-line':rgba(t.ink,.16),
     '--ghost-line':rgba(t.ink,.3), '--sel-fg':'#9A6400', '--sel-bg':'rgba(255,196,46,.28)', '--best':'#B7790A',
     '--glow':'transparent', '--pip':rgba(t.ink,.2), '--divider':rgba(t.ink,.12), '--accent':'#E39200',
@@ -579,6 +602,8 @@ let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blas
 let praises=[],bursts=[],lineFlashes=[];
 let chunks=[],orbs=[],rings=[],dust=[];      // juice: block chunks, score orbs, landing rings, landing dust
 let scoreHold=0, bestBeaten=false, hitWait=0;           // score count-up waits for the first orb; NEW BEST fires once a run
+let blastMeter=0, blast=null, lastClearAt=0, bigMode=false, hudH=92;   // blast = live round {t (ms left), pts, lines}
+let tags=[], slams=[], bands=[], borderFlash=null;   // per-cell point tags, COMBO slams, COLOR GONE bands, board-border flash
 let paused=false;
 let curWorld='night', curSkin='jewel', bgFrom='night', bgT=1, flip=null;
 let ambient=[], ambientOld=[], ambientBurst=0, lightningT=0;
@@ -783,7 +808,11 @@ function makeHand(density){
 }
 function weightedShape(density){
   const early=trayNo<=CFG.EARLY_TRAYS;
-  const w=SHAPES.map(s=>(1/(1+s.n*density*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT:1)
+  // crowded boards favour small pieces, but the penalty is capped at BIG_CAP cells so the big ones never vanish;
+  // in bigMode (Blast Round hands) the crowd penalty is nearly off and 5+ cell pieces are pushed hard
+  const dens=bigMode?density*0.2:density;
+  const w=SHAPES.map(s=>(1/(1+Math.min(s.n,CFG.BIG_CAP)*dens*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT*(bigMode?0.3:1):1)
+    *(bigMode&&s.n>=5?2.5:1)
     *(early&&!stackable(s)?CFG.EARLY_AWKWARD:1));
   let r=Math.random()*w.reduce((x,y)=>x+y,0);
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
@@ -806,7 +835,8 @@ function pickHand(a0,density,tier,withStar){
     let sc;
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
-    else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
+    else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough
+      +(bigMode?hand.reduce((a,s)=>a+s.n,0)*1.5:0);   // Blast Round: among playable clearing hands, prefer the chunkiest pieces
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
     if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
@@ -836,9 +866,21 @@ function genTray(){
   transformCool=Math.max(0,transformCool-1);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
-  const wantStar=CFG.STAR_ENABLED && !transform && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
+  const wantStar=CFG.STAR_ENABLED && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
 
-  if(goldenNext){ goldenNext=false; if(genGolden(a0,density)) return; }
+  if(goldenNext && !blast){ goldenNext=false; if(genGolden(a0,density)) return; }
+
+  if(blast){                                        // Blast Round: a sweep if one can be built, else the best big-piece jackpot hand
+    const h=planSweep(a0);
+    if(h){ commitTray(h,'BLAST·SWEEP'); return; }
+    bigMode=true;
+    const saved=CFG.CANDIDATES; CFG.CANDIDATES=Math.max(saved,60);
+    let r=pickHand(a0,density,'jackpot');
+    CFG.CANDIDATES=saved; bigMode=false;
+    if(!r.ev||!r.ev.ok) r=pickHand(a0,density,'jackpot');   // big pieces don't fit this board: fall back to a normal jackpot hand
+    commitTray(r.hand,'BLAST·'+(r.ev&&r.ev.ok?'BIG':'JACKPOT'));
+    return;
+  }
 
   if(tier==='sweep'){
     const h=planSweep(a0);
@@ -881,7 +923,7 @@ const PRAISE=[
 ];
 function praiseTier(lines,combo){
   const byLines=lines>=5?4:lines>=4?3:lines>=3?2:lines>=2?1:0;
-  const byCombo=combo>=8?4:combo>=6?3:combo>=4?2:combo>=2?1:0;
+  const byCombo=combo>=8?4:combo>=6?3:combo>=4?2:combo>=2?1:0;   // tier 1 at combo 2 — 'GREAT!' sits above the COMBO slam
   return Math.max(byLines,byCombo);
 }
 function praise(lines,combo){
@@ -924,7 +966,7 @@ function updateDbg(){
   const gold=golden?`GOLDEN plan ${golden.want.sweep?'sweep':golden.want.lines+' lines'}, need ${goldenNeed(golden.want)}, got ${golden.got.sweep?'sweep+':''}${golden.got.lines} lines, ${golden.pts} pts`
     :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
   const star=!CFG.STAR_ENABLED?'star off':starForced?'star guaranteed':'star on';
-  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star}`;
+  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star} · meter ${blastMeter.toFixed(2)}`;
 }
 
 /* ═══════ layout + tiles ═══════ */
@@ -999,6 +1041,22 @@ function jewelTile(size,g){
   x.globalAlpha=1; x.restore();
   roundPath(x,pad,pad,S,S,S*0.14);
   x.strokeStyle=L(26); x.lineWidth=Math.max(1,size*0.035); x.stroke();
+  return cv;
+}
+// Classic arcade block: flat face, light top-left bevel, dark bottom-right bevel, thin gloss. Reads at any size.
+function blockTile(size,g){
+  const {cv,x}=newTile(size);
+  const L=d=>`hsl(${g.h} ${Math.min(96,g.s+4)}% ${clamp((g.star?88:57)+d,6,97)}%)`;
+  const pad=size*0.035, S=size-pad*2, b=S*0.17, r=S*0.09;
+  x.save(); roundPath(x,pad,pad,S,S,r); x.clip();
+  x.fillStyle=L(17); x.fillRect(pad,pad,S,S);                                        // light bevel (top + left)
+  x.fillStyle=L(-16); x.beginPath(); x.moveTo(pad+S,pad); x.lineTo(pad+S,pad+S); x.lineTo(pad,pad+S);   // dark bevel (right + bottom)
+  x.lineTo(pad+b,pad+S-b); x.lineTo(pad+S-b,pad+S-b); x.lineTo(pad+S-b,pad+b); x.closePath(); x.fill();
+  x.fillStyle=L(0); x.fillRect(pad+b,pad+b,S-2*b,S-2*b);                             // the face
+  x.globalAlpha=.2; x.fillStyle='#fff'; x.fillRect(pad+b,pad+b,S-2*b,(S-2*b)*0.3); x.globalAlpha=1;   // gloss
+  if(g.star) drawStar(x,size/2,size/2,S*0.36,true);
+  x.restore();
+  roundPath(x,pad,pad,S,S,r); x.strokeStyle=L(-28); x.lineWidth=Math.max(1,size*0.03); x.stroke();
   return cv;
 }
 // Matte, fat corners, soft shadow underneath — no shine anywhere.
@@ -1224,6 +1282,7 @@ function stormTile(size,g){
 }
 const SKINS=[
   {id:'jewel', name:'Jewels', render:jewelTile, unlock:0},
+  {id:'blocks',name:'Blocks', render:blockTile, unlock:0},
   {id:'clay',  name:'Clay',   render:clayTile,  unlock:0},
   {id:'candy', name:'Candy',  render:candyTile, unlock:400},
   {id:'glass', name:'Glass',  render:glassTile, unlock:900},
@@ -1257,7 +1316,7 @@ function layout(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const cs=getComputedStyle(safeProbe);
   const insetT=parseFloat(cs.paddingTop)||0, insetB=parseFloat(cs.paddingBottom)||0;
-  const HUD=92+insetT, Hb=H-insetB;
+  const HUD=92+insetT, Hb=H-insetB; hudH=HUD;
   B=Math.min(W-26,Hb-HUD-190,520);
   cell=B/N; bx=(W-B)/2;
   by=HUD+Math.max(8,(Hb-HUD-B-cell*2.6-24)*0.34);
@@ -1280,9 +1339,9 @@ function buildBoardBg(){
   x.strokeStyle=t.light?t.stroke:'rgba(255,255,255,.07)'; x.lineWidth=1.5; x.stroke();
   const p=cell*.04;
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    x.fillStyle=t.light?t.slot:'rgba(255,255,255,.07)';
+    x.fillStyle=t.light?t.slot:'rgba(255,255,255,.055)';
     roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell-p*2,cell*.16); x.fill();
-    if(!t.light){ x.fillStyle='rgba(0,0,0,.18)'; roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell*.22,cell*.16); x.fill(); }  // a shallow inset shadow
+    if(!t.light){ x.fillStyle='rgba(0,0,0,.14)'; roundPath(x,pad+c*cell+p,pad+r*cell+p,cell-p*2,cell*.22,cell*.16); x.fill(); }  // a shallow inset shadow
   }
   boardBg={cv,pad,w};
 }
@@ -1738,7 +1797,7 @@ function mobility(){
 
 // ═══ transformations — achievement-triggered event looks (own world + own tile skin) ═══
 function triggerTransform(id){
-  if(!CFG.TRANSFORM_ENABLED) return;
+  if(!CFG.TRANSFORM_ENABLED || blast) return;    // a Blast Round owns the screen while it runs
   if(!transform && transformCool>0) return;   // quiet period after one ends — makes the next feel earned
   const first=!discoveredWorlds.has(id);
   transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
@@ -1753,6 +1812,56 @@ function endTransform(){
   transformCool=CFG.TRANSFORM_COOLDOWN;
   startFlip(CFG.HOME_WORLD,CFG.STYLE);
   renderPips();
+}
+/* ═══════ Blast Round ═══════
+   The meter (drawn as a bar by the board) fills with clears and drains after a pause.
+   Full: the look flips hot (rainbow gems, magenta sky), every tray is a sweep or a
+   big-piece jackpot hand, points double, and a timer runs that clears extend. */
+function startBlast(){
+  blastMeter=0;
+  blast={t:CFG.BLAST_SECONDS*1000,pts:0,lines:0};
+  startFlip('blast','rainbow');
+  pushBanner('BLAST ROUND','×'+CFG.BLAST_MULT+' · clear fast!','#FF7BD5');
+  if(!reduce){ spawnConfetti(); for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14}); }
+  shake=Math.max(shake,12*CFG.SHAKE); glowT=1.8; glowH=320;
+  Sfx.goldenWin();
+  genTray();                                        // the leftover pieces are replaced by a blast hand right away
+}
+function endBlast(){
+  const b=blast; blast=null;
+  if(b.pts>0) pushBanner('BLAST OVER','+'+b.pts+' · '+b.lines+' lines','#FF7BD5');
+  startFlip(transform?transform.id:CFG.HOME_WORLD,transform?TRANSFORMS[transform.id].skin:CFG.STYLE);
+  Sfx.praise(b.lines>=6?3:2);
+}
+// the bar by the board: the meter filling (gold) in normal play, the timer draining (hot) during a round
+function drawBlastBar(now){
+  if(!CFG.BLAST_ENABLED) return;
+  const above=by-hudH>=26, h=6, y=above?by-14:by+B+10, x0=bx+4, w=B-8;
+  const f=blast?clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1):blastMeter;
+  if(!blast && f<0.01) return;
+  const urgent=blast&&blast.t<5000, pulse=0.5+0.5*Math.sin(now*(urgent?0.02:0.006));
+  roundPath(ctx,x0,y,w,h,h/2); ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fill();
+  const g=ctx.createLinearGradient(x0,0,x0+w,0);
+  if(blast){ g.addColorStop(0,'#FF7BD5'); g.addColorStop(1,urgent?'#FF3B3B':'#FFB020'); }
+  else { g.addColorStop(0,'#FFB020'); g.addColorStop(1,'#FFE07A'); }
+  ctx.save(); roundPath(ctx,x0,y,w,h,h/2); ctx.clip();
+  ctx.fillStyle=g; ctx.globalAlpha=blast?0.75+0.25*pulse:0.85; ctx.fillRect(x0,y,w*f,h);
+  ctx.globalAlpha=0.35*pulse; ctx.fillStyle='#fff'; ctx.fillRect(x0+w*f-10,y,10,h);   // glowing tip
+  ctx.restore(); ctx.globalAlpha=1;
+  ctx.font='700 11px "Fredoka",Verdana,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle=blast?'#FF9DE3':'rgba(255,212,92,.85)';
+  const label=blast?('BLAST  '+Math.ceil(blast.t/1000)+'s'):(f>=1?'BLAST READY!':'BLAST');
+  ctx.fillText(label,x0,above?y-4:y+h+13);
+  if(!blast&&f>=1){ ctx.globalAlpha=0.4+0.4*pulse; ctx.fillStyle='#fff'; ctx.fillText(label,x0,above?y-4:y+h+13); ctx.globalAlpha=1; }
+}
+function stepBlast(now,dt){
+  if(!CFG.BLAST_ENABLED || state!=='play' || paused) return;
+  if(blast){
+    blast.t-=dt*16.67;
+    if(blast.t<=0) endBlast();
+  } else if(blastMeter>0 && blastMeter<1 && now-lastClearAt>CFG.METER_IDLE){
+    blastMeter=Math.max(0,blastMeter-CFG.METER_DRAIN*dt);    // dawdle and it slips away
+  }
 }
 function renderPips(){
   const box=el('transformPips'), n=CFG.TRANSFORM_PLACEMENTS;
@@ -1819,24 +1928,51 @@ function place(idx,r,c){
     }
 
     const cr=r+s.rows/2, cc0=c+s.cols/2;         // where the piece landed: the clear radiates out from here
-    const marked=new Map();
-    rows.forEach(r2=>{for(let i=0;i<N;i++) marked.set(r2+','+i,i);});
-    cols.forEach(c2=>{for(let i=0;i<N;i++) marked.set(i+','+c2,i);});
-    let lastGi=t.gi, cleared=0, maxDelay=0;
-    marked.forEach((along,key)=>{
+    const colorsBefore=new Set();                 // for COLOR GONE: which colours the board held, piece included
+    for(let rr=0;rr<N;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]) colorsBefore.add(grid[rr][cc].gi);
+    const marked=new Map();                       // value: true = part of a row (collapses vertically), false = column only
+    rows.forEach(r2=>{for(let i=0;i<N;i++) marked.set(r2+','+i,true);});
+    cols.forEach(c2=>{for(let i=0;i<N;i++) if(!marked.has(i+','+c2)) marked.set(i+','+c2,false);});
+    let lastGi=t.gi, cleared=0, maxDelay=0; const cellsGone=[];
+    marked.forEach((horiz,key)=>{
       const [rr,cc]=key.split(',').map(Number);
       const g=grid[rr][cc]; if(!g) return;
       lastGi=g.gi; cleared++;
-      // the whole line blinks white together, then the pop sweeps outward from the placed piece
+      // optional blink, then the collapse ripples outward from the placed piece
       const d=Math.hypot(rr+0.5-cr,cc+0.5-cc0);
       const delay=(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;
       maxDelay=Math.max(maxDelay,delay);
-      shatters.push({r:rr,c:cc,gi:g.gi,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
+      cellsGone.push([rr,cc,delay]);
+      shatters.push({r:rr,c:cc,gi:g.gi,horiz,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
       if(CFG.FX_SCORE_ORBS && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
         dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
     });
     if(CFG.FX_SCORE_ORBS && !reduce) scoreHold=Math.max(scoreHold,performance.now()+(maxDelay+5)/60*1000+ORB_MS*0.8);
+    // COLOR GONE — a clear that wipes the last of a colour off the board
+    const colorsAfter=new Set();
+    for(let rr=0;rr<N;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]) colorsAfter.add(grid[rr][cc].gi);
+    const gone=[...colorsBefore].filter(gi=>!colorsAfter.has(gi));
+    let colorBonus=0;
+    if(gone.length && colorsAfter.size>0 && CFG.COLOR_GONE_BONUS>0){
+      colorBonus=Math.round(CFG.COLOR_GONE_BONUS*gone.length*(1+(combo-1)*0.25));
+      gained+=colorBonus;
+      bands.push({t:-(maxDelay+8),txt:gone.length>1?gone.length+' COLORS GONE!':'COLOR GONE!',sub:'+'+colorBonus,
+        hues:gone.map(gi=>GEMS[gi].h)});
+      if(!reduce) for(let k=0;k<gone.length+1;k++) spawnFirework(bx+B*(0.2+0.6*Math.random()),by+B*(0.15+0.4*Math.random()),null,maxDelay+10+k*5);
+    }
+    // the point value on every cleared cell, rippling out with the collapse
+    if(CFG.FX_CELL_TAGS && !reduce && cleared){
+      const per=Math.max(1,Math.round((gained-s.n-colorBonus)/cleared));
+      cellsGone.forEach(([rr,cc,delay])=>tags.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,txt:String(per),t:-(delay+4)}));
+    }
+    // the headline: COMBO n slams in under the board centre, with fireworks; bigger streak = bigger word
+    if(CFG.FX_COMBO_SLAM && combo>=2){
+      slams.length=0;
+      slams.push({t:-(reduce?0:maxDelay+7),txt:'COMBO '+combo,n:combo});
+      if(!reduce) for(let k=0;k<Math.min(5,1+combo);k++) spawnFirework(bx+B*(0.15+0.7*Math.random()),by+B*(0.1+0.5*Math.random()),null,maxDelay+7+k*4);
+      if(combo>=3) borderFlash={t:-(maxDelay+7),col:combo>=5?'255,123,213':'255,212,92'};
+    } else if(!reduce && total>=2) spawnFirework(bx+cc0*cell,by+cr*cell,null,maxDelay+6);
 
     waves.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.07});
     glowT=1; glowH=GEMS[lastGi].h;
@@ -1850,8 +1986,10 @@ function place(idx,r,c){
     if(s.star) shake=Math.max(shake,12*CFG.SHAKE);
     const beat=(reduce?0:CFG.CLEAR_BLINK)/60+.02;                        // lands as the blink turns into the pop
     if(combo>1) Sfx.combo(combo,total,beat); else Sfx.clear(total,beat);
-    pops.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n),
-               sub:combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
+    // the points number sits high on the board's right side, clear of the COMBO slam and the COLOR GONE band
+    const popY=CFG.FX_COMBO_SLAM?by+cell*1.2:by+cr*cell, popX=CFG.FX_COMBO_SLAM?bx+B-cell*1.6:bx+cc0*cell;
+    pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n),
+               sub:(CFG.FX_COMBO_SLAM&&combo>1)?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
     // clean sweep — board completely emptied
     let anyLeft=false;
@@ -1871,6 +2009,9 @@ function place(idx,r,c){
     }
     if(!swept) praise(total,combo);
     tension=Math.max(0,tension-CFG.TENSION_DOWN);
+    lastClearAt=performance.now();
+    if(blast){ blast.t=Math.min(CFG.BLAST_SECONDS*1000,blast.t+total*CFG.BLAST_ADD*1000+(swept?5000:0)); blast.lines+=total; }
+    else if(CFG.BLAST_ENABLED) blastMeter=Math.min(1,swept?1:blastMeter+total*CFG.METER_LINE+(combo>1?CFG.METER_COMBO:0));
   } else {
     combo=0;
     tension=Math.min(1,tension+CFG.TENSION_UP);
@@ -1903,9 +2044,11 @@ function place(idx,r,c){
     }
   }
   if(transform) gained=Math.round(gained*CFG.TRANSFORM_MULT);
+  if(blast){ gained=Math.round(gained*CFG.BLAST_MULT); blast.pts+=gained; }
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
+  if(!blast && CFG.BLAST_ENABLED && blastMeter>=1 && !transform) startBlast();   // deals a fresh big-piece tray itself
   if(!bestBeaten && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
     bestBeaten=true;
     pushBanner('NEW BEST!','',"#8FF7FF");
@@ -2052,6 +2195,15 @@ function edgeGlow(rgb,strength){
   if(dL>2){ ctx.fillStyle=mk(0,0,dL,0); ctx.fillRect(0,0,dL,H); }
   if(dR>2){ ctx.fillStyle=mk(W,0,W-dR,0); ctx.fillRect(W-dR,0,dR,H); }
 }
+// a firework: a fountain of little stars in yellow / green / pink / blue from one point (drawn by the bursts loop)
+const FIRE_COLS=['#FFE45C','#7CF59A','#FF8AD8','#8FD8FF'];
+function spawnFirework(x,y,col,delay=0){
+  const c=col||FIRE_COLS[(Math.random()*FIRE_COLS.length)|0];
+  for(let k=0;k<16;k++){
+    const ang=Math.random()*6.283, sp=1.5+Math.random()*4.5;
+    bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.8-1,life:1,wait:delay,r:cell*(0.07+Math.random()*0.1),col:Math.random()<.8?c:'#fff'});
+  }
+}
 // clean-sweep confetti: falls in front, only ever over an already-emptied board
 function spawnConfetti(){
   if(reduce) return;
@@ -2089,12 +2241,12 @@ function frame(now){
   sweepFxT=Math.max(0,sweepFxT-dt/48);
   if(bestBeaten && shownScore>best){ best=shownScore; const bv=el('bestVal'); bv.textContent=best; if(!bv.classList.contains('bump')){ bv.classList.add('bump'); setTimeout(()=>bv.classList.remove('bump'),140); } }
   if(shownScore!==score && now>=scoreHold){         // quick count-up (held until the first score orb lands): ~30% of the gap a frame, at least 1
-    shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*0.3*dt))):score;
+    shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*0.09*dt))):score;
     el('scoreVal').textContent=shownScore;
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
-  stepFlip(dt);
+  stepFlip(dt); stepBlast(now,dt);
   const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
     : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
        lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
@@ -2137,7 +2289,17 @@ function frame(now){
   }
 
   ctx.drawImage(boardBg.cv,bx-boardBg.pad,by-boardBg.pad,boardBg.w,boardBg.w);
-  if(CFG.FX_TENSION_BORDER){                            // board border glow: calm (cool) -> warm as tension climbs
+  drawBlastBar(now);
+  if(blast && !reduce){                                  // the round's own border: hot and pulsing
+    const p=0.5+0.5*Math.sin(now*(blast.t<5000?0.02:0.005));
+    roundPath(ctx,bx-9,by-9,B+18,B+18,20);
+    ctx.strokeStyle=`rgba(255,123,213,${0.25+0.35*p})`; ctx.lineWidth=10+8*p; ctx.stroke();
+    ctx.strokeStyle=`rgba(255,255,255,${0.5+0.4*p})`; ctx.lineWidth=2.5; ctx.stroke();
+  } else if(borderFlash && (borderFlash.t+=dt)>=0){      // combo flash: the board edge lights in the streak colour, then fades
+    const f=1-borderFlash.t/26;
+    if(f<=0) borderFlash=null;
+    else { roundPath(ctx,bx-9,by-9,B+18,B+18,20); ctx.strokeStyle=`rgba(${borderFlash.col},${0.9*f})`; ctx.lineWidth=5+6*f; ctx.stroke(); }
+  } else if(CFG.FX_TENSION_BORDER){                            // board border glow: calm (cool) -> warm as tension climbs
     const hue=200-185*tension, a=0.45+0.4*tension;       // layered strokes fake the glow — shadowBlur every frame is slow on iOS
     roundPath(ctx,bx-9,by-9,B+18,B+18,20);
     ctx.strokeStyle=`hsla(${hue} 85% 62% / ${a*0.12})`; ctx.lineWidth=12+14*tension; ctx.stroke();
@@ -2155,14 +2317,14 @@ function frame(now){
       L=linesFor(test);
     }
     const pulse=Math.sin(now*0.008)*0.5+0.5, hue=GEMS[tray[drag.i].gi].h;
-    if(CFG.FX_LINE_PREVIEW){                      // the lines about to clear light up in the held piece's colour
-      ctx.globalAlpha=0.3+0.2*pulse; ctx.fillStyle=`hsl(${hue} 90% ${theme().light?55:70}%)`;
+    if(CFG.FX_LINE_PREVIEW){                      // the lines about to clear fill with the held piece's colour (gems recoloured after they're drawn)
+      ctx.globalAlpha=0.5+0.2*pulse; ctx.fillStyle=`hsl(${hue} 85% ${theme().light&&!theme().whiteInk?52:62}%)`;
     } else { ctx.globalAlpha=0.14+0.18*pulse; ctx.fillStyle=theme().light?'#FFB020':'#fff'; }
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
     for(const [dr,dc] of gh.s.cells)
-      gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,.5,0);
+      gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,CFG.FX_LINE_PREVIEW?.9:.5,0);
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 
@@ -2188,10 +2350,16 @@ function frame(now){
   }
 
   if(gh && gh.lines && CFG.FX_LINE_PREVIEW && (gh.lines.rows.length||gh.lines.cols.length)){
-    ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.16+0.12*gh.pulse; ctx.fillStyle=`hsl(${gh.hue} 90% 70%)`;
-    gh.lines.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
-    gh.lines.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
-    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+    // every gem already in a would-clear line is recoloured to the held piece — the whole line reads as one colour, about to go
+    const p=cell*.05, inL=(r,c)=>gh.lines.rows.includes(r)||gh.lines.cols.includes(c);
+    ctx.globalAlpha=0.72; ctx.fillStyle=`hsl(${gh.hue} 85% 60%)`;
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]&&inL(r,c)){ roundPath(ctx,bx+c*cell+p,by+r*cell+p,cell-p*2,cell-p*2,cell*.16); ctx.fill(); }
+    ctx.globalAlpha=0.22; ctx.fillStyle='#fff';
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]&&inL(r,c)){ roundPath(ctx,bx+c*cell+p*2,by+r*cell+p*2,cell-p*4,(cell-p*4)*0.3,cell*.1); ctx.fill(); }
+    ctx.globalAlpha=0.55+0.35*gh.pulse; ctx.strokeStyle=`hsl(${gh.hue} 95% 78%)`; ctx.lineWidth=3;   // and a glowing outline around each line
+    gh.lines.rows.forEach(r=>{ roundPath(ctx,bx+1,by+r*cell+1,B-2,cell-2,cell*.18); ctx.stroke(); });
+    gh.lines.cols.forEach(c=>{ roundPath(ctx,bx+c*cell+1,by+1,cell-2,B-2,cell*.18); ctx.stroke(); });
+    ctx.globalAlpha=1;
   }
   for(let i=rings.length-1;i>=0;i--){                 // landing ring: an outline that spreads out and fades
     const g=rings[i]; g.t+=dt*0.1;
@@ -2260,18 +2428,21 @@ function frame(now){
     ctx.globalAlpha=1;
   }
 
-  /* line clear, in frames: the whole line blinks white (on-off-on), then each gem pops —
-     a fast scale-up that turns into a whole block flung away from where the piece landed */
-  const POP=7;
+  /* line clear, in frames. Optional blink, then either:
+     squash — each gem collapses to a white-hot sliver along its line and is gone in ~6 frames (Block Blast's beat), or
+     burst  — each gem pops and becomes a whole block flung away from where the piece landed */
+  const squash=CFG.CLEAR_STYLE==='squash', POP=squash?6:7;
   for(let i=shatters.length-1;i>=0;i--){
     const s=shatters[i]; s.t+=dt;
     if(s.t<0){                                       // blink phase, timed from the clear itself so the line flashes in unison
       const since=s.t-s.t0, on=since<3||since>=5;
-      gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,on?0.95:0.15); continue;
+      gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,CFG.CLEAR_BLINK>0&&on?0.95:0.15); continue;
     }
     if(s.t>=POP){
       const g=GEMS[s.gi], cx=bx+(s.c+.5)*cell, cy=by+(s.r+.5)*cell;
-      if(CFG.FX_CHUNKS && !reduce){
+      if(squash && !reduce){                               // two little squares drift off the bar
+        for(let k=0;k<2;k++) shards.push({x:cx+(Math.random()-.5)*cell*.6,y:cy+(Math.random()-.5)*cell*.3,vx:(Math.random()-.5)*2,vy:-1-Math.random()*2,r:cell*(.05+Math.random()*.05),life:1,sq:true});
+      } else if(CFG.FX_CHUNKS && !reduce){
         const ang=Math.atan2(cy-s.oy,cx-s.ox)+(Math.random()-.5)*.5;   // away from the placed piece
         const sp=4.5+Math.random()*4;
         chunks.push({x:cx,y:cy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-3,rot:(Math.random()-.5)*.4,
@@ -2284,8 +2455,12 @@ function frame(now){
       }
       shatters.splice(i,1); continue;
     }
-    const p=s.t/POP, e=easeOutCubic(p);                 // the pop: swells and whites out
-    gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1+0.42*e,1-p*p,0.6+0.4*e);
+    const p=s.t/POP, e=easeOutCubic(p);
+    if(squash){                                          // thins to a bright sliver along the line, stretching slightly into it
+      const thin=Math.max(0.04,1-e*0.97), wide=1+0.12*e;
+      if(s.horiz) gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,wide,1,0.55+0.45*e,false,thin);
+      else        gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,thin,1,0.55+0.45*e,false,wide);
+    } else gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1+0.42*e,1-p*p,0.6+0.4*e);   // the pop: swells and whites out
   }
 
   for(let i=chunks.length-1;i>=0;i--){                 // flung blocks: tumble, shrink, fade — gone in ~half a second
@@ -2300,11 +2475,12 @@ function frame(now){
     roundPath(ctx,-sz/2+sz*.14,-sz/2+sz*.12,sz*.72,sz*.3,sz*.14); ctx.fill();
     ctx.restore();
   }
-  for(let i=shards.length-1;i>=0;i--){                 // specks
+  for(let i=shards.length-1;i>=0;i--){                 // specks (stars) and the squash's little squares
     const b=shards[i];
-    b.vy+=.3*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=.05*dt;
+    b.vy+=(b.sq?.08:.3)*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=(b.sq?.035:.05)*dt;
     if(b.life<=0){ shards.splice(i,1); continue; }
-    star(b.x,b.y,b.r*(0.4+0.6*b.life)*2,Math.max(0,b.life));
+    if(b.sq){ const r=b.r*(0.5+0.5*b.life); ctx.globalAlpha=Math.max(0,b.life)*0.9; ctx.fillStyle='#fff'; ctx.fillRect(b.x-r,b.y-r,r*2,r*2); }
+    else star(b.x,b.y,b.r*(0.4+0.6*b.life)*2,Math.max(0,b.life));
   }
   ctx.globalAlpha=1;
 
@@ -2406,11 +2582,67 @@ function frame(now){
     ctx.restore(); ctx.globalAlpha=1;
   }
 
-  for(let i=bursts.length-1;i>=0;i--){             // praise stars
+  for(let i=tags.length-1;i>=0;i--){               // per-cell point tags: pop in, sit, lift away
+    const g=tags[i]; g.t+=dt;
+    if(g.t<0) continue;
+    if(g.t>=38){ tags.splice(i,1); continue; }
+    const pin=Math.min(1,g.t/5), out=g.t>26?(g.t-26)/12:0, fs=Math.round(cell*0.42);
+    ctx.save(); ctx.translate(g.x,g.y-out*cell*0.5); ctx.scale(0.4+0.6*easeOutBack(pin),0.4+0.6*easeOutBack(pin));
+    ctx.globalAlpha=1-out; ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+    ctx.lineWidth=fs*0.22; ctx.strokeStyle='rgba(40,16,10,.85)'; ctx.strokeText(g.txt,0,0);
+    ctx.fillStyle='#FFB347'; ctx.fillText(g.txt,0,0);
+    ctx.restore();
+  }
+  for(let i=bands.length-1;i>=0;i--){              // COLOR GONE: a dark band across the board with the words in the lost colours
+    const b=bands[i]; b.t+=dt;
+    if(b.t<0) continue;
+    if(b.t>=80){ bands.splice(i,1); continue; }
+    const pin=Math.min(1,b.t/6), out=b.t>66?(b.t-66)/14:0, y=by+B*0.46, h=cell*1.15;
+    ctx.save(); ctx.globalAlpha=(1-out);
+    ctx.fillStyle='rgba(12,8,30,.55)'; ctx.fillRect(bx-9,y-h/2,B+18,h);
+    const fs=Math.round(Math.min(W*0.095,cell*0.95));
+    ctx.translate(W/2,y); ctx.scale(0.5+0.5*easeOutBack(pin),0.5+0.5*easeOutBack(pin));
+    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+    const tw=ctx.measureText(b.txt).width, tg=ctx.createLinearGradient(-tw/2,0,tw/2,0);
+    const hs=b.hues.length?b.hues:[320]; hs.forEach((hh,k)=>tg.addColorStop(hs.length>1?k/(hs.length-1):0.5,`hsl(${hh} 95% 72%)`));
+    if(hs.length===1){ tg.addColorStop(0,`hsl(${hs[0]} 95% 80%)`); tg.addColorStop(1,`hsl(${(hs[0]+60)%360} 95% 72%)`); }
+    ctx.lineWidth=fs*0.18; ctx.strokeStyle='rgba(20,8,40,.9)'; ctx.strokeText(b.txt,0,0);
+    ctx.fillStyle=tg; ctx.fillText(b.txt,0,0);
+    const ss=Math.round(fs*0.45); ctx.font='700 '+ss+'px "Fredoka",Verdana,sans-serif';
+    ctx.lineWidth=ss*0.25; ctx.strokeText(b.sub,tw/2+ss*0.9,-fs*0.25); ctx.fillStyle='#FFB347'; ctx.fillText(b.sub,tw/2+ss*0.9,-fs*0.25);
+    ctx.restore();
+  }
+  for(let i=slams.length-1;i>=0;i--){              // COMBO n: slams in oversized, holds, zips out
+    const p=slams[i]; p.t+=dt;
+    if(p.t<0) continue;
+    if(p.t>=48){ slams.splice(i,1); continue; }
+    const pin=Math.min(1,p.t/6), out=p.t>40?(p.t-40)/8:0;
+    const sc=(1.7-0.7*easeOutCubic(pin))*(1-0.5*out);
+    const fs=Math.round(Math.min(W*0.15,cell*1.35)*(1+0.05*Math.min(6,p.n-2)));
+    ctx.save(); ctx.translate(W/2,by+B*0.66); ctx.rotate(-0.06+0.06*pin); ctx.scale(sc,sc);
+    ctx.globalAlpha=Math.min(1,pin*1.5)*(1-out); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif';
+    const word='COMBO ', num=String(p.n), ww=ctx.measureText(word).width;
+    ctx.font='700 '+Math.round(fs*1.35)+'px "Fredoka",Verdana,sans-serif'; const nw=ctx.measureText(num).width;
+    const x0=-(ww+nw)/2;
+    ctx.font='700 '+fs+'px "Fredoka",Verdana,sans-serif'; ctx.textAlign='left';
+    ctx.lineWidth=fs*0.3; ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.strokeText(word,x0,0);
+    ctx.lineWidth=fs*0.16; ctx.strokeStyle='rgba(40,20,60,.95)'; ctx.strokeText(word,x0,0);
+    const g1=ctx.createLinearGradient(0,-fs*0.5,0,fs*0.5); g1.addColorStop(0,'#FFFFFF'); g1.addColorStop(0.35,'#FFE66B'); g1.addColorStop(1,'#FFA726');
+    ctx.fillStyle=g1; ctx.fillText(word,x0,0);
+    ctx.font='700 '+Math.round(fs*1.35)+'px "Fredoka",Verdana,sans-serif';
+    ctx.lineWidth=fs*0.36; ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.strokeText(num,x0+ww,fs*0.05);
+    ctx.lineWidth=fs*0.2; ctx.strokeStyle='rgba(40,20,60,.95)'; ctx.strokeText(num,x0+ww,fs*0.05);
+    const g2=ctx.createLinearGradient(0,-fs*0.7,0,fs*0.6); g2.addColorStop(0,'#FFFFFF'); g2.addColorStop(0.3,p.n>=5?'#FF9CE0':'#FFE66B'); g2.addColorStop(1,p.n>=5?'#E040A0':'#FF8F1F');
+    ctx.fillStyle=g2; ctx.fillText(num,x0+ww,fs*0.05);
+    ctx.restore();
+  }
+  for(let i=bursts.length-1;i>=0;i--){             // praise stars + fireworks
     const b=bursts[i];
+    if(b.wait>0){ b.wait-=dt; continue; }
     b.x+=b.vx*dt; b.y+=b.vy*dt; b.vx*=Math.pow(.94,dt); b.vy=b.vy*Math.pow(.94,dt)+0.04*dt; b.life-=dt*0.022;
     if(b.life<=0){ bursts.splice(i,1); continue; }
-    const r=b.r*(0.5+0.5*b.life);
+    const r=b.r*(0.5+0.5*Math.min(1,b.life));
     ctx.globalAlpha=Math.min(1,b.life*1.6); ctx.fillStyle=b.col;
     ctx.beginPath(); ctx.moveTo(b.x,b.y-r);
     ctx.quadraticCurveTo(b.x,b.y,b.x+r,b.y); ctx.quadraticCurveTo(b.x,b.y,b.x,b.y+r);
@@ -2426,7 +2658,7 @@ function frame(now){
     ctx.font='700 '+size+'px "Fredoka",Verdana,sans-serif';
     const fit=Math.min(1,W*0.88/ctx.measureText(p.word).width);   // long words shrink to fit the screen
     const sc=(reduce?1:0.3+0.7*easeOutBack(pin))*fit;
-    ctx.translate(W/2,by+B*0.3-out*cell*0.9);
+    ctx.translate(W/2,by+B*0.27-out*cell*0.9);
     if(!reduce) ctx.rotate(Math.sin(p.t*18)*0.05*(1-pin));
     ctx.scale(sc,sc);
     ctx.globalAlpha=1-out; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
@@ -2515,6 +2747,7 @@ async function gameOver(){
   if(state!=='play') return;
   if(paused){ setTimeout(gameOver,300); return; }
   state='over';
+  blast=null;                                        // the round dies with the run; resetWorld() restores the look on restart
   const prevBest=best;
   best=Math.max(best,score); el('bestVal').textContent=best;
   const newSkins=checkUnlocks();
@@ -2551,6 +2784,8 @@ function start(){
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];
   chunks=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
+  blast=null; blastMeter=0; lastClearAt=performance.now(); bigMode=false;
+  tags=[]; slams=[]; bands=[]; borderFlash=null;
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
@@ -2694,12 +2929,17 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['FX_LAND_BUMP','Landing thump'],
   ['FX_PICKUP_GROW','Pickup grow-in'],
   ['FX_LINE_PREVIEW','Coloured line preview'],
+  ['FX_CELL_TAGS','Point tags on cleared cells'],
+  ['FX_COMBO_SLAM','COMBO slam + fireworks'],
+  ['BLAST_ENABLED','Blast Round'],
   ['SHOW_TENSION','Debug readout']
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
-const DEV_ACTIONS=Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]);
+const DEV_ACTIONS=[['Blast Round',()=>{ if(!blast){ if(transform) endTransform(); startBlast(); } }],
+  ...Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }])];
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
+  ['CLEAR_STYLE','Clear style',opt(['squash','Squash to a bar'],['burst','Blocks fly out']),()=>{}],
   ['SND_PICKUP','Pickup sound',opt(['slide','Slide'],['soft','Soft'],['swish','Swish'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.pickup(),60); }],
   ['SND_PLACE','Place sound',opt(['drop','Drop'],['wood','Wood'],['soft','Soft'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.place(1),60); }]
 ];
@@ -2738,11 +2978,18 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
   ['LIFT','Piece lift (cells)',0,3,0.05],
   ['CLEAR_BLINK','Clear: blink frames',0,14,1],
-  ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1]
+  ['COLOR_GONE_BONUS','Colour-gone bonus (per colour)',0,200,10],
+  ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1],
+  ['BLAST_SECONDS','Blast: round length (s)',8,40,1],
+  ['BLAST_ADD','Blast: seconds per line',0,6,0.5],
+  ['BLAST_MULT','Blast: score multiplier',1,4,0.5],
+  ['METER_LINE','Blast meter per line',0.02,0.5,0.01],
+  ['METER_DRAIN','Blast meter drain (per frame)',0,0.004,0.0001],
+  ['BIG_CAP','Big-piece bias cap (cells)',1,9,1]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
-const DEV_STORE='crumble.dev.2';   // bumped for the ebb-and-flow retune, so older saved tuning doesn't override the new defaults
+const DEV_STORE='crumble.dev.3';   // bumped for the Blast Round + tier retune, so older saved tuning doesn't override the new defaults
 function devSave(){
   try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
 }
