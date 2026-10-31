@@ -89,6 +89,50 @@ in the `chunks` loop, `ORB_MS` (orb flight time).
 
 ---
 
+## Matching Block Blast's beat (2026-10-30, from a 60 fps screen recording)
+
+Measured from Jay's recording of Block Blast (frames in `tools/` are not kept;
+the numbers are what matter):
+
+- Drop → the whole line squashes into a thin glowing bar and is gone in
+  **~100 ms**. No blink, nothing flies. The celebration happens *afterwards*,
+  over the already-empty cells.
+- +150 ms: a point value appears on every cleared cell; small square sparkles.
+- +450 ms: a huge yellow **Combo N** slams in (oversized, settles), fireworks
+  (yellow / green / pink / blue fountains), "Great!" above it, "2 Colors Gone!"
+  banded across the middle. Hold 0.5–1.2 s each, then zip out. Board border
+  flashes pink on big combos.
+- The score ticks up slowly for ~2 s.
+- The hover preview is loud: the whole line, existing blocks included, turns
+  solid piece-colour with a glow outline.
+- Big pieces constantly (3×3, 2×5, wide Ls); the board is kept open for them.
+
+What changed to match:
+
+- `CLEAR_STYLE: 'squash'` (default) — each cleared gem thins to a white-hot
+  sliver along its line (`horiz` on the shatter decides the axis) over 6
+  frames; `CLEAR_BLINK` default 0; `CLEAR_STAGGER` 0.35. `'burst'` keeps the
+  flying blocks from the first juice pass.
+- `FX_CELL_TAGS` — the per-cell point tags (`tags`).
+- `FX_COMBO_SLAM` — "COMBO n" headline (`slams`) at `by+B*0.66`, fireworks
+  (`spawnFirework` → `bursts`, with a `wait`), `borderFlash` on combo ≥3. The
+  "+N" popup moved to the board's top-right so it stays clear of the slam.
+  Praise word sits at `by+B*0.27`.
+- **COLOR GONE** (`COLOR_GONE_BONUS` per colour): a clear that removes the last
+  gems of a colour pays a bonus and shows a band (`bands`) at `by+B*0.46` with
+  the words in the lost colours. Skipped on a clean sweep (that's the bigger
+  moment). Colours are counted after the piece lands, before the clear.
+- Hover preview: gems already in a would-clear line are recoloured solid in
+  the held piece's colour with a gloss and a glowing outline; the ghost is 90%.
+- Score count-up slowed (9% of the gap per frame) so it ticks through the
+  celebration.
+- **Classic** theme (steel-blue sky, navy board, `whiteInk` → Night's white UI
+  on a light sky) and **Blocks** skin (`blockTile`: flat face, light top-left
+  bevel, dark bottom-right bevel, gloss). Both selectable in Settings; Night +
+  Jewels stays the default.
+
+---
+
 ## Blast Round (2026-10-30)
 
 The bonus round, and the answer to "I want chains built to clear the board,
