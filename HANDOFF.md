@@ -6,15 +6,21 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-08, after the player build cleanup (plan PR 1.3).
+Last updated 2026-11-08, after offline + update toast (plan PR 1.4).
 
 ---
 
 ## Workflow
 
 - One change per branch → PR → merge to `main`. GitHub Pages serves `main`.
-- To see a deploy on the phone, **force-quit the home-screen web clip and
-  reopen it** (it caches hard).
+- **Deploys reach the phone by themselves now** (service worker, below): open the
+  game, and when a new version has downloaded an "Update ready — tap to refresh"
+  toast appears on the start / game-over screens. Tap it. (Force-quitting still
+  works. The first launch after this PR ships still needs one force-quit.)
+- **Every PR that touches a game file must run `npm run stamp`** (rewrites
+  `ASSET_HASH` in `sw.js`); `npm test` fails if it is stale. Without it phones
+  keep the old cached game. Adding a new js file also means adding it to `ASSETS`
+  in `sw.js` (a test checks the list matches `index.html`).
 - Test on a phone-sized viewport (390×844, touch).
 - **Automated tests:** `npm install` once, then `npm test` (Playwright, headless
   Chromium at 390×844). `tests/harness.mjs` serves the game, injects real pointer
@@ -140,6 +146,7 @@ Top to bottom:
 | #6 | Magnet tune: seats only near the slot, tighter finger tracking |
 | (1.2) | Playwright harness (`tests/`) + GitHub Action; no game changes |
 | (1.3) | Player build: Admin only with `?dev`, tension readout off, ads removed, both rescues free |
+| (1.4) | Service worker (`sw.js`): offline launch, versioned cache, "Update ready" toast (`js/update.js`) |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -475,3 +482,22 @@ button to paste back into `CFG`.
 Read this file, then `CFG` and `genTray` in `index.html`. Ask what she said
 about the last build before changing anything — her feedback has driven every
 recent pass.
+
+---
+
+## Offline + update toast (plan PR 1.4)
+
+- `sw.js` precaches `index.html`, `manifest.json`, icons and every `js/` file into
+  cache `crumble-<ASSET_HASH>`, and serves them cache-first (ignoring `?dev`).
+  The Google font is not cached; it degrades as before. Offline launch works
+  after one online visit.
+- A new deploy changes `ASSET_HASH` → the browser installs the new worker in the
+  background and it **waits** (no `skipWaiting` on its own, so a run is never
+  swapped out from under her). `js/update.js` shows `#updateToast` once a worker
+  is waiting and `state!=='play'`; tapping it sends `skipWaiting`, the page
+  reloads on `controllerchange`, and old caches are deleted on activate.
+- The page also calls `reg.update()` whenever the web clip becomes visible, since
+  iOS resumes it without reloading.
+- Only runs over http(s); `file://` just plays without it.
+- Tests: worker takes control, precache list matches `index.html`, offline
+  reload plays, update toast is held during a run then reloads onto the new cache.

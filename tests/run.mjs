@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { serve, openGame, play, snap, setup, dragPiece } from './harness.mjs';
+import { expectedAssets } from '../tools/stamp-sw.mjs';
 
 const EMPTY = Array(8).fill('00000000');
 const tests = [];
@@ -76,13 +77,52 @@ test('running out of moves ends the run', async ({ page }) => {
   assert.equal((await snap(page)).state, 'over');
 });
 
+const controlled = page => page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 10000 });
+
+test('the service worker takes control and caches the game', async ({ page }) => {
+  await controlled(page);
+  const cached = await page.evaluate(async () => (await (await caches.open((await caches.keys())[0])).keys()).length);
+  assert.ok(cached >= 20, `precached ${cached} files`);
+});
+
+test('precache list matches the scripts index.html loads', async () => {
+  const { assets, scripts } = expectedAssets();
+  assert.deepEqual(assets.filter(a => a.endsWith('.js')), scripts);
+});
+
+test('launches offline and still plays', async ({ page }) => {
+  await controlled(page);
+  await page.context().setOffline(true);
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
+  await play(page);
+  assert.equal((await snap(page)).tray.filter(Boolean).length, 3);
+});
+
+test('a new deploy shows "Update ready" after the run, and tapping it reloads onto the new version', async ({ page, server }) => {
+  await controlled(page);
+  await play(page);
+  server.patches['/sw.js'] = t => t.replace(/ASSET_HASH='[^']*'/, "ASSET_HASH='deploy2'");
+  await page.evaluate(() => navigator.serviceWorker.getRegistration().then(r => r.update()));
+  await page.waitForFunction(() => navigator.serviceWorker.getRegistration().then(r => !!r.waiting));
+  await page.waitForTimeout(1300);
+  assert.equal(await page.isVisible('#updateToast'), false, 'held back while a run is in progress');
+  await page.evaluate(() => { state = 'over'; });
+  await page.waitForSelector('#updateToast', { state: 'visible', timeout: 3000 });
+  await Promise.all([page.waitForNavigation(), page.click('#updateToast')]);
+  await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
+  const keys = await page.evaluate(() => caches.keys());
+  assert.deepEqual(keys, ['crumble-deploy2'], 'the old cache is gone');
+});
+
 const server = await serve();
 fs.mkdirSync('tests/out', { recursive: true });
 let failed = 0;
 for (const { name, fn } of tests) {
+  for (const k of Object.keys(server.patches)) delete server.patches[k];
   const { browser, page, errors } = await openGame(server.url);
   try {
-    await fn({ page, errors });
+    await fn({ page, errors, server });
     console.log(`ok   ${name}`);
   } catch (e) {
     failed++;
