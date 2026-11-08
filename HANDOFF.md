@@ -1,25 +1,76 @@
 # Crumble — project handoff
 
-A single-file browser puzzle game (Block Blast genre) built for my daughter.
-Everything lives in `index.html` — no build step, no dependencies, opens
-straight in a browser.
+A browser puzzle game (Block Blast genre) built for my daughter. Everything
+lives in `index.html` — no build step, no dependencies, opens straight in a
+browser. Hosted on GitHub Pages and played on her iPhone as a home-screen web
+clip.
 
-Goal: get it running as an app on an iPhone, add save/resume, then real ads.
+Last updated 2026-11-08, after PR #6 (magnet tune).
+
+---
+
+## Workflow
+
+- One change per branch → PR → merge to `main`. GitHub Pages serves `main`.
+- To see a deploy on the phone, **force-quit the home-screen web clip and
+  reopen it** (it caches hard).
+- Test on a phone-sized viewport (390×844, touch). For headless tests, copy the
+  game to a scratch `test.html` and expose internals there — never in
+  `index.html`.
 
 ---
 
 ## Ground rules
 
-- **Stays a single self-contained HTML file** unless there's a real reason to
-  split. No framework, no bundler. It should keep working by double-clicking it.
+- **One self-contained HTML file** is the default, not a hard rule — split if
+  it genuinely helps. No framework, no bundler.
 - Vanilla JS + canvas. Only external resource is the Fredoka font from Google
   Fonts, and it degrades fine if that fails to load.
 - Audio: recorded CC0 sound effects and jingles from Kenney (kenney.nl), trimmed,
-  normalized and embedded as base64 MP3 in `SAMPLES`, so it's still one file. The
-  original synthesized sounds are kept as the 'Original' set (and the later bells
-  as 'Bells'), all switchable under Settings → Sound.
-- No `localStorage` calls exist yet (the preview environment it was built in
-  blocked them). Adding them is a task below, not a bug.
+  normalized and embedded as base64 MP3 in `SAMPLES`. The original synthesized
+  sounds are the 'Original' set (and the later bells 'Bells'), switchable under
+  Settings → Sound.
+- **No `strokeText` on the live canvas** — overlay text goes through
+  `sprite()`/`blit()` (see the performance rule below).
+- Every visual effect has an `FX_*` switch in `CFG` and respects
+  `prefers-reduced-motion`. No event effect may draw over live board gems.
+- `localStorage` is used, always inside `try/catch`:
+  - `crumble.skins` — her look and sound choices, unlocked skins, discovered
+    worlds (`saveSkinSave` / `loadSkinSave`, `lookV` for one-time migrations).
+  - `crumble.dev.4` — Admin panel tuning overrides. Bump the key when defaults
+    change so old saved tuning doesn't mask them.
+  - **Not saved yet:** the current run and the best score (task 1).
+
+---
+
+## Features at a glance
+
+- 8×8 board, drag-and-drop with magnet snap, line-clear preview in the piece's
+  colour, 37 shapes (`RAW`).
+- Hand solver + tension wave (below) — every tray is fully playable in some order.
+- Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
+  with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
+  NEW BEST moment.
+- **Golden hand** — a bonus tray that multiplies its points (`GOLDEN_*`).
+- **Star gem** — a 1-cell piece that clears its row and column (`STAR_*`).
+- **Transformations** — achievement-triggered temporary looks (Rainbow, Gold
+  Vault, Volcano, Starfield, Storm) that also multiply points; discovering one
+  adds its world to the home picker (`TRANSFORM_*`).
+- **Blast Round** — meter-triggered timed bonus round (below).
+- **Rescues** — on game over (if the run is worth saving): first is free, the
+  second costs a rewarded ad, max 2 per run. A rescue serves a sweep/jackpot
+  hand from `genRescue` — she still has to find the play.
+- **Look**: themes (Classic default, Night, Daylight, Cotton Candy, Mint,
+  Paper), home worlds (10, each with an ambient effect), tile skins (Blocks
+  default, Jewels, Clay; Candy/Glass/Neon/Pixel unlock by best score), motifs.
+- **Settings** (player-facing, pauses the game): look + sound, saved as her
+  defaults. **Admin** panel (all tuning sliders and test buttons) is reached
+  from Settings' footer only while `CFG.DEV_MODE` is on.
+- Ads are faked (`Ads` object, countdown screen); interstitial every
+  `ADS_EVERY` game overs.
+- PWA: `manifest.json`, apple-touch icons, `viewport-fit=cover` with
+  safe-area insets in the CSS and `layout()` (via the `#safe` probe).
+  `tools/make-icon.html` regenerates the icons.
 
 ---
 
@@ -28,22 +79,50 @@ Goal: get it running as an app on an iPhone, add save/resume, then real ads.
 Top to bottom inside the one `<script>`:
 
 1. **`CFG`** — every tunable constant, commented. Start here.
-2. **`GEMS`** — six `{hue, saturation}` pairs plus a gold gem (golden hands only) and a prismatic star gem (star pieces only). Changing a hue recolors that gem
-   everywhere including its facets.
-3. **`Ads`** — three methods, currently faked. The *only* ad code in the file.
-4. **`SHAPES`** — 37 pieces parsed from ASCII art.
-5. **The solver** — `packGrid` / `placeMasks` / `applyBits` / `evalHand`,
-   `planSweep` and friends, then `genTray`.
-6. **Tile renderers** — `jewelTile`, `clayTile`, `buildCache`, `layout`.
-7. **Audio** — `buildChain` (buses), the synth sets (`BELLS_SFX`, `ORIG_SFX`), the recorded bank (`SAMPLES`, `smp`, `recordedSet`), then the `Sfx` dispatcher the game calls.
-8. **Game logic** — `place`, `linesFor`, `mobility`.
-9. **Input** — pointer handlers, `ghost`.
-10. **`frame`** — the whole render loop, drawn in layers.
-11. **Flow** — `gameOver`, `rescue`, `start`, then the player's **Settings** (look: theme / world / skin / motif; sound on/off and style — saved as her defaults) and the **Admin** panel (all tuning and test tools, reached from Settings' footer only when `CFG.DEV_MODE` is on).
+2. **`GEMS`** — six `{hue, saturation}` pairs plus a gold gem (golden hands
+   only) and a prismatic star gem (star pieces only).
+3. **Worlds and themes** — `HOME_WORLDS`, `TRANSFORMS`, `BLAST_WORLD`,
+   `THEMES`, `applyTheme`, ambient particles.
+4. **`Ads`** — three methods, currently faked. The *only* ad code in the file.
+5. **`SHAPES`** — 37 pieces parsed from ASCII art (`RAW`), plus `STAR`.
+6. **The solver** — `packGrid` / `placeMasks` / `applyBits` / `evalHand`,
+   `planSweep` and friends, `pickTier`, `genGolden`, `genTray`, `genRescue`.
+7. **Layout + tiles** — `layout`, the tile renderers (`blockTile`,
+   `jewelTile`, `clayTile`, the unlockable and event skins), `SKINS`,
+   `MOTIFS`, `buildCache`.
+8. **Audio** — `buildChain` (buses), the synth sets, the recorded bank
+   (`SAMPLES`, `smp`, `recordedSet`), then the `Sfx` dispatcher.
+9. **Game logic** — `place`, `linesFor`, `mobility`, `triggerTransform`.
+10. **Blast Round** — `startBlast`, `stepBlast`.
+11. **Input** — pointer handlers, `ghost`, the magnet.
+12. **Draw** — `sprite`/`blit` text cache, then `frame`, the render loop,
+    drawn in layers.
+13. **Flow** — `gameOver`, `rescue`, `start`.
+14. **Persistence** — skins/worlds/look save and unlocks.
+15. **Settings** (player) and the **developer/Admin panel** (`DEV_TOGGLES`,
+    `DEV_SLIDERS`, …, saved to `crumble.dev.4`).
 
 ---
 
-## The juice layer (2026-10-30, `juice` branch)
+## Change log
+
+| PR | What |
+|---|---|
+| #1 | Juice pass: burst clear, score orbs, landing thump, pickup grow, line preview |
+| #2 | Blast Round |
+| #3 | Block Blast's beat: squash clear, COMBO slam, COLOR GONE, Classic theme, Blocks skin |
+| #4 | iPhone slowdown fix: text sprites instead of per-frame `strokeText` |
+| #5 | Kid feedback: magnet snap, Classic + Blocks default, guided hands |
+| #6 | Magnet tune: seats only near the slot, tighter finger tracking |
+
+Details for each, oldest first:
+
+---
+
+## The juice layer (2026-10-30, PR #1)
+
+> Partly superseded by PR #3: the default clear is now `'squash'` with no blink.
+> The blink → pop → chunk timeline below is still there as `CLEAR_STYLE: 'burst'`.
 
 The feel pass that chases Block Blast's snappiness. All of it is in `place()`
 and `frame()`, every piece has an `FX_*` switch in `CFG` (and the Admin panel),
@@ -89,13 +168,15 @@ in the `chunks` loop, `ORB_MS` (orb flight time).
 
 ---
 
-## Kid-feedback pass (2026-10-30 night) — "doesn't snap, blocks aren't solid, too much work"
+## Kid-feedback pass (2026-10-30 night, PR #5) — "doesn't snap, blocks aren't solid, too much work"
 
 - **Magnet snap** (`FX_MAGNET`): the held piece is drawn at `drag.mx/my`, which
-  glides (≈55%/frame) to the slot it will land in whenever `ghost()` has one, and
-  back to floating above the finger when it doesn't. No separate ghost is drawn
-  with the magnet on; the lift shadow fades as it seats (`drag.snapK`). This is
-  the single biggest feel change — Block Blast does exactly this.
+  glides to the slot it will land in and back to floating above the finger when
+  it leaves; the lift shadow fades as it seats (`drag.snapK`). This is the single
+  biggest feel change — Block Blast does exactly this.
+  **Retuned in PR #6** ("sticky, doesn't move"): it only seats when the slot is
+  within `MAGNET_REACH` (0.6) cells of the finger, a farther valid slot just
+  shows a ghost, and the piece follows the finger at ~88%/frame.
 - **Solid blocks**: `blockTile` is now edge-to-edge (pad 0, hairline seam), board
   slots nearly gap-free (`p = cell*.025`). Defaults are now **Classic + Blocks**;
   `lookV:2` in the skin save migrates every phone to that once (Settings still
@@ -114,7 +195,7 @@ in the `chunks` loop, `ORB_MS` (orb flight time).
 
 ---
 
-## Performance rule: no `strokeText` on the live canvas (2026-10-30)
+## Performance rule: no `strokeText` on the live canvas (2026-10-30, PR #4)
 
 The first version of the celebration drew ~30 outlined texts per frame and the
 iPhone crawled. iOS Safari re-strokes glyph outlines on every `strokeText`, so
@@ -127,7 +208,7 @@ squares for the same reason, and the particle count is capped.
 
 ---
 
-## Matching Block Blast's beat (2026-10-30, from a 60 fps screen recording)
+## Matching Block Blast's beat (2026-10-30, PR #3, from a 60 fps screen recording)
 
 Measured from Jay's recording of Block Blast (frames in `tools/` are not kept;
 the numbers are what matter):
@@ -166,12 +247,12 @@ What changed to match:
   celebration.
 - **Classic** theme (steel-blue sky, navy board, `whiteInk` → Night's white UI
   on a light sky) and **Blocks** skin (`blockTile`: flat face, light top-left
-  bevel, dark bottom-right bevel, gloss). Both selectable in Settings; Night +
-  Jewels stays the default.
+  bevel, dark bottom-right bevel, gloss). Both selectable in Settings. (PR #5
+  then made Classic + Blocks the default.)
 
 ---
 
-## Blast Round (2026-10-30)
+## Blast Round (2026-10-30, PR #2)
 
 The bonus round, and the answer to "I want chains built to clear the board,
 with big pieces, and a reason to move fast."
@@ -199,7 +280,7 @@ with big pieces, and a reason to move fast."
   of the above.
 
 Also in this pass: `TIER_SOLVABLE` 0.20→0.15 and `TIER_JACKPOT` 0.50→0.40
-(helpful hands come sooner), and `BIG_CAP` — the crowded-board small-piece
+(helpful hands come sooner — since lowered again in PR #5 to 0 / 0.30), and `BIG_CAP` — the crowded-board small-piece
 bias stops growing past 4 cells, so 5–9 cell pieces keep showing up in normal
 play too. Empty cells and the coloured line preview were dimmed from the first
 juice pass (too bright on the phone).
@@ -230,12 +311,16 @@ falls when you clear. `pickTier` maps it to what you get served:
 
 | tension | tier | meaning |
 |---|---|---|
-| < 0.20 | honest | any fully-playable hand |
-| 0.20–0.50 | solvable | two or more clears reachable |
-| 0.50–0.85 | jackpot | three or more clears reachable, favors emptier boards |
-| > 0.85 | sweep | try to build a board-emptying hand |
+| ≥ `TIER_SOLVABLE` (0) | solvable | two or more clears reachable |
+| > `TIER_JACKPOT` (0.30) | jackpot | three or more clears reachable, favors emptier boards |
+| > `TIER_SWEEP` (0.85) | sweep | try to build a board-emptying hand (when off cooldown) |
 
-Retuned 2026-09-24 for ebb and flow (`TENSION_UP` 0.10, `TENSION_DOWN` 0.30): measured
+With `TIER_SOLVABLE` at 0 there is no 'honest' tier any more — every tray can
+clear something. On top of the tier, `GUIDE` favours hands with a piece that
+clears a line *right now* (see the kid-feedback pass). During a Blast Round the
+tiers are bypassed (`bigMode`).
+
+History: retuned 2026-09-24 for ebb and flow (`TENSION_UP` 0.10, `TENSION_DOWN` 0.30): measured
 with bot players, a strong player now sees ~48% honest / 38% solvable / 10% jackpot
 trays instead of ~75% jackpot, while a struggling player still gets jackpot help on
 ~40% of trays. Golden hands and star gems are each ~1 in 33 trays, and neither is
@@ -249,80 +334,49 @@ silently if any step fails. Gated by `SWEEP_COOLDOWN`.
 
 A debug readout (top-left, under the score) shows live tension and the tier
 just served. `CFG.SHOW_TENSION: false` hides it. **Turn this off before
-shipping.**
+shipping** (see the release checklist).
 
 ---
 
 ## Current state
 
-Working: 8×8 grid, drag-and-drop with lifted piece and ghost preview, line
-clears with a staged shatter sequence, combo scoring, clean sweep with bonus,
-two visual styles (Jewels / Clay, toggled on the start screen), synthesized
-audio with mute, game over detection, faked interstitial and rewarded-video
-flows.
+Everything in "Features at a glance" works on her phone. The last several
+passes were driven by her feedback: it should snap, feel solid, and be
+relaxing rather than work. Open questions from that:
 
-Just retuned for difficulty — `TENSION_UP` 0.18, `TENSION_DOWN` 0.18, tier
-thresholds lowered, honest tier made neutral instead of actively withholding
-clears. **This retune is untested.** Play several rounds watching the debug
-readout: tension should live mostly in the 0.3–0.7 band. Pinned at 1.0 means
-still too hard; pinned low means too easy.
+- Does the magnet now feel right (not sticky, still snappy)? `MAGNET_REACH`
+  and the follow rate are the knobs.
+- Is guided dealing too generous now? Watch the debug readout; if every tray is
+  a gift, lower `GUIDE` or raise `TIER_JACKPOT`.
+- Blast Round meter: is the idle drain fun pressure or mean? `METER_IDLE` /
+  `METER_DRAIN`.
 
 ---
 
 ## Tasks, in the order I'd do them
 
-### 1. Safe-area insets (do first — it's visibly broken on a real iPhone)
+Done since the first handoff: safe-area insets, PWA wrapper, rescues.
 
-`layout()` hardcodes `const HUD=92` and computes the tray position from the
-bottom of the viewport. On a notched iPhone the score slides under the status
-bar and the tray can collide with the home indicator. `viewport-fit=cover` is
-already set but nothing consumes the insets.
+### 1. Save / resume + best score
 
-Read `env(safe-area-inset-top)` and `-bottom` (easiest: a hidden probe div with
-that padding, read via `getComputedStyle`, or a CSS custom property) and add
-them into `layout()`'s vertical math and the `.hud` padding.
-
-### 2. PWA wrapper
-
-Add to `<head>`:
-
-```html
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="icon-180.png">
-```
-
-Plus a `manifest.json` and an icon. Host on GitHub Pages, open in Safari,
-Add to Home Screen. This is the fastest route to "it's an app on her phone"
-and needs no Mac.
-
-### 3. Save / resume
-
-Thin `Save` wrapper alongside `Ads`, same pattern — one place to change, and it
-should no-op cleanly when storage is unavailable rather than throwing.
+Thin `Save` wrapper alongside `Ads`, same pattern — one place to change, and
+it should no-op cleanly when storage is unavailable rather than throwing.
 
 Persist on every placement: board, score, combo, tension, sweepCool, tray,
-revives, chosen style. Separately persist `best`. On load, offer to resume if a
-saved run exists. Must survive a force-close, so write on `visibilitychange`
-too, not only on placement.
+rescues/rescuesUsed, golden/blast/transformation state (or simply end those on
+resume). Separately persist `best` — it currently resets every launch, which
+also means skin unlocks only count the current session's best. On load, resume
+automatically (she wants auto-resume, not save slots). Must survive a
+force-close, so write on `visibilitychange` too, not only on placement.
 
-### 4. Rescues
+### 2. Mid-run "stuck" rescue button
 
-Replace the current `revive()` (which clears the three fullest rows — that's
-charity) with a **rescue**: serve a jackpot or sweep hand from the existing
-generator. She still has to find the placement, which is the whole point.
+Rescues exist on the game-over card only. Add the mid-run version: dimmed
+until genuinely out of moves, then spends a rescue the same way.
 
-Design decided:
-- It's an inventory count (`rescues`), separate from where it came from.
-- **First one per run is free.** Do not gate a kid's first rescue behind an ad.
-- Second costs a rewarded video.
-- Only offer when the run is worth saving (above a score floor, or above half
-  her best) — offering on a 40-point run is noise.
-- Also expose mid-run as a "stuck" button, dimmed until genuinely out of moves.
+### 3. Real ads
 
-### 5. Real ads
-
-Swap the two method bodies in `Ads`. Nothing else should need to change.
+Swap the method bodies in `Ads`. Nothing else should need to change.
 
 - **Web:** Poki / CrazyGames / GameDistribution SDK. `commercialBreak()` and
   `rewardedBreak()`. No app store, no review.
@@ -331,7 +385,7 @@ Swap the two method bodies in `Ads`. Nothing else should need to change.
 Interstitials stay capped (`ADS_EVERY`) and never fire mid-round. Rewarded
 video is the one that actually pays.
 
-### 6. Capacitor / native iOS (only if the PWA proves it's worth it)
+### 4. Capacitor / native iOS (only if the PWA proves it's worth it)
 
 ```
 npm i @capacitor/core @capacitor/cli @capacitor/ios
@@ -341,11 +395,17 @@ npx cap add ios && npx cap open ios
 ```
 
 Needs a Mac with Xcode. Free Apple ID allows 7-day sideloading to your own
-device; $99/yr Apple Developer only when you want the App Store.
+device; $99/yr Apple Developer only for TestFlight / the App Store.
 
 **If this is ever aimed at kids officially:** COPPA and Google Play Families
 policy mean contextual-only ads, certified networks, no behavioral targeting —
 which cuts ad revenue substantially. Decide that before building toward IAP.
+
+### Release checklist (before anyone but her plays it)
+
+- `CFG.DEV_MODE: false` (hides Admin and ignores saved panel overrides)
+- `CFG.SHOW_TENSION: false` (hides the debug readout)
+- Real `Ads` bodies, or remove the fake ad screen
 
 ---
 
@@ -353,54 +413,52 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 
 | Knob | Does what |
 |---|---|
-| `TENSION_UP` / `TENSION_DOWN` | how fast the difficulty wave swings |
+| `TENSION_UP` / `TENSION_DOWN` / `TENSION_DRIFT` | how fast the difficulty wave swings |
+| `TIER_SOLVABLE` / `TIER_JACKPOT` / `TIER_SWEEP` | where each help tier kicks in |
+| `GUIDE` | favour hands that can clear right now (0 = off) |
 | `SWEEP_COOLDOWN` | how rare clean sweeps are |
 | `CANDIDATES` / `NODE_BUDGET` | how hard the solver thinks (slower = smarter) |
-| `SMALL_BIAS` | bias toward small pieces on a crowded board |
-| `SHARDS` / `SHAKE` / `SPARKLE_RATE` | visual intensity |
+| `SMALL_BIAS` / `BIG_CAP` | small-piece bias on a crowded board, and where it stops growing |
+| `TIDY` / `PAIR_CHANCE` | favour compact boards / partner pieces for awkward shapes |
+| `MAGNET_REACH` / `SNAP_*` / `LIFT` | drag feel |
+| `CLEAR_STYLE` / `CLEAR_BLINK` / `CLEAR_STAGGER` | how a line clear looks |
+| `BLAST_*` / `METER_*` | Blast Round length, payout, and meter pressure |
+| `GOLDEN_*` / `STAR_*` / `TRANSFORM_*` | special-event frequency and payout |
+| `SHAKE` / `SPARKLE_RATE` / `FX_*` | visual intensity, each effect switchable |
 | `GEMS` hues | recolor everything |
-| `STYLE` | `'jewel'` or `'clay'` default |
-| `SHOW_TENSION` | debug readout — off before shipping |
+| `THEME` / `STYLE` / `HOME_WORLD` / `MOTIF` | default look (a saved Settings choice overrides) |
+| `SHOW_TENSION` / `DEV_MODE` | debug readout / Admin panel — off before shipping |
+
+Most of these are live sliders in the Admin panel, with a "Copy settings"
+button to paste back into `CFG`.
 
 ---
 
 ## Open tuning notes (come back to these)
 
-- **Tension was too easy — addressed 2026-09-24.** The help tiers were pinned
-  (jackpot on ~75% of trays). Now `TENSION_DOWN` 0.30, `TENSION_UP` 0.10 and
-  thresholds 0.20/0.50/0.85, so help builds and releases in waves. Needs a real
-  playtest; if it now feels too hard, lower `TIER_JACKPOT` first.
-- **L/J pieces vs. density bias.** The 8 L/J orientations (4 cells each) are
-  liked and should stay common. `weightedShape` weights by `1/(1+n*density*3.0)`,
-  so on a crowded board it favors 1–3 cell pieces and L/J get squeezed out. Goal:
-  high density should not always mean small easy pieces. Ideas: exempt L/J from
-  the size penalty, cap the penalty so 4-cell pieces stay at a fixed weight, or
-  bias by "fits somewhere" instead of raw cell count.
-
-- **Board tidiness (`CFG.TIDY`).** Hand choice now penalizes hands whose best
-  play leaves a ragged board (`roughFlat` = filled/empty edge count, tracked in
-  `evalHand`), so pieces tend to fit the current gaps and help square things
-  off. In a bot sim it cut average fill about 10% at TIDY 2. Effect is modest;
-  a placement hint (highlight the flush spot) would be the next lever.
-
+- **L/J pieces vs. density bias.** The 8 L/J orientations are liked and should
+  stay common. `weightedShape` biases toward small pieces as the board fills;
+  `BIG_CAP` now stops that bias growing past 4 cells, which keeps L/J (4
+  cells) at a fixed weight. Watch whether they still get squeezed out.
+- **Board tidiness (`CFG.TIDY`).** Hand choice penalizes hands whose best play
+  leaves a ragged board (`roughFlat`, tracked in `evalHand`). In a bot sim it
+  cut average fill about 10% at TIDY 2. A placement hint (highlight the flush
+  spot) would be the next lever.
 - **Piece partners (`PAIR_CHANCE`).** Each L/J/T/S/Z/corner piece has partners
-  (`PARTNERS`, built at load by `pairHoles`) that sit against it to make a solid
-  2-4 wide block, allowing one single-cell hole. Awkward pieces from one tray
-  are remembered in `carry`, and the next tray seeds a partner into most
-  candidate hands. In a bot sim, a partner showed up next tray 69% of the time
-  vs 48% by chance, with fill up slightly. It can't force *where* she places the
-  first piece, so the fit is only as good as the board she made.
+  (`PARTNERS`, built at load by `pairHoles`). Awkward pieces from one tray are
+  remembered in `carry`, and the next tray seeds a partner into most candidate
+  hands. In a bot sim, a partner showed up next tray 69% of the time vs 48% by
+  chance.
 
 ## Known gaps
 
-- Best score resets on refresh (no storage yet — task 3).
+- Best score and the current run reset on every launch (task 1).
+- No mid-run rescue button (task 2).
+- No pause button — opening Settings pauses the game.
 - Resizing mid-game re-runs `layout()` and rebuilds the tile cache; lightly tested.
-- No pause.
-- `revive()` still uses the old clear-three-rows behaviour (task 4 replaces it).
-- The difficulty retune above has not been played yet.
 
 ## First thing to do in a new session
 
-Open `index.html`, read `CFG` and `genTray`, then play a few rounds with the
-debug readout visible and judge whether the retune landed before changing
-anything else.
+Read this file, then `CFG` and `genTray` in `index.html`. Ask what she said
+about the last build before changing anything — her feedback has driven every
+recent pass.
