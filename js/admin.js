@@ -19,7 +19,7 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['FX_PICKUP_GROW','Pickup grow-in'],
   ['FX_LINE_PREVIEW','Coloured line preview'],
   ['FX_CELL_TAGS','Point tags on cleared cells'],
-  ['FX_MAGNET','Magnet snap while dragging'],
+  ['FX_MAGNET','Magnet: piece hops into its slot (off = glide + ghost)'],
   ['FX_COMBO_SLAM','COMBO slam + fireworks'],
   ['BLAST_ENABLED','Blast Round'],
   ['SHOW_TENSION','Debug readout']
@@ -76,11 +76,12 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['BIG_CAP','Big-piece bias cap (cells)',1,9,1],
   ['GUIDE','Guided hands (obvious drops)',0,3,0.1],
   ['MAGNET_REACH','Magnet reach (cells)',0.3,1.5,0.05],
-  ['MAGNET_HOLD','Magnet hold (cells)',0,0.5,0.05]
+  ['MAGNET_HOLD','Magnet hold (cells)',0,0.5,0.05],
+  ['GHOST_ALPHA','Landing ghost strength',0.2,1,0.05]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
-const DEV_STORE='crumble.dev.5';   // bumped when LIFT changed meaning (plan 2.1), so older saved tuning doesn't override the new defaults
+const DEV_STORE='crumble.dev.6';   // bumped when the drag went to glide + ghost (after plan 2.1), so older saved tuning doesn't override the new defaults
 function devSave(){
   try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
 }
