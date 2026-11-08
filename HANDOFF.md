@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-08, after offline + update toast (plan PR 1.4).
+Last updated 2026-11-08, after the drag rewrite (plan PR 2.1).
 
 ---
 
@@ -27,7 +27,9 @@ Last updated 2026-11-08, after offline + update toast (plan PR 1.4).
   events, and reads state (`grid`, `tray`, `score`, `state`…) straight from the
   page's top-level bindings, so **no test hook lives in the game** — don't add one.
   Math.random is seeded. Scenarios are in `tests/run.mjs`: load, start, place,
-  refused drop, line clear, game over. Add a scenario there when you change a rule.
+  refused drop, line clear, game over, the drag rules (50 scripted drags, two
+  fingers, cancelled touch, board edges, lift height), offline and update.
+  `fingers(page)` in the harness gives real multi-touch (one pointerId per finger). Add a scenario there when you change a rule.
   A GitHub Action (`.github/workflows/test.yml`) runs it on every PR and on `main`.
   Chromium needs a one-time `npx playwright install chromium` locally.
 
@@ -51,7 +53,7 @@ Last updated 2026-11-08, after offline + update toast (plan PR 1.4).
 - `localStorage` is used, always inside `try/catch`:
   - `crumble.skins` — her look and sound choices, unlocked skins, discovered
     worlds (`saveSkinSave` / `loadSkinSave`, `lookV` for one-time migrations).
-  - `crumble.dev.4` — Admin panel tuning overrides. Bump the key when defaults
+  - `crumble.dev.5` — Admin panel tuning overrides. Bump the key when defaults
     change so old saved tuning doesn't mask them.
   - **Not saved yet:** the current run and the best score (task 1).
 
@@ -59,7 +61,7 @@ Last updated 2026-11-08, after offline + update toast (plan PR 1.4).
 
 ## Features at a glance
 
-- 8×8 board, drag-and-drop with magnet snap, line-clear preview in the piece's
+- 8×8 board, drag-and-drop with magnet snap (one finger, one landing rule — see plan 2.1 below), line-clear preview in the piece's
   colour, 37 shapes (`RAW`).
 - Hand solver + tension wave (below) — every tray is fully playable in some order.
 - Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
@@ -130,7 +132,7 @@ Top to bottom:
 13. **Flow** — `gameOver`, `rescue`, `start`.
 14. **Persistence** — skins/worlds/look save and unlocks.
 15. **Settings** (player) and the **developer/Admin panel** (`DEV_TOGGLES`,
-    `DEV_SLIDERS`, …, saved to `crumble.dev.4`).
+    `DEV_SLIDERS`, …, saved to `crumble.dev.5`).
 
 ---
 
@@ -147,6 +149,7 @@ Top to bottom:
 | (1.2) | Playwright harness (`tests/`) + GitHub Action; no game changes |
 | (1.3) | Player build: Admin only with `?dev`, tension readout off, ads removed, both rescues free |
 | (1.4) | Service worker (`sw.js`): offline launch, versioned cache, "Update ready" toast (`js/update.js`) |
+| (2.1) | Drag rewrite: one finger, one landing rule, piece seated or exactly at the finger, bottom-anchored lift |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -208,9 +211,8 @@ in the `chunks` loop, `ORB_MS` (orb flight time).
   glides to the slot it will land in and back to floating above the finger when
   it leaves; the lift shadow fades as it seats (`drag.snapK`). This is the single
   biggest feel change — Block Blast does exactly this.
-  **Retuned in PR #6** ("sticky, doesn't move"): it only seats when the slot is
-  within `MAGNET_REACH` (0.6) cells of the finger, a farther valid slot just
-  shows a ghost, and the piece follows the finger at ~88%/frame.
+  **Retuned in PR #6** ("sticky, doesn't move"), then **replaced in plan 2.1**
+  (below): one landing rule, no ghost when the magnet is on, no lerp on the finger.
 - **Solid blocks**: `blockTile` is now edge-to-edge (pad 0, hairline seam), board
   slots nearly gap-free (`p = cell*.025`). Defaults are now **Classic + Blocks**;
   `lookV:2` in the skin save migrates every phone to that once (Settings still
@@ -377,8 +379,8 @@ Everything in "Features at a glance" works on her phone. The last several
 passes were driven by her feedback: it should snap, feel solid, and be
 relaxing rather than work. Open questions from that:
 
-- Does the magnet now feel right (not sticky, still snappy)? `MAGNET_REACH`
-  and the follow rate are the knobs.
+- Does the drag snap now (plan 2.1)? `MAGNET_REACH`, `MAGNET_HOLD` and `LIFT`
+  are the knobs.
 - Is guided dealing too generous now? Watch the debug readout; if every tray is
   a gift, lower `GUIDE` or raise `TIER_JACKPOT`.
 - Blast Round meter: is the idle drain fun pressure or mean? `METER_IDLE` /
@@ -440,7 +442,7 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 | `CANDIDATES` / `NODE_BUDGET` | how hard the solver thinks (slower = smarter) |
 | `SMALL_BIAS` / `BIG_CAP` | small-piece bias on a crowded board, and where it stops growing |
 | `TIDY` / `PAIR_CHANCE` | favour compact boards / partner pieces for awkward shapes |
-| `MAGNET_REACH` / `SNAP_*` / `LIFT` | drag feel |
+| `MAGNET_REACH` / `MAGNET_HOLD` / `LIFT` | drag feel (see plan 2.1) |
 | `CLEAR_STYLE` / `CLEAR_BLINK` / `CLEAR_STAGGER` | how a line clear looks |
 | `BLAST_*` / `METER_*` | Blast Round length, payout, and meter pressure |
 | `GOLDEN_*` / `STAR_*` / `TRANSFORM_*` | special-event frequency and payout |
@@ -501,3 +503,38 @@ recent pass.
 - Only runs over http(s); `file://` just plays without it.
 - Tests: worker takes control, precache list matches `index.html`, offline
   reload plays, update toast is held during a run then reloads onto the new cache.
+
+---
+
+## The drag: one finger, one destination (plan PR 2.1)
+
+Her "it's not smooth" was partly the drag disagreeing with itself: the ghost
+search (`SNAP_RADIUS`/`SNAP_STICKY`) and the seat rule (Euclidean 0.6) were
+different, a 150 ms `SNAP_GRACE` could place a piece where nothing was shown,
+the piece lagged the finger (~88%/frame), and any second finger moved or dropped
+the piece. All in `js/game.js` (input section) and the drag block of `frame()`.
+
+- **One pointer.** `drag.id` is the `pointerId` that picked the piece up; moves,
+  releases and cancels from any other pointer are ignored, and a second finger
+  can't pick up another piece. A `pointercancel` for it sends the piece home.
+- **One answer: `drag.slot`.** `updateSlot()` (run on every move, and each frame
+  while the pickup lift eases in) picks the nearest legal spot whose top-left is
+  within `MAGNET_REACH` (0.75) cells of the floating piece's top-left *on both
+  axes*. The current slot is kept until it is more than `MAGNET_HOLD` (0.15)
+  past reach, or another legal spot is nearer by more than `MAGNET_HOLD`, so it
+  doesn't flicker. `frame()` draws from `drag.slot` and `onUp()` places from it,
+  so what she sees is where it lands. No slot → no ghost, the piece floats, and
+  release sends it back. `SNAP_RADIUS`, `SNAP_STICKY`, `SNAP_GRACE` are gone.
+- **Drawn position** = lerp(float, seat, `drag.snapK`). The float (`floatPos`)
+  is exactly the finger sideways, with `LIFT` (now 1.0) cells between the finger
+  and the piece's **bottom edge**, so a 1-row and a 3-row piece sit equally
+  above the thumb. Only the seat/unseat change eases (`snapK`, ~4 frames), and a
+  seated piece slides to a neighbouring slot over the same few frames.
+- `FX_MAGNET` off: the piece always floats and a faint ghost marks `drag.slot`.
+- Admin: Snap radius/stickiness sliders removed, Magnet hold added; the Admin
+  store key is now `crumble.dev.5` because `LIFT` changed meaning.
+- Tests (`tests/run.mjs`): 50 seeded random drags check the piece is drawn
+  exactly in the slot (or exactly at the finger when there is none), that the
+  slot obeys the rule, and that release calls `place` with that slot; plus two
+  fingers, a cancelled touch, releases just past each board edge, a finger
+  between four cells, and equal lift for 1- and 3-row pieces.

@@ -9,9 +9,6 @@ function el(id){ return document.getElementById(id); }
 const CFG = {
   GRID: 8,
   DEV_MODE: new URLSearchParams(location.search).has('dev'), // Admin panel only when the URL has ?dev (also ignores saved panel overrides otherwise)
-  SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
-  SNAP_STICKY:   0.5,    // a shown ghost is kept until the piece drifts this many cells from it (0.5 = always the nearest slot)
-  SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
   THEME: 'classic',      // a THEMES id — Classic (steel sky, navy board) by default; Night and the light modes in Settings → Look
   STYLE: 'blocks',       // a SKINS id — Blocks (edge-to-edge, bevelled) by default; picked in Settings; some are unlockable
   MOTIF: 'none',         // a MOTIFS id — face motif stamped on every tile, independent of skin
@@ -54,8 +51,9 @@ const CFG = {
   FX_LAND_BUMP:   true,   // a placed piece thumps in (quick squash + ring) instead of appearing
   FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
-  FX_MAGNET:      true,   // the held piece seats into the slot it will land in when the finger is right over it — the "snap"
-  MAGNET_REACH:   0.6,    // seat only when the slot is within this many cells of the finger; farther valid slots just show a ghost
+  FX_MAGNET:      true,   // the held piece seats into the slot it will land in — the "snap" (off: it floats and a faint ghost marks the slot)
+  MAGNET_REACH:   0.75,   // the slot is the nearest valid spot within this many cells of the floating piece, per axis; none in reach = no slot, release returns it
+  MAGNET_HOLD:    0.15,   // hysteresis: the current slot is kept until the piece is this much farther out than REACH (or this much nearer another slot)
   GUIDE:          1.0,    // how much hand choice favours pieces that clear something RIGHT NOW, no sequence needed (0 = off)
   CLEAR_STYLE:    'squash', // 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
@@ -82,7 +80,7 @@ const CFG = {
 
   GOLDEN_ENABLED: true,  // master switch for golden hands
 
-  LIFT:          1.55,   // how far above the finger a dragged piece floats, in cells
+  LIFT:          1.0,    // cells between the finger and the bottom edge of the dragged piece (same gap for every piece height)
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
   TIER_SOLVABLE: 0.0,    // tension above this deals 'solvable' hands (2+ lines); at 0 there are no 'honest' hands — every tray can clear
   TIER_JACKPOT:  0.30,   // ...above this 'jackpot' hands (3+ lines)

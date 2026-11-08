@@ -295,66 +295,81 @@ function place(idx,r,c){
 // a tray piece's cell size: as big as trayCell allows, but a 5-long bar still fits its slot
 const trayFit=s=>Math.min(trayCell,(B/3)*0.9/s.cols,trayH*0.9/s.rows);
 function slotRect(i){ const w=B/3; return {x:bx+w*i,y:trayY,w,h:trayH}; }
+// The drag. One rule decides everything the player sees and gets (plan 2.1, "one finger, one destination"):
+//  - only the pointer that picked the piece up moves or drops it (a second finger changes nothing);
+//  - the landing slot is the nearest valid board spot within MAGNET_REACH cells of where the floating piece
+//    is, per axis, kept until it drifts MAGNET_HOLD past that (no flicker at the edge);
+//  - with a slot the piece is drawn seated in it and the lines it would clear light up; release puts it
+//    exactly there. Without one there is no ghost, it floats, and release sends it back to the tray.
+// drag.slot is that one answer: frame() draws from it and onUp() places from it.
 function onDown(e){
-  if(state!=='play'||paused) return;
+  if(state!=='play'||paused||drag) return;          // one drag at a time: a second finger can't pick up another piece
   ac();
   for(let i=0;i<3;i++){
     const R=slotRect(i);
     if(tray[i]&&e.clientX>=R.x&&e.clientX<=R.x+R.w&&e.clientY>=R.y-12&&e.clientY<=R.y+R.h+12){
-      const R0=slotRect(i), s0=tray[i].s, tc0=trayFit(s0);
-      drag={i,x:e.clientX,y:e.clientY,px:e.clientX,vx:0,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:tc0/cell,
-            mx:R0.x+R0.w/2,my:R0.y+R0.h/2,snapK:0};      // mx/my: where the piece is drawn (glides to the finger or into its slot)
+      const s0=tray[i].s;
+      drag={i,id:e.pointerId,x:e.clientX,y:e.clientY,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(s0)/cell,
+            slot:null,snapK:0,sx:0,sy:0};             // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
+      updateSlot();
       Sfx.pickup(); return;
     }
   }
 }
 function onMove(e){
-  if(!drag||paused) return;
-  drag.vx=drag.vx*0.7+(e.clientX-drag.px)*0.3; drag.px=e.clientX;
+  if(!drag||paused||e.pointerId!==drag.id) return;
   drag.x=e.clientX; drag.y=e.clientY;
+  updateSlot();
 }
-function onUp(){
-  if(!drag||paused) return;
+function onUp(e){
+  if(!drag||paused||e.pointerId!==drag.id) return;
   const t=tray[drag.i];
   if(t){
-    let g=ghost();
-    if(!g && drag.last && performance.now()-drag.lastT<=CFG.SNAP_GRACE && canPlace(t.s,drag.last.r,drag.last.c,grid)) g=drag.last;
-    if(g) place(drag.i,g.r,g.c);
-    else{
-      const s=t.s, R=slotRect(drag.i);
-      ret={i:drag.i,t:0,fx:drag.x-(s.cols*cell)/2,fy:drag.y-cell*CFG.LIFT-(s.rows*cell)/2,fs:cell,
-           tx:R.x+(R.w-s.cols*trayFit(s))/2,ty:R.y+(R.h-s.rows*trayFit(s))/2,ts:trayFit(s)};
-      Sfx.deny();
-    }
+    updateSlot();                                     // the same answer the last frame drew (the finger hasn't moved since)
+    if(drag.slot) place(drag.i,drag.slot.r,drag.slot.c);
+    else sendBack();
   }
   drag=null;
 }
-function ghost(){
-  if(!drag) return null;
-  const t=tray[drag.i]; if(!t) return null;
-  const s=t.s;
-  // piece position in fractional grid cells
-  const fc=(drag.x-(s.cols*cell)/2-bx)/cell;
-  const fr=(drag.y-cell*CFG.LIFT-(s.rows*cell)/2-by)/cell;
-  const dist=(r,c)=>Math.hypot(r-fr,c-fc);
-  let g=null;
-  // hysteresis: keep the current ghost until the piece moves well away from it
-  const cur=drag.gh;
-  if(cur && cur.s===s && dist(cur.r,cur.c)<=CFG.SNAP_STICKY && canPlace(s,cur.r,cur.c,grid)) g=cur;
-  if(!g){
-    // otherwise the closest valid spot within SNAP_RADIUS of the nearest grid position
-    const r0=Math.round(fr), c0=Math.round(fc), R=CFG.SNAP_RADIUS;
-    let best=Infinity;
-    for(let dr=-R;dr<=R;dr++) for(let dc=-R;dc<=R;dc++){
-      const r=r0+dr, c=c0+dc, d=dist(r,c);
-      if(d<best && canPlace(s,r,c,grid)){ best=d; g={r,c,s}; }
+function onCancel(e){                                 // iOS took the touch away (a system gesture): the piece goes home
+  if(!drag||e.pointerId!==drag.id) return;
+  if(tray[drag.i]) sendBack();
+  drag=null;
+}
+function sendBack(){
+  const s=tray[drag.i].s, R=slotRect(drag.i), p=drawnPos(), ts=trayFit(s);
+  ret={i:drag.i,t:0,fx:p.x-(s.cols*cell)/2,fy:p.y-(s.rows*cell)/2,fs:cell,
+       tx:R.x+(R.w-s.cols*ts)/2,ty:R.y+(R.h-s.rows*ts)/2,ts};
+  Sfx.deny();
+}
+// Where the floating piece's centre is: exactly at the finger sideways, and LIFT cells between the finger
+// and the piece's bottom edge, so every piece sits the same height above the thumb. The lift eases in
+// with the pickup grow (drag.g) — that is the only motion between the finger and the floating piece.
+function floatPos(){
+  const s=tray[drag.i].s;
+  return {x:drag.x, y:drag.y-cell*CFG.LIFT*easeOutCubic(drag.g)-s.rows*cell/2};
+}
+// Where the piece is drawn: the float, or the seat, blended by snapK (the seat/unseat ease).
+function drawnPos(){
+  const f=floatPos(), k=drag.snapK;
+  return k<=0?f:{x:f.x+(drag.sx-f.x)*k, y:f.y+(drag.sy-f.y)*k};
+}
+function updateSlot(){
+  const t=tray[drag.i]; if(!t){ drag.slot=null; return; }
+  const s=t.s, f=floatPos();
+  const fc=(f.x-s.cols*cell/2-bx)/cell, fr=(f.y-s.rows*cell/2-by)/cell;   // the piece's top-left, in fractional cells
+  const reach=CFG.MAGNET_REACH, cheb=(r,c)=>Math.max(Math.abs(r-fr),Math.abs(c-fc)), eu=(r,c)=>Math.hypot(r-fr,c-fc);
+  let best=null, bd=Infinity;
+  for(let r=Math.ceil(fr-reach);r<=Math.floor(fr+reach);r++)
+    for(let c=Math.ceil(fc-reach);c<=Math.floor(fc+reach);c++){
+      const d=eu(r,c);
+      if(d<bd && canPlace(s,r,c,grid)){ bd=d; best={r,c}; }
     }
-  }
-  drag.gh=g;
-  if(g){ g.d=dist(g.r,g.c); drag.last=g; drag.lastT=performance.now(); }   // d: cells between the finger's spot and the slot
-  return g;
+  const cur=drag.slot;                                 // hysteresis: the slot it's in holds until it is clearly out of reach or clearly not the nearest
+  if(cur && canPlace(s,cur.r,cur.c,grid) && cheb(cur.r,cur.c)<=reach+CFG.MAGNET_HOLD && (!best || eu(cur.r,cur.c)<=bd+CFG.MAGNET_HOLD)) return;
+  drag.slot=best;
 }
 addEventListener('pointerdown',onDown,{passive:true});
 addEventListener('pointermove',onMove,{passive:true});
 addEventListener('pointerup',onUp,{passive:true});
-addEventListener('pointercancel',()=>{drag=null;},{passive:true});
+addEventListener('pointercancel',onCancel,{passive:true});

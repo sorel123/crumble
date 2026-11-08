@@ -64,9 +64,7 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['STAR_CHANCE','Star gem chance (per tray)',0,0.5,0.01],
   ['STAR_COMBO','Star gem guaranteed at combo',2,10,1],
   ['SWEEP_COOLDOWN','Sweep cooldown (trays)',0,10,1],
-  ['SNAP_RADIUS','Snap radius (cells)',0,3,1],
-  ['SNAP_STICKY','Snap stickiness',0,1.5,0.05],
-  ['LIFT','Piece lift (cells)',0,3,0.05],
+  ['LIFT','Piece lift above finger (cells)',0,3,0.05],
   ['CLEAR_BLINK','Clear: blink frames',0,14,1],
   ['COLOR_GONE_BONUS','Colour-gone bonus (per colour)',0,200,10],
   ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1],
@@ -77,11 +75,12 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['METER_DRAIN','Blast meter drain (per frame)',0,0.004,0.0001],
   ['BIG_CAP','Big-piece bias cap (cells)',1,9,1],
   ['GUIDE','Guided hands (obvious drops)',0,3,0.1],
-  ['MAGNET_REACH','Magnet reach (cells)',0.3,1.5,0.05]
+  ['MAGNET_REACH','Magnet reach (cells)',0.3,1.5,0.05],
+  ['MAGNET_HOLD','Magnet hold (cells)',0,0.5,0.05]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
-const DEV_STORE='crumble.dev.4';   // bumped for the Blast Round + tier retune, so older saved tuning doesn't override the new defaults
+const DEV_STORE='crumble.dev.5';   // bumped when LIFT changed meaning (plan 2.1), so older saved tuning doesn't override the new defaults
 function devSave(){
   try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
 }

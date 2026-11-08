@@ -75,18 +75,66 @@ export const geometry = page => page.evaluate(() => ({
   lift: CFG.LIFT,
 }));
 
+// Where the finger goes so the floating piece's top-left sits at fractional board cell (r, c).
+// The piece floats exactly at the finger sideways, with `lift` cells between the finger and its bottom edge.
+export const fingerFor = (g, s, r, c) => ({
+  x: g.bx + (c + s.cols / 2) * g.cell,
+  y: g.by + (r + s.rows) * g.cell + g.cell * g.lift,
+});
+
 // Drag tray piece `i` so it lands with its top-left cell on board cell (r, c): real pointer events.
 export async function dragPiece(page, i, r, c, { dx = 0, dy = 0 } = {}) {
   const g = await geometry(page);
   const s = await page.evaluate(i => ({ rows: tray[i].s.rows, cols: tray[i].s.cols }), i);
   const from = g.trayCenters[i];
-  const to = {
-    x: g.bx + (c + s.cols / 2) * g.cell + dx,
-    y: g.by + (r + s.rows / 2) * g.cell + g.cell * g.lift + dy,   // the piece floats `lift` cells above the finger
-  };
+  const f = fingerFor(g, s, r, c), to = { x: f.x + dx, y: f.y + dy };
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 });
   await page.mouse.move(to.x, to.y, { steps: 4 });
   await page.mouse.up();
 }
+
+// Real multi-touch through the DevTools protocol: Chromium turns these into pointer events with one
+// pointerId per finger, as iOS Safari does. Each call sends every finger still down, as the protocol wants.
+export async function fingers(page) {
+  const cdp = await page.context().newCDPSession(page);
+  const down = new Map();
+  const send = type => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [...down.values()] });
+  const pt = (id, x, y) => ({ id, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, radiusX: 1, radiusY: 1, force: 1 });
+  return {
+    async down(id, x, y) { down.set(id, pt(id, x, y)); await send('touchStart'); },
+    async move(id, x, y, steps = 1) {
+      const a = down.get(id);
+      for (let k = 1; k <= steps; k++) { down.set(id, pt(id, a.x + (x - a.x) * k / steps, a.y + (y - a.y) * k / steps)); await send('touchMove'); }
+    },
+    // the protocol releases whichever fingers are missing from the list; touchEnd itself must carry none
+    async up(id) { down.delete(id); await send(down.size ? 'touchMove' : 'touchEnd'); },
+    async cancel() { down.clear(); await cdp.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] }); },
+  };
+}
+
+// Let the game draw `n` frames (the seat ease settles in a handful).
+export const frames = (page, n = 1) => page.evaluate(n => new Promise(res => {
+  const step = k => (k ? requestAnimationFrame(() => step(k - 1)) : res());
+  step(n);
+}), n);
+
+// Record every place(i, r, c) call, from outside the game (the global function is wrapped, not edited).
+export const watchPlace = page => page.evaluate(() => {
+  if (window.__placed) return;
+  window.__placed = [];
+  const orig = place;
+  place = function (i, r, c) { window.__placed.push([i, r, c]); return orig.apply(this, arguments); };
+});
+export const placed = page => page.evaluate(() => window.__placed.splice(0));
+
+// What the screen shows for the piece being dragged: the landing slot, where the piece is drawn,
+// where it would float at the finger, and whether it is seated.
+export const dragView = page => page.evaluate(() => {
+  if (!drag) return null;
+  const s = tray[drag.i].s, f = floatPos();
+  return { i: drag.i, slot: drag.slot && { r: drag.slot.r, c: drag.slot.c }, cx: drag.cx, cy: drag.cy, fx: f.x, fy: f.y,
+    snapK: drag.snapK, rows: s.rows, cols: s.cols, seatX: drag.slot && bx + (drag.slot.c + s.cols / 2) * cell,
+    seatY: drag.slot && by + (drag.slot.r + s.rows / 2) * cell };
+});
