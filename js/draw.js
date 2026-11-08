@@ -219,7 +219,8 @@ function frame(now){
     ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;      ctx.lineWidth=2+2*tension;  ctx.stroke();
   }
 
-  const gh=ghost();
+  if(drag&&tray[drag.i]){ drag.g=Math.min(1,drag.g+dt*0.2); updateSlot(); }   // the pickup lift moves the piece without a pointer event
+  const gh=drag&&tray[drag.i]&&drag.slot?{r:drag.slot.r,c:drag.slot.c,s:tray[drag.i].s}:null;   // the one landing answer (see updateSlot)
   if(gh){
     let L;
     if(gh.s.star) L={rows:[gh.r],cols:[gh.c]};                 // preview the whole cross
@@ -235,7 +236,7 @@ function frame(now){
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
-    if(!CFG.FX_MAGNET || gh.d>CFG.MAGNET_REACH)                // seated pieces need no ghost; a slot the finger isn't over yet gets one
+    if(!CFG.FX_MAGNET)                                          // magnet off: the piece floats and a ghost marks the slot; on, the piece itself sits there
       for(const [dr,dc] of gh.s.cells) gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,.5,0);
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
@@ -456,15 +457,20 @@ function frame(now){
     const t=tray[drag.i],s=t.s;
     const gold=t.gi===GOLD;
     ctx.save();
-    drag.g=Math.min(1,drag.g+dt*0.2);                            // grows from tray size to board size over ~5 frames, lifting as it goes
-    const gk=easeOutBack(drag.g), gs=drag.s0+(1-drag.s0)*gk;
-    // the magnet: when there's a slot to land in, the piece glides INTO it (that's the snap); otherwise it floats above the finger
-    const snapped=CFG.FX_MAGNET&&gh&&gh.d<=CFG.MAGNET_REACH&&drag.g>=1;
-    const txp=snapped?bx+gh.c*cell+s.cols*cell/2:drag.x, typ=snapped?by+gh.r*cell+s.rows*cell/2:drag.y-cell*CFG.LIFT*easeOutCubic(drag.g);
-    const k=reduce?1:1-Math.pow(snapped?0.35:0.12,dt);         // tight on the finger; a short glide into the slot
-    drag.mx+=(txp-drag.mx)*k; drag.my+=(typ-drag.my)*k;
-    drag.snapK+=((snapped?1:0)-drag.snapK)*k;
-    ctx.translate(drag.mx,drag.my);
+    const gk=easeOutBack(drag.g), gs=drag.s0+(1-drag.s0)*gk;     // grows from tray size to board size over ~5 frames (drag.g steps above)
+    // the magnet: seated in the slot when there is one, otherwise exactly at the finger. Only the change between
+    // the two eases (snapK); the floating piece itself never lags the finger.
+    const seat=CFG.FX_MAGNET&&gh, k=reduce?1:1-Math.pow(0.35,dt);
+    if(seat){
+      const tx=bx+gh.c*cell+s.cols*cell/2, ty=by+gh.r*cell+s.rows*cell/2;
+      if(drag.snapK<0.05){ drag.sx=tx; drag.sy=ty; }               // seating fresh: start from this slot
+      else { drag.sx+=(tx-drag.sx)*k; drag.sy+=(ty-drag.sy)*k; }  // already seated: slide to the neighbouring slot
+    }
+    drag.snapK+=((seat?1:0)-drag.snapK)*k;
+    if(drag.snapK<0.002) drag.snapK=0; else if(drag.snapK>0.998) drag.snapK=1;
+    const p=drawnPos();
+    drag.cx=p.x; drag.cy=p.y;                                      // where it is on screen (the tests read this)
+    ctx.translate(p.x,p.y);
     ctx.scale(gs,gs);                                            // then rigid under the finger: no tilt
     if(gold) goldGlow(0,0,Math.max(s.cols,s.rows)*cell*0.95+cell*0.6,now,0);
     else if(s.star) goldGlow(0,0,cell*1.5,now,0,'235,225,255');
