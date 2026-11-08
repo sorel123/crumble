@@ -571,9 +571,10 @@ drop (`place()` in the pointerup) cost 7-25 ms, about two thirds of it `genTray`
   for up to `DEAL_SLICE_MS` (4 ms) until done, then the game-over check (`checkStuck`). The candidate
   search (`pickHandSteps`), the sweep planner (`planSweepSteps`/`tileExactSteps`) and golden hands yield
   between candidates, so a slice overruns by well under a millisecond. Same search as one go (a test checks
-  it); a deal takes 2-8 frames. Pickups wait while `dealing`; `start()` and `rescue()` cancel a pending one.
+  it); a deal takes 2-8 frames. Pickups wait while `dealing`, and so does the Blast Round clock; `start()` and `rescue()` cancel a pending one.
 - **Particle budget.** Fireworks, praise bursts, clear specks/chunks, landing dust and confetti share
-  `PARTICLE_CAP` (260) × `perf.fx`. A frame over `FRAME_BUDGET_MS` (20) cuts `perf.fx` by 0.15 (floor 0.3);
+  `PARTICLE_CAP` (260) × `perf.fx`. A frame over `FRAME_BUDGET_MS` (20), or over 1.5x the device's own frame interval
+  (so a 30 Hz Low Power Mode phone isn't cut on every frame), cuts `perf.fx` by 0.15 (floor 0.3);
   on-time frames grow it back by 0.01 (about a second). A slow moment sheds sparkle, not frames.
 - **`?dev` frame readout** (bottom-left): slowest frame of the last 2 s, count of frames over 20 ms (tap to
   reset), the game's own JS time last frame, particle budget and live count. Not in the player build.

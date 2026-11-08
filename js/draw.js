@@ -146,7 +146,8 @@ function stepConfetti(dt){
 }
 
 /* frame budget (plan 2.2). Every frame measures the gap since the one before. Effect particles share one
-   budget, PARTICLE_CAP scaled by perf.fx: a frame over FRAME_BUDGET_MS cuts it, frames on time grow it back
+   budget, PARTICLE_CAP scaled by perf.fx: a frame over FRAME_BUDGET_MS (or 1.5x the device's own frame
+   interval, so a 30 Hz Low Power Mode phone isn't punished for every frame) cuts it, frames on time grow it back
    over about a second, so a slow moment sheds sparkle instead of frames. With ?dev a corner readout shows the
    slowest frame of the last two seconds, how many frames have run long (tap it to reset), the time the game's
    own code took in the last frame, and the particle budget. */
@@ -156,7 +157,9 @@ function fxRoom(){ return Math.round(CFG.PARTICLE_CAP*perf.fx)-fxLive(); }
 function perfFrame(gap){
   if(!(gap>0&&gap<250)) return;                     // the first frame, or back from the background: not a frame she saw
   perf.gaps[perf.gi]=gap; perf.gi=(perf.gi+1)%perf.gaps.length;
-  if(gap>CFG.FRAME_BUDGET_MS){ perf.over++; perf.fx=Math.max(0.3,perf.fx-0.15); }
+  if(gap>CFG.FRAME_BUDGET_MS) perf.over++;
+  let base=Infinity; for(const g of perf.gaps) if(g>0&&g<base) base=g;   // the device's own frame interval (33 ms in Low Power Mode)
+  if(gap>Math.max(CFG.FRAME_BUDGET_MS,base*1.5)) perf.fx=Math.max(0.3,perf.fx-0.15);   // a frame late for this device
   else perf.fx=Math.min(1,perf.fx+0.01);
 }
 function perfHud(now){

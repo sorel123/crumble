@@ -84,7 +84,7 @@ function drawBlastBar(now){
 function stepBlast(now,dt){
   if(!CFG.BLAST_ENABLED || state!=='play' || paused) return;
   if(blast){
-    blast.t-=dt*16.67;
+    if(!dealing) blast.t-=dt*16.67;                  // the clock waits while her next hand is being dealt (she can't pick up)
     if(blast.t<=0) endBlast();
   } else if(blastMeter>0 && blastMeter<1 && now-lastClearAt>CFG.METER_IDLE){
     blastMeter=Math.max(0,blastMeter-CFG.METER_DRAIN*dt);    // dawdle and it slips away
