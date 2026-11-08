@@ -9,8 +9,6 @@ async function gameOver(){
   const prevBest=best;
   best=Math.max(best,score); el('bestVal').textContent=best;
   const newSkins=checkUnlocks();
-  deaths++;
-  if(deaths%CFG.ADS_EVERY===0) await Ads.showInterstitial();
   el('overScore').textContent=score;
   el('overMsg').textContent=(newSkins.length?'New skin unlocked: '+newSkins.join(', ')+'! ':'')
     +(score>=1500?'That is a serious run.'
@@ -20,16 +18,12 @@ async function gameOver(){
   const canRescue=rescuesUsed<CFG.MAX_RESCUES
     && (score>=CFG.RESCUE_FLOOR || score>=prevBest*CFG.RESCUE_BEST_FRAC) && score>0;
   btn.hidden=!canRescue;
-  btn.textContent=rescues>0?'Use a rescue':'Watch an ad for a rescue';
+  btn.textContent='Keep going';
   el('overCard').hidden=false;
 }
 async function rescue(){
   if(rescuesUsed>=CFG.MAX_RESCUES) return;
-  if(rescues<=0){
-    if(!await Ads.showRewarded()) return;
-    rescues++;
-  }
-  rescues--; rescuesUsed++;
+  rescuesUsed++;
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
   Sfx.rescue();
   combo=0; tension=0.5; goldenNext=false; genRescue();
@@ -37,7 +31,7 @@ async function rescue(){
 }
 function start(){
   layout();
-  grid=empty(); score=0; combo=0; rescues=CFG.FREE_RESCUES; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
+  grid=empty(); score=0; combo=0; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];
