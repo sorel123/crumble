@@ -1,11 +1,12 @@
 # Crumble — project handoff
 
-A browser puzzle game (Block Blast genre) built for my daughter. Everything
-lives in `index.html` — no build step, no dependencies, opens straight in a
-browser. Hosted on GitHub Pages and played on her iPhone as a home-screen web
+A browser puzzle game (Block Blast genre) built for my daughter. `index.html`
+holds the markup and CSS and loads plain scripts from `js/` — no build step,
+no bundler, no dependencies, opens straight in a browser (serve over http or
+open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-08, after PR #6 (magnet tune).
+Last updated 2026-11-08, after the file split (plan PR 1.1).
 
 ---
 
@@ -15,15 +16,16 @@ Last updated 2026-11-08, after PR #6 (magnet tune).
 - To see a deploy on the phone, **force-quit the home-screen web clip and
   reopen it** (it caches hard).
 - Test on a phone-sized viewport (390×844, touch). For headless tests, copy the
-  game to a scratch `test.html` and expose internals there — never in
+  game (index.html + js/) to a scratch folder and expose internals there — never in
   `index.html`.
 
 ---
 
 ## Ground rules
 
-- **One self-contained HTML file** is the default, not a hard rule — split if
-  it genuinely helps. No framework, no bundler.
+- **Plain script files, no bundler.** `index.html` + `js/*.js`, loaded in a fixed
+  order with `<script src>` tags. No framework, no modules. Files share globals
+  (no IIFE), so load order in `index.html` matters.
 - Vanilla JS + canvas. Only external resource is the Fredoka font from Google
   Fonts, and it degrades fine if that fails to load.
 - Audio: recorded CC0 sound effects and jingles from Kenney (kenney.nl), trimmed,
@@ -74,9 +76,28 @@ Last updated 2026-11-08, after PR #6 (magnet tune).
 
 ---
 
-## How the file is organised
+## How the code is organised
 
-Top to bottom inside the one `<script>`:
+`index.html` loads these in order (the sections below follow the same order):
+
+| File | Contents |
+|---|---|
+| `js/config.js` | `CFG` |
+| `js/worlds.js` | `GEMS`, worlds, themes, ambient particles, flip |
+| `js/ads.js` | `Ads` (faked) |
+| `js/shapes.js` | `RAW`/`SHAPES`, shared state vars, helpers |
+| `js/solver.js` | solver, `genTray`/`genRescue`, praise, `updateDbg` |
+| `js/render.js` | `layout`, tile renderers, `SKINS`, `buildCache` |
+| `js/samples.js` | `SAMPLES` base64 MP3 data (~190 KB, data only) |
+| `js/audio.js` | synth sets, recorded bank, `Sfx` |
+| `js/game.js` | `place`, Blast Round, input |
+| `js/draw.js` | `frame` and effects |
+| `js/flow.js` | `gameOver`, `rescue`, `start` |
+| `js/ui.js` | persistence, unlocks, Settings |
+| `js/admin.js` | Admin panel |
+| `js/main.js` | boot |
+
+Top to bottom:
 
 1. **`CFG`** — every tunable constant, commented. Start here.
 2. **`GEMS`** — six `{hue, saturation}` pairs plus a gold gem (golden hands
@@ -114,6 +135,7 @@ Top to bottom inside the one `<script>`:
 | #4 | iPhone slowdown fix: text sprites instead of per-frame `strokeText` |
 | #5 | Kid feedback: magnet snap, Classic + Blocks default, guided hands |
 | #6 | Magnet tune: seats only near the slot, tighter finger tracking |
+| (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
 
@@ -390,7 +412,7 @@ video is the one that actually pays.
 ```
 npm i @capacitor/core @capacitor/cli @capacitor/ios
 npx cap init
-# index.html -> www/index.html
+# index.html + js/ -> www/
 npx cap add ios && npx cap open ios
 ```
 
