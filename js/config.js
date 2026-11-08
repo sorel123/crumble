@@ -109,5 +109,10 @@ const CFG = {
   SND_PLACE_VOL:  1,
   PHONE_SPEAKER:  false,      // synth sounds only: cut the bass a phone speaker can't play (it just distorts)
 
+  // frame budget (plan 2.2): the phone should never show a frame over FRAME_BUDGET_MS during a clear
+  FRAME_BUDGET_MS: 20,   // a frame slower than this counts as long (the ?dev overlay counts them) and shrinks the particle budget
+  PARTICLE_CAP:   260,   // most effect particles alive at once (fireworks, specks, dust, confetti); scaled down while frames run long
+  DEAL_SLICE_MS:  4,     // ms of tray dealing per frame after a drop (the deal is spread over frames, never inside the clear's first one)
+
   SHOW_TENSION: false    // debug readout; off for the player (Admin can turn it on)
 };

@@ -138,3 +138,20 @@ export const dragView = page => page.evaluate(() => {
     snapK: drag.snapK, rows: s.rows, cols: s.cols, seatX: drag.slot && bx + (drag.slot.c + s.cols / 2) * cell,
     seatY: drag.slot && by + (drag.slot.r + s.rows / 2) * cell };
 });
+
+// Wait until the game has finished dealing a tray (the deal runs over a few frames after a drop, plan 2.2).
+export const dealt = page => page.waitForFunction(() => !dealing, null, { timeout: 5000 });
+
+// Record, from outside the game, how long each frame's own code took and the gap between frames, plus
+// the cost of each place() call. Wraps the global functions; nothing in the game changes.
+export const watchFrames = page => page.evaluate(() => {
+  if (window.__frames) return;
+  window.__frames = { work: [], place: [], steps: [] };
+  const of = frame;
+  frame = function (now) { const t = performance.now(); of(now); __frames.work.push(performance.now() - t); };
+  const op = place;
+  place = function () { const t = performance.now(); const r = op.apply(this, arguments); __frames.place.push(performance.now() - t); return r; };
+  const os = stepDeal;
+  stepDeal = function () { const busy = !!dealing && !dealing.wait; const t = performance.now(); os(); if (busy) __frames.steps.push(performance.now() - t); };
+});
+export const frameLog = page => page.evaluate(() => { const f = window.__frames, out = { work: f.work.splice(0), place: f.place.splice(0), steps: f.steps.splice(0) }; return out; });

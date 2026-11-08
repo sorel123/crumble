@@ -98,7 +98,8 @@ function sprite(key,w,h,draw){                       // draw(x) renders centred 
   const x=cv.getContext('2d'); x.scale(dpr,dpr); x.translate(w/2,h/2);
   x.textAlign='center'; x.textBaseline='middle'; x.lineJoin='round';
   draw(x);
-  sp={cv,w,h}; if(SPRITES.size>160) SPRITES.clear(); SPRITES.set(key,sp); return sp;
+  sp={cv,w,h}; if(SPRITES.size>=160) SPRITES.delete(SPRITES.keys().next().value);   // evict the oldest one, not the lot (a full clear re-rasterised every word on screen in one frame)
+  SPRITES.set(key,sp); return sp;
 }
 function blit(sp,x,y,sc=1,alpha=1,rot=0){
   ctx.save(); ctx.translate(x,y); if(rot) ctx.rotate(rot); if(sc!==1) ctx.scale(sc,sc);
@@ -114,9 +115,9 @@ function vgrad(x,y0,y1,stops){ const g=x.createLinearGradient(0,y0,0,y1); stops.
 // a firework: a fountain of little stars in yellow / green / pink / blue from one point (drawn by the bursts loop)
 const FIRE_COLS=['#FFE45C','#7CF59A','#FF8AD8','#8FD8FF'];
 function spawnFirework(x,y,col,delay=0){
-  if(bursts.length>140) return;                                    // enough on screen already
+  const n=Math.min(16,fxRoom()); if(n<=0) return;                  // enough on screen already
   const c=col||FIRE_COLS[(Math.random()*FIRE_COLS.length)|0];
-  for(let k=0;k<16;k++){
+  for(let k=0;k<n;k++){
     const ang=Math.random()*6.283, sp=1.5+Math.random()*4.5;
     bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.8-1,life:1,wait:delay,r:cell*(0.06+Math.random()*0.08),col:Math.random()<.8?c:'#fff',sq:true});
   }
@@ -125,7 +126,7 @@ function spawnFirework(x,y,col,delay=0){
 function spawnConfetti(){
   if(reduce) return;
   const cols=['#FFD45C','#FF7BD5','#8FD8FF','#9CF0B5','#FFFFFF'];
-  for(let k=0;k<28;k++) confetti.push({
+  for(let k=Math.min(28,fxRoom());k>0;k--) confetti.push({
     x:Math.random()*W, y:-20-Math.random()*80, vx:(Math.random()-.5)*1.6, vy:1.4+Math.random()*1.8,
     rot:Math.random()*6.283, vr:(Math.random()-.5)*.3, w:4+Math.random()*4, h:7+Math.random()*6,
     col:cols[(Math.random()*cols.length)|0], life:1
@@ -144,9 +145,41 @@ function stepConfetti(dt){
   ctx.globalAlpha=1;
 }
 
+/* frame budget (plan 2.2). Every frame measures the gap since the one before. Effect particles share one
+   budget, PARTICLE_CAP scaled by perf.fx: a frame over FRAME_BUDGET_MS cuts it, frames on time grow it back
+   over about a second, so a slow moment sheds sparkle instead of frames. With ?dev a corner readout shows the
+   slowest frame of the last two seconds, how many frames have run long (tap it to reset), the time the game's
+   own code took in the last frame, and the particle budget. */
+const perf={gaps:new Float32Array(120),gi:0,over:0,work:0,fx:1,hud:null};
+const fxLive=()=>bursts.length+shards.length+sparkles.length+dust.length+chunks.length+confetti.length;
+function fxRoom(){ return Math.round(CFG.PARTICLE_CAP*perf.fx)-fxLive(); }
+function perfFrame(gap){
+  if(!(gap>0&&gap<250)) return;                     // the first frame, or back from the background: not a frame she saw
+  perf.gaps[perf.gi]=gap; perf.gi=(perf.gi+1)%perf.gaps.length;
+  if(gap>CFG.FRAME_BUDGET_MS){ perf.over++; perf.fx=Math.max(0.3,perf.fx-0.15); }
+  else perf.fx=Math.min(1,perf.fx+0.01);
+}
+function perfHud(now){
+  if(!CFG.DEV_MODE) return;
+  if(!perf.hud){
+    perf.hud=document.createElement('div'); perf.hud.id='perfHud';
+    perf.hud.style.cssText='position:fixed;left:4px;bottom:calc(env(safe-area-inset-bottom) + 2px);z-index:50;font:600 10px/1.3 ui-monospace,Menlo,monospace;'
+      +'color:#fff;background:rgba(0,0,0,.45);padding:2px 5px;border-radius:4px;white-space:pre;-webkit-user-select:none;user-select:none';
+    perf.hud.addEventListener('pointerdown',e=>{ e.stopPropagation(); perf.over=0; perf.gaps.fill(0); });
+    document.body.append(perf.hud); perf.hudAt=0;
+  }
+  if(now-perf.hudAt<250) return;                     // a few updates a second: text changes cost layout too
+  perf.hudAt=now;
+  let mx=0; for(const g of perf.gaps) if(g>mx) mx=g;
+  perf.hud.textContent='max '+mx.toFixed(1)+'ms  >'+CFG.FRAME_BUDGET_MS+'ms: '+perf.over+'\nwork '+perf.work.toFixed(1)+'ms  fx '+Math.round(perf.fx*100)+'% ('+fxLive()+')';
+  perf.hud.style.color=mx>CFG.FRAME_BUDGET_MS?'#FFB3B3':'#fff';
+}
+
 let last=0;
 function frame(now){
   requestAnimationFrame(frame);
+  const t0=performance.now();
+  perfFrame(now-last);
   const dt=paused?0:Math.min(2.5,(now-last)/16.67)||1; last=now;
   if(hitWait>0) hitWait-=dt; else shake*=Math.pow(.85,dt);
   glowT*=Math.pow(.93,dt);
@@ -353,16 +386,17 @@ function frame(now){
     }
     if(s.t>=POP){
       const g=GEMS[s.gi], cx=bx+(s.c+.5)*cell, cy=by+(s.r+.5)*cell;
-      if(squash && !reduce){                               // two little squares drift off the bar
+      const room=fxRoom()>0;                               // the bits below are skipped once the particle budget is spent
+      if(room && squash && !reduce){                       // two little squares drift off the bar
         for(let k=0;k<2;k++) shards.push({x:cx+(Math.random()-.5)*cell*.6,y:cy+(Math.random()-.5)*cell*.3,vx:(Math.random()-.5)*2,vy:-1-Math.random()*2,r:cell*(.05+Math.random()*.05),life:1,sq:true});
-      } else if(CFG.FX_CHUNKS && !reduce){
+      } else if(room && !squash && CFG.FX_CHUNKS && !reduce){
         const ang=Math.atan2(cy-s.oy,cx-s.ox)+(Math.random()-.5)*.5;   // away from the placed piece
         const sp=4.5+Math.random()*4;
         chunks.push({x:cx,y:cy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-3,rot:(Math.random()-.5)*.4,
           vr:(Math.random()-.5)*.5,sz:cell*.86,life:1,gi:s.gi,
           col:`hsl(${g.h} ${g.s}% 60%)`,hi:`hsl(${g.h} ${g.s}% 84%)`});
       }
-      for(let k=0;k<(reduce?1:3);k++){                     // a few bright specks per gem
+      for(let k=0;room&&k<(reduce?1:3);k++){               // a few bright specks per gem
         const a=Math.random()*6.283,sp=2+Math.random()*4;
         shards.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,r:cell*(.05+Math.random()*.08),life:1});
       }
@@ -586,6 +620,9 @@ function frame(now){
   if(CFG.FX_COMBO_GLOW && comboGlowV>0.02) edgeGlow(combo>4?'255,123,213':'255,212,92',comboGlowV);
   if(CFG.FX_SWEEP_FX) stepConfetti(dt);
   stepOrbs(now,dt);
+  stepDeal();                                        // the next tray, a slice at a time, after this frame's drawing
+  perf.work=performance.now()-t0;
+  perfHud(now);
 }
 
 /* score orbs: one per cleared gem. Each kicks out from the line (away from the placed

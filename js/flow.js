@@ -26,7 +26,7 @@ async function rescue(){
   rescuesUsed++;
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
   Sfx.rescue();
-  combo=0; tension=0.5; goldenNext=false; genRescue();
+  combo=0; tension=0.5; goldenNext=false; cancelDeal(); genRescue();
   el('overCard').hidden=true; state='play';
 }
 function start(){
@@ -41,5 +41,5 @@ function start(){
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
-  genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
+  cancelDeal(); genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
 }
