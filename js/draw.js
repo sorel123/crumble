@@ -236,8 +236,8 @@ function frame(now){
     L.rows.forEach(r=>ctx.fillRect(bx,by+r*cell,B,cell));
     L.cols.forEach(c=>ctx.fillRect(bx+c*cell,by,cell,B));
     ctx.globalAlpha=1;
-    if(!CFG.FX_MAGNET)                                          // magnet off: the piece floats and a ghost marks the slot; on, the piece itself sits there
-      for(const [dr,dc] of gh.s.cells) gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,.5,0);
+    if(!CFG.FX_MAGNET)                                          // gliding (default): a ghost marks exactly where it lands; with the magnet on, the piece itself sits there
+      for(const [dr,dc] of gh.s.cells) gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,CFG.GHOST_ALPHA,0);
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 

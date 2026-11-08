@@ -51,9 +51,10 @@ const CFG = {
   FX_LAND_BUMP:   true,   // a placed piece thumps in (quick squash + ring) instead of appearing
   FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
-  FX_MAGNET:      true,   // the held piece seats into the slot it will land in — the "snap" (off: it floats and a faint ghost marks the slot)
+  FX_MAGNET:      false,  // on: the held piece seats into its landing slot and hops cell to cell. Off (default): it glides with the finger and a ghost marks the slot
+  GHOST_ALPHA:    0.6,    // how solid the landing ghost is (the "snap" she sees on the board while the piece glides)
   MAGNET_REACH:   0.75,   // the slot is the nearest valid spot within this many cells of the floating piece, per axis; none in reach = no slot, release returns it
-  MAGNET_HOLD:    0.15,   // hysteresis: the current slot is kept until the piece is this much farther out than REACH (or this much nearer another slot)
+  MAGNET_HOLD:    0.05,   // hysteresis: the current slot is kept until the piece is this much farther out than REACH (or this much nearer another slot)
   GUIDE:          1.0,    // how much hand choice favours pieces that clear something RIGHT NOW, no sequence needed (0 = off)
   CLEAR_STYLE:    'squash', // 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)

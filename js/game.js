@@ -373,3 +373,6 @@ addEventListener('pointerdown',onDown,{passive:true});
 addEventListener('pointermove',onMove,{passive:true});
 addEventListener('pointerup',onUp,{passive:true});
 addEventListener('pointercancel',onCancel,{passive:true});
+document.addEventListener('visibilitychange',()=>{      // backgrounded mid-drag: iOS may never send the cancel
+  if(document.visibilityState==='hidden'&&drag){ if(tray[drag.i]) sendBack(); drag=null; }
+});

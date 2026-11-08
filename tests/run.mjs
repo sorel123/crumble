@@ -83,10 +83,12 @@ test('running out of moves ends the run', async ({ page }) => {
 const rng = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 0.5, `${msg}: ${a} vs ${b}`);
 
-// Checks what the screen shows against the rule: seated exactly in a slot that is within reach,
-// or floating exactly at the finger with no valid slot in reach.
+// Checks what the screen shows against the rule: the piece glides exactly at the finger (or, with
+// FX_MAGNET on, sits exactly in its slot), and the slot - drawn as the ghost - is legal and within reach,
+// with no slot only when nothing valid is in reach.
 async function checkView(page, v, label) {
-  if (v.slot) {
+  const magnet = await page.evaluate(() => CFG.FX_MAGNET);
+  if (v.slot && magnet) {
     near(v.cx, v.seatX, `${label} drawn x = slot`); near(v.cy, v.seatY, `${label} drawn y = slot`);
     assert.equal(v.snapK, 1, `${label} seated`);
   } else {
@@ -105,12 +107,12 @@ async function checkView(page, v, label) {
   else assert.equal(rule.inReach, false, `${label} no slot, so nothing valid in reach`);
 }
 
-test('50 scripted drags each land exactly where the piece was shown', async ({ page }) => {
+test('50 scripted drags glide with the finger and land exactly where the ghost showed', async ({ page }) => {
   await play(page);
   await watchPlace(page);
   const g = await geometry(page), f = await fingers(page), rand = rng(2101);
   const nShapes = await page.evaluate(() => SHAPES.length);
-  let seated = 0, floated = 0;
+  let slotted = 0, floated = 0;
   for (let k = 0; k < 50; k++) {
     const i = Math.floor(rand() * 3), shapes = [0, 1, 2].map(() => Math.floor(rand() * nShapes));
     shapes[(i + 1) % 3] = 0;                                    // keep a 1x1 in the tray so the run never ends mid-test
@@ -129,12 +131,29 @@ test('50 scripted drags each land exactly where the piece was shown', async ({ p
     await checkView(page, v, `drag ${k}`);
     await f.up(1);
     const got = await placed(page);
-    if (v.slot) { seated++; assert.deepEqual(got, [[i, v.slot.r, v.slot.c]], `drag ${k}: landed in the slot it showed`); }
+    if (v.slot) { slotted++; assert.deepEqual(got, [[i, v.slot.r, v.slot.c]], `drag ${k}: landed in the slot it showed`); }
     else { floated++; assert.deepEqual(got, [], `drag ${k}: nothing placed`); assert.ok(await page.evaluate(i => !!tray[i], i), `drag ${k}: back in the tray`); }
     assert.equal(await page.evaluate(() => state), 'play');
   }
-  console.log(`     (${seated} seated, ${floated} floating)`);
-  assert.ok(seated >= 15 && floated >= 10, `covered both cases (seated ${seated}, floating ${floated})`);
+  console.log(`     (${slotted} with a landing slot, ${floated} without)`);
+  assert.ok(slotted >= 15 && floated >= 10, `covered both cases (${slotted} with a slot, ${floated} without)`);
+});
+
+test('with the magnet on, the piece sits exactly in its slot and lands there', async ({ page }) => {
+  await play(page);
+  await watchPlace(page);
+  await page.evaluate(() => { CFG.FX_MAGNET = true; });
+  await setup(page, { rows: EMPTY, trayShapes: [9, 0, 0] });
+  const g = await geometry(page), f = await fingers(page);
+  const to = fingerFor(g, { rows: 2, cols: 2 }, 2.3, 4.6);
+  await f.down(1, g.trayCenters[0].x, g.trayCenters[0].y);
+  await f.move(1, to.x, to.y, 6);
+  await frames(page, 14);
+  const v = await dragView(page);
+  assert.deepEqual(v.slot, { r: 2, c: 5 });
+  await checkView(page, v, 'magnet');
+  await f.up(1);
+  assert.deepEqual(await placed(page), [[0, 2, 5]]);
 });
 
 test('a second finger during a drag changes nothing', async ({ page }) => {
@@ -179,6 +198,27 @@ test('a cancelled touch sends the piece back', async ({ page }) => {
   assert.equal(await dragView(page), null);
   assert.deepEqual(await placed(page), []);
   assert.equal((await snap(page)).tray[0].n, 4);
+});
+
+test('leaving the app mid-drag sends the piece back and frees the next pickup', async ({ page }) => {
+  await play(page);
+  await watchPlace(page);
+  await setup(page, { rows: EMPTY, trayShapes: [9, 0, 0] });
+  const g = await geometry(page), f = await fingers(page);
+  const to = fingerFor(g, { rows: 2, cols: 2 }, 3, 3);
+  await f.down(1, g.trayCenters[0].x, g.trayCenters[0].y);
+  await f.move(1, to.x, to.y, 5);
+  await page.evaluate(() => {             // iOS backgrounds the web clip without a pointercancel
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    delete document.visibilityState;
+  });
+  assert.equal(await dragView(page), null, 'the drag ended');
+  assert.equal((await snap(page)).tray[0].n, 4, 'piece back in the tray');
+  await f.up(1);
+  assert.deepEqual(await placed(page), [], 'the stale finger lifting places nothing');
+  await dragPiece(page, 0, 1, 1);
+  assert.deepEqual(await placed(page), [[0, 1, 1]], 'the next drag works');
 });
 
 test('releases at the board edge: just over lands on the edge, farther out comes back', async ({ page }) => {

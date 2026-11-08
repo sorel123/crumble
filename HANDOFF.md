@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-08, after the drag rewrite (plan PR 2.1).
+Last updated 2026-11-08, after the glide follow-up to the drag rewrite (plan PR 2.1).
 
 ---
 
@@ -150,6 +150,7 @@ Top to bottom:
 | (1.3) | Player build: Admin only with `?dev`, tension readout off, ads removed, both rescues free |
 | (1.4) | Service worker (`sw.js`): offline launch, versioned cache, "Update ready" toast (`js/update.js`) |
 | (2.1) | Drag rewrite: one finger, one landing rule, piece seated or exactly at the finger, bottom-anchored lift |
+| (2.1b) | Drag glides: piece always exactly at the finger, a ghost marks the landing slot (seating was "sticky, jumpy" on the phone) |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -538,3 +539,16 @@ the piece. All in `js/game.js` (input section) and the drag block of `frame()`.
   slot obeys the rule, and that release calls `place` with that slot; plus two
   fingers, a cancelled touch, releases just past each board edge, a finger
   between four cells, and equal lift for 1- and 3-row pieces.
+
+### Follow-up: glide + ghost (2.1b)
+
+Jay on the phone after 2.1: "sticky moving it, a little jumpy/edgy". Cause: over
+the board there is almost always a legal slot within reach, so the piece was
+*always* seated and moved in whole-cell hops, holding each slot `MAGNET_HOLD`
+past the halfway point before jumping. Now `FX_MAGNET` defaults to **off**: the
+piece is always drawn exactly at the finger (smooth), and a ghost at
+`GHOST_ALPHA` (0.6) plus the line preview marks `drag.slot` — still the one
+answer, so release lands exactly on the ghost. `MAGNET_HOLD` is 0.05 (just
+enough to stop the ghost flickering). `FX_MAGNET` on brings back the 2.1 seat.
+Also: backgrounding the app mid-drag (`visibilitychange` hidden) now sends the
+piece home, since iOS may not send a `pointercancel`. Admin store `crumble.dev.6`.
