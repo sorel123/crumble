@@ -3,3 +3,7 @@
 
 # screen recordings for reference, not part of the game
 video/
+
+# test tooling
+node_modules/
+tests/out/
