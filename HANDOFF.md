@@ -15,9 +15,15 @@ Last updated 2026-11-08, after the file split (plan PR 1.1).
 - One change per branch → PR → merge to `main`. GitHub Pages serves `main`.
 - To see a deploy on the phone, **force-quit the home-screen web clip and
   reopen it** (it caches hard).
-- Test on a phone-sized viewport (390×844, touch). For headless tests, copy the
-  game (index.html + js/) to a scratch folder and expose internals there — never in
-  `index.html`.
+- Test on a phone-sized viewport (390×844, touch).
+- **Automated tests:** `npm install` once, then `npm test` (Playwright, headless
+  Chromium at 390×844). `tests/harness.mjs` serves the game, injects real pointer
+  events, and reads state (`grid`, `tray`, `score`, `state`…) straight from the
+  page's top-level bindings, so **no test hook lives in the game** — don't add one.
+  Math.random is seeded. Scenarios are in `tests/run.mjs`: load, start, place,
+  refused drop, line clear, game over. Add a scenario there when you change a rule.
+  A GitHub Action (`.github/workflows/test.yml`) runs it on every PR and on `main`.
+  Chromium needs a one-time `npx playwright install chromium` locally.
 
 ---
 
@@ -135,6 +141,7 @@ Top to bottom:
 | #4 | iPhone slowdown fix: text sprites instead of per-frame `strokeText` |
 | #5 | Kid feedback: magnet snap, Classic + Blocks default, guided hands |
 | #6 | Magnet tune: seats only near the slot, tighter finger tracking |
+| (1.2) | Playwright harness (`tests/`) + GitHub Action; no game changes |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
