@@ -61,6 +61,12 @@
        border-radius:999px;padding:7px 16px;min-height:38px;cursor:pointer}
   .choices button[aria-pressed="true"]{background:var(--sel-bg);border-color:var(--gold);color:var(--sel-fg)}
   .choices .play{padding:7px 12px;font-size:15px}
+  #updateToast{position:fixed;left:50%;transform:translateX(-50%);z-index:50;
+        bottom:calc(22px + env(safe-area-inset-bottom,0px));max-width:calc(100% - 32px);
+        font-family:var(--font);font-size:15px;font-weight:600;color:var(--ink);
+        background:linear-gradient(#FFE07A,#FFC12E);border:0;border-radius:999px;padding:13px 24px;
+        min-height:48px;cursor:pointer;box-shadow:0 4px 0 #C9941A,0 8px 24px rgba(0,0,0,.35)}
+  #updateToast[hidden]{display:none}
   #safe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;
         padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 
@@ -188,6 +194,7 @@
   </div>
 </div>
 
+<button id="updateToast" type="button" hidden>Update ready — tap to refresh</button>
 <script src="js/config.js"></script>
 <script src="js/worlds.js"></script>
 <script src="js/shapes.js"></script>
@@ -201,5 +208,6 @@
 <script src="js/ui.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/main.js"></script>
+<script src="js/update.js"></script>
 </body>
 </html>

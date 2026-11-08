@@ -13,15 +13,21 @@ import { chromium } from 'playwright';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.mp3': 'audio/mpeg' };
 
+// `patches` lets a test change what the server returns for a path (e.g. pretend a new deploy):
+//   srv.patches['/sw.js'] = text => text + '// v2'
 export function serve() {
+  const patches = {};
   const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     const file = path.join(ROOT, rel === '/' ? 'index.html' : rel);
     if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream' });
+    const type = TYPES[path.extname(file)] || 'application/octet-stream';
+    if (patches[rel]) { res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' }); return res.end(patches[rel](fs.readFileSync(file, 'utf8'))); }
+    res.writeHead(200, { 'content-type': type });
     fs.createReadStream(file).pipe(res);
   });
   return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve({
+    patches,
     url: `http://127.0.0.1:${server.address().port}/`,
     close: () => new Promise(r => server.close(r)),
   })));
