@@ -3,9 +3,12 @@
 /* ═══════════════════════════════════════════════════════════════
    TUNE THESE
    ═══════════════════════════════════════════════════════════════ */
+// shared DOM lookup, used by every js/ file (defined here because this file loads first)
+function el(id){ return document.getElementById(id); }
+
 const CFG = {
   GRID: 8,
-  DEV_MODE: true,        // shows the gear + developer panel; set false before release (also ignores saved panel overrides)
+  DEV_MODE: new URLSearchParams(location.search).has('dev'), // Admin panel only when the URL has ?dev (also ignores saved panel overrides otherwise)
   SNAP_RADIUS:   1,      // cells searched around the nearest grid spot (per axis) when it isn't valid
   SNAP_STICKY:   0.5,    // a shown ghost is kept until the piece drifts this many cells from it (0.5 = always the nearest slot)
   SNAP_GRACE:    150,    // ms after a ghost vanishes that releasing still places it
@@ -41,11 +44,9 @@ const CFG = {
   GOLDEN_MULT:     3,    // multiplier when she finds it: clears at least (planned lines - 1), min 1 (a planned sweep: 3+ lines)
   GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
-  FREE_RESCUES: 1,       // rescues every run starts with (first one is never behind an ad)
-  MAX_RESCUES: 2,        // most rescues one run can use
+  MAX_RESCUES: 2,        // most rescues one run can use; both are free
   RESCUE_FLOOR: 300,     // offer a rescue only above this score...
   RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
-  ADS_EVERY: 3,
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
   // juice — the feel layer (all toggleable from the Admin panel)
   FX_CHUNKS:      true,   // cleared gems burst outward as whole blocks (not slivers), away from where you placed
@@ -109,5 +110,5 @@ const CFG = {
   SND_PLACE_VOL:  1,
   PHONE_SPEAKER:  false,      // synth sounds only: cut the bass a phone speaker can't play (it just distorts)
 
-  SHOW_TENSION: true     // set false to hide the debug readout
+  SHOW_TENSION: false    // debug readout; off for the player (Admin can turn it on)
 };

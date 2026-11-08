@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-08, after the file split (plan PR 1.1).
+Last updated 2026-11-08, after the player build cleanup (plan PR 1.3).
 
 ---
 
@@ -65,17 +65,16 @@ Last updated 2026-11-08, after the file split (plan PR 1.1).
   Vault, Volcano, Starfield, Storm) that also multiply points; discovering one
   adds its world to the home picker (`TRANSFORM_*`).
 - **Blast Round** — meter-triggered timed bonus round (below).
-- **Rescues** — on game over (if the run is worth saving): first is free, the
-  second costs a rewarded ad, max 2 per run. A rescue serves a sweep/jackpot
+- **Rescues** — on game over (if the run is worth saving): up to 2 per run, both
+  free ("Keep going"). A rescue serves a sweep/jackpot
   hand from `genRescue` — she still has to find the play.
 - **Look**: themes (Classic default, Night, Daylight, Cotton Candy, Mint,
   Paper), home worlds (10, each with an ambient effect), tile skins (Blocks
   default, Jewels, Clay; Candy/Glass/Neon/Pixel unlock by best score), motifs.
 - **Settings** (player-facing, pauses the game): look + sound, saved as her
   defaults. **Admin** panel (all tuning sliders and test buttons) is reached
-  from Settings' footer only while `CFG.DEV_MODE` is on.
-- Ads are faked (`Ads` object, countdown screen); interstitial every
-  `ADS_EVERY` game overs.
+  from Settings' footer only when the URL has `?dev` (`CFG.DEV_MODE`).
+- No ads, ever. Crumble is a family game; there is no ad code in the game.
 - PWA: `manifest.json`, apple-touch icons, `viewport-fit=cover` with
   safe-area insets in the CSS and `layout()` (via the `#safe` probe).
   `tools/make-icon.html` regenerates the icons.
@@ -88,9 +87,8 @@ Last updated 2026-11-08, after the file split (plan PR 1.1).
 
 | File | Contents |
 |---|---|
-| `js/config.js` | `CFG` |
+| `js/config.js` | `el` helper, `CFG` |
 | `js/worlds.js` | `GEMS`, worlds, themes, ambient particles, flip |
-| `js/ads.js` | `Ads` (faked) |
 | `js/shapes.js` | `RAW`/`SHAPES`, shared state vars, helpers |
 | `js/solver.js` | solver, `genTray`/`genRescue`, praise, `updateDbg` |
 | `js/render.js` | `layout`, tile renderers, `SKINS`, `buildCache` |
@@ -110,7 +108,6 @@ Top to bottom:
    only) and a prismatic star gem (star pieces only).
 3. **Worlds and themes** — `HOME_WORLDS`, `TRANSFORMS`, `BLAST_WORLD`,
    `THEMES`, `applyTheme`, ambient particles.
-4. **`Ads`** — three methods, currently faked. The *only* ad code in the file.
 5. **`SHAPES`** — 37 pieces parsed from ASCII art (`RAW`), plus `STAR`.
 6. **The solver** — `packGrid` / `placeMasks` / `applyBits` / `evalHand`,
    `planSweep` and friends, `pickTier`, `genGolden`, `genTray`, `genRescue`.
@@ -142,6 +139,7 @@ Top to bottom:
 | #5 | Kid feedback: magnet snap, Classic + Blocks default, guided hands |
 | #6 | Magnet tune: seats only near the slot, tighter finger tracking |
 | (1.2) | Playwright harness (`tests/`) + GitHub Action; no game changes |
+| (1.3) | Player build: Admin only with `?dev`, tension readout off, ads removed, both rescues free |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -362,8 +360,7 @@ up to three shapes, then `evalHand` verifies before it's served. Falls back
 silently if any step fails. Gated by `SWEEP_COOLDOWN`.
 
 A debug readout (top-left, under the score) shows live tension and the tier
-just served. `CFG.SHOW_TENSION: false` hides it. **Turn this off before
-shipping** (see the release checklist).
+just served. Off by default (`CFG.SHOW_TENSION: false`); Admin can turn it on.
 
 ---
 
@@ -388,11 +385,11 @@ Done since the first handoff: safe-area insets, PWA wrapper, rescues.
 
 ### 1. Save / resume + best score
 
-Thin `Save` wrapper alongside `Ads`, same pattern — one place to change, and
+Thin `Save` wrapper, same pattern — one place to change, and
 it should no-op cleanly when storage is unavailable rather than throwing.
 
 Persist on every placement: board, score, combo, tension, sweepCool, tray,
-rescues/rescuesUsed, golden/blast/transformation state (or simply end those on
+rescuesUsed, golden/blast/transformation state (or simply end those on
 resume). Separately persist `best` — it currently resets every launch, which
 also means skin unlocks only count the current session's best. On load, resume
 automatically (she wants auto-resume, not save slots). Must survive a
@@ -403,18 +400,7 @@ force-close, so write on `visibilitychange` too, not only on placement.
 Rescues exist on the game-over card only. Add the mid-run version: dimmed
 until genuinely out of moves, then spends a rescue the same way.
 
-### 3. Real ads
-
-Swap the method bodies in `Ads`. Nothing else should need to change.
-
-- **Web:** Poki / CrazyGames / GameDistribution SDK. `commercialBreak()` and
-  `rewardedBreak()`. No app store, no review.
-- **iOS native:** Capacitor + `@capacitor-community/admob`.
-
-Interstitials stay capped (`ADS_EVERY`) and never fire mid-round. Rewarded
-video is the one that actually pays.
-
-### 4. Capacitor / native iOS (only if the PWA proves it's worth it)
+### 3. Capacitor / native iOS (only if the PWA proves it's worth it)
 
 ```
 npm i @capacitor/core @capacitor/cli @capacitor/ios
@@ -432,9 +418,7 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 
 ### Release checklist (before anyone but her plays it)
 
-- `CFG.DEV_MODE: false` (hides Admin and ignores saved panel overrides)
-- `CFG.SHOW_TENSION: false` (hides the debug readout)
-- Real `Ads` bodies, or remove the fake ad screen
+- Nothing to flip: Admin needs `?dev` in the URL, and the debug readout is off by default.
 
 ---
 
@@ -456,7 +440,7 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 | `SHAKE` / `SPARKLE_RATE` / `FX_*` | visual intensity, each effect switchable |
 | `GEMS` hues | recolor everything |
 | `THEME` / `STYLE` / `HOME_WORLD` / `MOTIF` | default look (a saved Settings choice overrides) |
-| `SHOW_TENSION` / `DEV_MODE` | debug readout / Admin panel — off before shipping |
+| `SHOW_TENSION` / `DEV_MODE` | debug readout (off by default) / Admin panel (needs `?dev`) |
 
 Most of these are live sliders in the Admin panel, with a "Copy settings"
 button to paste back into `CFG`.

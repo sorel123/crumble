@@ -25,7 +25,7 @@ const STAR={cells:[[0,0]],rows:1,cols:1,n:1,star:true};
 const cvs=el('c'), ctx=cvs.getContext('2d'), safeProbe=el('safe');
 const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
-let grid,tray,score=0,best=0,combo=0,rescues=0,rescuesUsed=0,deaths=0;
+let grid,tray,score=0,best=0,combo=0,rescuesUsed=0;
 let tension=0, sweepCool=0, lastTier='—', trayNo=0;
 let starForced=false;   // a big combo guaranteed the next normal tray a star gem
 let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts}
