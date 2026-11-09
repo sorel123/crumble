@@ -2063,6 +2063,44 @@ test('pressure on screen (6.6): follows phase and room, lets go with a relief fl
 
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
+test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tint the screen around the board, never a gem, and fade out', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const settle = () => page.waitForTimeout(1500);
+  const read = () => page.evaluate(() => ({ ...lk }));
+  // a pixel in the top-left corner margin (where the vignette is darkest) and one gem pixel
+  const px = () => page.evaluate(() => { grid[4][4] = 2; shake = 0; const g = (x, y) => { const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data; return [d[0], d[1], d[2]]; };
+    return { corner: g(3, 3), gem: g(bx + 4.5 * cell, by + 4.5 * cell) }; });
+  await settle(); const base = await px(); const l0 = await read();
+  assert.ok(l0.bonus < 0.02 && l0.gold < 0.02 && l0.adv < 0.02 && l0.daily < 0.02, 'Endless with nothing live shows no mode look: ' + JSON.stringify(l0));
+  const moved = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));   // largest channel move (a gem's own sheen drifts by a few)
+  // bonus: violet; entrance flash; the corner changes, the gem does not
+  await page.evaluate(() => { startBonus(); });
+  await page.waitForTimeout(150);
+  assert.ok((await read()).flash > 0.3, 'a bonus starts with a flash');
+  await settle();
+  const b = await px(); assert.ok((await read()).bonus > 0.8, 'bonus look is up');
+  assert.ok(moved(b.corner, base.corner) > 8, 'the corner margin is tinted during a bonus: ' + base.corner + ' -> ' + b.corner);
+  assert.ok(moved(b.gem, base.gem) <= 5, 'a gem pixel is untouched: ' + base.gem + ' vs ' + b.gem);
+  await page.evaluate(() => { bonus = null; }); await settle();
+  assert.ok((await read()).bonus < 0.05, 'and it fades out when the bonus ends');
+  // golden hand
+  await page.evaluate(() => { golden = { want: { lines: 3, sweep: false }, got: { lines: 0, sweep: false }, pts: 0, plan: { lines: 3, sweep: false, ids: [] } }; });
+  await settle(); const g = await px();
+  assert.ok((await read()).gold > 0.8 && moved(g.corner, base.corner) > 8, 'golden tints the margins');
+  assert.ok(moved(g.gem, base.gem) <= 5, 'golden leaves the gem alone');
+  await page.evaluate(() => { golden = null; }); await settle();
+  // Adventure: the ring fills with the goal; Daily: its own tint
+  await page.evaluate(() => { mode = 'adventure'; lvl = LEVELS.find(l => l.goal.type === 'lines') || LEVELS[0]; lv = { lines: Math.floor(lvl.goal.n / 2), pieces: 3, combo: 0, swept: false }; });
+  await settle();
+  const a = await read(); assert.ok(a.adv > 0.8 && a.prog > 0.3 && a.prog < 0.8, 'Adventure look is up and the ring shows half the goal: ' + JSON.stringify(a));
+  const ap = await px(); assert.ok(moved(ap.corner, base.corner) > 5 && moved(ap.gem, base.gem) <= 5, 'Adventure tints the margin, not the gem');
+  await page.evaluate(() => { mode = 'daily'; lvl = null; }); await settle();
+  const d = await read(); assert.ok(d.daily > 0.8 && d.adv < 0.05 && d.prog === 0, 'Daily look replaces Adventure: ' + JSON.stringify(d));
+  await page.evaluate(() => { mode = 'endless'; }); await settle();
+  assert.ok((await read()).daily < 0.05, 'back in Endless the look is gone');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
