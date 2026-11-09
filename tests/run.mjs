@@ -1644,6 +1644,46 @@ test('playing a piece counts the day and a reached goal shows its banner in a re
   assert.equal(await page.evaluate(() => goals.streak.cur), 1);
 });
 
+// ── share card (plan 4.4) ──
+test('share card: a 1080x1350 picture of the board and score; Share shows only after an Endless or Daily game over', async ({ page }) => {
+  await play(page); await dealt(page);
+  await setup(page, { rows: EMPTY });
+  await page.evaluate(() => { mode = 'adventure'; });
+  await page.evaluate(() => { score = 0; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isHidden('#shareBtn'), true);
+  await page.evaluate(() => { state = 'play'; mode = 'endless'; score = 420; best = 420; gameOver(); });
+  assert.equal(await page.isVisible('#shareBtn'), true);
+  const dims = await page.evaluate(() => { const c = drawShareCard(shareData()); return [c.width, c.height, c.getContext('2d').getImageData(540, 400, 1, 1).data.length]; });
+  assert.deepEqual(dims.slice(0, 2), [1080, 1350]);
+});
+
+test('share card: Share hands the picture to the share sheet when the browser can take files', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { mode = 'endless'; score = 300; best = 300; });
+  await page.evaluate(() => { gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  await page.evaluate(() => {
+    window.__shared = null;
+    navigator.canShare = () => true;
+    navigator.share = async d => { window.__shared = { name: d.files[0].name, type: d.files[0].type, size: d.files[0].size }; };
+  });
+  await page.click('#shareBtn');
+  await page.waitForFunction(() => window.__shared);
+  const s = await page.evaluate(() => window.__shared);
+  assert.equal(s.name, 'crumble-score.png'); assert.equal(s.type, 'image/png'); assert.ok(s.size > 5000);
+});
+
+test('share card: where the share sheet cannot take files, the picture is saved instead', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { mode = 'daily'; score = 250; });
+  await page.evaluate(() => { gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  await page.evaluate(() => { Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true }); });
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#shareBtn')]);
+  assert.equal(dl.suggestedFilename(), 'crumble-score.png');
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 for (const { name, fn } of tests) {

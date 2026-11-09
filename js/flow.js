@@ -23,6 +23,7 @@ async function gameOver(){
   const btn=el('reviveBtn');
   btn.hidden=!rescueAllowed(prevBest);
   btn.textContent='Keep going';
+  shareSetup();                                      // (4.4) Share shows for Endless and Daily runs only
   el('overCard').hidden=false;
 }
 // a rescue is on offer while she has one left and the run is worth saving (the game-over card and the mid-run button share this)
