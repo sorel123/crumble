@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after the relaxed opening (plan PR 3.1).
+Last updated 2026-11-09, after save and resume (plan PR 3.3).
 
 ---
 
@@ -58,7 +58,8 @@ Last updated 2026-11-09, after the relaxed opening (plan PR 3.1).
     worlds (`saveSkinSave` / `loadSkinSave`, `lookV` for one-time migrations).
   - `crumble.dev.5` — Admin panel tuning overrides. Bump the key when defaults
     change so old saved tuning doesn't mask them.
-  - **Not saved yet:** the current run and the best score (task 1).
+  - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved; a live transformation or Blast Round is not (it ends on restore). Effects in flight are not saved. **Undo (3.2) should reuse `snapshot()`/`restore()`** (both pure, no storage).
+  - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore`), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
 
@@ -111,6 +112,7 @@ Last updated 2026-11-09, after the relaxed opening (plan PR 3.1).
 | `js/game.js` | `place`, Blast Round, input |
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
+| `js/save.js` | `snapshot`/`restore`, run autosave, best + stats |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
 | `js/main.js` | boot |
@@ -160,6 +162,7 @@ Top to bottom:
 | (2.2) | Frame budget: next tray dealt in slices after the clear, particle budget follows frame time, `?dev` frame readout, cache churn fixes |
 | (2.3) | Calm clears: everyday clears are a squash + point tags + one praise word; slam, orbs, COLOR GONE, fireworks, punch zoom from combo 3 (`CFG.BIG_COMBO`); `CFG.SPECIALS` (default off) pauses golden hands, star gems, transformations and Blast Round |
 | (3.1) | Relaxed opening: seeded opening board + verified first tray (a clear within the first move); no special in trays 1-5 (`SPECIAL_FROM_TRAY`); Blast meter, idle drain and auto-start removed |
+| (3.3) | Save and resume: `js/save.js` (`snapshot`/`restore`, autosave, `crumble.run`), best score and lifetime stats persisted (`crumble.stats`), `clearRunFx()` split out of `start()` |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
