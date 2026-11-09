@@ -47,6 +47,36 @@ test('dropping off the board returns the piece to the tray', async ({ page }) =>
   assert.deepEqual(after.tray, before.tray);
 });
 
+test('a press near a tray piece (below it, beside it, in an empty slot) still picks one up', async ({ page }) => {
+  await play(page);
+  const g = await geometry(page);
+  const press = async (x, y) => {
+    await page.mouse.move(x, y); await page.mouse.down();
+    const i = await page.evaluate(() => drag ? drag.i : -1);
+    await page.mouse.up();
+    return i;
+  };
+  const c = g.trayCenters;
+  assert.equal(await press(c[1].x, c[1].y + 70), 1, 'well below the piece, same column');
+  assert.equal(await press(c[2].x + 40, c[2].y), 2, 'off to the side of the piece');
+  assert.equal(await page.evaluate(() => { const r = slotRect(0); return pickAt(r.x + r.w / 2, by + B - 10); }), -1, 'on the board itself is not the tray');
+  await page.evaluate(() => { tray[1] = null; });
+  assert.notEqual(await press(c[1].x, c[1].y), -1, 'an empty slot hands off to the nearest piece');
+});
+
+test('a press while the new tray is dealing grabs a piece the moment it appears', async ({ page }) => {
+  await play(page);
+  const g = await geometry(page);
+  await page.evaluate(() => { dealing = { it: (function* () { while (!window.__go) yield; })(), wait: 0 }; });
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y);
+  await page.mouse.down();
+  assert.equal(await page.evaluate(() => drag), null, 'nothing yet while dealing');
+  await page.evaluate(() => { window.__go = true; });
+  await dealt(page);
+  await page.waitForFunction(() => drag && drag.i === 0, null, { timeout: 2000 });
+  await page.mouse.up();
+});
+
 test('a drop with nowhere to land is refused', async ({ page }) => {
   await play(page);
   // Board full except one cell: the L piece fits nowhere, so no nearby slot can pull it in.
