@@ -47,7 +47,7 @@ const CFG = {
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
   // juice — the feel layer (all toggleable from the Admin panel)
   FX_CHUNKS:      true,   // cleared gems burst outward as whole blocks (not slivers), away from where you placed
-  FX_SCORE_ORBS:  true,   // every cleared gem sends a glowing orb to the score, which bumps when they land
+  FX_SCORE_ORBS:  true,   // (combo BIG_COMBO+) every cleared gem sends a glowing orb to the score, which bumps when they land
   FX_LAND_BUMP:   true,   // a placed piece thumps in (quick squash + ring) instead of appearing
   FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
@@ -60,7 +60,7 @@ const CFG = {
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
   FX_CELL_TAGS:   true,   // a little point value appears on every cleared cell
-  FX_COMBO_SLAM:  true,   // headline "COMBO n" slams in on every consecutive clear, with fireworks
+  FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
   COLOR_GONE_BONUS: 60,   // points per colour wiped off the board by a clear ("COLOR GONE!")
 
   // Blast Round — the bonus round. A meter fills with clears (and drains while you dawdle);
@@ -80,6 +80,8 @@ const CFG = {
   STAR_COMBO:    6,      // a combo this high (or higher) guarantees one in the next normal tray
 
   GOLDEN_ENABLED: true,  // master switch for golden hands
+  SPECIALS: false,       // one switch for the rare specials together: golden hands, star gems, transformations, Blast Round. Off for now (plan 2.3); each is rebuilt and switched back on later. The per-special switches still apply when this is on
+  BIG_COMBO: 3,          // the loud celebration (COMBO slam, score orbs, COLOR GONE band, fireworks, punch zoom) starts at this combo; every clear below it is calm: a squash, point tags and one praise word
 
   LIFT:          1.0,    // cells between the finger and the bottom edge of the dragged piece (same gap for every piece height)
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
@@ -99,7 +101,7 @@ const CFG = {
   FX_GOLD_TINT:      true,   // faint full-screen gold wash while a golden hand is live
   FX_SWEEP_FX:       true,   // full-screen colour wash + confetti on a clean sweep
   FX_TENSION_BORDER: true,   // board border glow: calm (cool) -> warm as tension rises
-  FX_PUNCH_ZOOM:     true,   // brief 2-3% punch zoom on a 2+ line clear
+  FX_PUNCH_ZOOM:     true,   // (combo BIG_COMBO+) brief 2-3% punch zoom
 
   // sound — variant + volume for the two most-heard effects, set on the settings panel
   SND_SET:        'original', // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)

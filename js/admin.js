@@ -3,6 +3,7 @@
 /* ═══════ developer panel ═══════
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]
+  ['SPECIALS','Specials (golden, star, transformations, Blast) — master'],
   ['GOLDEN_ENABLED','Golden Hand'],
   ['STAR_ENABLED','Star Gem'],
   ['TRANSFORM_ENABLED','Transformations'],
@@ -14,13 +15,13 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['FX_TENSION_BORDER','Tension border glow'],
   ['FX_PUNCH_ZOOM','Punch zoom on clears'],
   ['FX_CHUNKS','Clears burst into blocks'],
-  ['FX_SCORE_ORBS','Score orbs fly to counter'],
+  ['FX_SCORE_ORBS','Score orbs fly to counter (combo 3+)'],
   ['FX_LAND_BUMP','Landing thump'],
   ['FX_PICKUP_GROW','Pickup grow-in'],
   ['FX_LINE_PREVIEW','Coloured line preview'],
   ['FX_CELL_TAGS','Point tags on cleared cells'],
   ['FX_MAGNET','Magnet: piece hops into its slot (off = glide + ghost)'],
-  ['FX_COMBO_SLAM','COMBO slam + fireworks'],
+  ['FX_COMBO_SLAM','COMBO slam + fireworks (combo 3+)'],
   ['BLAST_ENABLED','Blast Round'],
   ['SHOW_TENSION','Debug readout']
 ];

@@ -24,7 +24,7 @@ function mobility(){
 
 // ═══ transformations — achievement-triggered event looks (own world + own tile skin) ═══
 function triggerTransform(id){
-  if(!CFG.TRANSFORM_ENABLED || blast) return;    // a Blast Round owns the screen while it runs
+  if(!CFG.SPECIALS || !CFG.TRANSFORM_ENABLED || blast) return;    // a Blast Round owns the screen while it runs
   if(!transform && transformCool>0) return;   // quiet period after one ends — makes the next feel earned
   const first=!discoveredWorlds.has(id);
   transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
@@ -62,7 +62,7 @@ function endBlast(){
 }
 // the bar by the board: the meter filling (gold) in normal play, the timer draining (hot) during a round
 function drawBlastBar(now){
-  if(!CFG.BLAST_ENABLED) return;
+  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED) return;
   const above=by-hudH>=26, h=6, y=above?by-14:by+B+10, x0=bx+4, w=B-8;
   const f=blast?clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1):blastMeter;
   if(!blast && f<0.01) return;
@@ -82,7 +82,7 @@ function drawBlastBar(now){
   if(!blast&&f>=1){ ctx.globalAlpha=0.4+0.4*pulse; ctx.fillStyle='#fff'; ctx.fillText(label,x0,above?y-4:y+h+13); ctx.globalAlpha=1; }
 }
 function stepBlast(now,dt){
-  if(!CFG.BLAST_ENABLED || state!=='play' || paused) return;
+  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED || state!=='play' || paused) return;
   if(blast){
     if(!dealing) blast.t-=dt*16.67;                  // the clock waits while her next hand is being dealt (she can't pick up)
     if(blast.t<=0) endBlast();
@@ -140,11 +140,12 @@ function place(idx,r,c){
 
   if(total>0){
     ambientBurst=1;
-    if(CFG.FX_PUNCH_ZOOM && !reduce && total>=2) punchT=1;
+    const loud=combo+1>=CFG.BIG_COMBO;                // combo is bumped just below; this clear's own number
+    if(CFG.FX_PUNCH_ZOOM && !reduce && loud && total>=2) punchT=1;
     hitWait=reduce?0:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
     if(s.star && total>=2) triggerTransform('starfield');
     combo++; trayCombo=Math.max(trayCombo,combo);
-    if(CFG.STAR_ENABLED && combo>=CFG.STAR_COMBO) starForced=true;
+    if(CFG.SPECIALS && CFG.STAR_ENABLED && combo>=CFG.STAR_COMBO) starForced=true;
     if(combo>=5) triggerTransform('volcano');
     if(combo>=7) triggerTransform('storm');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
@@ -171,17 +172,17 @@ function place(idx,r,c){
       maxDelay=Math.max(maxDelay,delay);
       cellsGone.push([rr,cc,delay]);
       shatters.push({r:rr,c:cc,gi:g.gi,horiz,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
-      if(CFG.FX_SCORE_ORBS && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
+      if(CFG.FX_SCORE_ORBS && loud && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
         dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
     });
-    if(CFG.FX_SCORE_ORBS && !reduce) scoreHold=Math.max(scoreHold,performance.now()+(maxDelay+5)/60*1000+ORB_MS*0.8);
+    if(CFG.FX_SCORE_ORBS && loud && !reduce) scoreHold=Math.max(scoreHold,performance.now()+(maxDelay+5)/60*1000+ORB_MS*0.8);
     // COLOR GONE — a clear that wipes the last of a colour off the board
     const colorsAfter=new Set();
     for(let rr=0;rr<N;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]) colorsAfter.add(grid[rr][cc].gi);
     const gone=[...colorsBefore].filter(gi=>!colorsAfter.has(gi));
     let colorBonus=0;
-    if(gone.length && colorsAfter.size>0 && CFG.COLOR_GONE_BONUS>0){
+    if(loud && gone.length && colorsAfter.size>0 && CFG.COLOR_GONE_BONUS>0){
       colorBonus=Math.round(CFG.COLOR_GONE_BONUS*gone.length*(1+(combo-1)*0.25));
       gained+=colorBonus;
       bands.push({t:-(maxDelay+8),txt:gone.length>1?gone.length+' COLORS GONE!':'COLOR GONE!',sub:'+'+colorBonus,
@@ -194,12 +195,12 @@ function place(idx,r,c){
       cellsGone.forEach(([rr,cc,delay])=>tags.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,txt:String(per),t:-(delay+4)}));
     }
     // the headline: COMBO n slams in under the board centre, with fireworks; bigger streak = bigger word
-    if(CFG.FX_COMBO_SLAM && combo>=2){
+    if(CFG.FX_COMBO_SLAM && loud){
       slams.length=0;
       slams.push({t:-(reduce?0:maxDelay+7),txt:'COMBO '+combo,n:combo});
       if(!reduce) for(let k=0;k<Math.min(5,1+combo);k++) spawnFirework(bx+B*(0.15+0.7*Math.random()),by+B*(0.1+0.5*Math.random()),null,maxDelay+7+k*4);
       if(combo>=3) borderFlash={t:-(maxDelay+7),col:combo>=5?'255,123,213':'255,212,92'};
-    } else if(!reduce) spawnFirework(bx+cc0*cell,by+Math.min(cr,N-1.5)*cell,null,maxDelay+6);   // even a single clear gets a burst
+    } else if(!reduce && loud) spawnFirework(bx+cc0*cell,by+Math.min(cr,N-1.5)*cell,null,maxDelay+6);   // even a single clear gets a burst
 
     waves.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.07});
     glowT=1; glowH=GEMS[lastGi].h;
@@ -214,9 +215,10 @@ function place(idx,r,c){
     const beat=(reduce?0:CFG.CLEAR_BLINK)/60+.02;                        // lands as the blink turns into the pop
     if(combo>1) Sfx.combo(combo,total,beat); else Sfx.clear(total,beat);
     // the points number sits high on the board's right side, clear of the COMBO slam and the COLOR GONE band
-    const popY=CFG.FX_COMBO_SLAM?by+cell*1.2:by+cr*cell, popX=CFG.FX_COMBO_SLAM?bx+B-cell*1.6:bx+cc0*cell;
+    const slammed=CFG.FX_COMBO_SLAM&&loud;
+    const popY=slammed?by+cell*1.2:by+cr*cell, popX=slammed?bx+B-cell*1.6:bx+cc0*cell;
     pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n),
-               sub:(CFG.FX_COMBO_SLAM&&combo>1)?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
+               sub:slammed?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
     // clean sweep — board completely emptied
     let anyLeft=false;
@@ -238,7 +240,7 @@ function place(idx,r,c){
     tension=Math.max(0,tension-CFG.TENSION_DOWN);
     lastClearAt=performance.now();
     if(blast){ blast.t=Math.min(CFG.BLAST_SECONDS*1000,blast.t+total*CFG.BLAST_ADD*1000+(swept?5000:0)); blast.lines+=total; }
-    else if(CFG.BLAST_ENABLED) blastMeter=Math.min(1,swept?1:blastMeter+total*CFG.METER_LINE+(combo>1?CFG.METER_COMBO:0));
+    else if(CFG.SPECIALS && CFG.BLAST_ENABLED) blastMeter=Math.min(1,swept?1:blastMeter+total*CFG.METER_LINE+(combo>1?CFG.METER_COMBO:0));
   } else {
     combo=0;
     tension=Math.min(1,tension+CFG.TENSION_UP);
@@ -275,7 +277,7 @@ function place(idx,r,c){
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
-  if(!blast && CFG.BLAST_ENABLED && blastMeter>=1 && !transform) startBlast();   // deals a fresh big-piece tray itself
+  if(!blast && CFG.SPECIALS && CFG.BLAST_ENABLED && blastMeter>=1 && !transform) startBlast();   // deals a fresh big-piece tray itself
   if(!bestBeaten && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
     bestBeaten=true;
     pushBanner('NEW BEST!','',"#8FF7FF");
@@ -283,7 +285,7 @@ function place(idx,r,c){
     glowT=Math.max(glowT,1.4); Sfx.praise(3);
   }
   if(tray.every(v=>!v) && !dealing){                // (a Blast Round that just started is already dealing its own hand)
-    goldenNext = CFG.GOLDEN_ENABLED && goldenCool<=0 && !transform      // a live transformation already is the moment
+    goldenNext = CFG.SPECIALS && CFG.GOLDEN_ENABLED && goldenCool<=0 && !transform      // a live transformation already is the moment
       && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
     trayHadSweep=false; trayCombo=0;
     dealLater();

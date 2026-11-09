@@ -263,7 +263,7 @@ function* genGoldenSteps(a0,density){
 function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
   trayNo++;
-  if(CFG.TRANSFORM_ENABLED && Math.random()<CFG.MYSTERY_CHANCE)
+  if(CFG.SPECIALS && CFG.TRANSFORM_ENABLED && Math.random()<CFG.MYSTERY_CHANCE)
     triggerTransform(TRANSFORM_IDS[(Math.random()*TRANSFORM_IDS.length)|0]);
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
@@ -273,9 +273,9 @@ function* dealSteps(){
   transformCool=Math.max(0,transformCool-1);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
-  const wantStar=CFG.STAR_ENABLED && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
+  const wantStar=CFG.SPECIALS && CFG.STAR_ENABLED && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
 
-  if(goldenNext && !blast){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }
+  if(goldenNext && !blast && CFG.SPECIALS){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }
 
   if(blast){                                        // Blast Round: a sweep if one can be built, else the best big-piece jackpot hand
     const h=yield* planSweepSteps(a0);
@@ -373,6 +373,6 @@ function updateDbg(){
   if(d.hidden) return;
   const gold=golden?`GOLDEN plan ${golden.want.sweep?'sweep':golden.want.lines+' lines'}, need ${goldenNeed(golden.want)}, got ${golden.got.sweep?'sweep+':''}${golden.got.lines} lines, ${golden.pts} pts`
     :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
-  const star=!CFG.STAR_ENABLED?'star off':starForced?'star guaranteed':'star on';
+  const star=!CFG.SPECIALS||!CFG.STAR_ENABLED?'star off':starForced?'star guaranteed':'star on';
   d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star} · meter ${blastMeter.toFixed(2)}`;
 }

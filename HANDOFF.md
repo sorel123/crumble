@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-08, after the frame budget pass (plan PR 2.2).
+Last updated 2026-11-09, after calm clears (plan PR 2.3).
 
 ---
 
@@ -67,6 +67,8 @@ Last updated 2026-11-08, after the frame budget pass (plan PR 2.2).
 - 8×8 board, drag-and-drop with magnet snap (one finger, one landing rule — see plan 2.1 below), line-clear preview in the piece's
   colour, 37 shapes (`RAW`).
 - Hand solver + tension wave (below) — every tray is fully playable in some order.
+- **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
+- **Specials are paused:** `CFG.SPECIALS: false` switches off golden hands, star gems, transformations and Blast Round together (the code is untouched; Jay wants them back later, rebuilt to be a real highlight). Flip it in `config.js` or the Admin panel (`?dev`) to see them; the per-special switches apply when it is on. Sections below still describe them as designed.
 - Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
@@ -155,6 +157,7 @@ Top to bottom:
 | (2.1) | Drag rewrite: one finger, one landing rule, piece seated or exactly at the finger, bottom-anchored lift |
 | (2.1b) | Drag glides: piece always exactly at the finger, a ghost marks the landing slot (seating was "sticky, jumpy" on the phone) |
 | (2.2) | Frame budget: next tray dealt in slices after the clear, particle budget follows frame time, `?dev` frame readout, cache churn fixes |
+| (2.3) | Calm clears: everyday clears are a squash + point tags + one praise word; slam, orbs, COLOR GONE, fireworks, punch zoom from combo 3 (`CFG.BIG_COMBO`); `CFG.SPECIALS` (default off) pauses golden hands, star gems, transformations and Blast Round |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:

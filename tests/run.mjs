@@ -285,6 +285,51 @@ test('every piece floats the same height above the finger', async ({ page }) => 
 // empties the tray. The few gems left at the bottom keep it from being a clean sweep.
 const THREE_LINES = ['01111111', '01111111', '01111111', '00000000', '00000000', '11000011', '10000001', '11000011'];
 
+test('calm clears: an everyday clear is a squash, point tags and one praise word; combo 3+ brings the loud stuff', async ({ page }) => {
+  await play(page);
+  const loud = () => page.evaluate(() => ({ tags: tags.length, praises: praises.length, slams: slams.length, orbs: orbs.length, bands: bands.length, punch: punchT, combo }));
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const calm = await loud();
+  assert.equal(calm.combo, 1);
+  assert.ok(calm.tags > 0 && calm.praises === 1, 'point tags and one praise word');
+  assert.deepEqual([calm.slams, calm.orbs, calm.bands, calm.punch], [0, 0, 0, 0], 'no slam, orbs, band or punch zoom');
+  await dealt(page);
+  await page.evaluate(() => { combo = 1; });                  // this clear makes it combo 2: still calm
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const two = await loud();
+  assert.equal(two.combo, 2);
+  assert.deepEqual([two.slams, two.orbs], [0, 0], 'combo 2 is still calm');
+  await dealt(page);
+  await page.evaluate(() => { combo = 2; });                  // combo 3: the loud tier
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const big = await loud();
+  assert.equal(big.combo, 3);
+  assert.ok(big.slams === 1 && big.orbs > 0, 'slam and score orbs at combo 3');
+});
+
+test('specials are paused by one switch: no golden hand, star, transformation or Blast Round', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => CFG.SPECIALS), false, 'default is off');
+  const r = await page.evaluate(() => {
+    starForced = true; goldenNext = true; goldenCool = 0;
+    let stars = 0, golds = 0;
+    for (let i = 0; i < 40; i++) {
+      genTray();
+      stars += tray.filter(t => t && t.s.star).length; golds += golden ? 1 : 0;
+    }
+    triggerTransform('rainbow');
+    blastMeter = 1; lastClearAt = performance.now();
+    return { stars, golds, transform: !!transform, blast: !!blast };
+  });
+  assert.deepEqual(r, { stars: 0, golds: 0, transform: false, blast: false });
+  // ...and the switch brings them back
+  const on = await page.evaluate(() => { CFG.SPECIALS = true; triggerTransform('rainbow'); const t = !!transform; CFG.SPECIALS = false; return t; });
+  assert.equal(on, true, 'with SPECIALS on a transformation starts');
+});
+
 test('a 3-line clear: the next tray is dealt after the clear starts (frame times logged)', async ({ page }) => {
   await play(page);
   await watchFrames(page);
