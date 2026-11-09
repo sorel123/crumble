@@ -279,7 +279,8 @@ function place(idx,r,c){
     trayHadSweep=false; trayCombo=0;
     dealLater();
   }
-  if(!dealing) checkStuck();                          // otherwise checked once the new tray is dealt
+  stats.placed++; stats.lines+=total; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
+  if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
 function checkStuck(){ if(!tray.some(v=>v&&fitsAnywhere(v.s,grid))) setTimeout(gameOver,700); }
 
@@ -296,7 +297,7 @@ function stepDeal(){
   const end=performance.now()+CFG.DEAL_SLICE_MS;
   let r;
   do r=dealing.it.next(); while(!r.done && performance.now()<end);
-  if(r.done){ dealing=null; checkStuck(); }
+  if(r.done){ dealing=null; checkStuck(); saveRun(); }
 }
 function cancelDeal(){ if(dealing){ dealing.it.return(); dealing=null; } }   // a new run or a rescue deals its own tray
 

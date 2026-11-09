@@ -542,6 +542,116 @@ test('caches: text sprites evict one at a time, tile textures survive a look fli
 
 const controlled = page => page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 10000 });
 
+// Save and resume (plan 3.3). The page is reloaded in place, so localStorage survives like a force-quit.
+const reload = async page => { await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle')); };
+const runState = page => page.evaluate(() => ({ state, grid: grid.map(r => r.map(g => (g ? g.gi : -1))), tray: tray.map(t => (t ? [SHAPES.indexOf(t.s), t.gi] : null)),
+  score, combo, trayNo, tension, rescuesUsed, lastTier, carry: carry.map(s => SHAPES.indexOf(s)), startHidden: el('startCard').hidden, shown: el('scoreVal').textContent }));
+
+test('a force-quit mid-run reopens to the same board, tray, score and combo (the opening is not dealt again)', async ({ page, errors }) => {
+  await play(page);
+  const o = await page.evaluate(() => ({ r: grid.map(r => r.map(g => (g ? 1 : 0)).join('')), t: tray.map(t => SHAPES.indexOf(t.s)) }));
+  // play a few real placements so the saved state is not just the opening
+  for (let k = 0; k < 4; k++) {
+    const mv = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
+    if (!mv) break;
+    await dragPiece(page, mv.i, mv.r, mv.c);
+    await dealt(page);
+  }
+  await page.evaluate(() => { combo = 2; tension = 0.37; saveRun(); });      // a mid-combo state, saved as the game would
+  const before = await runState(page);
+  assert.ok(before.score > 0 && before.trayNo >= 1);
+  await reload(page);
+  const after = await runState(page);
+  assert.equal(after.state, 'play', 'it reopens straight into the run');
+  assert.equal(after.startHidden, true);
+  assert.deepEqual({ ...after, startHidden: 0, shown: 0 }, { ...before, startHidden: 0, shown: 0 });
+  assert.equal(after.shown, String(before.score), 'the HUD shows the saved score');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+  const g = await geometry(page);                                                         // and it is playable: a placement still works
+  const mv = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
+  const n0 = (await snap(page)).tray.filter(Boolean).length;
+  await dragPiece(page, mv.i, mv.r, mv.c);
+  const n1 = (await snap(page)).tray.filter(Boolean).length;
+  assert.ok(n1 === n0 - 1 || n1 === 3, 'a piece was placed after resuming (or the next tray was dealt)');
+  void o; void g;
+});
+
+test('snapshot() and restore() round-trip the run through plain JSON, with specials live', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    CFG.SPECIALS = true;
+    const g = { want: { sweep: false, lines: 2 }, got: { lines: 1, sweep: false }, pts: 40 };
+    golden = g; goldenNext = true; starForced = true; combo = 4; score = 321; rescuesUsed = 1; sweepCool = 3;
+    tray[1] = { s: STAR, gi: STAR_GI };
+    const a = JSON.parse(JSON.stringify(snapshot()));
+    start(); start();                                                                      // scramble everything
+    const ok = restore(a);
+    const b = JSON.parse(JSON.stringify(snapshot()));
+    return { ok, same: JSON.stringify(a) === JSON.stringify(b), star: tray[1].s.star, golden: !!golden, state };
+  });
+  assert.equal(r.ok, true); assert.equal(r.same, true); assert.equal(r.star, true); assert.equal(r.golden, true); assert.equal(r.state, 'play');
+});
+
+test('restore() refuses bad data and changes nothing', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const before = JSON.stringify(snapshot()), good = snapshot(), out = [];
+    const bad = [null, {}, { ...good, v: 2 }, { ...good, grid: good.grid.slice(1) }, { ...good, tray: [null] },
+      { ...good, grid: good.grid.map((r, i) => (i ? r : [99, ...r.slice(1)])) }, { ...good, tray: [{ s: 9999, gi: 0 }, null, null] }, { ...good, score: -5 }, { ...good, tension: 'x' }];
+    for (const b of bad) out.push(restore(b));
+    return { out, same: before === JSON.stringify(snapshot()) };
+  });
+  assert.ok(r.out.every(v => v === false)); assert.equal(r.same, true);
+});
+
+test('corrupt or missing saved data just opens the start card, no errors', async ({ page, errors }) => {
+  await page.evaluate(() => { localStorage.setItem('crumble.run', '{not json'); localStorage.setItem('crumble.stats', '[1,'); });
+  await reload(page);
+  assert.equal((await snap(page)).state, 'idle');
+  assert.equal(await page.isVisible('#startCard'), true);
+  await page.evaluate(() => localStorage.setItem('crumble.run', JSON.stringify({ v: 1, grid: 'no' })));
+  await reload(page);
+  assert.equal((await snap(page)).state, 'idle');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED|JSON/.test(e)), []);
+});
+
+test('best score and lifetime stats persist, and unlock skins before the first frame', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { score = 950; });
+  await page.evaluate(() => gameOver());
+  await page.waitForFunction(() => state === 'over');
+  const st = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.stats')));
+  assert.equal(st.best, 950); assert.equal(st.games, 1); assert.equal(st.totalScore, 950);
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.run')), null, 'a finished run is not kept');
+  await page.evaluate(() => localStorage.removeItem('crumble.skins'));                    // pretend the unlock list was lost: best alone must restore it
+  await reload(page);
+  const r = await page.evaluate(() => ({ state, best, shown: el('bestVal').textContent, glass: unlocked.has('glass'), candy: unlocked.has('candy'), neon: unlocked.has('neon') }));
+  assert.equal(r.state, 'idle'); assert.equal(r.best, 950); assert.equal(r.shown, '950');
+  assert.ok(r.glass && r.candy && !r.neon, 'skins up to 900 points are open');
+});
+
+test('lifetime stats count placements, lines, best combo and sweeps', async ({ page }) => {
+  await play(page);
+  await setup(page, { rows: ['11111110', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 7);
+  await dealt(page);
+  const s = await page.evaluate(() => ({ ...stats }));
+  assert.equal(s.placed, 1); assert.equal(s.lines, 1); assert.equal(s.bestCombo, 1); assert.equal(s.games, 1);
+  await page.evaluate(() => saveStats());
+  await reload(page);
+  assert.equal((await page.evaluate(() => stats.lines)), 1, 'stats survive a relaunch');
+});
+
+test('no storage: the game still plays', async ({ page, errors }) => {
+  await page.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('denied'); } }); });
+  await reload(page);
+  await play(page);
+  const mv = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
+  await dragPiece(page, mv.i, mv.r, mv.c);
+  assert.equal((await snap(page)).state, 'play');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
 test('the service worker takes control and caches the game', async ({ page }) => {
   await controlled(page);
   const cached = await page.evaluate(async () => (await (await caches.open((await caches.keys())[0])).keys()).length);
@@ -570,7 +680,7 @@ test('a new deploy shows "Update ready" after the run, and tapping it reloads on
   await page.waitForFunction(() => navigator.serviceWorker.getRegistration().then(r => !!r.waiting));
   await page.waitForTimeout(1300);
   assert.equal(await page.isVisible('#updateToast'), false, 'held back while a run is in progress');
-  await page.evaluate(() => { state = 'over'; });
+  await page.evaluate(() => { state = 'over'; clearRun(); });     // a finished run leaves nothing to resume
   await page.waitForSelector('#updateToast', { state: 'visible', timeout: 3000 });
   await Promise.all([page.waitForNavigation(), page.click('#updateToast')]);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);

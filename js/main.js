@@ -3,4 +3,7 @@
 loadSkinSave(); applyTheme(); buildSkinsUI(); buildSettingsUI();
 initDev();
 
-layout(); grid=empty(); resetWorld(); genTray(); updateDbg(); requestAnimationFrame(frame);
+loadStats(); checkUnlocks(); el('bestVal').textContent=best;     // best score first: it decides which skins are open
+layout(); grid=empty(); resetWorld();
+if(!loadRun()){ genTray(); updateDbg(); }                        // a saved run reopens exactly as it was (no opening is dealt)
+requestAnimationFrame(frame);
