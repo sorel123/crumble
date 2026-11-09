@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after pressure on screen (plan PR 6.6).
+Last updated 2026-11-09, after whole-screen mode looks (plan PR 6.7).
 
 ---
 
@@ -910,3 +910,20 @@ block in `js/draw.js` (`scr`, `pressureTarget`, `stepPressure`, `drawPressureWas
 - **Cost.** One fillRect, one drawImage of a 1/4-res cached vignette, one rim path with three strokes, one band fill. No per-frame allocations.
 - **Check on the phone:** play toward a cramped board: the rim should warm, the corners darken and the tray band deepen; clear out and a pale flash
   should wash the screen. Tune `p` caps in `pressureTarget` if it is too loud or too faint. Test: "pressure on screen (6.6)".
+
+## Whole-screen mode looks (plan 6.7)
+
+Jay: "during bonus type rounds, maybe whole screen animations". Four states readable from across the room, built on the 6.6 layer.
+Code is the "Whole-screen mode looks" block in `js/draw.js` (`lk`, `stepLooks`, `drawModeWash`, `drawModeRing`); no new switch except the
+existing `FX_GOLD_TINT` (gold). Everything is behind the gems (a tinted vignette that is clear over the whole board) or in a ring just *outside*
+the board frame (15 px out; the pressure / bonus rim is inside it), so gems and board material are never touched and no text is added.
+
+- **Bonus (violet):** violet wash and vignette pulsing with the rim, a soft band of light sweeping across the screen (period 4.2 s, 2.6 s on the last tray), a one-off flash when it starts. Extends 6.2's sky and rim; the sky world is unchanged.
+- **Golden hand (gold):** gold vignette on top of the old faint wash, plus a shimmering gold ring around the frame. Gone when the hand ends or is dead.
+- **Adventure (mint):** mint vignette and a ring that *fills with the goal* (`goalProgress()/goal.n`, eased) over a faint track: her progress, no numbers.
+- **Daily (coral):** coral vignette and a dashed ring that turns slowly (a "today only" ticket).
+- The ring is 15 px outside the frame but capped to the ~13 px phone margin (`o=max(6,min(15,bx-5))`), so it stays on screen. Bonus and gold are gated on `state==='play'` (nothing animates behind the game-over card); gold is skipped during Gold Vault; `resetLooks()` runs with `resetPressure()` and on a restored bonus.
+- All weights are eased (`lk.bonus/gold/adv/daily`, `dt*0.07`), so entering and leaving crossfade. Reduced motion: no sweep, no flash, static ring.
+- Pressure (6.6) still owns the board frame in Endless/Daily; a bonus halves the pressure wash as before. Colours are `TINTS`; tune the alphas in `drawModeWash` first if a look is too loud.
+- Test: "whole-screen mode looks (6.7)" (corner margin changes, a gem pixel does not, each fades out).
+

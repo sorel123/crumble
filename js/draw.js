@@ -118,6 +118,7 @@ function pressureTarget(){                              // {p, warm} for the cur
 function resetPressure(snap){                         // a new run (snap=false: eases from nothing) or a restored one (snap=true: already where it should be)
   const t=snap?pressureTarget():{p:0,warm:0};
   scr.p=t.p; scr.warm=t.warm; scr.relief=0; scr.ph=pace.ph;
+  resetLooks(snap);
 }
 function stepPressure(dt){
   const t=pressureTarget();
@@ -161,6 +162,77 @@ function drawTrayBand(){                               // the tray dims as the r
   const a=slotRect(0), z=slotRect(2);
   roundPath(ctx,a.x-6,a.y,z.x+z.w-a.x+12,a.h,14);
   ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); ctx.globalAlpha=1;
+}
+
+/* Whole-screen mode looks (plan 6.7). Four states she can read from across the room, each one eased weight in `lk`, drawn on the same
+   layer as the 6.6 pressure wash: BEHIND the gems (a tinted vignette that is clear over the whole board, a faint wash) and in a ring just
+   OUTSIDE the board frame. Block and board material are never touched, there is no new text.
+     bonus   violet: vignette, a slow band of light sweeping the screen (faster on the last tray), an entrance flash
+     golden  gold: vignette on top of the old gold wash, a shimmering gold ring
+     adventure  mint: vignette and a ring around the board that fills with the level's goal (her progress, readable without numbers)
+     daily   coral: vignette and a dashed ring that turns slowly (a "today only" ticket)
+   Reduced motion: no sweep, no flash, a static ring. Pressure (6.6) keeps the frame itself, so these never fight it. */
+const lk={bonus:0,gold:0,adv:0,daily:0,flash:0,was:false,prog:0};
+const TINTS={bonus:'110,60,230',gold:'200,140,10',adv:'20,150,120',daily:'230,90,80'};
+const _tv={};
+function tintVignette(key){                             // cached 1/4-res vignette per colour, rebuilt on resize
+  let t=_tv[key]; if(t&&t.W===W&&t.H===H&&t.B===B) return t.cv;
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(W*0.25)); cv.height=Math.max(1,Math.round(H*0.25));
+  const x=cv.getContext('2d'), w=cv.width, h=cv.height, g=x.createRadialGradient(w/2,h/2,Math.min(Math.hypot(w,h)/2-2,B*0.75*0.25),w/2,h/2,Math.hypot(w,h)/2);
+  g.addColorStop(0,`rgba(${TINTS[key]},0)`); g.addColorStop(1,`rgba(${TINTS[key]},1)`); x.fillStyle=g; x.fillRect(0,0,w,h);
+  _tv[key]={W,H,B,cv}; return cv;
+}
+let _band=null;
+function bandSprite(){                                  // a soft vertical band of light, one cached sprite
+  if(_band&&_band.H===H) return _band.cv;
+  const cv=document.createElement('canvas'); cv.width=64; cv.height=Math.max(1,Math.round(H*0.25));
+  const x=cv.getContext('2d'), g=x.createLinearGradient(0,0,64,0);
+  g.addColorStop(0,'rgba(220,190,255,0)'); g.addColorStop(.5,'rgba(235,215,255,1)'); g.addColorStop(1,'rgba(220,190,255,0)'); x.fillStyle=g; x.fillRect(0,0,64,cv.height);
+  _band={H,cv}; return cv;
+}
+function resetLooks(snap){                              // a new run (snap=false: fades in from nothing) or a restored one (snap=true: already up, no entrance flash)
+  lk.bonus=lk.gold=lk.adv=lk.daily=lk.flash=lk.prog=0; lk.was=!!(snap&&bonus);
+  if(snap&&bonus) lk.bonus=1;
+}
+function stepLooks(dt){
+  const play=state==='play', gl=golden&&goldenState()!=='dead';
+  const f=Math.min(1,dt*0.07);
+  lk.bonus+=((bonus&&play?1:0)-lk.bonus)*f;
+  lk.gold+=((gl&&play&&CFG.FX_GOLD_TINT&&!(transform&&transform.id==='goldvault')?1:0)-lk.gold)*f;   // Gold Vault is already gold: not doubled
+  lk.adv+=((mode==='adventure'&&lvl&&play?1:0)-lk.adv)*f;
+  lk.daily+=((mode==='daily'&&play?1:0)-lk.daily)*f;
+  if(bonus&&play&&!lk.was&&!reduce) lk.flash=1;
+  lk.was=!!bonus; lk.flash=Math.max(0,lk.flash-dt/40);
+  if(mode==='adventure'&&lvl&&lvl.goal) lk.prog+=(clamp(goalProgress()/lvl.goal.n,0,1)-lk.prog)*Math.min(1,dt*0.12);
+  else lk.prog=0;
+}
+function drawModeWash(now){                             // behind the board, after the pressure wash
+  const tv=(key,a)=>{ if(a>0.01){ ctx.globalAlpha=a; ctx.drawImage(tintVignette(key),0,0,W,H); } };
+  if(lk.bonus>0.01){
+    const last=bonus&&bonus.left===1, pulse=reduce?0.6:0.5+0.5*Math.sin(now*(last?0.007:0.004));
+    ctx.globalAlpha=lk.bonus*(0.07+0.06*pulse); ctx.fillStyle='#8A5CFF'; ctx.fillRect(0,0,W,H);
+    tv('bonus',lk.bonus*(0.5+0.2*pulse));
+    if(!reduce){ const per=last?2600:4200, u=((now%per)/per), bw=W*0.55;   // the sweep: one band crossing the screen
+      ctx.globalAlpha=lk.bonus*0.16; ctx.drawImage(bandSprite(),-bw+u*(W+bw*2),0,bw,H); }
+  }
+  if(lk.gold>0.01) tv('gold',lk.gold*0.42);
+  if(lk.adv>0.01) tv('adv',lk.adv*0.3);
+  if(lk.daily>0.01) tv('daily',lk.daily*0.3);
+  ctx.globalAlpha=1;
+  if(lk.flash>0.01){ ctx.globalAlpha=lk.flash*0.32; ctx.fillStyle='#E6D8FF'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+}
+function drawModeRing(now){                             // just outside the board frame (the pressure / bonus rim sits inside it)
+  const o=Math.max(6,Math.min(15,bx-5)), w=B+2*o, rr=Math.min(24,20+o-6),   // on a phone the margin is ~13 px: keep the ring on screen
+     per=4*(w-2*rr)+2*Math.PI*rr;
+  const ring=(col,lw,dash,off)=>{ roundPath(ctx,bx-o,by-o,w,w,rr); ctx.setLineDash(dash||[]); ctx.lineDashOffset=off||0; ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke(); ctx.setLineDash([]); };
+  if(lk.adv>0.01){                                       // the goal ring: faint track, bright fill = progress
+    ring(`rgba(120,240,210,${0.18*lk.adv})`,3);
+    if(lk.prog>0.005){ const sh=reduce?0.8:0.75+0.25*Math.sin(now*0.004);
+      ring(`rgba(150,255,225,${(0.5+0.4*sh)*lk.adv})`,4,[per*lk.prog,per]); }
+  }
+  if(lk.daily>0.01) ring(`rgba(255,150,130,${0.7*lk.daily})`,3,[3,9],reduce?0:-now*0.012);
+  if(lk.gold>0.01){ const sh=reduce?0.7:0.6+0.4*Math.sin(now*0.005);
+    ring(`rgba(255,206,72,${(0.3+0.4*sh)*lk.gold})`,4); ring(`rgba(255,244,190,${0.8*lk.gold})`,1.5); }
 }
 
 /* text sprites. Every overlay word (popups, tags, COMBO, COLOR GONE, praise, banners) is
@@ -319,7 +391,7 @@ function frame(now){
     ctx.globalAlpha=(1-flip.t/14)*0.5; ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
   }
 
-  stepPressure(dt); drawPressureWash();            // (6.6) pressure on screen, behind everything on the board
+  stepPressure(dt); drawPressureWash(); stepLooks(dt); drawModeWash(now);            // (6.6) pressure on screen, behind everything on the board
   ctx.save();
   if(shake>.2 && hitWait<=0) ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
   if(CFG.FX_PUNCH_ZOOM && punchT>0.01 && hitWait<=0){
@@ -342,6 +414,7 @@ function frame(now){
     ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;      ctx.lineWidth=2+2*tension;  ctx.stroke();
   }
 
+  drawModeRing(now);                                 // (6.7) the mode ring outside the frame
   drawTrayBand();                                    // (6.6) in the board layer, so nothing that flies over the tray (chunks, shards) is ever dimmed by it
   drawGoldPlan(now,!!(drag&&tray[drag.i]));           // (4.5c) before the held piece's preview, so the preview wins where they overlap
 
