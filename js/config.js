@@ -28,7 +28,6 @@ const CFG = {
   GIFT_CHANCE:    0.12,  // odds a calm tray is a guided one anyway, so a strong player still meets directed hands
   HONEST_TRIES:   2,     // candidate hands an honest tray looks at (the tidiest playable of these): a light hand, not a search
   BUILD_BIAS:     0.3,   // building phase: the crowded-board small-piece bias is scaled by this, so big pieces keep coming
-  RESCUE_EARN_LINES: 30, // Endless and Daily: the first rescue is free, the second is earned by clearing this many lines after it
 
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
   TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
@@ -57,7 +56,7 @@ const CFG = {
   GOLDEN_MIN_LINES:3,    // a jackpot-style golden hand must offer at least this many lines (a planned sweep always qualifies)
   GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
-  MAX_RESCUES: 2,        // most rescues one run can use; the first is free, the second earned (RESCUE_EARN_LINES; Adventure: both free)
+  MAX_RESCUES: 1,        // rescues one run gets: one, offered on the game-over card (plan 7.1; rescueAllowed is the single gate, the ad hook)
   RESCUE_FLOOR: 300,     // offer a rescue only above this score...
   RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
