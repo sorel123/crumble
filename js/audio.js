@@ -425,6 +425,12 @@ Object.assign(Sfx,{
     [0,4,7,12,16,19].forEach((s,i)=>{ const f=392*semis(s);
       voice(t+.46+i*.055,{f0:f,dur:.24,vol:.07,bp0:f*2,q:2,type:'sawtooth',det:[-7,7],wet:.2}); });
   }); },
+  goldenStep(n){ play(0,t=>{ bell(t,{f:659*semis([0,2,4,7,9,12][Math.max(0,n-1)%6]),dur:.7,vol:.06,wet:.35}); bell(t+.07,{f:1318*semis([0,2,4,7,9,12][Math.max(0,n-1)%6]),dur:.5,vol:.03,wet:.35}); }); },   // a rising note per planned line
+  goldenGong(){ play(.2,t=>{                                                                  // the golden hand's payoff, layered over goldenWin: a deep gong and a chime cascade
+    boom(t,.3); tone(t,{f0:98,dur:1.4,vol:.08,type:'sine'});
+    for(let i=0;i<14;i++) bell(t+.3+i*.06,{f:note([0,2,4,7,9,12,14,16,19,21,24,21,19,16][i]+8),dur:.9,vol:.045,wet:.5});
+    [0,4,7,12].forEach(st=>bell(t+1.2,{f:392*semis(st+12),dur:2.2,vol:.05,wet:.55}));
+  }); },
   blastTick(n){ play(0,t=>tone(t,{f0:n===1?1320:990,dur:.12,vol:.06,type:'triangle'})); },
   blastEnd(){ play(.05,t=>{
     boom(t,.18);

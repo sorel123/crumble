@@ -40,7 +40,7 @@ function clearRunFx(){
   blast=null; bigMode=false; blastIntro=null; blastSparks=[]; blastShown=blastCharge;
   if(!el('blastCard').hidden){ clearTimeout(blastCardT); el('blastCard').hidden=true; paused=false; }
   tags=[]; slams=[]; bands=[]; borderFlash=null;
-  confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
+  confetti=[]; goldenCele=null; goldRain=[]; goldenArrive=999; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
 }
 function start(){
   layout();

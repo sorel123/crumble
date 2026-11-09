@@ -263,7 +263,7 @@ function pickTier(a){
 // search, step for step, as running it straight through (genTray / runSteps).
 function runSteps(it){ let r; while(!(r=it.next()).done); return r.value; }
 function pickHand(a0,density,tier,withStar){ return runSteps(pickHandSteps(a0,density,tier,withStar)); }
-function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES){
+function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzle=false){   // puzzle (golden hand): no GUIDE/OBVIOUS/ALT, still playable and tidy
   const want = tier==='jackpot'?3 : tier==='solvable'?2 : 0;
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<candidates;i++){
@@ -275,23 +275,51 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES){
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough
       +(bigMode?hand.reduce((a,s)=>a+s.n,0)*1.5:0);   // Blast Round: among playable clearing hands, prefer the chunkiest pieces
-    if(ev.ok) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
-    if(ev.ok) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
+    if(ev.ok&&!puzzle) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
+    if(ev.ok&&!puzzle) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
-    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough && (!CFG.GUIDE||ev.obvPieces>0)) break;
+    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough && (puzzle||!CFG.GUIDE||ev.obvPieces>0)) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
     yield;
   }
   if(!bestHand){ bestHand=[weightedShape(density),weightedShape(density),weightedShape(density)]; bestEv=null; }
   return {hand:bestHand,ev:bestEv};
 }
+/* Golden hand plan (4.5c): the best way to play the pieces still in the tray. Tries every order and spot (clears
+   applied between placements, like evalHand) and returns the most lines (a sweep beats anything), plus WHICH
+   lines: ids 0-7 are rows, 8-15 columns. The board paints exactly those, so she sees what to aim for but still
+   solves the placement herself. Re-run after every placement so the glow only ever names lines still reachable. */
+function lineIds(lo,hi){ let m=0; for(let i=0;i<16;i++){ const L=LINE_MASKS[i*2],H=LINE_MASKS[i*2+1]; if((lo&L)===L&&(hi&H)===H) m|=1<<i; } return m; }
+function goldenSolve(a,shapes,budget=6000){
+  const [lo0,hi0]=packBits(a), idx=[]; shapes.forEach((s,i)=>{ if(s&&!s.star) idx.push(i); });
+  const pm=shapes.map(s=>s&&!s.star?placeMasks(s):null);
+  const best={lines:0,sweep:false,mask:0};
+  let b=budget;
+  function dfs(lo,hi,left,acc,mask){
+    if(acc>best.lines){ best.lines=acc; best.mask=mask; }
+    for(let q=0;q<left.length;q++){
+      const k=left[q], rest=left.filter((_,j)=>j!==q), s=shapes[k];
+      for(const m of pm[k]){
+        if(b<=0||best.sweep) return;
+        if((lo&m.lo)||(hi&m.hi)) continue;
+        b--;
+        const ids=lineIds(lo|m.lo,hi|m.hi), lines=applyBits(lo,hi,s,m), nlo=_lo, nhi=_hi;
+        if(lines&&!nlo&&!nhi){ best.sweep=true; best.lines=Math.max(best.lines,acc+lines); best.mask=mask|ids; return; }
+        dfs(nlo,nhi,rest,acc+lines,mask|ids);
+      }
+    }
+  }
+  dfs(lo0,hi0,idx,0,0);
+  const ids=[]; for(let i=0;i<16;i++) if(best.mask&(1<<i)) ids.push(i);
+  return {lines:best.lines,sweep:best.sweep,ids};
+}
 /* golden hand: a planned sweep if one can be built, else the best jackpot hand.
    Returns false (and deals nothing) if neither offers a real clear. */
 function* genGoldenSteps(a0,density){
   let hand=yield* planSweepSteps(a0), ev=hand&&evalHand(a0,hand,6000);
   if(hand&&ev.sweep){ sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; }   // same bookkeeping as a normal sweep hand
-  else { yield; ({hand,ev}=yield* pickHandSteps(a0,density,'jackpot')); }
-  if(!ev||!ev.ok||(!ev.sweep&&ev.lines<1)) return false;
+  else { yield; ({hand,ev}=yield* pickHandSteps(a0,density,'jackpot',false,Math.max(CFG.CANDIDATES,40),true)); }
+  if(!ev||!ev.ok||(!ev.sweep&&ev.lines<CFG.GOLDEN_MIN_LINES)) return false;   // a golden hand must be worth chasing; if none is on offer, nothing is dealt
   commitTray(hand,'GOLDEN·'+(ev.sweep?'SWEEP':'JACKPOT'),{sweep:ev.sweep,lines:ev.lines});
   return true;
 }
@@ -326,7 +354,7 @@ function* dealSteps(){
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
   const wantStar=special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || Math.random()<CFG.STAR_CHANCE);
 
-  if(goldenNext && specialsOk && !blast && special('golden')){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }
+  if(goldenNext && special('golden') && specialOk() && !blast){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }   // (4.5c) the shared special rules: trays 1-5, one live, never two in a row
 
   if(blast){                                        // Blast Round: a sweep if one can be built, else the best big-piece jackpot hand
     const h=yield* planSweepSteps(a0);
@@ -429,6 +457,7 @@ function commitTray(shapes,label,plan){
   golden=plan?{want:plan,got:{lines:0,sweep:false},pts:0}:null;
   if(plan){
     goldenCool=CFG.GOLDEN_COOLDOWN;
+    goldenReplan(); goldenArrive=0;
     pushBanner('GOLDEN HAND','×'+CFG.GOLDEN_MULT+' if you find it');
     Sfx.goldenIn();
   }
@@ -445,6 +474,21 @@ function goldenResult(g){         // {hit: found the plan, mult: 1 = missed enti
   if(hit) return {hit,mult:Math.max(CFG.GOLDEN_MULT,CFG.GOLDEN_PARTIAL)};
   return {hit,mult:g.got.lines>0||g.got.sweep?CFG.GOLDEN_PARTIAL:1};
 }
+/* the live plan: re-run for the pieces still in the tray. `need` is the lines that pay the full multiplier (a planned
+   sweep pays for a sweep or 3 lines; otherwise one short of the plan is fine). alive = still reachable, locked = already earned. */
+function goldenReplan(){
+  if(!golden) return;
+  const left=tray.map(t=>t?t.s:null);
+  golden.plan=goldenSolve(packGrid(grid),left);
+}
+function goldenState(g=golden){                 // 'alive' (lines still to go), 'locked' (full multiplier earned), 'dead' (only the consolation is left)
+  if(!g) return null;
+  const need=g.want.sweep?3:Math.max(1,g.want.lines-1);
+  if(g.got.sweep||g.got.lines>=need) return 'locked';
+  const p=g.plan||{lines:0,sweep:false};
+  return (g.want.sweep&&p.sweep)||g.got.lines+p.lines>=need?'alive':'dead';
+}
+const goldenLeft=g=>Math.max(0,(g.want.sweep?3:Math.max(1,g.want.lines-1))-g.got.lines);
 function updateDbg(){
   const d=el('dbg');
   d.hidden=!CFG.SHOW_TENSION;

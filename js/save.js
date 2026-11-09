@@ -14,7 +14,7 @@ function snapshot(){
     tray:tray.map(t=>t?{s:t.s.star?-1:SHAPES.indexOf(t.s),gi:t.gi}:null),
     score, combo, tension, sweepCool, trayNo, rescuesUsed, bestBeaten, lastTier,
     carry:carry.map(s=>SHAPES.indexOf(s)).filter(i=>i>=0),
-    golden:golden?{want:golden.want,got:golden.got,pts:golden.pts}:null,
+    golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies: Undo keeps the snapshot while the live hand goes on mutating its own
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     blastCharge, specialEnd,
     blast:blast?{t:Math.max(0,Math.round(blast.t)),pts:blast.pts,lines:blast.lines,best:blast.best,swaps:blast.swaps}:null
@@ -37,7 +37,8 @@ function restore(o){
   score=o.score; combo=o.combo; tension=clamp(o.tension,0,1); sweepCool=Math.max(0,o.sweepCool|0); trayNo=o.trayNo;
   rescuesUsed=o.rescuesUsed; bestBeaten=!!o.bestBeaten; lastTier=typeof o.lastTier==='string'?o.lastTier:'—';
   carry=(Array.isArray(o.carry)?o.carry:[]).filter(i=>isInt(i,0,SHAPES.length-1)).map(i=>SHAPES[i]);
-  golden=o.golden&&o.golden.want&&o.golden.got?{want:o.golden.want,got:o.golden.got,pts:o.golden.pts|0}:null;
+  golden=o.golden&&o.golden.want&&o.golden.got?{want:{...o.golden.want},got:{...o.golden.got},pts:o.golden.pts|0}:null;
+  goldenReplan(); goldenArrive=999;                  // the plan is not stored: it is worked out again from the board and the pieces left
   goldenNext=!!o.goldenNext; goldenCool=Math.max(0,o.goldenCool|0); trayHadSweep=!!o.trayHadSweep;
   trayCombo=o.trayCombo|0; starForced=!!o.starForced; starCool=isInt(o.starCool,0,1e3)?o.starCool:0; transformCool=Math.max(0,o.transformCool|0);
   resetWorld(); renderPips();
@@ -70,6 +71,17 @@ function undo(){
   syncActions(); saveRun();
   return true;
 }
+let goldChipTxt='';
+function syncGoldChip(){                          // (4.5c) what the golden hand still needs, always one short line under the tray
+  const st=golden&&!blast&&state==='play'&&!dealing?goldenState():null, c=el('goldChip');
+  let txt='';
+  if(st==='locked') txt='×'+(+CFG.GOLDEN_MULT.toFixed(1))+' locked in!';
+  else if(st==='alive'){ const n=goldenLeft(golden); txt=golden.want.sweep&&!golden.got.lines?'Gold: clear the board for ×'+(+CFG.GOLDEN_MULT.toFixed(1)):'Gold: '+n+(n===1?' more line':' more lines')+' for ×'+(+CFG.GOLDEN_MULT.toFixed(1)); }
+  else if(st==='dead') txt='×'+(+CFG.GOLDEN_PARTIAL.toFixed(1))+' for any clear';
+  c.hidden=!txt;
+  if(txt&&txt!==goldChipTxt){ c.textContent=txt; c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
+  goldChipTxt=txt;
+}
 const canExit=()=>!!undoSnap||rescueAllowed(best);               // a way out of being stuck other than ending the run
 function syncActions(){
   const live=state==='play'&&!dealing;
@@ -78,6 +90,7 @@ function syncActions(){
   const wait=stuck&&live&&canExit();
   el('endBtn').hidden=!wait; el('noMoves').hidden=!wait;
   el('starNote').hidden=!(live&&!stats.starSeen&&!blast&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until she has used one
+  syncGoldChip();
   syncBlastBtn();
 }
 el('endBtn').onclick=e=>{ e.stopPropagation(); if(stuck&&state==='play') gameOver(); };
