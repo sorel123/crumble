@@ -133,6 +133,8 @@ const CFG = {
   SND_SET:        'strings',  // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)
   SND_PICKUP:     'soft',     // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
   SND_PLACE:      'drop',     // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
+  MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects
+  MUSIC_VOL:      .5,         // 0..1; the music is quiet at .5 on purpose
   SND_PICKUP_VOL: 1,
   SND_PLACE_VOL:  1,
   PHONE_SPEAKER:  false,      // synth sounds only: cut the bass a phone speaker can't play (it just distorts)

@@ -148,6 +148,8 @@
             margin-top:10px;padding-top:14px;border-top:1px solid var(--divider)}
   .setgroup:first-child{margin-top:0;padding-top:0;border-top:0}
   .section-lbl{align-self:flex-start;margin:-4px 0 -6px 2px}
+  #setList .togpair{align-self:stretch;display:flex;gap:18px}
+  #setList .togpair .tog{flex:1;gap:8px}
   #setList .tog{align-self:stretch;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:600;padding:4px 2px}
   #setList input[type=checkbox]{width:24px;height:24px;accent-color:var(--gold)}
   .looks{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:min(300px,100%)}
@@ -270,7 +272,8 @@
         <div class="motifs" id="motifRow"></div>
       </details>
       <p class="setgroup">Sound</p>
-      <label class="tog"><span>Sound effects</span><input type="checkbox" id="sndOn"></label>
+      <div class="togpair"><label class="tog"><span>Sound effects</span><input type="checkbox" id="sndOn"></label>
+      <label class="tog"><span>Music</span><input type="checkbox" id="musicOn"></label></div>
       <p class="lbl section-lbl">Sound style</p>
       <div class="motifs" id="sndSetRow"></div>
     </div>
@@ -361,6 +364,7 @@
 <script src="js/render.js"></script>
 <script src="js/samples.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/music.js"></script>
 <script src="js/game.js"></script>
 <script src="js/draw.js"></script>
 <script src="js/flow.js"></script>

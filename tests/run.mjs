@@ -2109,6 +2109,82 @@ test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tin
   assert.deepEqual(await page.evaluate(() => [lk.prog, lk.flash, lk.bonus]), [0, 0, 0], 'a new run starts with no mode look');
 });
 
+// ---- music (plan 6.8) ----
+// Rendered offline (no audio hardware needed): the same engine the live game uses, on an OfflineAudioContext.
+const renderMusic = (page, opts) => page.evaluate(async ({ secs, i, track, duckAt }) => {
+  const SR = 22050, oc = new OfflineAudioContext(1, SR * secs, SR), dest = oc.createGain(); dest.connect(oc.destination);
+  const E = createMusic(oc, dest); E.start(0, track, .25); E.setI(i, 0); if (i > 0) E.nodes.tg.gain.value = .1 * i;
+  E.sched(secs); if (duckAt !== null) E.duck(.3, 1.5, duckAt);
+  const d = (await oc.startRendering()).getChannelData(0), db = (a, b) => { let s = 0; for (let k = a * SR; k < b * SR; k++) s += d[k] * d[k]; return 10 * Math.log10(s / ((b - a) * SR) + 1e-12); };
+  let pk = 0; for (const v of d) pk = Math.max(pk, Math.abs(v));
+  return { peak: 20 * Math.log10(pk), rms: db(4, secs), before: db(duckAt === null ? 0 : duckAt - 1, duckAt === null ? 1 : duckAt), under: db(duckAt === null ? 0 : duckAt, duckAt === null ? 1 : duckAt + 1) };
+}, { secs: 16, i: 0, track: 0, duckAt: null, ...opts });
+
+test('music (6.8): every piece is an 8-bar loop that comes out the same each time, inside its scale, and thins as it gets tight', async ({ page }) => {
+  const r = await page.evaluate(() => MUSIC_TRACKS.map((T, tr) => {
+    const same = Array.from({ length: MUSIC_BARS }, (_, b) => JSON.stringify(musicPlan(tr, b)) === JSON.stringify(musicPlan(tr, b + MUSIC_BARS)));
+    const bells = Array.from({ length: MUSIC_BARS }, (_, b) => musicPlan(tr, b).bells), all = bells.flat();
+    const kept = d => all.filter(s => s.q < s.p0 * musicDensity(d)).length;
+    return { same: same.every(Boolean), inScale: all.every(s => T.scale.includes(s.midi)), calm: kept(0), tight: kept(1), chords: Array.from({ length: MUSIC_BARS }, (_, b) => musicPlan(tr, b).chord.pad.length) };
+  }));
+  assert.equal(r.length, 3, 'three pieces');
+  for (const t of r) {
+    assert.ok(t.same, 'a loop repeats exactly'); assert.ok(t.inScale, 'every bell is in the pentatonic scale, so nothing can clash');
+    assert.ok(t.calm > t.tight && t.tight >= 2, `calm keeps more bells than tight (${t.calm} vs ${t.tight}), but a tight bar is never empty`);
+    assert.ok(t.chords.every(n => n === 4));
+  }
+});
+
+test('music (6.8): quiet by design, a tight board is audibly different, and a clear ducks it', async ({ page }) => {
+  const calm = await renderMusic(page, { i: 0 }), tight = await renderMusic(page, { i: 1 }), ducked = await renderMusic(page, { duckAt: 8 });
+  assert.ok(calm.peak < -12 && calm.peak > -40, `quiet but there (peak ${calm.peak.toFixed(1)} dBFS)`);
+  assert.ok(calm.rms < -24 && calm.rms > -45, `rms ${calm.rms.toFixed(1)} dBFS sits well under the sound effects`);
+  assert.ok(Math.abs(tight.rms - calm.rms) > .3, `the tension layer changes the mix (${calm.rms.toFixed(1)} -> ${tight.rms.toFixed(1)})`);
+  assert.ok(tight.peak < -10, 'and still never loud');
+  assert.ok(ducked.before - ducked.under > 6, `ducking dips it by more than 6 dB (${ducked.before.toFixed(1)} -> ${ducked.under.toFixed(1)})`);
+  for (const track of [1, 2]) { const t = await renderMusic(page, { track }); assert.ok(t.rms > -45 && t.peak < -12, 'the other pieces sit at the same level'); }
+});
+
+test('music (6.8): on by default at a low volume, its own Settings switch, saved, and independent of Sound effects', async ({ page }) => {
+  assert.equal(await page.evaluate(() => CFG.MUSIC), true, 'on by default');
+  assert.ok(await page.evaluate(() => CFG.MUSIC_VOL * .5 <= .3), 'low by default');
+  await play(page);
+  await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
+  await page.click('#setBtn');
+  assert.equal(await page.isChecked('#musicOn'), true);
+  await page.uncheck('#musicOn');
+  assert.equal(await page.evaluate(() => musicE), null, 'switching it off stops the engine');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.skins')).music), false, 'and it is remembered');
+  await page.check('#sndOn'); await page.uncheck('#sndOn');
+  assert.equal(await page.evaluate(() => musicE), null, 'Sound effects does not bring it back');
+  await page.check('#musicOn');
+  assert.notEqual(await page.evaluate(() => musicE), null, 'switching it on starts it again');
+});
+
+test('music (6.8): the intensity layer follows the pressure on screen and drops when she is clear', async ({ page }) => {
+  await play(page);
+  await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
+  const m = await page.evaluate(() => { const o = {}; scr.p = 0; o.calm = musicTarget(); scr.p = .55; o.build = musicTarget(); scr.p = .8; o.edge = musicTarget(); scr.p = 1; o.tight = musicTarget(); state = 'over'; o.over = musicTarget(); state = 'play'; return o; });
+  assert.equal(m.calm, 0); assert.ok(m.build > 0 && m.build < .8, 'building barely registers'); assert.ok(m.edge > .9, 'an edge is nearly full intensity'); assert.equal(m.tight, 1); assert.equal(m.over, 0, 'nothing behind the game-over card');
+  await page.evaluate(() => { musicTarget = () => 1; });                                  // a tight board for a while
+  await page.waitForFunction(() => musicMi > .5, null, { timeout: 9000 });
+  assert.ok(await page.evaluate(() => musicE.i > .5), 'the engine is told');
+  await page.evaluate(() => { musicTarget = () => 0; });                                  // she got clear
+  await page.waitForFunction(() => musicMi < .3, null, { timeout: 9000 });
+});
+
+test('music (6.8): the sound arbiter ducks it under the winning event, deeper for bigger ones, and a new run picks another piece', async ({ page }) => {
+  await play(page); await spySet(page);
+  await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
+  const lvl = async fns => { await page.evaluate(f => { musicE.duckEnd = 0; musicE.duckLvl = 1; arbLead = { p: 0, until: 0 }; for (const x of f) eval(x); }, fns); await tick(page); return page.evaluate(() => musicE.duckLvl); };
+  const one = await lvl(['Sfx.clear(1)']), big = await lvl(['Sfx.clear(3)', 'Sfx.sweep()']);
+  assert.ok(one < 1 && one > big, `a clear dips it a little (${one}), a sweep a lot (${big})`);
+  assert.equal(await lvl(['Sfx.starPick()']), 1, 'the star pickup tick (priority 0) leaves it alone');
+  const before = await page.evaluate(() => musicTrackNo);
+  await page.evaluate(() => { start(); });
+  assert.notEqual(await page.evaluate(() => musicTrackNo), before, 'a new run moves to another piece');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

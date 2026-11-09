@@ -46,6 +46,7 @@ const DEV_SOUND_TOGGLES=[       // shown in the Sound section
   ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
 ];
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
+  ['MUSIC_VOL','Music volume',0,1,0.05],
   ['SND_PICKUP_VOL','Pickup volume',0,1.5,0.05],
   ['SND_PLACE_VOL','Place volume',0,1.5,0.05],
   ['TRANSFORM_PLACEMENTS','Transform length (placements)',1,15,1],

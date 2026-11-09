@@ -6,7 +6,7 @@
    noise buffer is built when the context is created (first user gesture,
    which browsers require) and reused by every noise hit.
    ═══════════════════════════════════════════════════════════════ */
-let actx=null,sfxGain=1,muted=false,master=null,nbuf=null,revIn=null,setSpeaker=()=>{},origBus=null,smpBus=null;
+let actx=null,sfxGain=1,muted=false,master=null,nbuf=null,revIn=null,setSpeaker=()=>{},origBus=null,smpBus=null,musBus=null;
 /* The whole chain, built on whatever context it's handed (the live one, or an
    offline one for rendering/tests): sounds -> master -> soft high-shelf ->
    safety limiter -> out, plus a small reverb send any sound can feed via
@@ -22,7 +22,10 @@ function buildChain(c){
   // the original synth sounds get their own copy of the same pair (ohp1/ohp2), so the speaker filter reaches them too
   const ohp1=c.createBiquadFilter(), ohp2=c.createBiquadFilter();
   for(const h of [ohp1,ohp2]){ h.type='highpass'; h.Q.value=.7; }
-  const setSpeaker=on=>{ for(const h of [hp1,hp2,ohp1,ohp2]) h.frequency.value=on?220:10; };   // distorts, like a blown speaker
+  // the music (6.8) gets its own pair too: it is level-controlled in music.js, so it skips the limiter, but it still goes through the speaker filter
+  const mhp1=c.createBiquadFilter(), mhp2=c.createBiquadFilter();
+  for(const h of [mhp1,mhp2]){ h.type='highpass'; h.Q.value=.7; }
+  const setSpeaker=on=>{ for(const h of [hp1,hp2,ohp1,ohp2,mhp1,mhp2]) h.frequency.value=on?220:10; };   // distorts, like a blown speaker
   setSpeaker(CFG.PHONE_SPEAKER);
   m.connect(hp1); hp1.connect(hp2); hp2.connect(tame); tame.connect(lim); lim.connect(c.destination);
   const len=Math.floor(c.sampleRate*1.0), ir=c.createBuffer(2,len,c.sampleRate), fade=c.sampleRate*.006;
@@ -46,7 +49,8 @@ function buildChain(c){
   const ocomp=c.createDynamicsCompressor();
   ocomp.threshold.value=-18; ocomp.knee.value=12; ocomp.ratio.value=6; ocomp.attack.value=.003; ocomp.release.value=.2;
   og.connect(ohp1); ohp1.connect(ohp2); ohp2.connect(ocomp); ocomp.connect(c.destination);
-  return {master:m,revIn:rin,nbuf:nb,setSpeaker,smp,orig:og};
+  const mus=c.createGain(); mus.gain.value=1; mus.connect(mhp1); mhp1.connect(mhp2); mhp2.connect(c.destination);
+  return {master:m,revIn:rin,nbuf:nb,setSpeaker,smp,orig:og,mus};
 }
 /* phone-speaker default (6.4): on for touch devices unless she has chosen either way (the Settings toggle
    saves crumble.speaker; the Admin panel's saved tuning counts too). A web page can't tell headphones apart. */
@@ -62,10 +66,10 @@ function ac(){
   if(!actx){
     speakerDefault();
     actx=new (window.AudioContext||window.webkitAudioContext)();
-    ({master,revIn,nbuf,setSpeaker,smp:smpBus,orig:origBus}=buildChain(actx));
-    loadBank();
+    ({master,revIn,nbuf,setSpeaker,smp:smpBus,orig:origBus,mus:musBus}=buildChain(actx));
+    loadBank(); musicSync();
   }
-  if(actx.state==='suspended') actx.resume().catch(()=>{});
+  if(actx.state!=='running') actx.resume().catch(()=>{});
   return actx;
 }
 const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger — physical sounds only, never musical ones
@@ -504,16 +508,16 @@ function arbFlush(){
   const q=arbQ; arbQ=[]; if(!q.length||!actx) return;
   const now=actx.currentTime, lead=now<arbLead.until?arbLead.p:0;
   const top=Math.max(lead,...q.map(e=>e.p));
-  let hold=0; const later=[];
+  let hold=0, win=0; const later=[];
   for(const e of q){
-    if(e.p>=top){ arbPlay(e,1); if(e.p>0) hold=Math.max(hold,e.hold); continue; }
+    if(e.p>=top){ arbPlay(e,1); if(e.p>0){ hold=Math.max(hold,e.hold); win=Math.max(win,e.p); } continue; }
     const sameTick=q.some(o=>o.p>e.p);
     const own=(e.fn==='clear'||e.fn==='combo')&&sameTick&&(top>=4||(e.fn==='clear'&&q.some(o=>o.fn==='combo')));   // a sweep, star, escape, bonus start... brings its own impact; a combo is the clear
     const how=e.p===0||own?'drop':sameTick?e.same:(e.same==='drop'?'duck':e.same);
     if(how==='duck') arbPlay(e,DUCK);
     else if(how==='defer'){ if(e.late) arbPlay(e,DUCK); else later.push(e); }
   }
-  if(hold>0) arbLead={p:top,until:Math.max(arbLead.until,now+hold)};
+  if(hold>0){ arbLead={p:top,until:Math.max(arbLead.until,now+hold)}; if(!muted) musicDuck(win,hold); }   // 6.8: the music dips under whatever won
   for(const e of later) setTimeout(()=>sfxEvent(e.fn,e.a,true),Math.max(0,(arbLead.until-now)*1000)+40);
 }
 function sfxEvent(fn,a,late=false){
