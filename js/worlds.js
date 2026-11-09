@@ -37,9 +37,9 @@ const TRANSFORMS={
   storm:    {name:'Storm',      world:{top:'#232B38',bottom:'#0C1016',effect:'storm',flash:true},   skin:'storm'}
 };
 const TRANSFORM_IDS=Object.keys(TRANSFORMS);
-const BLAST_WORLD={top:'#6A0F3A',bottom:'#1C0412',effect:'sparks'};   // the Blast Round sky: hot magenta, rising sparks
-function worldDef(id){    // resolves a HOME_WORLDS id, a TRANSFORMS id, or 'blast' to {top,bottom,effect,flash?}
-  if(id==='blast') return BLAST_WORLD;
+const BONUS_WORLD={top:'#3A1170',bottom:'#12062B',effect:'sparks'};   // the bonus trays' sky: deep violet, rising sparks (the board and tiles keep her look)
+function worldDef(id){    // resolves a HOME_WORLDS id, a TRANSFORMS id, or 'bonus' to {top,bottom,effect,flash?}
+  if(id==='bonus') return BONUS_WORLD;
   const t=TRANSFORMS[id]; if(t) return t.world;
   return HOME_WORLDS.find(w=>w.id===id) || HOME_WORLDS[0];
 }
@@ -60,7 +60,7 @@ const THEMES=[
 const theme=()=>THEMES.find(t=>t.id===CFG.THEME)||THEMES[0];
 const rgba=(hex,a)=>{ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; };
 function bgOf(id){                      // the sky: a light theme's own gradient, except during a transformation
-  const t=theme(); return t.light&&!TRANSFORMS[id]&&id!=='blast'?{top:t.top,bottom:t.bot}:worldDef(id);
+  const t=theme(); return t.light&&!TRANSFORMS[id]&&id!=='bonus'?{top:t.top,bottom:t.bot}:worldDef(id);
 }
 function applyTheme(){
   const t=theme(), st=document.documentElement.style;
@@ -233,8 +233,14 @@ function startFlip(toWorld,toSkin){
   ambient=spawnAmbient(worldDef(curWorld).effect);
   flip={t:0,fromBig,fromSmall};
 }
+// the bonus trays' sky: only the background and its particles change, over ~BONUS_SKY_FRAMES; her tiles are never touched
+const BONUS_SKY_FRAMES=70;
+function startSky(toWorld){
+  if(reduce){ curWorld=toWorld; ambient=spawnAmbient(worldDef(toWorld).effect); ambientOld=[]; bgFrom=toWorld; bgT=1; return; }
+  bgFrom=curWorld; bgT=0; ambientOld=ambient; curWorld=toWorld; ambient=spawnAmbient(worldDef(toWorld).effect);
+}
 function stepFlip(dt){
-  if(!flip) return;
+  if(!flip){ if(bgT<1){ bgT=Math.min(1,bgT+dt/BONUS_SKY_FRAMES); if(bgT>=1) ambientOld=[]; } return; }
   flip.t+=dt;
   if(bgT<1){ bgT=Math.min(1,flip.t/FLIP_BG_DUR); if(bgT>=1) ambientOld=[]; }
   if(flip.t>=FLIP_TOTAL) flip=null;

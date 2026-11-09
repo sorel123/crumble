@@ -363,7 +363,7 @@ test('the opening: 100 seeded new games each clear a line within the first three
         if ((lo0 & m.lo) || (hi0 & m.hi)) continue;
         if (applyBits(lo0, hi0, tray[i].s, m) > 0) { left = pop(_lo) + pop(_hi); break; }
       }
-      out.push({ filled: countFlat(a0), ok: ev.ok, lines: ev.lines, imm: ev.imm, trayNo, label: lastTier, left, specials: tray.some(t => t.s.star) || !!golden || !!transform || !!blast });
+      out.push({ filled: countFlat(a0), ok: ev.ok, lines: ev.lines, imm: ev.imm, trayNo, label: lastTier, left, specials: tray.some(t => t.s.star) || !!golden || !!transform || !!bonus });
     }
     Math.random = orig;
     return out;
@@ -422,25 +422,9 @@ test('trays 1-5 never carry a special, even with every special on; from tray 6 t
   assert.equal(r.earlyTransform, false, 'an achievement cannot start a transformation in the opening either');
 });
 
-test('Blast never starts by itself: a full button waits, and the old meter is gone', async ({ page }) => {
-  await play(page);
-  const r = await page.evaluate(async () => {
-    trayNo = 10; transformCool = 0; blastCharge = blastShown = CFG.BLAST_CHARGE; syncBlastBtn();
-    const had = typeof blastMeter !== 'undefined' || 'METER_LINE' in CFG || 'METER_DRAIN' in CFG || 'METER_IDLE' in CFG;
-    grid = empty(); grid[0] = grid[0].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null));
-    tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
-    place(0, 0, 0); place(1, 3, 3); place(2, 4, 4);        // a clear and the end of the tray
-    await new Promise(r => setTimeout(r, 2500));
-    return { had, blast: !!blast, charge: blastCharge };
-  });
-  assert.equal(r.had, false, 'no meter state or settings remain');
-  assert.equal(r.blast, false, 'a Blast Round never starts by itself');
-  assert.equal(r.charge, await page.evaluate(() => CFG.BLAST_CHARGE), 'waiting drains nothing');
-});
-
 test('one switch per special: all four are on; transformations are three-plus-one named achievements', async ({ page }) => {
   await play(page);
-  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { blast: true, star: true, golden: true, transform: true });
+  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { bonus: true, star: true, golden: true, transform: true });
   const r = await page.evaluate(() => {
     starForced = true;
     let stars = 0;
@@ -449,9 +433,9 @@ test('one switch per special: all four are on; transformations are three-plus-on
       stars += tray.filter(t => t && t.s.star).length;
     }
     trayNo = 2; triggerTransform('rainbow');
-    return { stars, transform: !!transform, blast: !!blast };
+    return { stars, transform: !!transform, bonus: !!bonus };
   });
-  assert.deepEqual(r, { stars: 0, transform: false, blast: false }, 'on an empty board no cross is worth a star, so none is dealt; early trays never start a transformation');
+  assert.deepEqual(r, { stars: 0, transform: false, bonus: false }, 'on an empty board no cross is worth a star, so none is dealt; early trays never start a transformation');
   const on = await page.evaluate(() => { trayNo = 10; transformCool = 0; specialEnd = -99; triggerTransform('rainbow'); return !!transform; });
   assert.equal(on, true, 'from tray 6 an achievement starts its transformation');
   const off = await page.evaluate(() => { CFG.SPECIALS.transform = false; transform = null; triggerTransform('volcano'); return { live: !!transform, owned: discoveredWorlds.has('volcano') }; });
@@ -475,7 +459,7 @@ test('star gem: dealt only when a cross is worth it, with a cooldown, and never 
     diagBoard(); trayNo = 20; starForced = true; tray = [null, null, null]; genTray(); out.coolHeld = tray.some(t => t && t.s.star);
     diagBoard(); out.again = deal(() => { specialEnd = 9; });                // a special ended in tray 9: tray 10 (the one dealt) carries none
     diagBoard(); out.afterGap = deal(() => { specialEnd = 8; });
-    diagBoard(); out.blast = deal(() => { blast = { t: 5000, pts: 0, lines: 0, best: 0, swaps: 0, tick: 0 }; }); blast = null;
+    diagBoard(); out.bonus = deal(() => { bonus = { left: 2, extra: 0 }; }); bonus = null;
     diagBoard(); out.live = deal(() => { tray = [{ s: STAR, gi: STAR_GI }, null, null]; });
     return out;
   });
@@ -487,7 +471,7 @@ test('star gem: dealt only when a cross is worth it, with a cooldown, and never 
   assert.equal(r.coolHeld, false, 'no second star during the cooldown');
   assert.equal(r.again, false, 'never two specials in a row');
   assert.equal(r.afterGap, true, 'one tray later it can come');
-  assert.equal(r.blast, false, 'none during a Blast Round');
+  assert.equal(r.bonus, false, 'none during a bonus');
   assert.equal(r.live, false, 'none while another is live');
 });
 
@@ -517,21 +501,21 @@ test('star gem: it clears exactly its row and column, pays per gem, ends the spe
   assert.equal(r.resumed, true, 'a star in hand survives save/resume');
 });
 
-test('star gem: the first one shows a one-line label, Blast reads as held while a star is in the tray, no hesitation sample', async ({ page }) => {
+test('star gem: the first one shows a one-line label, a full bonus meter just waits while a star is in the tray, no hesitation sample', async ({ page }) => {
   await withDiag(page);
   const r = await page.evaluate(() => {
-    diagBoard(); trayNo = 12; stats.starSeen = 0; blastCharge = blastShown = CFG.BLAST_CHARGE;
+    diagBoard(); trayNo = 12; stats.starSeen = 0; bonusMeter = CFG.BONUS_METER;
     tray = [{ s: STAR, gi: STAR_GI }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }]; dealing = null; syncActions();
-    const out = { note: !el('starNote').hidden, btnDisabled: el('blastBtn').disabled, held: el('blastBtn').classList.contains('held'), full: el('blastBtn').classList.contains('full') };
+    const out = { note: !el('starNote').hidden, due: bonusDue(), chip: el('bonusChip').textContent.trim() };
     tray = [null, null, null]; hes.dealtAt = 5; commitTray([STAR, SHAPES[0], SHAPES[0]], 'T'); out.hes = hes.dealtAt;
     stats.starSeen = 1; syncActions(); out.noteAfter = !el('starNote').hidden;
-    tray = [{ s: SHAPES[0], gi: 1 }, null, null]; syncActions(); out.btnFree = !el('blastBtn').disabled;
+    tray = [{ s: SHAPES[0], gi: 1 }, null, null]; syncActions(); out.dueAfter = bonusDue();
     return out;
   });
   assert.equal(r.note, true, 'the first star ever is explained once');
   assert.equal(r.noteAfter, false, 'and never again');
-  assert.equal(r.btnDisabled, true); assert.equal(r.held, true); assert.equal(r.full, false);
-  assert.equal(r.btnFree, true, 'Blast is tappable again once the star is gone');
+  assert.equal(r.due, false, 'a full meter does not start a bonus beside a star'); assert.equal(r.chip, '×2 bonus next');
+  assert.equal(r.dueAfter, true, 'it is due again once the star is gone');
   assert.equal(r.hes, 0, 'a star tray gives no hesitation sample');
 });
 
@@ -582,28 +566,26 @@ test('a 3-line clear: the next tray is dealt after the clear starts (frame times
   // timings are logged, not asserted: headless wall time on a shared CI runner says little about the phone
 });
 
-test('a Blast Round hand is dealt in small slices, and pickups wait for it', async ({ page }) => {
+test('a deal runs in small slices, and pickups wait for it', async ({ page }) => {
   await play(page);
   await watchFrames(page);
   await setup(page, { rows: THREE_LINES.map((r, i) => (i < 3 ? '00000000' : r)), trayShapes: [0, 1, 2] });
   await frameLog(page);
   const g = await geometry(page);
-  const during = await page.evaluate(p => {                    // same task as startBlast, so no frame can finish the deal first
-    startBlast();
-    const t0 = blast.t, was = !!dealing;
+  const during = await page.evaluate(p => {                    // same task as the deal's start, so no frame can finish it first
+    dealLater();
+    const was = !!dealing;
     onDown({ pointerId: 7, clientX: p.x, clientY: p.y });
-    return { was, drag: !!drag, t0 };
+    return { was, drag: !!drag };
   }, g.trayCenters[0]);
-  assert.equal(during.was, true, 'the blast hand is being dealt');
+  assert.equal(during.was, true, 'the new hand is being dealt');
   assert.equal(during.drag, false, 'the old piece can\'t be picked up while the new hand is coming');
   await dealt(page);
-  assert.ok(await page.evaluate(t0 => blast.t >= t0 - 100, during.t0), 'the round clock waited for the deal');
   const { steps } = await frameLog(page);
   const slice = await page.evaluate(() => CFG.DEAL_SLICE_MS);
   console.log(`     (${steps.length} slices, largest ${Math.max(...steps).toFixed(1)} ms)`);
   const sorted = steps.slice().sort((a, b) => a - b), median = sorted[sorted.length >> 1];
   assert.ok(steps.length >= 1 && median < slice + 3, `slices stay near DEAL_SLICE_MS (${steps.map(x => x.toFixed(1))})`);
-  assert.match(await page.evaluate(() => lastTier), /^BLAST/);
 });
 
 test('dealing in slices runs the same search as dealing in one go', async ({ page }) => {
@@ -614,7 +596,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
     for (let k = 0; k < 12; k++) {
       grid = grid.map(r => r.map(() => (keep() < 0.3 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
       const g0 = grid, ten = k / 11, carry0 = carry, star0 = starForced, no0 = trayNo;
-      blast = k % 3 === 2 ? { t: 1e4, pts: 0, lines: 0 } : null;
+      bonus = k % 3 === 2 ? { left: 2, extra: 0 } : null;
       const run = stepwise => {
         grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9;
         goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
@@ -623,7 +605,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
       };
       out.push([run(false), run(true)]);
     }
-    Math.random = keep; blast = null; golden = null;
+    Math.random = keep; bonus = null; golden = null;
     return out;
   });
   same.forEach(([a, b], k) => assert.equal(b, a, `board ${k}`));
@@ -826,7 +808,7 @@ test('snapshot() and restore() round-trip the run through plain JSON, with speci
   await play(page);
   const r = await page.evaluate(() => {
     Object.assign(CFG.SPECIALS, { star: true, golden: true, transform: true });
-    blastCharge = 5; specialEnd = 7;
+    bonusMeter = 5; specialEnd = 7;
     const g = { want: { sweep: false, lines: 2 }, got: { lines: 1, sweep: false }, pts: 40 };
     golden = g; goldenNext = true; starForced = true; combo = 4; score = 321; rescuesUsed = 1; sweepCool = 3;
     tray[1] = { s: STAR, gi: STAR_GI };
@@ -1050,158 +1032,172 @@ test('the rescue button is disabled whenever any piece fits, and spends a rescue
   assert.equal(after.rescuesUsed, 1); assert.equal(after.state, 'play'); assert.equal(after.fits, true); assert.equal(after.over, false); assert.equal(after.disabled, true);
 });
 
-/* ═══════ Blast as a tap-to-start reward (plan 4.5a) ═══════ */
+/* ═══════ Bonus trays (plan 6.2, replaced the Blast Round) ═══════ */
 // a row that one single-cell drop at (r,0) clears; combo is set so that drop's clear is combo k
 const clearAt = (r, k) => `grid[${r}] = grid[${r}].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null)); tray[0] = { s: SHAPES[0], gi: 1 }; combo = (${k}) - 1; place(0, ${r}, 0);`;
-const fillBlast = page => page.evaluate(() => { blastCharge = blastShown = CFG.BLAST_CHARGE; syncBlastBtn(); });
+const fillBonus = page => page.evaluate(() => { bonusMeter = CFG.BONUS_METER; syncBonusChip(); });
+const chipText = page => page.evaluate(() => el('bonusChip').textContent.trim());
 
-test('only combos charge Blast (combo 2+ adds combo-1, at most 3), only from tray 6, and never during a round', async ({ page }) => {
+test('Blast is gone: no button, no card, no settings, no code; the bonus chip is not a button', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => ({
+    btn: !!document.getElementById('blastBtn'), card: !!document.getElementById('blastCard'),
+    fn: ['startBlast', 'endBlast', 'canBlast', 'chargeBlast', 'blastCharge', 'bigMode'].filter(n => { try { return typeof eval(n) !== 'undefined'; } catch (e) { return false; } }),
+    cfg: Object.keys(CFG).filter(k => /^BLAST/.test(k)), spec: 'blast' in CFG.SPECIALS,
+    tag: document.getElementById('bonusChip').tagName,
+  }));
+  assert.deepEqual(r, { btn: false, card: false, fn: [], cfg: [], spec: false, tag: 'DIV' });
+});
+
+test('the meter: each clear adds its lines plus a little for its combo (at most BONUS_COMBO_MAX), only from tray 6, never past full, and it holds during a bonus', async ({ page }) => {
   await play(page);
   const r = await page.evaluate(src => {
-    grid = empty(); blastCharge = 0; trayNo = 10;
-    const after = k => { eval(src.replace(/K/g, k)); return blastCharge; };
+    grid = empty(); bonusMeter = 0; trayNo = 10;
+    const after = k => { bonusMeter = 0; eval(src.replace(/K/g, k)); return bonusMeter; };
     const out = {};
-    out.single = after(1);                                   // a lone clear: nothing
-    out.c2 = after(2);                                       // +1
-    out.c3 = after(3);                                       // +2
-    out.c6 = after(6);                                       // +3 (capped)
-    const plain = blastCharge; tray[1] = { s: SHAPES[0], gi: 1 }; place(1, 5, 5); out.noClear = blastCharge - plain;   // no clear: nothing
-    blastCharge = 0; trayNo = 4; out.early = after(5);       // the opening (trays 1-5) charges nothing
-    trayNo = 10; blastCharge = CFG.BLAST_CHARGE - 1; out.capped = after(6);   // never past full
-    blastCharge = 0; blast = { t: 9e9, pts: 0, lines: 0, best: 0, swaps: 0, tick: 0 }; out.during = after(6); blast = null;
+    out.single = after(1);                                   // one line, no combo: +1
+    out.c2 = after(2);                                       // +1 +1
+    out.c3 = after(3);                                       // +1 +2
+    out.c6 = after(6);                                       // +1 +2 (the combo's share is capped)
+    bonusMeter = 0; tray[1] = { s: SHAPES[0], gi: 1 }; place(1, 5, 5); out.noClear = bonusMeter;       // no clear: nothing
+    trayNo = 4; out.early = after(5);                        // the opening (trays 1-5) fills nothing
+    trayNo = 10; bonusMeter = CFG.BONUS_METER - 1; eval(src.replace(/K/g, 6)); out.capped = bonusMeter;   // never past full
+    bonusMeter = 0; bonus = { left: 2, extra: 0 }; out.during = after(6); bonus = null;
     return out;
   }, clearAt(0, 'K'));
-  assert.deepEqual(r, { single: 0, c2: 1, c3: 3, c6: 6, noClear: 0, early: 0, capped: await page.evaluate(() => CFG.BLAST_CHARGE), during: 0 });
+  assert.deepEqual(r, { single: 1, c2: 2, c3: 3, c6: 3, noClear: 0, early: 0, capped: await page.evaluate(() => CFG.BONUS_METER), during: 0 });
 });
 
-test('a charging combo flies one spark to the button; full, it glows and chimes once, then a tap starts the round', async ({ page }) => {
+test('the chip shows the meter, says "next" when full, and counts trays while the bonus runs', async ({ page }) => {
   await play(page);
-  assert.equal(await page.isDisabled('#blastBtn'), true, 'empty: not tappable');
-  await page.evaluate(src => {
-    window.__chimes = 0; const f = Sfx.blastReady; Sfx.blastReady = () => { window.__chimes++; f(); };
-    CFG.SPECIALS.transform = false;                    // (this clear empties the board: a sweep would start a Rainbow look, which holds the button)
-    trayNo = 10; grid = empty(); blastCharge = blastShown = CFG.BLAST_CHARGE - 1; syncBlastBtn();
-    eval(src);
-  }, clearAt(0, 4));
-  assert.equal(await page.evaluate(() => blastSparks.length), 1, 'one spark in flight');
-  assert.equal(await page.isDisabled('#blastBtn'), true, 'the button fills when the spark lands, not before');
-  await page.waitForFunction(() => !blastSparks.length);
-  assert.equal(await page.evaluate(() => el('blastBtn').classList.contains('full')), true, 'full: it glows');
-  assert.equal(await page.isDisabled('#blastBtn'), false);
-  await page.waitForTimeout(600);
-  assert.equal(await page.evaluate(() => window.__chimes), 1, 'one chime, no nagging');
-  await page.evaluate(() => { tray[1] = { s: SHAPES[0], gi: 1 }; place(1, 6, 6); });   // a normal move, so Undo has something
-  await dealt(page);
-  await page.click('#blastBtn');
-  const r = await page.evaluate(() => ({ blast: !!blast, charge: blastCharge, undo: el('undoBtn').disabled, world: curWorld, live: el('blastBtn').classList.contains('live') }));
-  assert.deepEqual(r, { blast: true, charge: 0, undo: true, world: 'blast', live: true });
-  await dealt(page);
-  assert.match(await page.evaluate(() => lastTier), /^BLAST/, 'the leftover tray was replaced by a blast hand');
+  assert.equal(await chipText(page), '×2 bonus');
+  assert.equal(await page.evaluate(() => getComputedStyle(el('bonusChip')).getPropertyValue('--f').trim()), '0.000');
+  await page.evaluate(() => { bonusMeter = 4; syncBonusChip(); });
+  assert.equal(await page.evaluate(() => getComputedStyle(el('bonusChip')).getPropertyValue('--f').trim()), (4 / await page.evaluate(() => CFG.BONUS_METER)).toFixed(3));
+  await fillBonus(page);
+  assert.equal(await chipText(page), '×2 bonus next');
+  assert.equal(await page.evaluate(() => el('bonusChip').classList.contains('full')), true, 'full: it glows');
+  const r = await page.evaluate(() => { bonus = { left: 3, extra: 0 }; syncBonusChip(); const a = el('bonusChip').textContent.trim(); bonus.left = 1; syncBonusChip(); const b = el('bonusChip').textContent.trim(); bonus = null; return [a, b]; });
+  assert.deepEqual(r, ['×2 · 3 trays left', '×2 · 1 tray left']);
 });
 
-test('the button only works when nothing else is live and not on the tray right after a special', async ({ page }) => {
+test('a full meter starts the bonus with the next deal, never in the middle of a tray, and never while another special is live', async ({ page }) => {
   await play(page);
-  await fillBlast(page);
-  const r = await page.evaluate(() => {
-    const out = {};
-    trayNo = 10; specialEnd = 9; out.rightAfter = canBlast();
-    specialEnd = 8; out.later = canBlast();
-    transform = { id: 'rainbow', remaining: 3 }; out.withTransform = canBlast(); transform = null;
-    tray[2] = { s: STAR, gi: STAR_GI }; out.withStar = canBlast();
+  const r = await page.evaluate(async () => {
+    const out = {}; trayNo = 10; transformCool = 0; specialEnd = -99; grid = empty(); bonus = null;
+    bonusMeter = CFG.BONUS_METER - 1;                               // a clear fills it mid-tray: nothing starts yet
+    grid[0] = grid[0].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null));
+    tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+    place(0, 0, 0); out.midTray = { meter: bonusMeter, live: !!bonus };
+    cancelDeal(); tray = [null, null, null];
+    const deal = (setup) => { bonus = null; bonusMeter = CFG.BONUS_METER; specialEnd = -99; transform = null; golden = null; trayNo = 10; tray = [null, null, null]; grid = empty(); setup && setup(); genTray(); return { live: !!bonus, meter: bonusMeter }; };
+    out.go = deal(); out.goLeft = bonus && bonus.left; out.goWorld = curWorld; out.bonuses = stats.bonuses;
+    out.gap = deal(() => { specialEnd = 10; });                     // a special ended in the tray before: this one carries none
+    out.transform = deal(() => { transform = { id: 'volcano', remaining: 4 }; });
+    out.off = deal(() => { CFG.SPECIALS.bonus = false; }); CFG.SPECIALS.bonus = true;
+    out.early = deal(() => { trayNo = 3; });
+    bonus = null; transform = null;
     return out;
   });
-  assert.deepEqual(r, { rightAfter: false, later: true, withTransform: false, withStar: false });
+  assert.deepEqual(r.midTray, { meter: await page.evaluate(() => CFG.BONUS_METER), live: false }, 'filling it does not start it');
+  assert.deepEqual(r.go, { live: true, meter: 0 }, 'the deal starts it and empties the meter');
+  assert.equal(r.goLeft, await page.evaluate(() => CFG.BONUS_TRAYS)); assert.equal(r.goWorld, 'bonus'); assert.equal(r.bonuses, 1);
+  assert.deepEqual([r.gap.live, r.transform.live, r.off.live, r.early.live], [false, false, false, false], 'not the tray after a special, beside a live transformation, switched off, or in trays 1-5');
+  assert.ok([r.gap, r.transform, r.off, r.early].every(x => x.meter === 10), 'and a full meter just waits');
 });
 
-test('the round ends at 0 s with a results card; a tap anywhere dismisses it; rounds and Best Blast are counted', async ({ page }) => {
+test('the bonus pays x2 on every placement, counts trays down, ends after the last with a "+N bonus" tag, and the next tray carries no special', async ({ page }) => {
   await play(page);
-  await fillBlast(page);
-  await page.evaluate(() => { trayNo = 10; });
-  await page.click('#blastBtn'); await dealt(page);
-  await page.evaluate(() => { blast.pts = 480; blast.lines = 6; blast.best = 3; blast.t = 200; });
-  await page.waitForFunction(() => !el('blastCard').hidden);
-  const r = await page.evaluate(() => ({ blast: !!blast, paused, state, pts: el('bcPts').textContent, best: el('bcBest').textContent,
-    stats: { blasts: stats.blasts, bestBlast: stats.bestBlast }, end: specialEnd === trayNo, home: curWorld !== 'blast' }));
-  assert.deepEqual(r, { blast: false, paused: true, state: 'play', pts: '+480', best: 'NEW BEST BLAST!', stats: { blasts: 1, bestBlast: 480 }, end: true, home: true });
-  await page.mouse.click(30, 300);                         // anywhere
-  assert.equal(await page.evaluate(() => el('blastCard').hidden && !paused), true);
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.stats')).bestBlast), 480, 'saved for later goals (4.2)');
-  // the next tray carries no special
-  assert.equal(await page.evaluate(() => { trayNo = specialEnd + 1; return specialOk(); }), false);
-});
-
-test('a drag in flight when the clock runs out lands first, then the card shows', async ({ page }) => {
-  await play(page);
-  await page.evaluate(() => { trayNo = 10; startBlast(); });
-  await dealt(page);
-  const g = await geometry(page);
-  await page.evaluate(p => { onDown({ pointerId: 3, clientX: p.x, clientY: p.y }); blast.t = 0; }, g.trayCenters[0]);
-  await frames(page, 5);
-  assert.deepEqual(await page.evaluate(() => ({ blast: !!blast, card: !el('blastCard').hidden, drag: !!drag })), { blast: true, card: false, drag: true });
-  await page.evaluate(() => onUp({ pointerId: 3 }));
-  await page.waitForFunction(() => !el('blastCard').hidden);
-  assert.equal(await page.evaluate(() => blast), null);
-});
-
-test('the round clock does not run while the app is hidden, or while Settings is open', async ({ page }) => {
-  await play(page);
-  await page.evaluate(() => { trayNo = 10; startBlast(); });
-  await dealt(page);
-  const t0 = await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); return blast.t; });
-  await page.waitForTimeout(3000);
-  const t1 = await page.evaluate(() => { delete document.hidden; return blast.t; });
-  assert.ok(Math.abs(t1 - t0) < 50, `hidden 3 s: ${t0} -> ${t1}`);
-  await page.click('#setBtn');
-  await page.waitForTimeout(1000);
-  const t2 = await page.evaluate(() => blast.t);
-  assert.ok(Math.abs(t2 - t1) < 100, `Settings open 1 s: ${t1} -> ${t2}`);
-});
-
-test('stuck mid-round: the hand is swapped twice at most, then the round ends early; the run goes on', async ({ page }) => {
-  await play(page);
-  await page.evaluate(() => { trayNo = 10; startBlast(); });
-  await dealt(page);
-  const r = await page.evaluate(() => {
-    const out = [];
-    const jam = () => { grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => ((r + c) % 2 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
-      tray = [0, 1, 2].map(() => ({ s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 })); };
-    for (let k = 0; k < 3; k++) { jam(); checkStuck(); out.push({ swaps: blast.swaps, dealing: !!dealing, t: blast.t, stuck }); cancelDeal(); }
+  const r = await page.evaluate(async () => {
+    const gain = (b) => { grid = empty(); combo = 0; trayNo = 10; bonus = b; tray = [{ s: SHAPES[0], gi: 1 }, null, null];
+      grid[0] = grid[0].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null)); const s0 = score; place(0, 0, 0); cancelDeal(); return score - s0; };
+    const plain = gain(null), b = { left: 3, extra: 0 }, dbl = gain(b);
+    const out = { plain, dbl, extra: b.extra };
+    const bb = { left: 1, extra: 120 }; bonus = bb; grid = empty(); trayNo = 20; specialEnd = -99; combo = 0; transform = null;
+    tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }]; dealing = null;
+    place(0, 0, 0); out.mid = bonus && bonus.left; place(1, 3, 3); place(2, 6, 6);
+    out.ended = bonus === null; out.specialEnd = specialEnd; out.tag = bonusTag && bonusTag.txt; out.chip = el('bonusChip').textContent.trim(); out.want = '+' + bb.extra.toLocaleString() + ' bonus'; out.grew = bb.extra > 120;
+    out.home = curWorld === CFG.HOME_WORLD;
     return out;
   });
-  assert.deepEqual(r.map(x => [x.swaps, x.dealing, x.stuck]), [[1, true, false], [2, true, false], [2, false, false]]);
-  assert.equal(r[2].t, 0, 'the third time the round ends early');
-  await page.waitForFunction(() => !el('blastCard').hidden);
-  assert.equal(await page.evaluate(() => state), 'play', 'a round never ends the run');
+  assert.ok(r.plain > 0 && r.dbl === 2 * r.plain, `double: ${r.dbl} vs ${r.plain}`);
+  assert.equal(r.extra, r.plain, 'the doubling\'s share is what the tag will report');
+  assert.deepEqual([r.mid, r.ended, r.specialEnd, r.tag, r.chip, r.home, r.grew], [1, true, 20, r.want, r.want, true, true]);
+  await dealt(page);
 });
 
-test('save/resume keeps the charge and a live round with the time it had left', async ({ page }) => {
+test('a bonus plays through three real trays: left counts 3, 2, 1, then it ends; the sky and the rim are drawn without errors', async ({ page, errors }) => {
   await play(page);
-  await page.evaluate(() => { blastCharge = blastShown = 7; trayNo = 10; saveRun(); });
-  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
-  assert.equal(await page.evaluate(() => blastCharge), 7);
-  assert.equal(await page.evaluate(() => getComputedStyle(el('blastBtn')).getPropertyValue('--f').trim()), (7 / await page.evaluate(() => CFG.BLAST_CHARGE)).toFixed(3));
-  await page.evaluate(() => { startBlast(); });
+  await page.evaluate(() => { trayNo = 10; bonus = null; bonusMeter = CFG.BONUS_METER; tray = [null, null, null]; grid = empty(); genTray(); });
+  assert.equal(await page.evaluate(() => bonus.left), 3);
+  const skin = await page.evaluate(() => curSkin);
+  const seen = [];
+  for (let t = 0; t < 3; t++) {
+    await dealt(page);
+    seen.push(await page.evaluate(() => (bonus ? bonus.left : 0)));
+    for (let k = 0; k < 3; k++) {                                   // play the tray out, anywhere that fits
+      const m = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
+      if (!m) break;
+      await page.evaluate(m => { place(m.i, m.r, m.c); }, m);
+      await new Promise(r => setTimeout(r, 120));
+    }
+    await page.evaluate(() => { if (state === 'play' && !tray.some(Boolean) && !dealing) genTray(); });
+    await page.evaluate(() => { grid = empty(); });                  // keep room for the next tray
+    await new Promise(r => setTimeout(r, 300));
+  }
+  assert.deepEqual(seen, [3, 2, 1]);
   await dealt(page);
-  await page.evaluate(() => { blast.t = 12000; blast.pts = 90; paused = true; saveRun(); });
-  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
-  const r = await page.evaluate(() => ({ t: blast && blast.t, pts: blast && blast.pts, world: curWorld, charge: blastCharge, undo: !!undoSnap }));
-  assert.ok(r.t > 11000 && r.t <= 12000, 'the round carries on: ' + r.t);
-  assert.deepEqual({ ...r, t: 0 }, { t: 0, pts: 90, world: 'blast', charge: 0, undo: false });
+  const end = await page.evaluate(() => ({ bonus, world: curWorld === CFG.HOME_WORLD, skin: curSkin }));
+  assert.deepEqual(end, { bonus: null, world: true, skin: skin }, 'it ended after the third tray; her tiles never changed');
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), [], 'no page errors');
 });
 
-test('Undo cannot give back spent charge or replay a round, and round trays give no hesitation sample', async ({ page }) => {
+test('while a bonus runs the sky shifts and the rim pulses, but the board material and her tiles do not change', async ({ page, errors }) => {
   await play(page);
-  await fillBlast(page);
-  await page.evaluate(() => { trayNo = 10; tray[1] = { s: SHAPES[0], gi: 1 }; grid = empty(); place(1, 6, 6); });
+  const before = await page.evaluate(() => ({ skin: curSkin, world: curWorld }));
+  await page.evaluate(() => { trayNo = 10; bonusMeter = 0; startBonus(); });
+  await new Promise(r => setTimeout(r, 400));
+  const mid = await page.evaluate(() => ({ skin: curSkin, world: curWorld, flip: !!flip, bgT, banner: banners.some(b => /BONUS/.test(b.txt)) || banners.length >= 0 }));
+  assert.equal(mid.world, 'bonus'); assert.equal(mid.skin, before.skin); assert.equal(mid.flip, false, 'a sky crossfade, not a tile flip');
+  await new Promise(r => setTimeout(r, 1500));
+  assert.equal(await page.evaluate(() => bgT), 1, 'the sky has settled');
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
+});
+
+test('the bonus is saved and resumed (meter and trays left), Undo takes a bonus move back with its points, and a new run starts clean', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { trayNo = 10; bonusMeter = 6; bonus = { left: 2, extra: 40 }; syncBonusChip(); saveRun(); });
+  const stored = await page.evaluate(() => { const o = JSON.parse(localStorage.getItem('crumble.run')); return { m: o.bonusMeter, b: o.bonus }; });
+  assert.deepEqual(stored, { m: 6, b: { left: 2, extra: 40 } });
+  await reload(page);
+  const r = await page.evaluate(() => ({ meter: bonusMeter, left: bonus && bonus.left, extra: bonus && bonus.extra, world: curWorld, chip: el('bonusChip').textContent.trim() }));
+  assert.deepEqual(r, { meter: 6, left: 2, extra: 40, world: 'bonus', chip: '×2 · 2 trays left' });
   await dealt(page);
-  assert.equal(await page.isDisabled('#undoBtn'), false);
-  await page.click('#blastBtn'); await dealt(page);
-  assert.equal(await page.isDisabled('#undoBtn'), true, 'starting a round clears Undo');
-  const n = await page.evaluate(() => hes.log.length);
-  const m = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
-  await dragPiece(page, m.i, m.r, m.c);
-  assert.equal(await page.isDisabled('#undoBtn'), true, 'a move in a round cannot be undone');
-  assert.equal(await page.evaluate(() => hes.log.length), n, 'no hesitation sample from a round tray');
+  const u = await page.evaluate(() => {
+    grid = empty(); grid[0] = grid[0].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null)); tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+    const s0 = score, x0 = bonus.extra; place(0, 0, 0); const moved = { gain: score - s0, extra: bonus.extra - x0 };
+    undo(); return { moved, score: score === s0, extra: bonus && bonus.extra === x0, left: bonus && bonus.left };
+  });
+  assert.ok(u.moved.gain > 0 && u.moved.extra > 0, 'the move was doubled');
+  assert.deepEqual([u.score, u.extra, u.left], [true, true, 2], 'Undo restores the points, the extra and the trays left');
+  const n = await page.evaluate(() => { start(); return { bonus, meter: bonusMeter, world: curWorld === CFG.HOME_WORLD, chip: el('bonusChip').textContent.trim() }; });
+  assert.deepEqual(n, { bonus: null, meter: 0, world: true, chip: '×2 bonus' });
+});
+
+test('dealing is untouched by a live bonus: the same board and dice deal the same tray', async ({ page }) => {
+  await play(page);
+  const same = await page.evaluate(() => {
+    const seeded = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const keep = Math.random, out = [], was = { ...CFG.SPECIALS };
+    CFG.SPECIALS.star = CFG.SPECIALS.golden = false;                // (those two only roll dice while no bonus is live, which would shift the stream)
+    for (let k = 0; k < 8; k++) {
+      grid = grid.map(r => r.map(() => (keep() < 0.3 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+      const run = b => { bonus = b; trayNo = 10; tension = k / 7; carry = []; golden = null; goldenNext = false; starForced = false; Math.random = seeded(50 + k); genTray(); bonus = null; return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier; };
+      out.push([run(null), run({ left: 2, extra: 0 })]);
+    }
+    Math.random = keep; Object.assign(CFG.SPECIALS, was); return out;
+  });
+  same.forEach(([a, b], k) => assert.equal(b, a, `board ${k}`));
 });
 
 // ---- golden hand (plan 4.5c) ----
@@ -1223,7 +1219,7 @@ test('golden hand: dealt only under the special rules, only when it offers a rea
     const out = {};
     out.early = deal(() => { trayNo = 3; });
     out.gap = deal(() => { specialEnd = 9; });
-    out.blast = deal(() => { blast = { t: 5000, pts: 0, lines: 0, best: 0, swaps: 0, tick: 0 }; }); blast = null;
+    out.bonus = deal(() => { bonus = { left: 2, extra: 0 }; }); bonus = null;
     out.star = deal(() => { tray = [{ s: STAR, gi: STAR_GI }, null, null]; });
     out.off = deal(() => { CFG.SPECIALS.golden = false; }); CFG.SPECIALS.golden = true;
     let dealt = 0, bad = 0, checked = 0;
@@ -1238,7 +1234,7 @@ test('golden hand: dealt only under the special rules, only when it offers a rea
     out.dealt = dealt; out.bad = bad; out.checked = checked;
     return out;
   }, goldBoard);
-  assert.deepEqual([r.early, r.gap, r.blast, r.star, r.off], [false, false, false, false, false], 'never in trays 1-5, the tray after a special, in Blast, beside a star, or when switched off');
+  assert.deepEqual([r.early, r.gap, r.bonus, r.star, r.off], [false, false, false, false, false], 'never in trays 1-5, the tray after a special, in a bonus, beside a star, or when switched off');
   assert.ok(r.dealt >= 3, 'with the board and a forced trigger, golden hands do get dealt (' + r.dealt + ' of 25)');
   assert.equal(r.bad, 0, 'every golden hand has a verified plan of enough lines, all-gold pieces and a cooldown');
 });
@@ -1357,20 +1353,20 @@ test('achievements: sweep, combo 5 and a 10-gem star each start their own look; 
   assert.equal(star.big, 'starfield', 'a 14-gem star clears the bar of 10'); assert.equal(star.small, null, 'below the bar it is only a star');
 });
 
-test('achievements: gated like a special (trays 1-5, Blast, golden, star in tray, cooldown, a live one) but a blocked one still unlocks its look', async ({ page }) => {
+test('achievements: gated like a special (trays 1-5, a bonus, golden, star in tray, cooldown, a live one) but a blocked one still unlocks its look', async ({ page }) => {
   await ach(page);
   const r = await page.evaluate(() => {
-    const tries = {}, one = (name, setup) => { transform = null; transformCool = 0; specialEnd = -99; golden = null; blast = null; trayNo = 10; tray = [null, null, null]; discoveredWorlds.clear();
+    const tries = {}, one = (name, setup) => { transform = null; transformCool = 0; specialEnd = -99; golden = null; bonus = null; trayNo = 10; tray = [null, null, null]; discoveredWorlds.clear();
       setup(); triggerTransform('rainbow'); tries[name] = { live: !!transform, owned: discoveredWorlds.has('rainbow') }; };
-    one('open', () => {}); one('early', () => { trayNo = 3; }); one('blast', () => { blast = { t: 9e9, pts: 0, lines: 0, best: 0, swaps: 0, tick: 0 }; });
+    one('open', () => {}); one('early', () => { trayNo = 3; }); one('bonus', () => { bonus = { left: 2, extra: 0 }; });
     one('golden', () => { golden = { want: { lines: 2 }, got: { lines: 0 }, pts: 0 }; }); one('star', () => { tray = [{ s: STAR, gi: 1 }, null, null]; });
     one('cool', () => { transformCool = 3; }); one('gap', () => { specialEnd = 9; });
-    transform = { id: 'volcano', remaining: 4 }; transformCool = 0; specialEnd = -99; golden = null; blast = null; tray = [null, null, null]; discoveredWorlds.clear();
+    transform = { id: 'volcano', remaining: 4 }; transformCool = 0; specialEnd = -99; golden = null; bonus = null; tray = [null, null, null]; discoveredWorlds.clear();
     triggerTransform('rainbow'); tries.live = { id: transform.id, owned: discoveredWorlds.has('rainbow') };
     transform = null; return tries;
   });
   assert.deepEqual(r.open, { live: true, owned: true });
-  for (const k of ['early', 'blast', 'golden', 'star', 'cool', 'gap']) assert.deepEqual(r[k], { live: false, owned: true }, k + ': no flip, look still unlocked');
+  for (const k of ['early', 'bonus', 'golden', 'star', 'cool', 'gap']) assert.deepEqual(r[k], { live: false, owned: true }, k + ': no flip, look still unlocked');
   assert.deepEqual(r.live, { id: 'volcano', owned: true }, 'a live one is not replaced');
 });
 

@@ -242,10 +242,7 @@ function makeHand(density){
 function weightedShape(density){
   const early=trayNo<=CFG.EARLY_TRAYS;
   // crowded boards favour small pieces, but the penalty is capped at BIG_CAP cells so the big ones never vanish;
-  // in bigMode (Blast Round hands) the crowd penalty is nearly off and 5+ cell pieces are pushed hard
-  const dens=bigMode?density*0.2:density;
-  const w=SHAPES.map(s=>(1/(1+Math.min(s.n,CFG.BIG_CAP)*dens*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT*(bigMode?0.3:1):1)
-    *(bigMode&&s.n>=5?2.5:1)
+  const w=SHAPES.map(s=>(1/(1+Math.min(s.n,CFG.BIG_CAP)*density*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT:1)
     *(early&&!stackable(s)?CFG.EARLY_AWKWARD:1));
   let r=rnd()*w.reduce((x,y)=>x+y,0);
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
@@ -273,8 +270,7 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
     let sc;
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
-    else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough
-      +(bigMode?hand.reduce((a,s)=>a+s.n,0)*1.5:0);   // Blast Round: among playable clearing hands, prefer the chunkiest pieces
+    else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
     if(ev.ok&&!puzzle) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
     if(ev.ok&&!puzzle) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
@@ -340,6 +336,7 @@ function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
   trayNo++;
   if(mode==='daily') rndSrc=mulberry(hashStr(dailySeed(trayNo)));   // (4.1b) every tray of the Daily is dealt from the date's stream, so two phones see the same dice
+  if(bonusDue()) startBonus();                         // (6.2) a full meter: this tray and the next two pay x2; dealing below is unchanged
   const specialsOk=trayNo>=CFG.SPECIAL_FROM_TRAY;      // trays 1-5 never carry a special
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
@@ -353,19 +350,7 @@ function* dealSteps(){
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
   const wantStar=special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || rnd()<CFG.STAR_CHANCE);
 
-  if(goldenNext && special('golden') && specialOk() && !blast){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }   // (4.5c) the shared special rules: trays 1-5, one live, never two in a row
-
-  if(blast){                                        // Blast Round: a sweep if one can be built, else the best big-piece jackpot hand
-    const h=yield* planSweepSteps(a0);
-    if(h){ commitTray(h,'BLAST·SWEEP'); return; }
-    bigMode=true;
-    let r;
-    try{ r=yield* pickHandSteps(a0,density,'jackpot',false,Math.max(CFG.CANDIDATES,60)); }
-    finally{ bigMode=false; }                         // also reset if the deal is abandoned mid-way (a new run starts)
-    if(!r.ev||!r.ev.ok) r=yield* pickHandSteps(a0,density,'jackpot');   // big pieces don't fit this board: fall back to a normal jackpot hand
-    commitTray(r.hand,'BLAST·'+(r.ev&&r.ev.ok?'BIG':'JACKPOT'));
-    return;
-  }
+  if(goldenNext && special('golden') && specialOk()){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }   // (4.5c) the shared special rules: trays 1-5, one live, never two in a row
 
   if(mode==='adventure'&&lvl&&lvl.goal.type==='sweep'){   // (4.1) a sweep level: a sweep is dealt whenever one can be built
     const h=yield* planSweepSteps(a0);
@@ -483,7 +468,7 @@ function commitTray(shapes,label,plan){
   lastTier=label;
   carry=shapes.filter(x=>!stackable(x));
   if(shapes.includes(STAR)) Sfx.starIn();
-  if(blast||shapes.includes(STAR)) hesVoid(); else hesDealt();   // a Blast hand or a star tray is no normal hesitation sample             // a Blast Round hand is no normal hesitation sample
+  if(shapes.includes(STAR)) hesVoid(); else hesDealt();   // a star tray is no normal hesitation sample
   updateDbg(); syncActions();
 }
 // forgiving success rule: one line short of the plan is fine (min 1); a planned sweep needs a sweep or 3+ lines

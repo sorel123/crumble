@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after the Daily (plan PR 4.1b).
+Last updated 2026-11-09, after the bonus trays (plan PR 6.2).
 
 ---
 
@@ -58,10 +58,10 @@ Last updated 2026-11-09, after the Daily (plan PR 4.1b).
     worlds (`saveSkinSave` / `loadSkinSave`, `lookV` for one-time migrations).
   - `crumble.dev.5` — Admin panel tuning overrides. Bump the key when defaults
     change so old saved tuning doesn't mask them.
-  - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved, and so are the Blast charge and a live Blast Round (it carries on with the time it had left); a live transformation is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
+  - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved, and so are the bonus meter and a live bonus (trays left, points it added; plan 6.2); a live transformation is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
   - `crumble.hes` — the hesitation log (3.4): the last 60 trays' `{pick, place, clr}` (ms from the tray appearing to her first pickup, ms from the pickup that led to the first drop to that drop, whether it cleared). Recorded in the player build too; only shown with `?dev`.
   - `crumble.mode`, `crumble.adv`, `crumble.run.adv`, `crumble.run.daily`, `crumble.daily` (4.1) — the mode she was in (`endless` / `adventure` / `daily`), Adventure progress `{v:1, lv:{"7":{s:stars,p:fewest pieces,n:times cleared,f:failed tries}}}` (plain data on purpose: 4.2's goals and streaks extend it), and the Adventure level in progress. Each mode has its own run key (`runStore(mode)`), so switching modes never loses a game; `crumble.run` is still Endless.
-  - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, blasts, bestBlast`; the last two are Blast rounds played and the most points in one, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
+  - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, bonuses`; `bonuses` is bonus runs earned, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
 
@@ -71,17 +71,17 @@ Last updated 2026-11-09, after the Daily (plan PR 4.1b).
   colour, 37 shapes (`RAW`).
 - Hand solver + tension wave (below) — every tray is fully playable in some order.
 - **Obvious moves (3.4):** the dealer prefers hands where one or two pieces have an *obvious* clear (a line already 5-7/8 full whose gap is one plain run the piece drops into), and where the hand's smallest piece of 2+ cells has room (`OBVIOUS`, `OBVIOUS_MAX`, `ALT`; see Hand solver). Measured with `tools/bot-sim.mjs`.
-- **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). Plan 6.0: 2-4 gems are scattered outside the seeded lines, so that first clear leaves blocks; about 1 in 8 openings (`CFG.OPENING_SWEEP_CHANCE`) keep the board bare and can sweep. No special (golden hand, star, transformation, Blast Round) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
+- **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). Plan 6.0: 2-4 gems are scattered outside the seeded lines, so that first clear leaves blocks; about 1 in 8 openings (`CFG.OPENING_SWEEP_CHANCE`) keep the board bare and can sweep. No special (golden hand, star, transformation, bonus) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
-- **Specials, one switch each (4.5):** `CFG.SPECIALS = {blast:true, star:true, golden:true, transform:true}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **Blast is back (4.5a)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; **transformations are back as achievements (4.5d)**. Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
+- **Specials, one switch each (4.5):** `CFG.SPECIALS = {bonus:true, star:true, golden:true, transform:true}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **the Blast Round was replaced by automatic bonus trays (6.2)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; **transformations are back as achievements (4.5d)**. Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
 - Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
 - **Golden hand (4.5c)** — the rarest, biggest special: a gold tray whose target lines glow on the board; finding it pays ×3. See the 4.5c section at the end.
 - **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
 - **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
-- **Blast Round (4.5a)** — a reward she starts herself. Combos charge the `⚡ Blast` button under the tray (it is the meter: its fill is the charge, then the round's clock); full, it glows and she taps it whenever she likes for 20 s of big pieces at ×2, with its own look, sting and a results card. Details below.
-- **Undo (3.2):** the `↩ Undo` button under the tray puts the run back to just before the last placement, exactly (`snapshot()` taken first thing in `place()` via `noteUndo()`, restored by `undo()` in `save.js`; lifetime stats are rewound too). One move back, once per placement: a new run, a rescue and game over clear it (so it can never refund a rescue), and a Blast Round in progress is not undoable.
+- **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
+- **Undo (3.2):** the `↩ Undo` button under the tray puts the run back to just before the last placement, exactly (`snapshot()` taken first thing in `place()` via `noteUndo()`, restored by `undo()` in `save.js`; lifetime stats are rewound too). One move back, once per placement: a new run, a rescue and game over clear it (so it can never refund a rescue), and a bonus in progress is undone with the move (trays left and points come back).
 - **Stuck (3.2):** when no tray piece fits, the run waits instead of ending: pieces dim, "No moves" shows, and Undo, `🛟 Rescue` (needs a rescue left and `rescueAllowed()`, shared with the game-over card) and `End run` are offered. Only when neither Undo nor Rescue is available does it end on its own, 700 ms after the last drop (`checkStuck()` / `canExit()`). `syncActions()` keeps the buttons current.
 - **Rescues** — on game over (if the run is worth saving): up to 2 per run, both
   free ("Keep going"). A rescue serves a sweep/jackpot
@@ -113,7 +113,7 @@ Last updated 2026-11-09, after the Daily (plan PR 4.1b).
 | `js/render.js` | `layout`, tile renderers, `SKINS`, `buildCache` |
 | `js/samples.js` | `SAMPLES` base64 MP3 data (~190 KB, data only) |
 | `js/audio.js` | synth sets, recorded bank, `Sfx` |
-| `js/game.js` | `place`, Blast Round, input |
+| `js/game.js` | `place`, bonus trays, input |
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
 | `js/save.js` | `snapshot`/`restore`, run autosave, best + stats |
@@ -128,7 +128,7 @@ Top to bottom:
 1. **`CFG`** — every tunable constant, commented. Start here.
 2. **`GEMS`** — six `{hue, saturation}` pairs plus a gold gem (golden hands
    only) and a prismatic star gem (star pieces only).
-3. **Worlds and themes** — `HOME_WORLDS`, `TRANSFORMS`, `BLAST_WORLD`,
+3. **Worlds and themes** — `HOME_WORLDS`, `TRANSFORMS`, `BONUS_WORLD`,
    `THEMES`, `applyTheme`, ambient particles.
 5. **`SHAPES`** — 37 pieces parsed from ASCII art (`RAW`), plus `STAR`.
 6. **The solver** — `packGrid` / `placeMasks` / `applyBits` / `evalHand`,
@@ -139,7 +139,7 @@ Top to bottom:
 8. **Audio** — `buildChain` (buses), the synth sets, the recorded bank
    (`SAMPLES`, `smp`, `recordedSet`), then the `Sfx` dispatcher.
 9. **Game logic** — `place`, `linesFor`, `mobility`, `triggerTransform`.
-10. **Blast Round** — `startBlast`, `stepBlast`.
+10. **Bonus trays** — `chargeBonus`, `startBonus`, `endBonus`, `drawBonusRim`.
 11. **Input** — pointer handlers, `ghost`, the magnet.
 12. **Draw** — `sprite`/`blit` text cache, then `frame`, the render loop,
     drawn in layers.
@@ -177,6 +177,7 @@ Top to bottom:
 | (4.1b) | Daily: date-seeded opening and trays, results calendar, third mode in the menu; Adventure/Daily scores no longer leak into the saved best |
 | (6.0) | Opening no longer sweeps on move one: 2-4 scattered gems outside the seeded lines, and about 1 in 8 openings keep the board bare (`CFG.OPENING_SWEEP_CHANCE`); the opening test counts sweeps |
 | (6.4) | Audio routing: the Original synth chain has its own speaker filter (`ohp1`/`ohp2`, set by `setSpeaker` with the other pair), so phone-speaker mode cuts its bass too; `ORIG_SFX.pickup/place` take the Admin volumes (`SND_PICKUP_VOL`, `SND_PLACE_VOL`). `PHONE_SPEAKER` defaults on for touch devices (`speakerDefault()`, run in `ac()`) unless a choice is saved: `crumble.speaker` (written by the Admin toggle) or `PHONE_SPEAKER` in `crumble.dev.6` |
+| (6.2) | Bonus trays replace the Blast Round: a clear meter, then ×2 for the next 3 trays, automatically; Blast's button, timer, results card, big-piece hands and `canBlast` gating are gone. See the 6.2 section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -315,7 +316,9 @@ What changed to match:
 
 ---
 
-## Blast Round (2026-10-30, PR #2)
+## Blast Round (2026-10-30, PR #2) — REMOVED in 6.2, kept as history
+
+> Everything about Blast (this section and "Blast as a tap-to-start reward" below) is gone from the code; see "Bonus trays (plan 6.2)" at the end.
 
 The bonus round, and the answer to "I want chains built to clear the board,
 with big pieces, and a reason to move fast."
@@ -494,7 +497,7 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 | `TIDY` / `PAIR_CHANCE` | favour compact boards / partner pieces for awkward shapes |
 | `MAGNET_REACH` / `MAGNET_HOLD` / `LIFT` | drag feel (see plan 2.1) |
 | `CLEAR_STYLE` / `CLEAR_BLINK` / `CLEAR_STAGGER` | how a line clear looks |
-| `BLAST_*` | Blast charge to fill (`BLAST_CHARGE`), round length and payout |
+| `BONUS_*` | Bonus meter size (`BONUS_METER`), combo share (`BONUS_COMBO_MAX`), trays it lasts and multiplier |
 | `GOLDEN_*` / `STAR_*` / `TRANSFORM_*` | special-event frequency and payout |
 | `SHAKE` / `SPARKLE_RATE` / `FX_*` | visual intensity, each effect switchable |
 | `GEMS` hues | recolor everything |
@@ -649,7 +652,7 @@ drop (`place()` in the pointerup) cost 7-25 ms, about two thirds of it `genTray`
 
 ---
 
-## Blast as a tap-to-start reward (plan 4.5a)
+## Blast as a tap-to-start reward (plan 4.5a) — REMOVED in 6.2, kept as history
 
 The first special to come back, rebuilt so it is earned, legible, chosen by her, and the loudest thing on screen.
 All of it is in the Blast section of `js/game.js` (plus `stepBlastFx` called from `frame()`, the button and card in
@@ -770,3 +773,34 @@ Check on the iPhone: Daily from the start card or the mode chip; play a few move
 
 ### 4.2 Goals, unlock progress, streak
 `js/goals.js`, store `crumble.goals` = `{v:1, streak:{cur,best,last}, days, done:[ids]}`. The streak counts days with at least one piece placed (`playedToday()` in `place()`); a missed day only pauses it (`streakNow()` is 0 until she plays, `best` is kept). Goals are lifetime ladders (`GOAL_FAMILIES`: lines, games, combo, sweeps, Adventure stars, play days, Blast rounds) derived from `stats`/`adv`; one rung per family shows, `checkGoals()` banners a reached rung once. First load with no save marks passed rungs done silently. Goals card (start card and mode menu) also shows the next score skin with a bar and the locked achievement looks with their hint. To add a goal, append a family.
+
+## Bonus trays (plan 6.2)
+
+Replaces the Blast Round (Jay: it was confusing; a bonus should just happen). Code is the "Bonus trays" block in `js/game.js`
+(plus `startSky` in `worlds.js`, `drawBonusRim` called from `frame()`, the chip in `index.html`).
+
+- **Meter.** `bonusMeter`, size `CFG.BONUS_METER` (10). Every clear in `place()` calls `chargeBonus(total, combo)`: it adds the
+  lines cleared, plus 1 per combo step above the first (at most `BONUS_COMBO_MAX`, 2). Nothing fills it in trays 1-5, while a
+  bonus runs, or past full; nothing ever drains it. Roughly one bonus every 5-8 trays of normal play: tune `BONUS_METER` first.
+- **Start.** Only at a deal: `dealSteps()` calls `bonusDue()` (switch on, meter full, `specialOk()`) and `startBonus()`, so the
+  tray being dealt is bonus tray 1 of `BONUS_TRAYS` (3). A full meter waits (chip says "×2 bonus next") while a transformation
+  is live or the tray after another special. Dealing itself is untouched (a test deals the same tray with and without a live
+  bonus). While a bonus runs `specialOk()` is false, so no star, golden hand or live transformation comes with it (the
+  achievement still unlocks its look); the golden hand stays the only other multiplier.
+- **Pay.** `gained*BONUS_MULT` at the end of `place()`'s scoring, after the transformation multiplier; `bonus.extra` collects
+  the doubling's share. A tray counts down when it is emptied (`bonus.left--`); at 0 `endBonus()` sets `specialEnd`, returns the
+  sky home, and the chip shows `+N bonus` (N = `extra`) for 3 s.
+- **What she sees.** `#bonusChip` between Undo and Rescue (a div, not a button): meter fill, then "×2 bonus next" glowing, then
+  "×2 · 3 trays left" counting down, then "+N bonus". Starting a bonus also queues a "BONUS ×2 / NEXT 3 TRAYS" banner and a sting
+  (`Sfx.bonusStart`; `bonusReady` chimes once when the meter fills, `bonusEnd` at the end). Whole-screen treatment: `startSky('bonus')`
+  crossfades only the sky and ambient particles (violet, `BONUS_WORLD`) over ~70 frames, ambient particles get a boost, and the
+  board's rim pulses (`drawBonusRim`, faster on the last tray). The tile skin and board are never touched (no tile flip).
+  Reduced motion: the sky snaps, the rim is static. Hidden while stuck (End run needs the room).
+- **Save/resume/Undo.** `snapshot()` carries `bonusMeter` and `bonus:{left,extra}`; `restore()` puts the sky back at once. Undo
+  takes the move back with its points, `extra` and trays left (the start of a bonus is a deal, so Undo before it is also fine).
+- **Gone:** `blast`, `bigMode`, `blastCharge`, the Blast button/card/timer/3-2-1/sparks, `stats.blasts/bestBlast` (now
+  `stats.bonuses`, which feeds the goal "Earn a ×2 bonus"), `CFG.BLAST_*`, `CFG.SPECIALS.blast`.
+- **Admin:** toggle, "Fill bonus meter" and "Bonus trays" buttons, sliders for `BONUS_METER`, `BONUS_COMBO_MAX`, `BONUS_TRAYS`,
+  `BONUS_MULT`. Tests: "Bonus trays" block in `tests/run.mjs`.
+- **What to check on the phone:** chain a few clears and watch the chip fill; when it is full the next tray should bring the
+  banner, the violet sky and the pulsing rim, and the chip counting 3, 2, 1; ask her what the chip means without telling her.

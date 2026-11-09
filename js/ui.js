@@ -49,7 +49,7 @@ function setMotif(id){ CFG.MOTIF=id; buildCache(); renderMotifs(); renderLooks()
 function setWorld(id){
   if(!isWorldUnlocked(id)) return;
   CFG.HOME_WORLD=id;
-  if(!transform){ curWorld=id; ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1; }
+  if(!transform&&!bonus){ curWorld=id; ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1; }
   renderWorlds(); renderLooks(); saveSkinSave();
 }
 function renderSkins(){
@@ -121,6 +121,8 @@ function setLook(id){
   applyTheme();
   if(!transform){                                  // mid-transformation the skin and world apply when it ends
     curSkin=l.style; buildCache();
+  }
+  if(!transform&&!bonus){
     curWorld=l.world; ambient=spawnAmbient(worldDef(l.world).effect); ambientOld=[]; bgFrom=l.world; bgT=1;
   }
   renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); saveSkinSave();

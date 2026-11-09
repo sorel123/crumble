@@ -5,7 +5,6 @@ async function gameOver(){
   if(state!=='play') return;
   if(paused){ setTimeout(gameOver,300); return; }
   state='over'; clearRun(); undoSnap=null; stuck=false; syncActions();
-  blast=null;                                        // the round dies with the run; resetWorld() restores the look on restart
   const prevBest=best;
   stats.totalScore+=score;
   el('overEye').textContent='No room left'; el('againBtn').textContent='Start over'; el('overMenuBtn').textContent='Modes';
@@ -37,20 +36,19 @@ async function rescue(){
   el('overCard').hidden=true; state='play';
   syncActions(); saveRun();
 }
-// everything in flight that a new run, or a restored one, starts without (effects, banners, drag, the Blast Round)
+// everything in flight that a new run, or a restored one, starts without (effects, banners, drag, the bonus)
 function clearRunFx(){
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false; starCool=0; transform=null; transformCool=0;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];
   chunks=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
-  blast=null; bigMode=false; blastIntro=null; blastSparks=[]; blastShown=blastCharge;
-  if(!el('blastCard').hidden){ clearTimeout(blastCardT); el('blastCard').hidden=true; paused=false; }
+  bonus=null; bonusTag=null; clearTimeout(bonusTagT);
   tags=[]; slams=[]; bands=[]; borderFlash=null;
   confetti=[]; goldenCele=null; goldRain=[]; goldenArrive=999; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
 }
 function start(){
   layout();
-  grid=empty(); score=0; combo=0; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[]; blastCharge=0; specialEnd=-99;
+  grid=empty(); score=0; combo=0; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[]; bonusMeter=0; specialEnd=-99;
   clearRunFx(); stats.games++;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0';

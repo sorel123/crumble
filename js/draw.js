@@ -220,14 +220,14 @@ function frame(now){
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
-  stepFlip(dt); stepBlast(now,dt);
+  stepFlip(dt);
   const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
     : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
        lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
   ctx.fillStyle=skyFill(bgTop,bgBot); ctx.fillRect(0,0,W,H);     // gradient object cached per colour pair (a new one each frame is slow on iOS)
 
   ambientBurst*=Math.pow(.88,dt);
-  const aboost=1+ambientBurst*1.8;
+  const aboost=1+ambientBurst*1.8+(bonus&&!reduce?0.6:0);   // a bonus keeps the sky's particles livelier
   if(bgT<1) stepAmbient(ambientOld,worldDef(bgFrom).effect,dt,aboost,1-easeOutCubic(bgT),false);
   stepAmbient(ambient,worldDef(curWorld).effect,dt,aboost,bgT<1?easeOutCubic(bgT):1,true);
 
@@ -264,13 +264,8 @@ function frame(now){
   }
 
   ctx.drawImage(boardBg.cv,bx-boardBg.pad,by-boardBg.pad,boardBg.w,boardBg.w);
-  drawBlastBar(now);
-  if(blast && !reduce){                                  // the round's own border: hot and pulsing
-    const p=0.5+0.5*Math.sin(now*(blast.t<5000?0.02:0.005));
-    roundPath(ctx,bx-9,by-9,B+18,B+18,20);
-    ctx.strokeStyle=`rgba(255,123,213,${0.25+0.35*p})`; ctx.lineWidth=10+8*p; ctx.stroke();
-    ctx.strokeStyle=`rgba(255,255,255,${0.5+0.4*p})`; ctx.lineWidth=2.5; ctx.stroke();
-  } else if(borderFlash && (borderFlash.t+=dt)>=0){      // combo flash: the board edge lights in the streak colour, then fades
+  if(bonus){ drawBonusRim(now); }                          // the bonus trays' pulsing rim
+  else if(borderFlash && (borderFlash.t+=dt)>=0){      // combo flash: the board edge lights in the streak colour, then fades
     const f=1-borderFlash.t/26;
     if(f<=0) borderFlash=null;
     else { roundPath(ctx,bx-9,by-9,B+18,B+18,20); ctx.strokeStyle=`rgba(${borderFlash.col},${0.9*f})`; ctx.lineWidth=5+6*f; ctx.stroke(); }
@@ -708,7 +703,6 @@ function frame(now){
   }
   if(CFG.FX_SWEEP_FX) stepConfetti(dt);
   stepOrbs(now,dt);
-  stepBlastFx(now,dt);
   stepDeal(); stepPending();                                        // the next tray, a slice at a time, after this frame's drawing
   perf.work=performance.now()-t0;
   perfHud(now);
