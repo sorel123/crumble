@@ -1562,6 +1562,58 @@ test('Daily: game over records the day once, shows Today\'s best, and the calend
   assert.equal(await page.textContent('#bestVal'), '500');
 });
 
+// ── goals, unlock progress and the streak (plan 4.2) ──
+test('streak: counts days played, one missed day only pauses it, and the same day is counted once', async ({ page }) => {
+  const day = async iso => { await setDay(page, iso); };
+  const piece = () => page.evaluate(() => { playedToday(); return [goals.streak.cur, goals.streak.best, streakNow(), goals.days]; });
+  await day('2026-11-09'); assert.deepEqual(await piece(), [1, 1, 1, 1]);
+  assert.deepEqual(await piece(), [1, 1, 1, 1], 'a second piece the same day is not another day');
+  await day('2026-11-10'); assert.deepEqual(await piece(), [2, 2, 2, 2]);
+  await day('2026-11-11'); assert.deepEqual(await piece(), [3, 3, 3, 3]);
+  await day('2026-11-12');                                                   // she has not played yet today: yesterday's streak is still alive
+  assert.equal(await page.evaluate(() => streakNow()), 3);
+  await day('2026-11-13');                                                   // a whole day missed: paused at 0, best kept
+  assert.deepEqual(await page.evaluate(() => [streakNow(), goals.streak.best]), [0, 3]);
+  assert.deepEqual(await piece(), [1, 3, 1, 4], 'the next play starts a new streak; the best stays');
+  await day('2026-12-01'); await page.evaluate(() => { goals.streak.last = '2026-11-30'; });
+  assert.deepEqual(await piece(), [2, 3, 2, 5], 'month boundaries count as consecutive');
+});
+
+test('goals: a reached rung gets one banner and is saved; old progress is marked done silently on first load', async ({ page }) => {
+  assert.equal(await page.evaluate(() => goals.done.size), 0);
+  await page.evaluate(() => { stats.lines = 30; stats.games = 4; checkGoals(false); });
+  assert.deepEqual(await page.evaluate(() => [...goals.done].sort()), ['games:3', 'lines:25']);
+  await page.evaluate(() => { window.__b = []; const pb = pushBanner; pushBanner = (...a) => { window.__b.push(a); return pb(...a); }; stats.lines = 120; checkGoals(); checkGoals(); });
+  const b = await page.evaluate(() => window.__b);
+  assert.equal(b.length, 1, 'once'); assert.deepEqual(b[0].slice(0, 2), ['GOAL REACHED', 'Clear 100 lines']);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.goals')));
+  assert.ok(saved.done.includes('lines:100'));
+  // a phone with old stats and no goals save: nothing announced, rungs already passed are done
+  await page.evaluate(() => { localStorage.removeItem('crumble.goals'); localStorage.setItem('crumble.stats', JSON.stringify({ v: 1, best: 10, lines: 300, games: 12 })); });
+  await page.reload(); await page.waitForFunction(() => typeof goals !== 'undefined');
+  assert.deepEqual(await page.evaluate(() => [...goals.done].sort()), ['games:10', 'games:3', 'lines:100', 'lines:25', 'lines:250']);
+});
+
+test('goals card: streak, next skin with progress, locked looks with their achievement, rungs; reachable from the start card and the menu', async ({ page }) => {
+  await page.evaluate(() => { stats.lines = 60; best = 300; playedToday(); checkGoals(false); });
+  await page.click('#startGoals'); await page.waitForSelector('#goalsCard:not([hidden])');
+  assert.equal(await page.textContent('#streakNum'), '1');
+  assert.match(await page.textContent('#goalUnlock'), /Next skin: Candy.*300 \/ 400/);
+  assert.match(await page.textContent('#goalUnlock'), /Rainbow look.*Clean sweep/);
+  assert.match(await page.textContent('#goalList'), /Clear 100 lines.*60 \/ 100/);
+  await page.click('#goalsBack'); await page.waitForSelector('#menuCard:not([hidden])');
+  assert.match(await page.textContent('#menuGoalsSub'), /1 day in a row/);
+  await page.click('#menuGoals'); await page.waitForSelector('#goalsCard:not([hidden])');
+});
+
+test('playing a piece counts the day and a reached goal shows its banner in a real run', async ({ page }) => {
+  await play(page); await dealt(page);
+  await setup(page, { rows: EMPTY });
+  await page.evaluate(() => { stats.lines = 24; });
+  await dragPiece(page, 0, 3, 3);
+  assert.equal(await page.evaluate(() => goals.streak.cur), 1);
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 for (const { name, fn } of tests) {

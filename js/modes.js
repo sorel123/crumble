@@ -156,7 +156,7 @@ function levelWin(){
   state='won'; undoSnap=null; stuck=false; clearRun('adventure'); syncActions();
   const L=lvl, stars=starsFor(L,lv.pieces), rec=advRec(L.id), first=rec.n===0;
   rec.n++; rec.s=Math.max(rec.s,stars); rec.p=rec.p?Math.min(rec.p,lv.pieces):lv.pieces; rec.f=0;
-  saveAdv(); saveStats();
+  saveAdv(); saveStats(); checkGoals();
   pushBanner('LEVEL CLEARED','','#8FF7FF'); if(!reduce) spawnConfetti(); glowT=Math.max(glowT,1.4); Sfx.praise(3);
   setTimeout(()=>showWin(stars,first),reduce?300:1200);
 }
@@ -182,15 +182,16 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['setPanel','menuCard','mapCard','dailyCard','blastCard'].some(id=>!el(id).hidden); }
+function overlayOpen(){ return ['setPanel','menuCard','mapCard','dailyCard','goalsCard','blastCard'].some(id=>!el(id).hidden); }
 function pauseForMenu(){ if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); } }
-function hideMenus(){ el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
+function hideMenus(){ el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
 function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
 function openMenu(){
-  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true;
+  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('goalsCard').hidden=true;
   const today=daily.d[dailyKey()], liveD=peekRun('daily');
   el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'Same board for everyone, once a day';
   el('menuAdvSub').textContent=advStars()?'★ '+advStars()+' of '+LEVELS.length*3+' · level '+nextLevel().id:'Goal levels, no timer';
+  el('menuGoalsSub').textContent=streakNow()?'🔥 '+streakNow()+(streakNow()===1?' day':' days')+' in a row':'Streak and unlocks';
   el('menuBest').textContent=best?'Best '+best:'Play as long as you can';
   el('menuCard').hidden=false;
 }
