@@ -411,7 +411,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
 
 test('slow frames shrink the particle budget, and it grows back', async ({ page }) => {
   await play(page);
-  const before = await page.evaluate(() => perf.fx);
+  const before = await page.evaluate(() => { perf.fx = 1; return perf.fx; });   // start from a full budget: a slow CI runner may already have cut it
   await page.evaluate(() => new Promise(res => {             // eight frames that each take ~35 ms
     let n = 8; const busy = () => { const t = performance.now(); while (performance.now() - t < 35); if (--n) requestAnimationFrame(busy); else res(); };
     requestAnimationFrame(busy);
