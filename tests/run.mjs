@@ -355,7 +355,15 @@ test('the opening: 100 seeded new games each clear a line within the first three
       Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
       start();
       const a0 = packGrid(grid), hand = tray.map(t => t.s), ev = evalHand(a0, hand, 6000);
-      out.push({ filled: countFlat(a0), ok: ev.ok, lines: ev.lines, imm: ev.imm, trayNo, label: lastTier, specials: tray.some(t => t.s.star) || !!golden || !!transform || !!blast });
+      // plan 6.0: the cells left after the first clearing drop (the first found, in the solver's scan order)
+      const pop = x => { let n = 0; for (; x; x >>>= 1) n += x & 1; return n; };
+      let left = -1;
+      for (let i = 0; i < 3 && left < 0; i++) for (const m of placeMasks(tray[i].s)) {
+        const [lo0, hi0] = packBits(a0);
+        if ((lo0 & m.lo) || (hi0 & m.hi)) continue;
+        if (applyBits(lo0, hi0, tray[i].s, m) > 0) { left = pop(_lo) + pop(_hi); break; }
+      }
+      out.push({ filled: countFlat(a0), ok: ev.ok, lines: ev.lines, imm: ev.imm, trayNo, label: lastTier, left, specials: tray.some(t => t.s.star) || !!golden || !!transform || !!blast });
     }
     Math.random = orig;
     return out;
@@ -366,6 +374,11 @@ test('the opening: 100 seeded new games each clear a line within the first three
   assert.ok(r.every(g => g.filled >= 4 && g.filled <= 16 && g.label === 'OPENING' && g.trayNo === 1), 'a modest seeded pattern, dealt as the opening tray');
   assert.ok(r.every(g => !g.specials));
   assert.ok(new Set(r.map(g => g.filled)).size > 3, 'the patterns vary');
+  // plan 6.0: most first clears leave blocks; about 1 in 8 sweep the board clean (the rest are the scattered gems)
+  const sweeps = r.filter(g => g.left === 0).length;
+  assert.ok(r.every(g => g.left >= 0), 'every opening has a clearing drop');
+  assert.ok(sweeps >= 3 && sweeps <= 25, `about 1 in 8 openings sweep on move one (got ${sweeps}/100)`);
+  assert.ok(r.filter(g => g.left > 0).length >= 75, 'most first clears leave blocks on the board');
 });
 
 test('the opening clear really works through the UI: drag the clearing piece, the line goes', async ({ page }) => {

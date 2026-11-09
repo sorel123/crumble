@@ -384,16 +384,32 @@ function* dealSteps(){
 /* The opening (plan 3.1): a new game does not start on an empty board with random pieces. The board holds a
    seeded pattern, one or two nearly-full lines each missing one gap of 2-4 cells, and the first tray is
    verified with the solver to complete a line with a single obvious drop (plus the other two pieces still
-   playable). So her first move is a clear, and every game starts the same relaxed way. */
+   playable). So her first move is a clear, and every game starts the same relaxed way.
+   Plan 6.0: most openings also scatter 2-4 gems outside the seeded lines, so the first clear leaves blocks
+   instead of emptying the board (no clean-sweep bonus on move one). About 1 in 8 keep the board bare, so a
+   sweep is still possible sometimes, never always. */
 function seedOpening(){
   for(let attempt=0;attempt<200;attempt++){
     const g=empty(), vert=rnd()<0.5, rowsN=1+((rnd()*2)|0);
     const gap=rowsN===2?2+((rnd()*2)|0):2+((rnd()*3)|0);    // a 2-line gap is 2-3 wide: it takes one rectangle
     const gs=(rnd()*(N-gap+1))|0, l0=(rnd()*(N-rowsN+1))|0;
+    const scatter=rnd()>=CFG.OPENING_SWEEP_CHANCE, nScatter=2+((rnd()*3)|0);
     for(let k=0;k<rowsN;k++) for(let j=0;j<N;j++){
       if(j>=gs&&j<gs+gap) continue;
       const r=vert?j:l0+k, c=vert?l0+k:j;
       g[r][c]={gi:(rnd()*NCOLOR)|0,t:1,f:0,l:0};
+    }
+    if(scatter){                                             // gems only outside the seeded band, so they survive the clear
+      const free=[];
+      for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+        const line=vert?c:r;
+        if(line>=l0&&line<l0+rowsN) continue;
+        free.push([r,c]);
+      }
+      for(let i=0;i<nScatter&&free.length;i++){
+        const [r,c]=free.splice((rnd()*free.length)|0,1)[0];
+        g[r][c]={gi:(rnd()*NCOLOR)|0,t:1,f:0,l:0};
+      }
     }
     const bar=n=>SHAPES.find(s=>s.n===n&&(vert?s.cols===1:s.rows===1)&&s.rows*s.cols===n);   // a straight piece n long, lying along the line
     const rect=SHAPES.find(s=>s.n===gap*rowsN&&(vert?s.rows===gap&&s.cols===rowsN:s.cols===gap&&s.rows===rowsN)&&s.rows*s.cols===s.n);
