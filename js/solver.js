@@ -125,15 +125,18 @@ function targetCells(a,cov){
   cov.cols.forEach(c=>{ for(let r=0;r<N;r++) if(!a[r*N+c]) T.add(r*N+c); });
   return [...T];
 }
-function tileExact(T){
+// tileExact / planSweep also come as generators (…Steps), pausing between first pieces, so a dealt sweep
+// can be spread over frames like the candidate search below (an awkward target can take several ms)
+function tileExact(T){ return runSteps(tileExactSteps(T)); }
+function* tileExactSteps(T){
   const pool=SHAPES.slice().sort(()=>Math.random()-0.5);
   const out=[];
-  function rec(rem){
+  function rec(rem,only){                     // only: the shape to try first (the top level, one shape per step)
     if(rem.size===0) return true;
     if(out.length>=3) return false;
     let first=Infinity; for(const v of rem) if(v<first) first=v;
     const fr=(first/N)|0, fc=first%N;
-    for(const s of pool){
+    for(const s of only?[only]:pool){
       for(const [dr,dc] of s.cells){
         const r=fr-dr, c=fc-dc;
         if(r<0||c<0||r+s.rows>N||c+s.cols>N) continue;
@@ -151,18 +154,23 @@ function tileExact(T){
     }
     return false;
   }
-  return rec(new Set(T)) ? out.slice() : null;
+  const rem=new Set(T);
+  if(!rem.size) return [];
+  for(const s of pool){ if(rec(rem,s)) return out.slice(); yield; }
+  return null;
 }
-function planSweep(a){
+function planSweep(a){ return runSteps(planSweepSteps(a)); }
+function* planSweepSteps(a){
   const n=countFlat(a);
   if(n<CFG.SWEEP_MIN||n>CFG.SWEEP_MAX) return null;
   for(const [ur,uc] of [[true,true],[true,false],[false,true]]){
     const cov=coverAll(a,ur,uc); if(!cov) continue;
     const T=targetCells(a,cov);
     if(!T.length||T.length>15) continue;
-    const tiles=tileExact(T); if(!tiles) continue;
+    const tiles=yield* tileExactSteps(T); if(!tiles) continue;
     const hand=tiles.slice(0,3);
     while(hand.length<3) hand.push(SHAPES[(Math.random()*4)|0]);
+    yield;
     if(evalHand(a,hand,6000).sweep) return hand;
   }
   return null;
@@ -216,10 +224,15 @@ function pickTier(a){
   return 'honest';
 }
 /* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
-function pickHand(a0,density,tier,withStar){
+// The tray deal runs as a generator that yields after every candidate hand, so a deal can be
+// spread over a few frames (dealLater) instead of landing in the frame a clear starts. Same
+// search, step for step, as running it straight through (genTray / runSteps).
+function runSteps(it){ let r; while(!(r=it.next()).done); return r.value; }
+function pickHand(a0,density,tier,withStar){ return runSteps(pickHandSteps(a0,density,tier,withStar)); }
+function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES){
   const want = tier==='jackpot'?3 : tier==='solvable'?2 : 0;
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
-  for(let i=0;i<CFG.CANDIDATES;i++){
+  for(let i=0;i<candidates;i++){
     const hand=makeHand(density);
     if(withStar) hand[(Math.random()*3)|0]=STAR;      // graded with the star in it, so the score is honest
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
@@ -232,21 +245,23 @@ function pickHand(a0,density,tier,withStar){
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
     if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough && (!CFG.GUIDE||ev.imm>0)) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
+    yield;
   }
   if(!bestHand){ bestHand=[weightedShape(density),weightedShape(density),weightedShape(density)]; bestEv=null; }
   return {hand:bestHand,ev:bestEv};
 }
 /* golden hand: a planned sweep if one can be built, else the best jackpot hand.
    Returns false (and deals nothing) if neither offers a real clear. */
-function genGolden(a0,density){
-  let hand=planSweep(a0), ev=hand&&evalHand(a0,hand,6000);
+function* genGoldenSteps(a0,density){
+  let hand=yield* planSweepSteps(a0), ev=hand&&evalHand(a0,hand,6000);
   if(hand&&ev.sweep){ sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; }   // same bookkeeping as a normal sweep hand
-  else ({hand,ev}=pickHand(a0,density,'jackpot'));
+  else { yield; ({hand,ev}=yield* pickHandSteps(a0,density,'jackpot')); }
   if(!ev||!ev.ok||(!ev.sweep&&ev.lines<1)) return false;
   commitTray(hand,'GOLDEN·'+(ev.sweep?'SWEEP':'JACKPOT'),{sweep:ev.sweep,lines:ev.lines});
   return true;
 }
-function genTray(){
+function genTray(){ runSteps(dealSteps()); }
+function* dealSteps(){
   trayNo++;
   if(CFG.TRANSFORM_ENABLED && Math.random()<CFG.MYSTERY_CHANCE)
     triggerTransform(TRANSFORM_IDS[(Math.random()*TRANSFORM_IDS.length)|0]);
@@ -260,27 +275,27 @@ function genTray(){
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
   const wantStar=CFG.STAR_ENABLED && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
 
-  if(goldenNext && !blast){ goldenNext=false; if(genGolden(a0,density)) return; }
+  if(goldenNext && !blast){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }
 
   if(blast){                                        // Blast Round: a sweep if one can be built, else the best big-piece jackpot hand
-    const h=planSweep(a0);
+    const h=yield* planSweepSteps(a0);
     if(h){ commitTray(h,'BLAST·SWEEP'); return; }
     bigMode=true;
-    const saved=CFG.CANDIDATES; CFG.CANDIDATES=Math.max(saved,60);
-    let r=pickHand(a0,density,'jackpot');
-    CFG.CANDIDATES=saved; bigMode=false;
-    if(!r.ev||!r.ev.ok) r=pickHand(a0,density,'jackpot');   // big pieces don't fit this board: fall back to a normal jackpot hand
+    let r;
+    try{ r=yield* pickHandSteps(a0,density,'jackpot',false,Math.max(CFG.CANDIDATES,60)); }
+    finally{ bigMode=false; }                         // also reset if the deal is abandoned mid-way (a new run starts)
+    if(!r.ev||!r.ev.ok) r=yield* pickHandSteps(a0,density,'jackpot');   // big pieces don't fit this board: fall back to a normal jackpot hand
     commitTray(r.hand,'BLAST·'+(r.ev&&r.ev.ok?'BIG':'JACKPOT'));
     return;
   }
 
   if(tier==='sweep'){
-    const h=planSweep(a0);
+    const h=yield* planSweepSteps(a0);
     if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; return; }
     tier='jackpot';
   }
 
-  const {hand}=pickHand(a0,density,tier,wantStar);
+  const {hand}=yield* pickHandSteps(a0,density,tier,wantStar);
   if(hand.includes(STAR)) starForced=false;
   commitTray(hand,tier.toUpperCase()+(hand.includes(STAR)?'+STAR':''));
 }
@@ -324,8 +339,8 @@ function praise(lines,combo){
   const P=PRAISE[tier], word=P.words[(Math.random()*P.words.length)|0];
   praises.length=0;                                 // newest wins — words never stack up
   praises.push({t:0,tier,word,a:P.a,b:P.b});
-  const x=W/2, y=by+B*0.3;
-  for(let k=0;!reduce&&k<6+tier*6;k++){
+  const x=W/2, y=by+B*0.3, n=Math.min(6+tier*6,fxRoom());
+  for(let k=0;!reduce&&k<n;k++){
     const ang=Math.random()*6.283, sp=2.5+Math.random()*(3+tier*1.6);
     bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.75,life:1,
       r:cell*(0.1+Math.random()*0.13),col:Math.random()<.5?P.a:P.b});

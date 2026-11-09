@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-08, after the glide follow-up to the drag rewrite (plan PR 2.1).
+Last updated 2026-11-08, after the frame budget pass (plan PR 2.2).
 
 ---
 
@@ -28,7 +28,10 @@ Last updated 2026-11-08, after the glide follow-up to the drag rewrite (plan PR 
   page's top-level bindings, so **no test hook lives in the game** — don't add one.
   Math.random is seeded. Scenarios are in `tests/run.mjs`: load, start, place,
   refused drop, line clear, game over, the drag rules (50 scripted drags, two
-  fingers, cancelled touch, board edges, lift height), offline and update.
+  fingers, cancelled touch, board edges, lift height), the frame budget (3-line
+  clear, sliced deals, particle budget, `?dev` readout, caches), offline and update.
+  The tray is dealt a few frames after a drop: `dealt(page)` waits for it, and
+  `watchFrames`/`frameLog` record per-frame work from outside the game.
   `fingers(page)` in the harness gives real multi-touch (one pointerId per finger). Add a scenario there when you change a rule.
   A GitHub Action (`.github/workflows/test.yml`) runs it on every PR and on `main`.
   Chromium needs a one-time `npx playwright install chromium` locally.
@@ -151,6 +154,7 @@ Top to bottom:
 | (1.4) | Service worker (`sw.js`): offline launch, versioned cache, "Update ready" toast (`js/update.js`) |
 | (2.1) | Drag rewrite: one finger, one landing rule, piece seated or exactly at the finger, bottom-anchored lift |
 | (2.1b) | Drag glides: piece always exactly at the finger, a ghost marks the landing slot (seating was "sticky, jumpy" on the phone) |
+| (2.2) | Frame budget: next tray dealt in slices after the clear, particle budget follows frame time, `?dev` frame readout, cache churn fixes |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -552,3 +556,33 @@ answer, so release lands exactly on the ghost. `MAGNET_HOLD` is 0.05 (just
 enough to stop the ghost flickering). `FX_MAGNET` on brings back the 2.1 seat.
 Also: backgrounding the app mid-drag (`visibilitychange` hidden) now sends the
 piece home, since iOS may not send a `pointercancel`. Admin store `crumble.dev.6`.
+
+---
+
+## Frame budget (plan PR 2.2)
+
+Goal: no frame over 20 ms during a 3-line clear on her iPhone. Measured in headless Chromium first: the
+drop (`place()` in the pointerup) cost 7-25 ms, about two thirds of it `genTray`, and a Blast Round hand
+~19 ms (4x that with CPU throttling). That all landed before the clear's first frame.
+
+- **The next tray is dealt after the clear starts.** `genTray` is now a wrapper that runs the generator
+  `dealSteps()` straight through (start, boot). When the tray empties in `place()`, or a Blast Round starts,
+  `dealLater()` queues it instead: it waits one frame, then `stepDeal()` runs at the end of each `frame()`
+  for up to `DEAL_SLICE_MS` (4 ms) until done, then the game-over check (`checkStuck`). The candidate
+  search (`pickHandSteps`), the sweep planner (`planSweepSteps`/`tileExactSteps`) and golden hands yield
+  between candidates, so a slice overruns by well under a millisecond. Same search as one go (a test checks
+  it); a deal takes 2-8 frames. Pickups wait while `dealing`, and so does the Blast Round clock; `start()` and `rescue()` cancel a pending one.
+- **Particle budget.** Fireworks, praise bursts, clear specks/chunks, landing dust and confetti share
+  `PARTICLE_CAP` (260) × `perf.fx`. A frame over `FRAME_BUDGET_MS` (20), or over 1.5x the device's own frame interval
+  (so a 30 Hz Low Power Mode phone isn't cut on every frame), cuts `perf.fx` by 0.15 (floor 0.3);
+  on-time frames grow it back by 0.01 (about a second). A slow moment sheds sparkle, not frames.
+- **`?dev` frame readout** (bottom-left): slowest frame of the last 2 s, count of frames over 20 ms (tap to
+  reset), the game's own JS time last frame, particle budget and live count. Not in the player build.
+- **Cache churn:** tile textures are kept per skin + motif (`TILES`), so a transformation flip and back
+  no longer re-renders 16 tile canvases inside the clear that triggered it; the board-glow sprites for every
+  gem colour are built at layout; text sprites evict the oldest one instead of clearing all 160.
+- Measured after (headless, unthrottled): drop 2-6 ms, slowest frame of ours ~10 ms, no long frames on a
+  normal 3-line clear. A Blast Round start can still show one long frame in the container's software
+  renderer while the world flip draws; its sounds and first rainbow tiles (~5 ms) are still in the drop.
+- What to check on the phone: open with `?dev`, play some 3-line clears and a Blast Round, and read the
+  count of frames over 20 ms.

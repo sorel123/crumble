@@ -52,7 +52,7 @@ function startBlast(){
   if(!reduce){ spawnConfetti(); for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14}); }
   shake=Math.max(shake,12*CFG.SHAKE); glowT=1.8; glowH=320;
   Sfx.goldenWin();
-  genTray();                                        // the leftover pieces are replaced by a blast hand right away
+  dealLater();                                      // the leftover pieces are replaced by a blast hand (pickups wait for it)
 }
 function endBlast(){
   const b=blast; blast=null;
@@ -84,7 +84,7 @@ function drawBlastBar(now){
 function stepBlast(now,dt){
   if(!CFG.BLAST_ENABLED || state!=='play' || paused) return;
   if(blast){
-    blast.t-=dt*16.67;
+    if(!dealing) blast.t-=dt*16.67;                  // the clock waits while her next hand is being dealt (she can't pick up)
     if(blast.t<=0) endBlast();
   } else if(blastMeter>0 && blastMeter<1 && now-lastClearAt>CFG.METER_IDLE){
     blastMeter=Math.max(0,blastMeter-CFG.METER_DRAIN*dt);    // dawdle and it slips away
@@ -112,7 +112,7 @@ function place(idx,r,c){
   if(bump){                                        // the thump: a ring spreads out from under the piece, dust kicks out sideways
     const px=bx+c*cell, py=by+r*cell, pw=s.cols*cell, ph=s.rows*cell;
     rings.push({x:px,y:py,w:pw,h:ph,t:0});
-    for(let k=0;k<6;k++){
+    for(let k=Math.min(6,fxRoom())-1;k>=0;k--){
       const left=k%2===0, yy=py+ph-cell*0.15-Math.random()*ph*0.5;
       dust.push({x:left?px+cell*0.1:px+pw-cell*0.1,y:yy,vx:(left?-1:1)*(1.2+Math.random()*2),vy:-(0.4+Math.random()*1.2),r:cell*(0.05+Math.random()*0.05),life:1});
     }
@@ -282,14 +282,32 @@ function place(idx,r,c){
     if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
     glowT=Math.max(glowT,1.4); Sfx.praise(3);
   }
-  if(tray.every(v=>!v)){
+  if(tray.every(v=>!v) && !dealing){                // (a Blast Round that just started is already dealing its own hand)
     goldenNext = CFG.GOLDEN_ENABLED && goldenCool<=0 && !transform      // a live transformation already is the moment
       && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
     trayHadSweep=false; trayCombo=0;
-    genTray();
+    dealLater();
   }
-  if(!tray.some(v=>v&&fitsAnywhere(v.s,grid))) setTimeout(gameOver,700);
+  if(!dealing) checkStuck();                          // otherwise checked once the new tray is dealt
 }
+function checkStuck(){ if(!tray.some(v=>v&&fitsAnywhere(v.s,grid))) setTimeout(gameOver,700); }
+
+/* The next tray is dealt after the clear has started, not inside the drop (plan 2.2). Choosing a hand
+   is the most expensive thing the game does (~5-15 ms; more for a Blast Round hand), and it used to run
+   in the same input event as the clear, so the clear's first frame was the slowest frame of the game.
+   Now the deal waits one frame, then runs in slices of DEAL_SLICE_MS at the end of each frame until it
+   is done (a few frames; the same search as dealing it in one go). Pickups wait for it. */
+let dealing=null;                                     // {it: dealSteps() generator, wait: frames before it starts}
+function dealLater(){ if(!dealing) dealing={it:dealSteps(),wait:1}; }
+function stepDeal(){
+  if(!dealing) return;
+  if(dealing.wait>0){ dealing.wait--; return; }
+  const end=performance.now()+CFG.DEAL_SLICE_MS;
+  let r;
+  do r=dealing.it.next(); while(!r.done && performance.now()<end);
+  if(r.done){ dealing=null; checkStuck(); }
+}
+function cancelDeal(){ if(dealing){ dealing.it.return(); dealing=null; } }   // a new run or a rescue deals its own tray
 
 /* ═══════ input ═══════ */
 // a tray piece's cell size: as big as trayCell allows, but a 5-long bar still fits its slot
@@ -303,7 +321,7 @@ function slotRect(i){ const w=B/3; return {x:bx+w*i,y:trayY,w,h:trayH}; }
 //    exactly there. Without one there is no ghost, it floats, and release sends it back to the tray.
 // drag.slot is that one answer: frame() draws from it and onUp() places from it.
 function onDown(e){
-  if(state!=='play'||paused||drag) return;          // one drag at a time: a second finger can't pick up another piece
+  if(state!=='play'||paused||drag||dealing) return;   // one drag at a time (a second finger can't pick up another piece); none while a tray is being dealt
   ac();
   for(let i=0;i<3;i++){
     const R=slotRect(i);

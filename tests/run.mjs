@@ -2,7 +2,7 @@
 //   npm test
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { serve, openGame, play, snap, setup, dragPiece, geometry, fingerFor, fingers, frames, watchPlace, placed, dragView } from './harness.mjs';
+import { serve, openGame, play, snap, setup, dragPiece, geometry, fingerFor, fingers, frames, watchPlace, placed, dragView, dealt, watchFrames, frameLog } from './harness.mjs';
 import { expectedAssets } from '../tools/stamp-sw.mjs';
 
 const EMPTY = Array(8).fill('00000000');
@@ -277,6 +277,146 @@ test('every piece floats the same height above the finger', async ({ page }) => 
     await frames(page, 30);
   }
   gaps.forEach(d => near(d, g.cell * g.lift, 'gap below the piece'));
+});
+
+// ── Frame budget (plan 2.2) ──
+
+// Rows 0-2 full but for column 0; a vertical 1x3 bar (SHAPES[4]) dropped there clears three rows and
+// empties the tray. The few gems left at the bottom keep it from being a clean sweep.
+const THREE_LINES = ['01111111', '01111111', '01111111', '00000000', '00000000', '11000011', '10000001', '11000011'];
+
+test('a 3-line clear: the next tray is dealt after the clear starts (frame times logged)', async ({ page }) => {
+  await play(page);
+  await watchFrames(page);
+  await page.evaluate(() => { combo = 2; });                  // mid-streak: COMBO slam, fireworks, praise, the lot
+  await setup(page, { rows: THREE_LINES, trayShapes: [4, null, null] });
+  await frames(page, 5);
+  await frameLog(page);
+  await page.evaluate(() => {                                   // note the frame the clear first drew and the frame the tray came back
+    window.__seen = { n: 0, clearAt: -1, trayAt: -1 };
+    const of = frame;
+    frame = function (now) {
+      of(now); const s = __seen; s.n++;
+      if (s.clearAt < 0 && shatters.length) s.clearAt = s.n;
+      if (tray.every(v => !v)) s.empty = true;
+      else if (s.empty && s.trayAt < 0) s.trayAt = s.n;
+    };
+  });
+  await dragPiece(page, 0, 0, 0);
+  await dealt(page);
+  await frames(page, 60);
+  const seen = await page.evaluate(() => __seen), log = await frameLog(page);
+  assert.ok(seen.clearAt > 0, 'the clear drew');
+  assert.ok(seen.trayAt > seen.clearAt, `the tray came after the clear's first frame (clear ${seen.clearAt}, tray ${seen.trayAt})`);
+  const s = await snap(page);
+  assert.deepEqual(s.rows.slice(0, 3), ['00000000', '00000000', '00000000'], 'three rows cleared');
+  assert.equal(s.tray.filter(Boolean).length, 3, 'a full tray was dealt');
+  assert.equal(s.state, 'play');
+  const maxWork = Math.max(...log.work), maxStep = Math.max(...log.steps);
+  console.log(`     (drop ${log.place[0].toFixed(1)} ms, slowest frame ${maxWork.toFixed(1)} ms, deal ${log.steps.length} slices, largest ${maxStep.toFixed(1)} ms)`);
+  // timings are logged, not asserted: headless wall time on a shared CI runner says little about the phone
+});
+
+test('a Blast Round hand is dealt in small slices, and pickups wait for it', async ({ page }) => {
+  await play(page);
+  await watchFrames(page);
+  await setup(page, { rows: THREE_LINES.map((r, i) => (i < 3 ? '00000000' : r)), trayShapes: [0, 1, 2] });
+  await frameLog(page);
+  const g = await geometry(page);
+  const during = await page.evaluate(p => {                    // same task as startBlast, so no frame can finish the deal first
+    startBlast();
+    const t0 = blast.t, was = !!dealing;
+    onDown({ pointerId: 7, clientX: p.x, clientY: p.y });
+    return { was, drag: !!drag, t0 };
+  }, g.trayCenters[0]);
+  assert.equal(during.was, true, 'the blast hand is being dealt');
+  assert.equal(during.drag, false, 'the old piece can\'t be picked up while the new hand is coming');
+  await dealt(page);
+  assert.ok(await page.evaluate(t0 => blast.t >= t0 - 100, during.t0), 'the round clock waited for the deal');
+  const { steps } = await frameLog(page);
+  const slice = await page.evaluate(() => CFG.DEAL_SLICE_MS);
+  console.log(`     (${steps.length} slices, largest ${Math.max(...steps).toFixed(1)} ms)`);
+  const sorted = steps.slice().sort((a, b) => a - b), median = sorted[sorted.length >> 1];
+  assert.ok(steps.length >= 1 && median < slice + 3, `slices stay near DEAL_SLICE_MS (${steps.map(x => x.toFixed(1))})`);
+  assert.match(await page.evaluate(() => lastTier), /^BLAST/);
+});
+
+test('dealing in slices runs the same search as dealing in one go', async ({ page }) => {
+  await play(page);
+  const same = await page.evaluate(() => {
+    const seeded = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const keep = Math.random, out = [];
+    for (let k = 0; k < 12; k++) {
+      grid = grid.map(r => r.map(() => (keep() < 0.3 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+      const g0 = grid, ten = k / 11, carry0 = carry, star0 = starForced, no0 = trayNo;
+      blast = k % 3 === 2 ? { t: 1e4, pts: 0, lines: 0 } : null;
+      const run = stepwise => {
+        grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9;
+        goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
+        if (stepwise) { const it = dealSteps(); while (!it.next().done) performance.now(); } else genTray();   // stepwise: one candidate per call, as frames would
+        return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier;
+      };
+      out.push([run(false), run(true)]);
+    }
+    Math.random = keep; blast = null; golden = null;
+    return out;
+  });
+  same.forEach(([a, b], k) => assert.equal(b, a, `board ${k}`));
+});
+
+test('slow frames shrink the particle budget, and it grows back', async ({ page }) => {
+  await play(page);
+  const before = await page.evaluate(() => perf.fx);
+  await page.evaluate(() => new Promise(res => {             // eight frames that each take ~35 ms
+    let n = 8; const busy = () => { const t = performance.now(); while (performance.now() - t < 35); if (--n) requestAnimationFrame(busy); else res(); };
+    requestAnimationFrame(busy);
+  }));
+  await frames(page, 2);
+  const slow = await page.evaluate(() => ({ fx: perf.fx, over: perf.over }));
+  assert.ok(slow.fx < before && slow.fx <= 0.5, `budget cut (${before} -> ${slow.fx})`);
+  assert.ok(slow.over >= 6, `long frames counted (${slow.over})`);
+  const capped = await page.evaluate(() => {
+    for (let k = 0; k < 40; k++) spawnFirework(W / 2, H / 2);
+    return { live: fxLive(), cap: Math.round(CFG.PARTICLE_CAP * perf.fx) };
+  });
+  assert.ok(capped.live <= capped.cap, `particles held to the budget (${capped.live} <= ${capped.cap})`);
+  await page.evaluate(() => { bursts.length = 0; });
+  await page.waitForFunction(() => perf.fx > 0.9, null, { timeout: 5000 }).catch(() => {});
+  // headless frames aren't always on time; when they are, the budget must have come back
+  const gaps = await page.evaluate(() => Math.max(...perf.gaps));
+  if (gaps <= 20) assert.ok(await page.evaluate(() => perf.fx > 0.9), 'budget recovered');
+  // a phone held at 30 Hz (Low Power Mode) runs every frame at ~33 ms: that is its normal pace, not a slow moment
+  const lowPower = await page.evaluate(() => { perf.gaps.fill(0); perf.fx = 1; for (let k = 0; k < 200; k++) perfFrame(33.3); return perf.fx; });
+  assert.equal(lowPower, 1, 'a steady 30 Hz keeps the full particle budget');
+});
+
+test('the frame readout shows only with ?dev', async ({ page, server }) => {
+  await frames(page, 20);
+  assert.equal(await page.locator('#perfHud').count(), 0, 'no readout in the player build');
+  await page.goto(server.url + '?dev');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  await page.waitForSelector('#perfHud', { state: 'visible', timeout: 3000 });
+  await page.waitForFunction(() => /max [\d.]+ms/.test(el('perfHud').textContent));
+  await page.evaluate(() => { perf.over = 7; });
+  await page.dispatchEvent('#perfHud', 'pointerdown');
+  assert.equal(await page.evaluate(() => perf.over), 0, 'a tap resets the count');
+});
+
+test('caches: text sprites evict one at a time, tile textures survive a look flip and back', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    SPRITES.clear();
+    for (let k = 0; k < 160; k++) sprite('t' + k, 4, 4, () => {});
+    const keep = SPRITES.get('t5');
+    sprite('new', 4, 4, () => {});
+    const sprites = { size: SPRITES.size, firstGone: !SPRITES.has('t0'), keptSame: SPRITES.get('t5') === keep };
+    const home = gemBig;
+    startFlip('rainbow', 'rainbow'); const away = gemBig;
+    startFlip(curWorld, CFG.STYLE);
+    return { sprites, changed: away !== home, back: gemBig === home };
+  });
+  assert.deepEqual(r.sprites, { size: 160, firstGone: true, keptSame: true });
+  assert.ok(r.changed && r.back, 'the home tiles are reused after a flip');
 });
 
 const controlled = page => page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 10000 });

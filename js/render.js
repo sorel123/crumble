@@ -331,14 +331,22 @@ const MOTIFS=[
   {id:'star',  name:'Star'},
   {id:'circle',name:'Circle'}
 ];
+// Tile textures, kept per skin + motif until the next relayout: a transformation flips to its own skin
+// and back, and rebuilding 16 tile canvases each way used to land in the frame of the clear that set it off.
+const TILES=new Map();
 function buildCache(){
-  const skin=SKINS.find(s=>s.id===curSkin)||SKINS[0];
-  gemBig=GEMS.map(g=>skin.render(cell,g));
-  gemSmall=GEMS.map(g=>skin.render(trayCell,g));
-  if(CFG.MOTIF!=='none'){
-    gemBig.forEach(cv=>stampMotif(cv,cell,CFG.MOTIF));
-    gemSmall.forEach(cv=>stampMotif(cv,trayCell,CFG.MOTIF));
+  const key=curSkin+'|'+CFG.MOTIF;
+  let t=TILES.get(key);
+  if(!t){
+    const skin=SKINS.find(s=>s.id===curSkin)||SKINS[0];
+    t={big:GEMS.map(g=>skin.render(cell,g)), small:GEMS.map(g=>skin.render(trayCell,g))};
+    if(CFG.MOTIF!=='none'){
+      t.big.forEach(cv=>stampMotif(cv,cell,CFG.MOTIF));
+      t.small.forEach(cv=>stampMotif(cv,trayCell,CFG.MOTIF));
+    }
+    TILES.set(key,t);
   }
+  gemBig=t.big; gemSmall=t.small;
 }
 function layout(){
   dpr=Math.min(devicePixelRatio||1,2);
@@ -354,9 +362,10 @@ function layout(){
   trayH=cell*2.4;
   trayY=by+B+Math.max(16,(Hb-by-B-trayH-14)*0.5);
   trayCell=cell*0.66;                         // the size most tray pieces show at; long ones shrink to fit (trayFit)
-  SPRITES.clear();
+  SPRITES.clear(); TILES.clear();
   buildCache();
   buildBoardBg();
+  GEMS.forEach(g=>glowSprite(g.h));            // the board glow takes the cleared gem's colour: build those now, not mid-clear
 }
 addEventListener('resize',layout);
 /* the board panel and its 64 empty-cell slots never change between layouts,
