@@ -56,6 +56,9 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['SMALL_BIAS','Small-piece bias',0,8,0.1],
   ['SINGLE_WEIGHT','Single-cell weight',0,1,0.05],
   ['TIDY','Tidiness',0,5,0.1],
+  ['OBVIOUS','Obvious clears (per piece)',0,30,1],
+  ['OBVIOUS_MAX','Obvious clears counted (pieces)',0,3,1],
+  ['ALT','Room for the smallest piece',0,3,0.1],
   ['PAIR_CHANCE','Partner-piece chance',0,1,0.05],
   ['GOLDEN_COMBO','Golden hand at combo',1,10,1],
   ['GOLDEN_CHANCE','Golden hand chance (per tray)',0,0.5,0.01],
@@ -177,7 +180,7 @@ function initDev(){
   const sync=()=>refresh.forEach(f=>f());
   el('adminBtn').onclick=e=>{
     e.stopPropagation();
-    paused=true; drag=null; shake=0;          // freeze the game while the panel is up
+    paused=true; drag=null; shake=0; hesVoid();          // freeze the game while the panel is up
     el('setPanel').hidden=true; sync(); el('devPanel').hidden=false;
   };
   el('devClose').onclick=e=>{ e.stopPropagation(); el('devPanel').hidden=true; paused=false; };

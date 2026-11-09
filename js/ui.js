@@ -110,13 +110,23 @@ function buildSettingsUI(){
   renderThemes(); renderSndSet(); el('sndOn').checked=!muted;
 }
 function openSettings(){
-  if(state==='play'){ paused=true; drag=null; shake=0; }           // the game waits while Settings is open
+  if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); }           // the game waits while Settings is open
   renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted;
   el('setPanel').hidden=false;
 }
 el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };
 el('startSettings').onclick=e=>{ e.stopPropagation(); openSettings(); };
 el('setDone').onclick=e=>{ e.stopPropagation(); el('setPanel').hidden=true; paused=false; };
+// The hesitation log (plan 3.4) for Jay on her phone, where the home-screen app has no URL bar for ?dev: five quick
+// taps on the note at the bottom of Settings turn it into the log's medians. Nothing changes for her otherwise.
+let hesTaps=[];
+el('setNote').onclick=e=>{
+  e.stopPropagation();
+  const now=performance.now(); hesTaps=hesTaps.filter(t=>now-t<3000); hesTaps.push(now);
+  if(hesTaps.length<5) return;
+  hesTaps=[]; const h=hesSummary(), sec=ms=>(ms/1000).toFixed(1)+'s';
+  el('setNote').textContent=h.n?`Last ${h.n} trays (${h.total} kept): first pickup ${sec(h.pick)}, pickup to drop ${sec(h.place)}, first drop clears ${h.clr}%`:'No hesitation samples yet';
+};
 el('startBtn').onclick=e=>{e.stopPropagation();ac();start();};
 el('againBtn').onclick=e=>{e.stopPropagation();start();};
 el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};

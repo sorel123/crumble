@@ -174,7 +174,9 @@ function perfHud(now){
   if(now-perf.hudAt<250) return;                     // a few updates a second: text changes cost layout too
   perf.hudAt=now;
   let mx=0; for(const g of perf.gaps) if(g>mx) mx=g;
-  perf.hud.textContent='max '+mx.toFixed(1)+'ms  >'+CFG.FRAME_BUDGET_MS+'ms: '+perf.over+'\nwork '+perf.work.toFixed(1)+'ms  fx '+Math.round(perf.fx*100)+'% ('+fxLive()+')';
+  const h=hesSummary(), sec=ms=>(ms/1000).toFixed(1)+'s';   // the hesitation log (plan 3.4): medians of the last 20 trays, n = samples used / kept
+  perf.hud.textContent='max '+mx.toFixed(1)+'ms  >'+CFG.FRAME_BUDGET_MS+'ms: '+perf.over+'\nwork '+perf.work.toFixed(1)+'ms  fx '+Math.round(perf.fx*100)+'% ('+fxLive()+')'
+    +'\nhes pick '+sec(h.pick)+'  place '+sec(h.place)+'  clr '+h.clr+'%  n '+h.n+'/'+h.total;
   perf.hud.style.color=mx>CFG.FRAME_BUDGET_MS?'#FFB3B3':'#fff';
 }
 
