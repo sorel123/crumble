@@ -72,8 +72,6 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['BLAST_SECONDS','Blast: round length (s)',8,40,1],
   ['BLAST_ADD','Blast: seconds per line',0,6,0.5],
   ['BLAST_MULT','Blast: score multiplier',1,4,0.5],
-  ['METER_LINE','Blast meter per line',0.02,0.5,0.01],
-  ['METER_DRAIN','Blast meter drain (per frame)',0,0.004,0.0001],
   ['BIG_CAP','Big-piece bias cap (cells)',1,9,1],
   ['GUIDE','Guided hands (obvious drops)',0,3,0.1],
   ['MAGNET_REACH','Magnet reach (cells)',0.3,1.5,0.05],

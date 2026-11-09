@@ -63,16 +63,12 @@ const CFG = {
   FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
   COLOR_GONE_BONUS: 60,   // points per colour wiped off the board by a clear ("COLOR GONE!")
 
-  // Blast Round — the bonus round. A meter fills with clears (and drains while you dawdle);
-  // full = a timed round of big-piece sweep/jackpot hands, a hot new look, and doubled points.
+  // Blast Round — the bonus round. No meter: it is started on purpose (plan 4.5).
+  // A timed round of big-piece sweep/jackpot hands, a hot new look, and doubled points.
   BLAST_ENABLED:  true,
   BLAST_SECONDS:  20,     // round length when it starts
   BLAST_ADD:      2.5,    // seconds added per line cleared during the round (capped at BLAST_SECONDS)
   BLAST_MULT:     2,      // score multiplier during the round
-  METER_LINE:     0.14,   // meter gained per line cleared
-  METER_COMBO:    0.06,   // extra per clear while on a combo
-  METER_IDLE:     2500,   // ms without a clear before the meter starts draining
-  METER_DRAIN:    0.0004, // meter lost per frame once draining (~40 s from full to empty)
   BIG_CAP:        4,      // the crowded-board small-piece bias stops growing past this many cells, so 5-9 cell pieces keep coming
   // star gem: a single-cell piece that clears its whole row and column
   STAR_ENABLED:  true,   // master switch for star gems
@@ -81,6 +77,7 @@ const CFG = {
 
   GOLDEN_ENABLED: true,  // master switch for golden hands
   SPECIALS: false,       // one switch for the rare specials together: golden hands, star gems, transformations, Blast Round. Off for now (plan 2.3); each is rebuilt and switched back on later. The per-special switches still apply when this is on
+  SPECIAL_FROM_TRAY: 6,  // no golden hand, star gem, transformation or Blast Round before this tray number, even with SPECIALS on (plan 3.1: the opening is calm)
   BIG_COMBO: 3,          // the loud celebration (COMBO slam, score orbs, COLOR GONE band, fireworks, punch zoom) starts at this combo; every clear below it is calm: a squash, point tags and one praise word
 
   LIFT:          1.0,    // cells between the finger and the bottom edge of the dragged piece (same gap for every piece height)
