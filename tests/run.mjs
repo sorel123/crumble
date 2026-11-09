@@ -1246,7 +1246,7 @@ test('golden hand: finding it pays ×3, a miss pays nothing extra, and the next 
 test('golden hand: celebration never blocks play, rains only outside the board, and the next tray arrives within 1.5 s', async ({ page, errors }) => {
   await play(page);
   await page.evaluate(goldHand);
-  const t0 = await page.evaluate(() => { place(0, 0, 0); place(1, 1, 0); const t = performance.now(); place(2, 2, 0); return t; });
+  const t0 = await page.evaluate(() => { CFG.PARTICLE_CAP = 100000; perf.fx = 1; place(0, 0, 0); place(1, 1, 0); const t = performance.now(); place(2, 2, 0); return t; });   // (the rain is sized by the live particle budget, which follows frame time: pin it so a slow runner cannot starve it)
   const rain = await page.evaluate(() => ({ n: goldRain.length, inside: goldRain.filter(p => p.lim > by - 6 && p.lim < by + B).length, spark: sparkles.every(s => { const c = Math.floor((s.x - bx) / cell), r = Math.floor((s.y - by) / cell); return r < 0 || c < 0 || r >= N || c >= N || !grid[r][c]; }) }));
   assert.ok(rain.n > 0, 'a rain of gold falls'); assert.equal(rain.inside, 0, 'no rain particle is aimed across the board'); assert.equal(rain.spark, true, 'board sparkles sit on empty cells');
   await dealt(page);
