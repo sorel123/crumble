@@ -340,8 +340,6 @@ function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
   trayNo++;
   const specialsOk=trayNo>=CFG.SPECIAL_FROM_TRAY;      // trays 1-5 never carry a special
-  if(specialsOk && special('transform') && Math.random()<CFG.MYSTERY_CHANCE)
-    triggerTransform(TRANSFORM_IDS[(Math.random()*TRANSFORM_IDS.length)|0]);
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
   let tier=pickTier(a0);
@@ -420,8 +418,8 @@ function genRescue(){
   }
   commitTray(bestHand,'RESCUE');
 }
-function pushBanner(txt,sub,col){   // queued: one on screen at a time, the next starts as this one fades (frame)
-  banners.push({t:0,txt,sub,col:col||'#FFD45C'});
+function pushBanner(txt,sub,col,k){   // queued: one on screen at a time, the next starts as this one fades (frame); k>1 runs it faster
+  banners.push({t:0,txt,sub,col:col||'#FFD45C',k:k||1});
 }
 /* praise: a big word for a multi-line clear or a long combo — the bigger the
    moment, the bigger the word. A clean sweep has its own banner instead. */

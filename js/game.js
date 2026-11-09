@@ -22,21 +22,39 @@ function mobility(){
   return n/SHAPES.length;
 }
 
-// ═══ transformations — achievement-triggered event looks (own world + own tile skin) ═══
+// ═══ transformations as achievements (plan 4.5d) ═══
+// Four named achievements, one per special. Earning one unlocks its look for good (it joins the Settings looks, see
+// LOOKS in ui.js; `discoveredWorlds` is the saved record). Three of them also start a short live transformation
+// (sky + tiles, x TRANSFORM_MULT for TRANSFORM_PLACEMENTS placements) when nothing else is going on. Gold Vault never
+// goes live: the golden hand's own celebration owns that moment. An achievement that cannot go live (Blast, a golden
+// hand or a star in play, a live one already, the cooldown, trays 1-5) still unlocks the look; that rule matters more
+// than the sky flip. The card is only drawn over the play (a banner), it never pauses or blocks anything.
+const ACHIEVE={rainbow:'Clean sweep', volcano:'Combo ×'+CFG.TRANSFORM_COMBO, starfield:'Star blast', goldvault:'Golden hand'};
+let newLook=false;                                // a look was just unlocked and Settings has not been opened since (the gear's dot)
+function syncLookDot(){ el('setBtn').classList.toggle('dot',newLook); }
+function canGoLive(id){
+  return id!=='goldvault' && !blast && !transform && transformCool<=0 && trayNo>=CFG.SPECIAL_FROM_TRAY
+    && !golden && !tray.some(t=>t&&t.s.star) && (id==='starfield'||trayNo>specialEnd+1);   // a star's own clear is its parent: it may follow it
+}
 function triggerTransform(id){
-  if(!special('transform') || blast || trayNo<CFG.SPECIAL_FROM_TRAY) return;    // a Blast Round owns the screen while it runs
-  if(!transform && transformCool>0) return;   // quiet period after one ends — makes the next feel earned
-  const first=!discoveredWorlds.has(id);
-  transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
-  startFlip(id,TRANSFORMS[id].skin);
-  Sfx.transformShift();
-  if(first){ discoveredWorlds.add(id); saveSkinSave(); renderWorlds(); }
-  pushBanner(TRANSFORMS[id].name.toUpperCase(),first?'New world discovered!':'×'+CFG.TRANSFORM_MULT+' SCORE');
-  renderPips();
+  if(!special('transform') || !ACHIEVE[id]) return;
+  const first=!discoveredWorlds.has(id), live=canGoLive(id), name=TRANSFORMS[id].name;
+  if(first){
+    discoveredWorlds.add(id); newLook=true; syncLookDot(); saveSkinSave(); renderWorlds();
+    if(el('lookGrid').children.length) renderLooks();
+  }
+  if(live){
+    transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
+    startFlip(id,TRANSFORMS[id].skin);
+    Sfx.transformShift(); renderPips();
+  }
+  if(!CFG.FX_TRANSFORM_MOMENT) return;
+  if(first){ pushBanner(name.toUpperCase(),'NEW LOOK UNLOCKED','#FFE9A8'); Sfx.achieve(Object.keys(ACHIEVE).indexOf(id)); }
+  else if(live){ pushBanner(name.toUpperCase(),'×'+CFG.TRANSFORM_MULT+' · '+CFG.TRANSFORM_PLACEMENTS+' MOVES','#FFE9A8',1.6); }
 }
 function endTransform(){
   transform=null;
-  transformCool=CFG.TRANSFORM_COOLDOWN;
+  transformCool=CFG.TRANSFORM_COOLDOWN; specialEnd=Math.max(specialEnd,trayNo);   // the next tray carries no special
   startFlip(CFG.HOME_WORLD,CFG.STYLE);
   renderPips();
 }
@@ -219,6 +237,7 @@ function goldenCelebrate(full,mult,extra){
   pushBanner(full?'GOLDEN HAND COMPLETE':'GOLDEN ×'+(+mult.toFixed(1)),(full?'×'+(+mult.toFixed(1))+'  ':'')+'+'+extra);
   const fx=CFG.FX_GOLDEN_FANFARE;
   if(full){
+    triggerTransform('goldvault');                      // unlocks the Gold Vault look; it never flips the sky (this moment is its own)
     if(fx) goldenCele={t:0,full:true};
     for(let k=0;k<5;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
     shake=Math.max(shake,18*CFG.SHAKE); glowT=2.2;
@@ -287,13 +306,13 @@ function place(idx,r,c){
     const loud=combo+1>=CFG.BIG_COMBO;                // combo is bumped just below; this clear's own number
     if(CFG.FX_PUNCH_ZOOM && !reduce && loud && total>=2) punchT=1;
     hitWait=reduce?0:s.star?starMs:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
-    if(s.star && total>=2) triggerTransform('starfield');
+    
     combo++; trayCombo=Math.max(trayCombo,combo);
     if(combo>=2) chargeBlast(Math.min(combo-1,CFG.BLAST_CHARGE_MAX),bx+(c+s.cols/2)*cell,by+(r+s.rows/2)*cell);   // only combos charge Blast
     if(blast) blast.best=Math.max(blast.best,combo);
     if(special('star') && combo>=CFG.STAR_COMBO) starForced=true;
-    if(combo>=5) triggerTransform('volcano');
-    if(combo>=7) triggerTransform('storm');
+    if(combo>=CFG.TRANSFORM_COMBO) triggerTransform('volcano');
+    if(s.star && starGems>=CFG.TRANSFORM_STAR_GEMS) triggerTransform('starfield');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
     if(s.star) gained=s.n+Math.max(gained-s.n,Math.round(CFG.STAR_PER_GEM*starGems*(1+(combo-1)*CFG.COMBO_STEP)));   // a star pays per gem
     if(s.star&&starGems>0) pushBanner('STAR BLAST',starGems+(starGems===1?' gem':' gems'),'#E6D8FF');

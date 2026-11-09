@@ -395,9 +395,9 @@ test('Blast never starts by itself: a full button waits, and the old meter is go
   assert.equal(r.charge, await page.evaluate(() => CFG.BLAST_CHARGE), 'waiting drains nothing');
 });
 
-test('one switch per special: Blast, the star gem and the golden hand are on, transformations stay off', async ({ page }) => {
+test('one switch per special: all four are on; transformations are three-plus-one named achievements', async ({ page }) => {
   await play(page);
-  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { blast: true, star: true, golden: true, transform: false });
+  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { blast: true, star: true, golden: true, transform: true });
   const r = await page.evaluate(() => {
     starForced = true;
     let stars = 0;
@@ -405,13 +405,14 @@ test('one switch per special: Blast, the star gem and the golden hand are on, tr
       genTray();
       stars += tray.filter(t => t && t.s.star).length;
     }
-    triggerTransform('rainbow');
+    trayNo = 2; triggerTransform('rainbow');
     return { stars, transform: !!transform, blast: !!blast };
   });
-  assert.deepEqual(r, { stars: 0, transform: false, blast: false }, 'on an empty board no cross is worth a star, so none is dealt');
-  // ...and its own switch brings one back
-  const on = await page.evaluate(() => { CFG.SPECIALS.transform = true; triggerTransform('rainbow'); const t = !!transform; CFG.SPECIALS.transform = false; return t; });
-  assert.equal(on, true, 'switched on, a transformation starts');
+  assert.deepEqual(r, { stars: 0, transform: false, blast: false }, 'on an empty board no cross is worth a star, so none is dealt; early trays never start a transformation');
+  const on = await page.evaluate(() => { trayNo = 10; transformCool = 0; specialEnd = -99; triggerTransform('rainbow'); return !!transform; });
+  assert.equal(on, true, 'from tray 6 an achievement starts its transformation');
+  const off = await page.evaluate(() => { CFG.SPECIALS.transform = false; transform = null; triggerTransform('volcano'); return { live: !!transform, owned: discoveredWorlds.has('volcano') }; });
+  assert.deepEqual(off, { live: false, owned: false }, 'switched off, nothing happens and nothing unlocks');
 });
 
 // ---- star gem (plan 4.5b) ----
@@ -664,7 +665,7 @@ test('Settings fits one screen; a look sets theme, world, skin and motif togethe
   const fit = await page.evaluate(() => { const l = el('setList'); return { sh: l.scrollHeight, ch: l.clientHeight, done: el('setDone').getBoundingClientRect().bottom, vh: innerHeight }; });
   assert.ok(fit.sh <= fit.ch + 1, `Settings scrolls: ${fit.sh} > ${fit.ch}`);
   assert.ok(fit.done <= fit.vh, 'Done is on screen');
-  assert.equal(await page.locator('#lookGrid .look-btn').count(), 5);
+  assert.equal(await page.locator('#lookGrid .look-btn').count(), 9, 'five everyday looks and the four earned ones');
   assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'true', 'Classic is lit by default');
   await page.click('#lookGrid [data-id=cotton]');
   const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, cw: curWorld }));
@@ -1035,6 +1036,7 @@ test('a charging combo flies one spark to the button; full, it glows and chimes 
   assert.equal(await page.isDisabled('#blastBtn'), true, 'empty: not tappable');
   await page.evaluate(src => {
     window.__chimes = 0; const f = Sfx.blastReady; Sfx.blastReady = () => { window.__chimes++; f(); };
+    CFG.SPECIALS.transform = false;                    // (this clear empties the board: a sweep would start a Rainbow look, which holds the button)
     trayNo = 10; grid = empty(); blastCharge = blastShown = CFG.BLAST_CHARGE - 1; syncBlastBtn();
     eval(src);
   }, clearAt(0, 4));
@@ -1222,6 +1224,7 @@ test('golden hand: the glowing lines are re-planned after each placement; a dead
 
 test('golden hand: finding it pays ×3, a miss pays nothing extra, and the next tray carries no special', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.SPECIALS.transform = false; });      // (this test is about the golden multiplier alone)
   const run = (solve) => page.evaluate(async ([goldHand, solve]) => {
     eval(goldHand);
     const base = score;
@@ -1284,6 +1287,107 @@ test('golden hand: save/resume and Undo keep the hand and re-plan it', async ({ 
 
 const server = await serve();
 fs.mkdirSync('tests/out', { recursive: true });
+// ---- transformations as achievements (plan 4.5d) ----
+const ach = async page => { await play(page); await page.evaluate(() => { trayNo = 10; transform = null; transformCool = 0; specialEnd = -99; golden = null; tray = [null, null, null]; banners.length = 0; }); };
+
+test('achievements: sweep, combo 5 and a 10-gem star each start their own look; Gold Vault unlocks without a flip; Storm and the random roll are gone', async ({ page }) => {
+  await ach(page);
+  const r = await page.evaluate(() => {
+    const out = {};
+    for (const [id, f] of [['rainbow', () => triggerTransform('rainbow')], ['volcano', () => { combo = 4; grid = empty(); grid[0][0] = grid[1][0] = { gi: 0, t: 1, f: 0, l: 0 }; for (let c = 0; c < 8; c++) grid[0][c] = { gi: 0, t: 1, f: 0, l: 0 }; grid[0][7] = null; tray = [{ s: SHAPES.find(s => s.cells.length === 1), gi: 1 }, null, null]; place(0, 0, 7); }]]) {
+      transform = null; transformCool = 0; f(); out[id] = transform && transform.id;
+    }
+    transform = null; transformCool = 0; triggerTransform('goldvault'); out.gold = { live: !!transform, owned: discoveredWorlds.has('goldvault') };
+    triggerTransform('storm'); out.storm = !!transform;
+    out.ids = Object.keys(ACHIEVE);
+    return out;
+  });
+  assert.equal(r.rainbow, 'rainbow'); assert.equal(r.volcano, 'volcano', 'a combo of 5 earns Volcano');
+  assert.deepEqual(r.gold, { live: false, owned: true });
+  assert.equal(r.storm, false); assert.deepEqual(r.ids, ['rainbow', 'volcano', 'starfield', 'goldvault']);
+  const star = await page.evaluate(() => {
+    const t = (n) => { transform = null; transformCool = 0; specialEnd = -99; discoveredWorlds.delete('starfield'); grid = empty();
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (r !== c) grid[r][c] = { gi: 0, t: 1, f: 0, l: 0 };
+      CFG.TRANSFORM_STAR_GEMS = n; tray = [{ s: STAR, gi: 6 }, null, null]; place(0, 0, 0); return transform && transform.id; };
+    return { big: t(10), small: t(15) };
+  });
+  assert.equal(star.big, 'starfield', 'a 14-gem star clears the bar of 10'); assert.equal(star.small, null, 'below the bar it is only a star');
+});
+
+test('achievements: gated like a special (trays 1-5, Blast, golden, star in tray, cooldown, a live one) but a blocked one still unlocks its look', async ({ page }) => {
+  await ach(page);
+  const r = await page.evaluate(() => {
+    const tries = {}, one = (name, setup) => { transform = null; transformCool = 0; specialEnd = -99; golden = null; blast = null; trayNo = 10; tray = [null, null, null]; discoveredWorlds.clear();
+      setup(); triggerTransform('rainbow'); tries[name] = { live: !!transform, owned: discoveredWorlds.has('rainbow') }; };
+    one('open', () => {}); one('early', () => { trayNo = 3; }); one('blast', () => { blast = { t: 9e9, pts: 0, lines: 0, best: 0, swaps: 0, tick: 0 }; });
+    one('golden', () => { golden = { want: { lines: 2 }, got: { lines: 0 }, pts: 0 }; }); one('star', () => { tray = [{ s: STAR, gi: 1 }, null, null]; });
+    one('cool', () => { transformCool = 3; }); one('gap', () => { specialEnd = 9; });
+    transform = { id: 'volcano', remaining: 4 }; transformCool = 0; specialEnd = -99; golden = null; blast = null; tray = [null, null, null]; discoveredWorlds.clear();
+    triggerTransform('rainbow'); tries.live = { id: transform.id, owned: discoveredWorlds.has('rainbow') };
+    transform = null; return tries;
+  });
+  assert.deepEqual(r.open, { live: true, owned: true });
+  for (const k of ['early', 'blast', 'golden', 'star', 'cool', 'gap']) assert.deepEqual(r[k], { live: false, owned: true }, k + ': no flip, look still unlocked');
+  assert.deepEqual(r.live, { id: 'volcano', owned: true }, 'a live one is not replaced');
+});
+
+test('achievements: ending one sets the no-special-next-tray rule and the cooldown; the first earn gets the full card, repeats a short one, the gear gets a dot', async ({ page }) => {
+  await ach(page);
+  const r = await page.evaluate(() => {
+    const out = {}; trayNo = 12; discoveredWorlds.clear(); newLook = false; syncLookDot();
+    triggerTransform('rainbow'); out.first = banners.map(b => [b.txt, b.sub, b.k]); out.dot = el('setBtn').classList.contains('dot');
+    banners.length = 0; transform.remaining = 1; tray = [{ s: SHAPES[0], gi: 1 }, null, null]; place(0, 5, 5);
+    out.ended = { live: !!transform, cool: transformCool, end: specialEnd, tn: trayNo };
+    banners.length = 0; transformCool = 0; specialEnd = -99; triggerTransform('rainbow'); out.repeat = banners.map(b => [b.txt, b.sub, b.k]);
+    return out;
+  });
+  assert.deepEqual(r.first, [['RAINBOW', 'NEW LOOK UNLOCKED', 1]]); assert.equal(r.dot, true);
+  assert.equal(r.ended.live, false); assert.equal(r.ended.cool, 8); assert.equal(r.ended.end, r.ended.tn, 'the next tray carries no special');
+  assert.equal(r.repeat.length, 1); assert.match(r.repeat[0][1], /×1\.5 · 9 MOVES/); assert.ok(r.repeat[0][2] > 1, 'repeats are shorter');
+  await page.click('#setBtn');
+  assert.equal(await page.evaluate(() => el('setBtn').classList.contains('dot')), false, 'opening Settings clears the dot');
+});
+
+test('achievements: unlocked looks open in Settings, persist across a reload, and a locked one refuses', async ({ page }) => {
+  await ach(page);
+  await page.evaluate(() => { discoveredWorlds.clear(); transform = null; saveSkinSave(); });
+  await page.evaluate(() => openSettings());
+  assert.ok(await page.locator('#lookGrid [data-id=volcano]').isDisabled(), 'locked');
+  assert.match(await page.locator('#lookGrid [data-id=volcano] .lock').textContent(), /Combo ×5/);
+  await page.evaluate(() => el('lookGrid').querySelector('[data-id=volcano]').click());
+  assert.equal(await page.evaluate(() => CFG.STYLE), 'blocks', 'a locked look does nothing');
+  await page.evaluate(() => { el('setDone').click(); trayNo = 10; transformCool = 0; specialEnd = -99; triggerTransform('volcano'); transform = null; openSettings(); });
+  assert.equal(await page.locator('#lookGrid [data-id=volcano]').isDisabled(), false, 'earned: open');
+  await page.click('#lookGrid [data-id=volcano]');
+  assert.deepEqual(await page.evaluate(() => [CFG.STYLE, CFG.HOME_WORLD]), ['volcano', 'volcano']);
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => [CFG.STYLE, CFG.HOME_WORLD, discoveredWorlds.has('volcano')]), ['volcano', 'volcano', true], 'the earned look survives a reload');
+});
+
+test('achievements: Undo of the earning move takes the live look back, Undo inside one keeps it, resume ends it; the card never blocks play', async ({ page }) => {
+  await ach(page);
+  const r = await page.evaluate(() => {
+    const out = {}; CFG.SPECIALS.golden = false; discoveredWorlds.clear();
+    grid = empty(); for (let c = 0; c < 7; c++) grid[0][c] = { gi: 0, t: 1, f: 0, l: 0 };
+    tray = [{ s: SHAPES.find(s => s.cells.length === 1), gi: 1 }, { s: SHAPES.find(s => s.cells.length === 1), gi: 2 }, { s: SHAPES.find(s => s.cells.length === 1), gi: 3 }];
+    noteUndo(); place(0, 0, 7); // a clear that empties the board: a clean sweep
+    out.live = transform && transform.id; undoSnap && 0;
+    return out;
+  });
+  assert.equal(r.live, 'rainbow', 'a clean sweep starts Rainbow');
+  await page.evaluate(() => { undo(); });
+  assert.equal(await page.evaluate(() => !!transform), false, 'undoing the sweep takes the live look back');
+  const kept = await page.evaluate(() => {
+    transform = { id: 'volcano', remaining: 5 }; tray = [{ s: SHAPES[0], gi: 1 }, null, null]; place(0, 6, 0);
+    undo(); return transform && [transform.id, transform.remaining];
+  });
+  assert.deepEqual(kept, ['volcano', 5], 'Undo inside a live look keeps it, with its moves back');
+  const saved = await page.evaluate(() => { const o = JSON.parse(JSON.stringify(snapshot())); transform = { id: 'volcano', remaining: 5 }; restore(o); return !!transform; });
+  assert.equal(saved, false, 'resume ends a live transformation');
+  await page.evaluate(() => { trayNo = 10; transformCool = 0; specialEnd = -99; triggerTransform('starfield'); });
+  assert.equal(await page.evaluate(() => paused || false), false, 'the card does not pause the game');
+});
+
 let failed = 0;
 for (const { name, fn } of tests) {
   for (const k of Object.keys(server.patches)) delete server.patches[k];

@@ -85,8 +85,8 @@ const CFG = {
   STAR_STAGGER:  0.7,    // frames of delay per cell of distance for its cross to go white-hot
 
   // the specials, one switch each (plan 4.5). Each comes back on once it has been rebuilt to be a real highlight:
-  // Blast (4.5a) is back; golden hand (4.5c) and the star gem are back, transformations are still paused. special(name) reads these.
-  SPECIALS: {blast:true, star:true, golden:true, transform:false},
+  // All four specials are back (Blast 4.5a, star 4.5b, golden hand 4.5c, transformations-as-achievements 4.5d). special(name) reads these.
+  SPECIALS: {blast:true, star:true, golden:true, transform:true},
   SPECIAL_FROM_TRAY: 6,  // no special before this tray number (plan 3.1: the opening is calm); see specialOk()
   BIG_COMBO: 3,          // the loud celebration (COMBO slam, score orbs, COLOR GONE band, fireworks, punch zoom) starts at this combo; every clear below it is calm: a squash, point tags and one praise word
 
@@ -100,7 +100,9 @@ const CFG = {
   TRANSFORM_PLACEMENTS: 9,     // how many placements one lasts
   TRANSFORM_MULT:       1.5,   // score multiplier while active
   TRANSFORM_COOLDOWN:   8,     // trays that must pass after one ends before another can start
-  MYSTERY_CHANCE:       0.015, // odds a fresh tray triggers a random one anyway (blocked by the cooldown too)
+  TRANSFORM_COMBO:      5,     // the combo that earns Volcano
+  TRANSFORM_STAR_GEMS:  10,    // a star clearing at least this many gems earns Starfield (STAR_MIN is 9)
+  FX_TRANSFORM_MOMENT:  true,  // the achievement card + sting (reduced motion: card and flip only)
 
   // event screen effects — each independently toggleable; none may ever draw over live board gems
   FX_COMBO_GLOW:     true,   // screen-edge glow in the combo colour, intensifying with the streak
