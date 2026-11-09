@@ -187,7 +187,7 @@ function frame(now){
   if(hitWait>0) hitWait-=dt; else shake*=Math.pow(.85,dt);
   glowT*=Math.pow(.93,dt);
 
-  const comboTarget=combo>=2?Math.min(1,(combo-1)/6):0;
+  const comboTarget=combo>=CFG.BIG_COMBO?Math.min(1,(combo-1)/6):0;
   comboGlowV+=(comboTarget-comboGlowV)*Math.min(1,dt*0.15);
   const goldTarget=golden?1:0;
   goldTintV+=(goldTarget-goldTintV)*Math.min(1,dt*0.15);
