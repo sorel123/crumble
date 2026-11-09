@@ -499,26 +499,48 @@ function slotRect(i){ const w=B/3; return {x:bx+w*i,y:trayY,w,h:trayH}; }
 //  - with a slot the piece is drawn seated in it and the lines it would clear light up; release puts it
 //    exactly there. Without one there is no ghost, it floats, and release sends it back to the tray.
 // drag.slot is that one answer: frame() draws from it and onUp() places from it.
-function onDown(e){
-  if(state!=='play'||paused||drag||dealing||(blast&&blast.t<=0)) return;   // one drag at a time (a second finger can't pick up another piece); none while a tray is being dealt
-  ac();
+// Which tray piece a press at (x,y) takes (a small, quick finger lands near a piece, not on it): anywhere below
+// the board counts, and the slot's whole column is its target. An empty column hands off to the nearest piece.
+function pickAt(x,y){
+  if(y<by+B||x<bx-B/6||x>bx+B+B/6) return -1;
+  let best=-1, bd=Infinity;
   for(let i=0;i<3;i++){
-    const R=slotRect(i);
-    if(tray[i]&&e.clientX>=R.x&&e.clientX<=R.x+R.w&&e.clientY>=R.y-12&&e.clientY<=R.y+R.h+12){
-      const s0=tray[i].s;
-      drag={i,id:e.pointerId,x:e.clientX,y:e.clientY,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(s0)/cell,
-            slot:null,snapK:0,sx:0,sy:0};             // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
-      updateSlot(); hesPick();
-      Sfx.pickup(); if(tray[i]&&tray[i].s.star) Sfx.starPick(); return;
-    }
+    if(!tray[i]) continue;
+    const R=slotRect(i), d=Math.abs(x-(R.x+R.w/2));
+    if(d<bd){ bd=d; best=i; }
   }
+  return best;
+}
+let pendingPress=null;                                // a press that came while the tray was dealing: {id,x,y}
+function onDown(e){
+  if(state!=='play'||paused||drag||(blast&&blast.t<=0)) return;   // one drag at a time (a second finger can't pick up another piece)
+  if(e.target&&e.target.closest&&e.target.closest('button')) return;
+  if(dealing){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY}; return; }   // taken the moment the new tray appears (stepPending)
+  startDrag(e.pointerId,e.clientX,e.clientY);
+}
+function startDrag(id,x,y){
+  ac();
+  const i=pickAt(x,y);
+  if(i<0) return;
+  const s0=tray[i].s;
+  drag={i,id,x,y,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(s0)/cell,
+        slot:null,snapK:0,sx:0,sy:0};                 // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
+  updateSlot(); hesPick();
+  Sfx.pickup(); if(tray[i]&&tray[i].s.star) Sfx.starPick();
+}
+function stepPending(){                               // called each frame: the deal finished and her finger is still down
+  if(!pendingPress||dealing||drag) return;
+  const p=pendingPress; pendingPress=null;
+  if(state==='play'&&!paused&&!(blast&&blast.t<=0)) startDrag(p.id,p.x,p.y);
 }
 function onMove(e){
+  if(pendingPress&&e.pointerId===pendingPress.id){ pendingPress.x=e.clientX; pendingPress.y=e.clientY; }
   if(!drag||paused||e.pointerId!==drag.id) return;
   drag.x=e.clientX; drag.y=e.clientY;
   updateSlot();
 }
 function onUp(e){
+  if(pendingPress&&e.pointerId===pendingPress.id) pendingPress=null;
   if(!drag||paused||e.pointerId!==drag.id) return;
   const t=tray[drag.i];
   if(t){
@@ -528,7 +550,8 @@ function onUp(e){
   }
   drag=null;
 }
-function onCancel(e){                                 // iOS took the touch away (a system gesture): the piece goes home
+function onCancel(e){
+  if(pendingPress&&e.pointerId===pendingPress.id) pendingPress=null;                                 // iOS took the touch away (a system gesture): the piece goes home
   if(!drag||e.pointerId!==drag.id) return;
   if(tray[drag.i]) sendBack();
   drag=null;

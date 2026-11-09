@@ -709,7 +709,7 @@ function frame(now){
   if(CFG.FX_SWEEP_FX) stepConfetti(dt);
   stepOrbs(now,dt);
   stepBlastFx(now,dt);
-  stepDeal();                                        // the next tray, a slice at a time, after this frame's drawing
+  stepDeal(); stepPending();                                        // the next tray, a slice at a time, after this frame's drawing
   perf.work=performance.now()-t0;
   perfHud(now);
 }
