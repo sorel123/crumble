@@ -248,6 +248,52 @@ function weightedShape(density){
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
   return SHAPES[0];
 }
+/* ═══ Pressure and recovery (plan 6.1) ═══
+   Room, not fullness: a board can be half full and wide open, or a third full and riddled. roomOf() asks how many
+   placements a reference set of mid and big pieces (the rectangles of 4+ cells and the four 3-cell corners) still
+   has, as a share of what each has on an empty board, square-rooted (so the first losses register) and averaged.
+   1 = empty, about 0.3 = cramped (only a few spots for anything bigger than a bar), 0 = only small pieces fit. */
+const ROOM_REF=SHAPES.filter(s=>(s.n>=4&&s.n===s.rows*s.cols)||(s.n===3&&s.rows===2));
+const ROOM_MAX=ROOM_REF.map(s=>placeMasks(s).length);
+function roomOf(a){ const [lo,hi]=packBits(a); return roomBits(lo,hi); }
+function roomBits(lo,hi){
+  let sum=0;
+  for(let k=0;k<ROOM_REF.length;k++){
+    let n=0; for(const m of placeMasks(ROOM_REF[k])) if(!(lo&m.lo)&&!(hi&m.hi)) n++;
+    sum+=Math.sqrt(n/ROOM_MAX[k]);
+  }
+  return sum/ROOM_REF.length;
+}
+/* The phase for the tray being dealt. calm (room >= ROOM_OK) and building deal honest hands; the edge (room <
+   ROOM_EDGE) holds EDGE_HOLD_MIN..MAX honest trays; then up to RECOVERY_TRIES recovery hands (a sequence to
+   spot); a miss goes back to the edge. The clear that lifts her out of edge or recovery earns RELIEF_TRAYS
+   guided trays. pace.n counts the trays dealt in the phase so far. */
+function paceSet(ph){ pace.ph=ph; pace.n=0; }
+function paceStep(a0){
+  const r=roomNow=roomOf(a0), cramped=r<CFG.ROOM_EDGE, ph=pace.ph;
+  if((ph==='edge'||ph==='recovery')&&!cramped){ paceSet('relief'); pace.len=CFG.RELIEF_TRAYS; }
+  else if(ph==='relief'&&pace.n<pace.len&&!cramped){}
+  else if(cramped){
+    if(ph==='edge'){ if(pace.n>=pace.hold) paceSet('recovery'); }
+    else if(ph==='recovery'){ if(pace.n>=CFG.RECOVERY_TRIES) paceSet('edge'), pace.hold=edgeHold(); }
+    else { paceSet('edge'); pace.hold=edgeHold(); }
+  }
+  else paceSet(r>=CFG.ROOM_OK?'calm':'building');
+  pace.n++;
+  return pace.ph;
+}
+const edgeHold=()=>CFG.EDGE_HOLD_MIN+((rnd()*(CFG.EDGE_HOLD_MAX-CFG.EDGE_HOLD_MIN+1))|0);
+const paced=()=>mode!=='adventure';                    // Adventure keeps the tension wave its levels were tuned on
+// what each phase deals: honest (calm, building), edge (every piece has a spot now, no promise the three fit in
+// sequence), recovery, guided (relief; the first relief tray tries a planned sweep), and now and then a calm gift
+function paceTier(a0){
+  const ph=paceStep(a0);
+  if(ph==='edge') return 'edge';
+  if(ph==='recovery') return 'recovery';
+  if(ph==='relief') return pace.n>1?'solvable':sweepCool<=0?'sweep':'jackpot';
+  return ph==='calm'&&rnd()<CFG.GIFT_CHANCE?'solvable':'honest';
+}
+const fitsBits=(lo,hi,s)=>placeMasks(s).some(m=>!(lo&m.lo)&&!(hi&m.hi));
 function pickTier(a){
   if(tension>CFG.TIER_SWEEP && sweepCool<=0) return 'sweep';
   if(tension>CFG.TIER_JACKPOT) return 'jackpot';
@@ -259,22 +305,33 @@ function pickTier(a){
 // spread over a few frames (dealLater) instead of landing in the frame a clear starts. Same
 // search, step for step, as running it straight through (genTray / runSteps).
 function runSteps(it){ let r; while(!(r=it.next()).done); return r.value; }
-function pickHand(a0,density,tier,withStar){ return runSteps(pickHandSteps(a0,density,tier,withStar)); }
+function pickHand(a0,density,tier,withStar,candidates){ return runSteps(pickHandSteps(a0,density,tier,withStar,candidates)); }
 function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzle=false){   // puzzle (golden hand): no GUIDE/OBVIOUS/ALT, still playable and tidy
-  const want = tier==='jackpot'?3 : tier==='solvable'?2 : 0;
+  const want = tier==='jackpot'?3 : tier==='solvable'||tier==='recovery'?2 : 0;
+  // (6.1) honest and edge hands get no help at all; a recovery hand is scored on the sequence, not on easy drops
+  const guided = !puzzle && tier!=='honest' && tier!=='edge' && tier!=='recovery';
+  const [blo,bhi]=packBits(a0);
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<candidates;i++){
     const hand=makeHand(density);
     if(withStar) hand[(rnd()*3)|0]=STAR;      // graded with the star in it, so the score is honest
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     let sc;
-    if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
-    else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest
+    if(tier==='edge'){                                // Block Blast-honest: no piece is dead on arrival; the order and the space are hers
+      const fit=hand.filter(s=>fitsBits(blo,bhi,s)).length;
+      sc=fit===3?10:-200+fit;
+    }
+    else if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
+    else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest of a few
+    else if(tier==='recovery') sc=ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough+(ev.immPieces<=1?15:0)-(ev.obvPieces>1?15:0);   // the way out is a sequence she has to see
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
-    if(ev.ok&&!puzzle) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
-    if(ev.ok&&!puzzle) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
+    if(ev.ok&&guided) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
+    if(ev.ok&&guided) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
-    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough && (puzzle||!CFG.GUIDE||ev.obvPieces>0)) break;
+    if(tier==='edge'){ if(sc>0) break; }
+    else if(tier==='honest'){ if(bestEv&&bestEv.ok&&i>=CFG.HONEST_TRIES-1) break; }
+    else if(tier==='recovery'){ if(ev.ok && i>=7 && ev.lines>=want && ev.immPieces<=1) break; }
+    else if(ev.ok && i>=7 && ev.lines>=want && ev.rough<=bestRough && (puzzle||!CFG.GUIDE||ev.obvPieces>0)) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
     yield;
   }
@@ -313,7 +370,7 @@ function goldenSolve(a,shapes,budget=6000){
    Returns false (and deals nothing) if neither offers a real clear. */
 function* genGoldenSteps(a0,density){
   let hand=yield* planSweepSteps(a0), ev=hand&&evalHand(a0,hand,6000);
-  if(hand&&ev.sweep){ sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; }   // same bookkeeping as a normal sweep hand
+  if(hand&&ev.sweep){ sweepCool=CFG.SWEEP_COOLDOWN; if(!paced()) tension=0.5; }   // same bookkeeping as a normal sweep hand
   else { yield; ({hand,ev}=yield* pickHandSteps(a0,density,'jackpot',false,Math.max(CFG.CANDIDATES,40),true)); }
   if(!ev||!ev.ok||(!ev.sweep&&ev.lines<CFG.GOLDEN_MIN_LINES)) return false;   // a golden hand must be worth chasing; if none is on offer, nothing is dealt
   commitTray(hand,'GOLDEN·'+(ev.sweep?'SWEEP':'JACKPOT'),{sweep:ev.sweep,lines:ev.lines});
@@ -340,7 +397,7 @@ function* dealSteps(){
   const specialsOk=trayNo>=CFG.SPECIAL_FROM_TRAY;      // trays 1-5 never carry a special
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
-  let tier=pickTier(a0);
+  let tier=paced()?paceTier(a0):pickTier(a0);           // (6.1) Endless and Daily: the phase decides; Adventure: the tension wave
   sweepCool=Math.max(0,sweepCool-1);
   goldenCool=Math.max(0,goldenCool-1);
   transformCool=Math.max(0,transformCool-1);
@@ -348,7 +405,7 @@ function* dealSteps(){
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
-  const wantStar=special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || rnd()<CFG.STAR_CHANCE);
+  const wantStar=tier!=='edge' && tier!=='recovery' && special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || rnd()<CFG.STAR_CHANCE);
 
   if(goldenNext && special('golden') && specialOk()){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }   // (4.5c) the shared special rules: trays 1-5, one live, never two in a row
 
@@ -358,11 +415,11 @@ function* dealSteps(){
   }
   if(tier==='sweep'){
     const h=yield* planSweepSteps(a0);
-    if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; return; }
+    if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; if(!paced()) tension=0.5; return; }
     tier='jackpot';
   }
 
-  const {hand}=yield* pickHandSteps(a0,density,tier,wantStar);
+  const {hand}=yield* pickHandSteps(a0,paced()&&pace.ph==='building'?density*CFG.BUILD_BIAS:density,tier,wantStar);
   if(hand.includes(STAR)){ starForced=false; starCool=CFG.STAR_COOL; }
   commitTray(hand,tier.toUpperCase()+(hand.includes(STAR)?'+STAR':''));
 }
@@ -411,6 +468,10 @@ function seedOpening(){
 function genRescue(){
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
+  if(paced()){                                      // (6.1) a recovery hand: a way out she has to see, not a jackpot
+    const {hand,ev}=pickHand(a0,density,'recovery',false,CFG.CANDIDATES*4);
+    if(ev&&ev.ok){ commitTray(hand,'RESCUE'); return; }
+  }
   const sw=planSweep(a0);
   if(sw){ commitTray(sw,'RESCUE·SWEEP'); return; }
   let bestHand=null,bestScore=-Infinity;
@@ -500,5 +561,6 @@ function updateDbg(){
   const gold=golden?`GOLDEN plan ${golden.want.sweep?'sweep':golden.want.lines+' lines'}, need ${goldenNeed(golden.want)}, got ${golden.got.sweep?'sweep+':''}${golden.got.lines} lines, ${golden.pts} pts`
     :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
   const star=!special('star')?'star off':starForced?'star guaranteed':'star on';
-  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star}`;
+  const pc=paced()?`${pace.ph} ${pace.n}${pace.ph==='edge'?'/'+pace.hold:''} · room ${roomNow.toFixed(2)} · `:'';
+  d.textContent=`${pc}tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star}`;
 }

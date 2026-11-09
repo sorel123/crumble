@@ -17,6 +17,7 @@ function snapshot(){
     golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies: Undo keeps the snapshot while the live hand goes on mutating its own
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     bonusMeter, specialEnd,
+    pace:{...pace}, rescueLines,                    // (6.1) the dealer's phase, so resume and Undo keep the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     tf:transform?{id:transform.id,remaining:transform.remaining}:null,   // Undo keeps a live look; resume (loadRun) ends it
@@ -55,6 +56,10 @@ function restore(o,keepLive){
   renderPips();
   bonusMeter=isInt(o.bonusMeter,0,1e4)?Math.min(o.bonusMeter,CFG.BONUS_METER):0; bonusTag=null;
   specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
+  const pc=o.pace, PH=['calm','building','edge','recovery','relief'];   // (6.1) older saves have none: start calm
+  pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
+  rescueLines=isInt(o.rescueLines,0,1e6)?o.rescueLines:0;
+  roomNow=roomOf(packGrid(grid));
   const b=o.bonus;                                  // a live bonus carries on with the trays it had left (the sky is back at once)
   if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){
     bonus={left:b.left,extra:b.extra};
@@ -161,7 +166,7 @@ function hesPick(){ if(!hes.dealtAt) return; const t=performance.now(); if(!hes.
 function hesPlace(cleared){                           // place(): only the tray's first drop makes a sample
   if(!hes.dealtAt||!hes.firstPick){ hes.dealtAt=0; return; }
   const now=performance.now();
-  hes.log.push({pick:Math.round(hes.firstPick-hes.dealtAt),place:Math.round(now-hes.lastPick),clr:cleared?1:0});
+  hes.log.push({pick:Math.round(hes.firstPick-hes.dealtAt),place:Math.round(now-hes.lastPick),clr:cleared?1:0,ph:paced()?pace.ph:'adv'});   // (6.1) tagged with the dealer's phase
   if(hes.log.length>HES_KEEP) hes.log.splice(0,hes.log.length-HES_KEEP);
   hes.dealtAt=0;
   try{ localStorage.setItem(HES_STORE,JSON.stringify(hes.log)); }catch(e){}

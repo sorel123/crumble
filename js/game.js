@@ -309,13 +309,17 @@ function place(idx,r,c){
       tension=0;
     }
     if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
-    tension=Math.max(0,tension-CFG.TENSION_DOWN);
+    if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
+    if(paced()&&rescuesUsed===1&&rescueLines<CFG.RESCUE_EARN_LINES&&rescueLines+total>=CFG.RESCUE_EARN_LINES)
+      pushBanner('RESCUE EARNED','🛟 one more save',"#8FF7FF");   // (6.1) the second rescue is earned, not given
+    rescueLines+=total;
   } else {
     combo=0;
-    tension=Math.min(1,tension+CFG.TENSION_UP);
+    if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
   }
 
-  tension=Math.min(1,tension+(1-mobility())*CFG.TENSION_DRIFT);
+  if(paced()) tension+=(1-roomOf(packGrid(grid))-tension)*0.5;   // (6.1) a display value now (the border glow): how cramped the board is, eased
+  else tension=Math.min(1,tension+(1-mobility())*CFG.TENSION_DRIFT);
 
   if(golden){
     const planned=golden.plan?golden.plan.ids:[], hitPlan=[...rows,...cols.map(c2=>8+c2)].some(id=>planned.includes(id));

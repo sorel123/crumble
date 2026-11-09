@@ -449,6 +449,10 @@ test('star gem: dealt only when a cross is worth it, with a cooldown, and never 
   await withDiag(page);
   const r = await page.evaluate(() => {
     const out = {};
+    const edge0 = CFG.ROOM_EDGE;
+    diagBoard(); pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; trayNo = 9; starForced = true; starCool = 0; specialEnd = -99; tray = [null, null, null]; genTray();
+    out.edgeStar = { ph: pace.ph, star: tray.some(t => t && t.s.star) };   // (6.1) the diagonal board is cramped: an edge tray, and edge trays carry no star
+    CFG.ROOM_EDGE = 0;                                                     // the rest checks the star's own rules, away from the edge
     grid = empty(); out.empty = starBest(grid).n;
     diagBoard(); out.diag = starBest(grid).n; out.at = starAt(3, 3);
     const deal = (setup) => { trayNo = 9; starForced = true; starCool = 0; specialEnd = -99; tray = [null, null, null]; setup && setup(); genTray(); return tray.some(t => t && t.s.star); };
@@ -461,8 +465,10 @@ test('star gem: dealt only when a cross is worth it, with a cooldown, and never 
     diagBoard(); out.afterGap = deal(() => { specialEnd = 8; });
     diagBoard(); out.bonus = deal(() => { bonus = { left: 2, extra: 0 }; }); bonus = null;
     diagBoard(); out.live = deal(() => { tray = [{ s: STAR, gi: STAR_GI }, null, null]; });
+    CFG.ROOM_EDGE = edge0;
     return out;
   });
+  assert.deepEqual(r.edgeStar, { ph: 'edge', star: false }, 'no star on an edge tray (6.1)');
   assert.equal(r.empty, 0); assert.equal(r.diag, 14); assert.equal(r.at, 14);
   assert.equal(r.emptyDealt, false, 'an empty board is not worth a star');
   assert.ok(r.thin < 9, 'two short rows are worth less than STAR_MIN');
@@ -596,9 +602,10 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
     for (let k = 0; k < 12; k++) {
       grid = grid.map(r => r.map(() => (keep() < 0.3 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
       const g0 = grid, ten = k / 11, carry0 = carry, star0 = starForced, no0 = trayNo;
+      const pace0 = { ph: ['calm', 'building', 'edge', 'recovery', 'relief'][k % 5], n: 1 + (k % 3), hold: 2, len: 2 };   // (6.1) every phase, mid-way
       bonus = k % 3 === 2 ? { left: 2, extra: 0 } : null;
       const run = stepwise => {
-        grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9;
+        grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9; pace = { ...pace0 }; starCool = 0; specialEnd = -99; tray = [null, null, null];
         goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
         if (stepwise) { const it = dealSteps(); while (!it.next().done) performance.now(); } else genTray();   // stepwise: one candidate per call, as frames would
         return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier;
@@ -1751,6 +1758,138 @@ test('phone speaker defaults on for touch devices unless she has chosen (6.4)', 
   });
   assert.equal(r.touchDefault, true, 'touch device: speaker mode on by default');
   assert.equal(r.savedOff, false, 'a saved Settings choice is not overridden');
+});
+
+// ---- pressure and recovery (plan 6.1) ----
+const rowsBoard = rows => `grid = ${JSON.stringify(rows)}.map(r => [...r].map(ch => (ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null)));`;
+const HALF = ['11111111', '11111111', '11111111', '11111111', '00000000', '00000000', '00000000', '00000000'];        // 32 gems, all in one half
+const SPECK = ['10010010', '01001001', '00100100', '10010010', '01001001', '00100100', '10010010', '01001001'];      // 22 gems, scattered
+const SPREAD = ['10000001', '00100100', '00011000', '01000010', '01000010', '00011000', '00100100', '10000001']; // 17 gems spread out: building
+const CRAMP = ['11011011', '11011011', '00000000', '11011011', '11011011', '00000000', '11011011', '11011011'];     // 36 gems, only small gaps
+
+test('room (6.1): empty is 1, a riddled board has less room than a fuller tidy one, and it is cheap', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(([h, s, c, sp]) => {
+    const at = rows => { eval(rows); return roomOf(packGrid(grid)); };
+    const out = { empty: (grid = empty(), roomOf(packGrid(grid))), half: at(h), speck: at(s), cramp: at(c), spread: at(sp) };
+    grid = empty(); const a = packGrid(grid); const t0 = performance.now(); for (let i = 0; i < 1000; i++) roomOf(a); out.ms = (performance.now() - t0) / 1000;
+    return out;
+  }, [rowsBoard(HALF), rowsBoard(SPECK), rowsBoard(CRAMP), rowsBoard(SPREAD)]);
+  assert.equal(r.empty, 1);
+  assert.ok(r.speck < r.cramp, '22 scattered gems are tighter than 36 in neat blocks: room, not fullness');
+  assert.ok(r.spread > 0.3 && r.spread < 0.55, `17 spread gems are building (${r.spread.toFixed(2)})`);
+  assert.ok(r.speck < r.half, `22 scattered gems leave less room (${r.speck.toFixed(2)}) than 32 tidy ones (${r.half.toFixed(2)})`);
+  assert.ok(r.half > 0.55 && r.cramp < 0.3, `half board is calm (${r.half.toFixed(2)}), the cramped one is the edge (${r.cramp.toFixed(2)})`);
+  assert.ok(r.ms < 0.5, `room() costs ${r.ms.toFixed(3)} ms`);
+});
+
+test('phases (6.1): calm, building, an edge held 2-3 trays, recovery at most twice, relief earned by getting out', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(([cramp, half, speck]) => {
+    const deal = rows => { eval(rows); tray = [null, null, null]; genTray(); return pace.ph + ':' + lastTier; };
+    CFG.SPECIALS.golden = CFG.SPECIALS.star = CFG.SPECIALS.bonus = false; trayNo = 10;
+    const out = {};
+    pace = { ph: 'calm', n: 0, hold: 0, len: 0 };
+    out.calm = deal(half); out.building = deal(speck);
+    const holds = new Set(), seq = [];
+    for (let k = 0; k < 30; k++) { pace = { ph: 'building', n: 1, hold: 0, len: 0 }; deal(cramp); holds.add(pace.hold); }
+    out.holds = [...holds].sort();
+    pace = { ph: 'building', n: 1, hold: 0, len: 0 };
+    for (let k = 0; k < 9; k++) seq.push(deal(cramp).split(':')[0] + (pace.ph === 'edge' && pace.n === 1 ? '/' + pace.hold : ''));
+    out.seq = seq;
+    pace = { ph: 'edge', n: 1, hold: 3, len: 0 }; out.out = [deal(half), deal(half), deal(half)];
+    pace = { ph: 'recovery', n: 1, hold: 0, len: 0 }; out.out2 = deal(half);
+    pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; out.adventure = (mode = 'adventure', tension = 0.5, deal(half)); mode = 'endless';
+    return out;
+  }, [rowsBoard(CRAMP), rowsBoard(HALF), rowsBoard(SPREAD)]);
+  assert.match(r.calm, /^calm:(HONEST|SOLVABLE)$/);
+  assert.match(r.building, /^building:HONEST$/);
+  assert.deepEqual(r.holds, [2, 3], 'the edge is held a rolled 2 or 3 trays');
+  // edge (hold h trays) -> recovery x2 -> edge again: the dealer does not keep handing out a way out
+  const h = +r.seq[0].split('/')[1];
+  const want = [...Array(h).fill('edge'), 'recovery', 'recovery', 'edge'];
+  assert.deepEqual(r.seq.slice(0, want.length).map(x => x.split('/')[0]), want, r.seq.join(' '));
+  assert.deepEqual(r.out.map(x => x.split(':')[0]), ['relief', 'relief', 'calm'], 'getting out earns RELIEF_TRAYS guided trays, then calm');
+  assert.match(r.out[0], /:(SWEEP|JACKPOT)$/); assert.match(r.out[1], /:SOLVABLE$/);
+  assert.match(r.out2, /^relief:/, 'getting out of recovery earns relief too');
+  assert.match(r.adventure, /^calm:(SOLVABLE|JACKPOT)$/, 'Adventure keeps the tension wave (no honest trays, phase untouched)');
+});
+
+test('hands by phase (6.1): honest and recovery are playable, edge pieces each have a spot, recovery is a sequence, never a star', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(([cramp, half]) => {
+    const out = { honest: 0, edgeEach: 0, rec: 0, recLines: 0, recSeq: 0, star: 0, n: 30 };
+    CFG.SPECIALS.golden = CFG.SPECIALS.bonus = false; CFG.STAR_CHANCE = 1; CFG.STAR_MIN = 1; trayNo = 20;
+    const fits = s => fitsAnywhere(s, grid);
+    for (let k = 0; k < out.n; k++) {
+      eval(half); pace = { ph: 'calm', n: 1, hold: 0, len: 0 }; CFG.GIFT_CHANCE = 0; starCool = 9; tray = [null, null, null]; genTray();
+      if (evalHand(packGrid(grid), tray.map(t => t.s), 6000).ok) out.honest++;
+      eval(cramp); pace = { ph: 'edge', n: 1, hold: 3, len: 0 }; starForced = true; starCool = 0; specialEnd = -99; tray = [null, null, null]; genTray();
+      if (tray.every(t => fits(t.s))) out.edgeEach++;
+      out.star += tray.some(t => t.s.star) ? 1 : 0;
+      eval(cramp); pace = { ph: 'edge', n: 3, hold: 2, len: 0 }; starForced = true; starCool = 0; specialEnd = -99; tray = [null, null, null]; genTray();
+      const ev = evalHand(packGrid(grid), tray.map(t => t.s), 6000);
+      if (ev.ok) out.rec++; if (ev.lines >= 2) out.recLines++; if (ev.immPieces <= 1) out.recSeq++;
+      out.star += tray.some(t => t.s.star) ? 1 : 0;
+    }
+    return out;
+  }, [rowsBoard(CRAMP), rowsBoard(HALF)]);
+  assert.equal(r.honest, r.n, 'calm/building hands are playable in some order');
+  assert.equal(r.edgeEach, r.n, 'no edge piece is dead on arrival');
+  assert.equal(r.rec, r.n, 'a recovery hand is playable');
+  assert.ok(r.recLines >= r.n * 0.8 && r.recSeq >= r.n * 0.8, `recovery offers 2+ lines (${r.recLines}) with at most one piece clearing on its own (${r.recSeq})`);
+  assert.equal(r.star, 0, 'no star on edge or recovery trays');
+});
+
+test('rescues (6.1): the first is free, the second is earned by 30 lines; Adventure keeps both free', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const out = {};
+    score = 500; rescuesUsed = 0; out.first = rescueAllowed(best);
+    rescue(); out.afterFirst = { used: rescuesUsed, allowed: rescueAllowed(best), ph: pace.ph, lines: rescueLines };
+    banners.length = 0;
+    grid = empty(); for (let c = 0; c < 7; c++) grid[0][c] = { gi: 0, t: 1, f: 0, l: 0 };
+    rescueLines = CFG.RESCUE_EARN_LINES - 1; tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, null]; place(0, 0, 7);
+    out.earned = { allowed: rescueAllowed(best), banner: banners.some(b => b.txt === 'RESCUE EARNED') };
+    rescueLines = 0; mode = 'adventure'; out.adv = rescueAllowed(best); mode = 'endless';
+    return out;
+  });
+  assert.equal(r.first, true);
+  assert.deepEqual(r.afterFirst, { used: 1, allowed: false, ph: 'recovery', lines: 0 });
+  assert.deepEqual(r.earned, { allowed: true, banner: true });
+  assert.equal(r.adv, true);
+});
+
+test('pace (6.1): save/resume and Undo keep the phase and the earned-rescue count; an old save starts calm', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { pace = { ph: 'edge', n: 2, hold: 3, len: 0 }; rescueLines = 12; rescuesUsed = 1; saveRun(); });
+  await reload(page);
+  const a = await page.evaluate(() => ({ pace, rescueLines }));
+  assert.deepEqual(a, { pace: { ph: 'edge', n: 2, hold: 3, len: 0 }, rescueLines: 12 });
+  const u = await page.evaluate(() => {
+    const mv = (() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return [i, r, c]; })();
+    place(...mv); pace = { ph: 'relief', n: 1, hold: 0, len: 2 }; rescueLines = 40; undo();
+    const back = { pace: { ...pace }, rescueLines };
+    const o = snapshot(); delete o.pace; delete o.rescueLines; restore(o);
+    return { back, old: { pace: { ...pace }, rescueLines } };
+  });
+  assert.deepEqual(u.back, { pace: { ph: 'edge', n: 2, hold: 3, len: 0 }, rescueLines: 12 }, 'Undo puts the rhythm back');
+  assert.deepEqual(u.old, { pace: { ph: 'calm', n: 0, hold: 0, len: 0 }, rescueLines: 0 });
+});
+
+test('pace (6.1): a new run starts calm, hesitation samples carry the phase, ?dev shows phase and room', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    pace = { ph: 'edge', n: 2, hold: 3, len: 0 }; rescueLines = 9; start();
+    const fresh = { pace: { ...pace }, rescueLines };
+    pace.ph = 'building'; hesDealt(); hesPick(); const mv = (() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return [i, r, c]; })();
+    place(...mv);
+    CFG.SHOW_TENSION = true; updateDbg();
+    return { fresh, ph: hes.log[hes.log.length - 1].ph, dbg: el('dbg').textContent };
+  });
+  assert.deepEqual(r.fresh, { pace: { ph: 'calm', n: 0, hold: 0, len: 0 }, rescueLines: 0 }, 'a new run starts calm (the opening tray is dealt by seedOpening, outside the phases)');
+  assert.equal(r.ph, 'building');
+  assert.match(r.dbg, /room \d\.\d\d/);
 });
 
 let failed = 0;

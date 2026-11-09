@@ -16,7 +16,21 @@ const CFG = {
   HOME_WORLD: 'night',   // a HOME_WORLDS id, or a discovered TRANSFORMS id — her default background
   UNLOCK_ALL_WORLDS: false, // dev: every world selectable regardless of discovery
 
-  // difficulty wave
+  // pressure and recovery (plan 6.1, Endless and Daily): the dealer reads the ROOM left on the board (room(), solver.js:
+  // how many placements a set of mid and big reference pieces still has, 1 = empty, 0 = only small pieces fit) and
+  // moves through phases: calm -> building -> edge (held a few trays, no help) -> recovery (a sequence to spot) -> relief.
+  ROOM_OK:        0.55,  // room at or above this is calm; below it the pressure is building
+  ROOM_EDGE:      0.30,  // room below this is the edge: cramped, honest trays, no help, held EDGE_HOLD_MIN..MAX trays
+  EDGE_HOLD_MIN:  2,
+  EDGE_HOLD_MAX:  3,
+  RECOVERY_TRIES: 2,     // recovery hands in a row before the dealer goes back to edge trays (a miss can really lose)
+  RELIEF_TRAYS:   2,     // guided trays earned by the clear that gets her out of the edge (the first may be a planned sweep)
+  GIFT_CHANCE:    0.12,  // odds a calm tray is a guided one anyway, so a strong player still meets directed hands
+  HONEST_TRIES:   2,     // candidate hands an honest tray looks at (the tidiest playable of these): a light hand, not a search
+  BUILD_BIAS:     0.3,   // building phase: the crowded-board small-piece bias is scaled by this, so big pieces keep coming
+  RESCUE_EARN_LINES: 30, // Endless and Daily: the first rescue is free, the second is earned by clearing this many lines after it
+
+  // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
   TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped
   TENSION_DOWN:  0.30,   // subtracted when you clear (a clear releases the tension — the wave's downswing)
@@ -43,7 +57,7 @@ const CFG = {
   GOLDEN_MIN_LINES:3,    // a jackpot-style golden hand must offer at least this many lines (a planned sweep always qualifies)
   GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
-  MAX_RESCUES: 2,        // most rescues one run can use; both are free
+  MAX_RESCUES: 2,        // most rescues one run can use; the first is free, the second earned (RESCUE_EARN_LINES; Adventure: both free)
   RESCUE_FLOOR: 300,     // offer a rescue only above this score...
   RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
@@ -92,7 +106,7 @@ const CFG = {
 
   LIFT:          1.0,    // cells between the finger and the bottom edge of the dragged piece (same gap for every piece height)
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
-  TIER_SOLVABLE: 0.0,    // tension above this deals 'solvable' hands (2+ lines); at 0 there are no 'honest' hands — every tray can clear
+  TIER_SOLVABLE: 0.0,    // (Adventure; Endless and Daily use the 6.1 phases) tension above this deals 'solvable' hands (2+ lines); at 0 there are no 'honest' hands — every tray can clear
   TIER_JACKPOT:  0.30,   // ...above this 'jackpot' hands (3+ lines)
   TIER_SWEEP:    0.85,   // ...above this a planned clean sweep (when off cooldown)
 

@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after the bonus trays (plan PR 6.2).
+Last updated 2026-11-09, after pressure and recovery (plan PR 6.1).
 
 ---
 
@@ -83,9 +83,10 @@ Last updated 2026-11-09, after the bonus trays (plan PR 6.2).
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **Undo (3.2):** the `↩ Undo` button under the tray puts the run back to just before the last placement, exactly (`snapshot()` taken first thing in `place()` via `noteUndo()`, restored by `undo()` in `save.js`; lifetime stats are rewound too). One move back, once per placement: a new run, a rescue and game over clear it (so it can never refund a rescue), and a bonus in progress is undone with the move (trays left and points come back).
 - **Stuck (3.2):** when no tray piece fits, the run waits instead of ending: pieces dim, "No moves" shows, and Undo, `🛟 Rescue` (needs a rescue left and `rescueAllowed()`, shared with the game-over card) and `End run` are offered. Only when neither Undo nor Rescue is available does it end on its own, 700 ms after the last drop (`checkStuck()` / `canExit()`). `syncActions()` keeps the buttons current.
-- **Rescues** — on game over (if the run is worth saving): up to 2 per run, both
-  free ("Keep going"). A rescue serves a sweep/jackpot
-  hand from `genRescue` — she still has to find the play.
+- **Pressure and recovery (6.1, Endless and Daily):** the dealer reads the *room* left on the board (`roomOf()`), not how full it is, and moves through phases: calm and building deal honest hands (no help), a cramped board is held on the edge for 2-3 trays, then a recovery hand she has to spot, and getting out earns guided relief trays. Losses are real now. See the 6.1 section at the end. Adventure keeps the old tension wave.
+- **Rescues** — on game over (if the run is worth saving): up to 2 per run. The first is free; the second is earned by clearing
+  `RESCUE_EARN_LINES` (30) lines after it ("RESCUE EARNED" banner); Adventure keeps both free. A rescue deals a recovery hand
+  (Endless/Daily; Adventure still gets the sweep/jackpot hand from `genRescue`) — she still has to find the play.
 - **Look**: themes (Classic default, Night, Daylight, Cotton Candy, Mint,
   Paper), home worlds (10, each with an ambient effect), tile skins (Blocks
   default, Jewels, Clay; Candy/Glass/Neon/Pixel unlock by best score), motifs.
@@ -178,6 +179,7 @@ Top to bottom:
 | (6.0) | Opening no longer sweeps on move one: 2-4 scattered gems outside the seeded lines, and about 1 in 8 openings keep the board bare (`CFG.OPENING_SWEEP_CHANCE`); the opening test counts sweeps |
 | (6.4) | Audio routing: the Original synth chain has its own speaker filter (`ohp1`/`ohp2`, set by `setSpeaker` with the other pair), so phone-speaker mode cuts its bass too; `ORIG_SFX.pickup/place` take the Admin volumes (`SND_PICKUP_VOL`, `SND_PLACE_VOL`). `PHONE_SPEAKER` defaults on for touch devices (`speakerDefault()`, run in `ac()`) unless a choice is saved: `crumble.speaker` (written by the Admin toggle) or `PHONE_SPEAKER` in `crumble.dev.6` |
 | (6.2) | Bonus trays replace the Blast Round: a clear meter, then ×2 for the next 3 trays, automatically; Blast's button, timer, results card, big-piece hands and `canBlast` gating are gone. See the 6.2 section |
+| (6.1) | Pressure and recovery: `roomOf()` measures room on the board; phases calm/building/edge/recovery/relief pick the tray (`paceTier`); honest trays return, edge trays only promise each piece a spot, recovery is a sequence she must see; the second rescue is earned; strong bot added to `tools/bot-sim.mjs`. See the 6.1 section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -368,6 +370,9 @@ version only guaranteed one piece fit, so you could burn two and be stuck.
 
 ### Tension
 
+> Since plan 6.1 this wave only deals Adventure. Endless and Daily use the room metric and phases (6.1 section at
+> the end); there `tension` is just a display value (1 − room, eased) for the board's border glow.
+
 A 0–1 value that rises when you place without clearing (and as mobility drops),
 falls when you clear. `pickTier` maps it to what you get served:
 
@@ -488,7 +493,11 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 
 | Knob | Does what |
 |---|---|
-| `TENSION_UP` / `TENSION_DOWN` / `TENSION_DRIFT` | how fast the difficulty wave swings |
+| `ROOM_OK` / `ROOM_EDGE` | (6.1) where calm ends and the edge starts, in room (0-1) |
+| `EDGE_HOLD_MIN/MAX` / `RECOVERY_TRIES` / `RELIEF_TRAYS` | (6.1) how long the edge holds, how many tries at a way out, how long the relief lasts |
+| `HONEST_TRIES` / `BUILD_BIAS` / `GIFT_CHANCE` | (6.1) how light an honest hand is (the main difficulty knob), big pieces while building, guided hands in calm |
+| `RESCUE_EARN_LINES` | (6.1) lines after the first rescue that earn the second |
+| `TENSION_UP` / `TENSION_DOWN` / `TENSION_DRIFT` | (Adventure only) how fast the difficulty wave swings |
 | `TIER_SOLVABLE` / `TIER_JACKPOT` / `TIER_SWEEP` | where each help tier kicks in |
 | `GUIDE` | favour hands that can clear right now (0 = off) |
 | `SWEEP_COOLDOWN` | how rare clean sweeps are |
@@ -804,3 +813,53 @@ Replaces the Blast Round (Jay: it was confusing; a bonus should just happen). Co
   `BONUS_MULT`. Tests: "Bonus trays" block in `tests/run.mjs`.
 - **What to check on the phone:** chain a few clears and watch the chip fill; when it is full the next tray should bring the
   banner, the violet sky and the pulsing rim, and the chip counting 3, 2, 1; ask her what the chip means without telling her.
+
+---
+
+## Pressure and recovery (plan 6.1)
+
+Jay after Phase 4: "pretty difficult to lose now... doesn't get hard then you save it." The dealer stacked every
+advantage on every tray (no honest tier, GUIDE + OBVIOUS + ALT + TIDY, jackpot hands from tension 0.3, two free
+rescues): the casual bot lost once every ~300 trays and cleared something on 92% of them. 6.1 gives Endless and Daily
+a rhythm instead. Adventure is untouched (its levels and stars are calibrated on the old wave; `paced()` is false there).
+
+- **Room, not fullness** (`roomOf(a)` / `roomBits(lo,hi)`, `solver.js`). For a reference set (`ROOM_REF`: the
+  rectangles of 4+ cells and the four 3-cell corners) the share of each one's empty-board placements still legal,
+  square-rooted, averaged. 1 = empty; 17 spread-out gems ≈ 0.38; 36 gems in neat blocks ≈ 0.26; 23 scattered gems ≈ 0.10.
+  About 5 µs a call.
+- **Phases** (`pace = {ph, n, hold, len}`, `paceStep()` at each deal, `paceTier()` maps it to a tier):
+
+  | phase | when | tray |
+  |---|---|---|
+  | calm | room ≥ `ROOM_OK` (0.55) | `honest`: the tidiest playable of `HONEST_TRIES` (2) random hands, no GUIDE/OBVIOUS/ALT; `GIFT_CHANCE` (0.12) a guided `solvable` hand |
+  | building | `ROOM_EDGE` ≤ room < `ROOM_OK` | `honest`, with the small-piece bias × `BUILD_BIAS` (0.3), so big pieces keep coming |
+  | edge | room < `ROOM_EDGE` (0.30) | held a rolled `EDGE_HOLD_MIN..MAX` (2-3) trays; `edge` hands: every piece has a spot when dealt, but the three are **not** promised to fit in sequence (Block Blast-honest; the plan owner's call) |
+  | recovery | after the hold, still cramped | 2+ lines reachable as a sequence, at most one piece clearing on its own, never a star; at most `RECOVERY_TRIES` (2) in a row, then back to edge |
+  | relief | the deal after she gets out of edge or recovery | `RELIEF_TRAYS` (2) guided trays: the first tries a planned sweep, else `jackpot`; the second `solvable` |
+
+  No star on edge or recovery trays. Golden hands and bonus trays work as before. The labels (`EDGE`, `RECOVERY`,
+  `HONEST`, …) show in the debug readout with phase and room; the `?dev` frame overlay has a phase line too.
+- **`tension`** is a display value in Endless/Daily now: `1 - room`, eased, after each placement (border glow; 6.6 builds on it).
+- **Rescues.** `rescueEarned()`: the first is free, the second needs `RESCUE_EARN_LINES` (30) lines cleared since the first
+  (`rescueLines`, "RESCUE EARNED" banner; the game-over card says how to earn it). Endless/Daily rescues deal a recovery
+  hand and set the phase to the last recovery try: clear out and relief follows, miss and it is the edge again.
+- **Saved:** `snapshot()` carries `pace` and `rescueLines` (resume and Undo keep the rhythm); an older save starts calm.
+  Hesitation samples carry `ph`, so the log shows where she pauses.
+- **Measured** with `tools/bot-sim.mjs` (`BOT=strong` and `RESCUE=1` are new; the pace line reports trays per game,
+  phase mix, recovery cleared, relief per game and the trays between relief moments, where games were lost):
+
+  | bot | trays to first stuck (p25 / median / p75) | relief moments a game | trays between them | lost in |
+  |---|---|---|---|---|
+  | casual, seeds 4/6/8 | 33-46 / 78-104 / 152-176 | 3-5 | 14-17 | ~half edge, ~40% building |
+  | casual + rescues (seed 9) | 246 / 303 / 485 | ~16 | 16 | mostly edge |
+  | strong (seeds 5, 6) | never stuck in 4000 trays | (93% of trays calm) | | |
+
+  Before 6.1 the casual bot's median game was ~200-300 trays. Deal cost median 0.4-0.5 ms, p95 6.2 ms (a sweep plan
+  is the max, ~30-80 ms, spread over frames as before). The casual bot rarely reaches a recovery tray: it gets out
+  during the hold or loses there; when it does reach one it clears it nearly every time.
+- **Knobs, in order:** `HONEST_TRIES` is the main difficulty dial (1 = casual median ~45 trays, 2 = ~85, 4 = ~200);
+  then `ROOM_EDGE` (higher = edge sooner, relief more often), `RESCUE_EARN_LINES`, `GIFT_CHANCE`. All are Admin sliders.
+- **Open:** rescues still roughly triple a casual run (each is close to a new life); if her runs feel endless, raise
+  `RESCUE_EARN_LINES` or go to one rescue. The strong bot never loses: fine for "a strong player can get through", but
+  a late-run creep (e.g. `BUILD_BIAS` falling with trays) is the lever if a long run needs an end.
+- Tests: the "(6.1)" block in `tests/run.mjs` (room, phase sequence, hands by phase, rescues, save/Undo, overlay).
