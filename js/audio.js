@@ -19,7 +19,10 @@ function buildChain(c){
   lim.attack.value=.002; lim.release.value=.12;                      //  gain, which is what squashed the mix)
   const hp1=c.createBiquadFilter(), hp2=c.createBiquadFilter();   // phone-speaker mode: bass below ~220Hz can't be played
   for(const h of [hp1,hp2]){ h.type='highpass'; h.Q.value=.7; }    // by a tiny speaker — fed to one, it just buzzes and
-  const setSpeaker=on=>{ for(const h of [hp1,hp2]) h.frequency.value=on?220:10; };   // distorts, like a blown speaker
+  // the original synth sounds get their own copy of the same pair (ohp1/ohp2), so the speaker filter reaches them too
+  const ohp1=c.createBiquadFilter(), ohp2=c.createBiquadFilter();
+  for(const h of [ohp1,ohp2]){ h.type='highpass'; h.Q.value=.7; }
+  const setSpeaker=on=>{ for(const h of [hp1,hp2,ohp1,ohp2]) h.frequency.value=on?220:10; };   // distorts, like a blown speaker
   setSpeaker(CFG.PHONE_SPEAKER);
   m.connect(hp1); hp1.connect(hp2); hp2.connect(tame); tame.connect(lim); lim.connect(c.destination);
   const len=Math.floor(c.sampleRate*1.0), ir=c.createBuffer(2,len,c.sampleRate), fade=c.sampleRate*.006;
@@ -42,7 +45,7 @@ function buildChain(c){
   const og=c.createGain(); og.gain.value=.9;
   const ocomp=c.createDynamicsCompressor();
   ocomp.threshold.value=-18; ocomp.knee.value=12; ocomp.ratio.value=6; ocomp.attack.value=.003; ocomp.release.value=.2;
-  og.connect(ocomp); ocomp.connect(c.destination);
+  og.connect(ohp1); ohp1.connect(ohp2); ohp2.connect(ocomp); ocomp.connect(c.destination);
   return {master:m,revIn:rin,nbuf:nb,setSpeaker,smp,orig:og};
 }
 function ac(){
@@ -255,14 +258,14 @@ function oVoice(t,{f0,f1=f0,dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8]
   }
 }
 const ORIG_SFX={
-  pickup(){ play(0,(t,p)=>{
-    oNoise(t,{dur:.008,f0:7000*p,q:1,vol:.012});
-    oVoice(t,{f0:880*p,f1:1050*p,dur:.06,vol:.05,bp0:1800*p,q:1.5,type:'triangle',det:[-5,5]});
+  pickup(v=1){ if(v<=0) return; play(0,(t,p)=>{     // v = the Admin volume (CFG.SND_PICKUP_VOL); 0 = silent (a 0 ramp would throw)
+    oNoise(t,{dur:.008,f0:7000*p,q:1,vol:.012*v});
+    oVoice(t,{f0:880*p,f1:1050*p,dur:.06,vol:.05*v,bp0:1800*p,q:1.5,type:'triangle',det:[-5,5]});
   }); },
-  place(){ play(0,(t,p)=>{
-    oNoise(t,{dur:.012,f0:3200*p,q:.9,vol:.045});
-    oVoice(t,{f0:520*p,f1:200*p,dur:.09,vol:.1,bp0:1100*p,bp1:400*p,q:1.4,type:'triangle',det:[-6,0,6],atk:.002});
-    oVoice(t,{f0:240*p,f1:150*p,dur:.08,vol:.04,bp0:400,q:.8,type:'sine',det:[0]});
+  place(v=1){ if(v<=0) return; play(0,(t,p)=>{      // v = the Admin volume (CFG.SND_PLACE_VOL); 0 = silent
+    oNoise(t,{dur:.012,f0:3200*p,q:.9,vol:.045*v});
+    oVoice(t,{f0:520*p,f1:200*p,dur:.09,vol:.1*v,bp0:1100*p,bp1:400*p,q:1.4,type:'triangle',det:[-6,0,6],atk:.002});
+    oVoice(t,{f0:240*p,f1:150*p,dur:.08,vol:.04*v,bp0:400,q:.8,type:'sine',det:[0]});
   }); },
   clear(total=1,delay=.1){ play(delay,(t,p)=>{
     const k=1+.06*(total-1), base=392*p*k;
@@ -404,12 +407,12 @@ const PLACE_SMP={drop:['pl_drop',.11], wood:['pl_wood',.11], soft:['pl_soft',.07
 const Sfx={
   pickup(){
     const k=CFG.SND_PICKUP;
-    if(k==='original') return ORIG_SFX.pickup();
+    if(k==='original') return ORIG_SFX.pickup(CFG.SND_PICKUP_VOL);
     const v=PICKUP_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PICKUP_VOL,rate:jit()}); }
   },
   place(n=1){                                                // bigger pieces land a touch lower
     const k=CFG.SND_PLACE;
-    if(k==='original') return ORIG_SFX.place();
+    if(k==='original') return ORIG_SFX.place(CFG.SND_PLACE_VOL);
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
   }
 };

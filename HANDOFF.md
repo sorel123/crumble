@@ -176,6 +176,7 @@ Top to bottom:
 | (4.1a) | Adventure: 30 goal levels on a map (no timer), mode menu, one saved run per mode, `rnd()`/`seeded()` seam for seeded dealing, `tools/adventure-sim.mjs` |
 | (4.1b) | Daily: date-seeded opening and trays, results calendar, third mode in the menu; Adventure/Daily scores no longer leak into the saved best |
 | (6.0) | Opening no longer sweeps on move one: 2-4 scattered gems outside the seeded lines, and about 1 in 8 openings keep the board bare (`CFG.OPENING_SWEEP_CHANCE`); the opening test counts sweeps |
+| (6.4) | Audio routing: the Original synth chain has its own speaker filter (`ohp1`/`ohp2`, set by `setSpeaker` with the other pair), so phone-speaker mode cuts its bass too; `ORIG_SFX.pickup/place` take the Admin volumes (`SND_PICKUP_VOL`, `SND_PLACE_VOL`). `PHONE_SPEAKER` still defaults off in `CFG` |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
