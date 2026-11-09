@@ -330,8 +330,8 @@ function frame(now){
       const q=Math.sin(g.t*Math.PI)*0.17;
       gem(g.gi,bx+c*cell,by+r*cell,cell,base*(1+q),1,0,false,base*(1-q));
     } else if(g.l>0){                               // landing thump: wide-and-short on impact, springs back over ~8 frames
-      g.l=Math.max(0,g.l-dt*0.13);
-      const q=Math.sin(g.l*Math.PI)*0.16;
+      g.l=Math.max(0,g.l-dt*0.17);                // ~6 frames, about 100 ms
+      const q=Math.sin(g.l*Math.PI)*0.11;
       gem(g.gi,bx+c*cell,by+r*cell,cell,base*(1+q),1,g.f?g.f*g.f*0.45:0,false,base*(1-q*0.7));
     } else gem(g.gi,bx+c*cell,by+r*cell,cell,base,1,g.f?g.f*g.f*0.45:0);
   }
@@ -440,7 +440,7 @@ function frame(now){
     if(s.t>=POP){
       const g=GEMS[s.gi], cx=bx+(s.c+.5)*cell, cy=by+(s.r+.5)*cell;
       const room=fxRoom()>0;                               // the bits below are skipped once the particle budget is spent
-      if(room && squash && !reduce && !s.star){                       // two little squares drift off the bar
+      if(room && squash && !reduce && !s.star && s.big){                       // two little squares drift off the bar (a bigger clear only)
         for(let k=0;k<2;k++) shards.push({x:cx+(Math.random()-.5)*cell*.6,y:cy+(Math.random()-.5)*cell*.3,vx:(Math.random()-.5)*2,vy:-1-Math.random()*2,r:cell*(.05+Math.random()*.05),life:1,sq:true});
       } else if(room && !squash && CFG.FX_CHUNKS && !reduce){
         const ang=Math.atan2(cy-s.oy,cx-s.ox)+(Math.random()-.5)*.5;   // away from the placed piece
@@ -449,7 +449,7 @@ function frame(now){
           vr:(Math.random()-.5)*.5,sz:cell*.86,life:1,gi:s.gi,
           col:`hsl(${g.h} ${g.s}% 60%)`,hi:`hsl(${g.h} ${g.s}% 84%)`});
       }
-      for(let k=0;room&&k<(reduce?1:s.star?4:3);k++){               // a few bright specks per gem
+      for(let k=0;room&&k<(reduce?1:s.star?4:s.big?3:1);k++){               // a few bright specks per gem
         const a=Math.random()*6.283,sp=2+Math.random()*4;
         shards.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,r:cell*(.05+Math.random()*.08),life:1});
       }
