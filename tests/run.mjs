@@ -2099,6 +2099,14 @@ test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tin
   const d = await read(); assert.ok(d.daily > 0.8 && d.adv < 0.05 && d.prog === 0, 'Daily look replaces Adventure: ' + JSON.stringify(d));
   await page.evaluate(() => { mode = 'endless'; }); await settle();
   assert.ok((await read()).daily < 0.05, 'back in Endless the look is gone');
+  // the ring stays on screen on a phone (its outer edge is inside the canvas), and a finished run does not keep a bonus look
+  const ring = await page.evaluate(() => { const o = Math.max(6, Math.min(15, bx - 5)); return { left: bx - o - 3, right: bx + B + o + 3, W }; });
+  assert.ok(ring.left >= 0 && ring.right <= ring.W, 'ring fits on screen: ' + JSON.stringify(ring));
+  await page.evaluate(() => { startBonus(); }); await settle();
+  await page.evaluate(() => { state = 'over'; }); await settle();
+  assert.ok((await read()).bonus < 0.05, 'game over drops the bonus look');
+  await page.evaluate(() => { start(); });
+  assert.deepEqual(await page.evaluate(() => [lk.prog, lk.flash, lk.bonus]), [0, 0, 0], 'a new run starts with no mode look');
 });
 
 for (const { name, fn } of tests) {

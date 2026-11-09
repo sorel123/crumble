@@ -64,6 +64,7 @@ function restore(o,keepLive){
   if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){
     bonus={left:b.left,extra:b.extra};
     curWorld='bonus'; ambient=spawnAmbient(worldDef('bonus').effect); ambientOld=[]; bgFrom='bonus'; bgT=1;
+    resetLooks(true);
   }
   syncBonusChip();
   if(mode==='adventure'){ lvl=LEVELS[o.lv.id-1]; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:o.lv.combo,swept:!!o.lv.swept}; }

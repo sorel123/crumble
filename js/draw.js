@@ -118,6 +118,7 @@ function pressureTarget(){                              // {p, warm} for the cur
 function resetPressure(snap){                         // a new run (snap=false: eases from nothing) or a restored one (snap=true: already where it should be)
   const t=snap?pressureTarget():{p:0,warm:0};
   scr.p=t.p; scr.warm=t.warm; scr.relief=0; scr.ph=pace.ph;
+  resetLooks(snap);
 }
 function stepPressure(dt){
   const t=pressureTarget();
@@ -189,14 +190,18 @@ function bandSprite(){                                  // a soft vertical band 
   g.addColorStop(0,'rgba(220,190,255,0)'); g.addColorStop(.5,'rgba(235,215,255,1)'); g.addColorStop(1,'rgba(220,190,255,0)'); x.fillStyle=g; x.fillRect(0,0,64,cv.height);
   _band={H,cv}; return cv;
 }
+function resetLooks(snap){                              // a new run (snap=false: fades in from nothing) or a restored one (snap=true: already up, no entrance flash)
+  lk.bonus=lk.gold=lk.adv=lk.daily=lk.flash=lk.prog=0; lk.was=!!(snap&&bonus);
+  if(snap&&bonus) lk.bonus=1;
+}
 function stepLooks(dt){
   const play=state==='play', gl=golden&&goldenState()!=='dead';
   const f=Math.min(1,dt*0.07);
-  lk.bonus+=((bonus?1:0)-lk.bonus)*f;
-  lk.gold+=((gl&&CFG.FX_GOLD_TINT?1:0)-lk.gold)*f;
+  lk.bonus+=((bonus&&play?1:0)-lk.bonus)*f;
+  lk.gold+=((gl&&play&&CFG.FX_GOLD_TINT&&!(transform&&transform.id==='goldvault')?1:0)-lk.gold)*f;   // Gold Vault is already gold: not doubled
   lk.adv+=((mode==='adventure'&&lvl&&play?1:0)-lk.adv)*f;
   lk.daily+=((mode==='daily'&&play?1:0)-lk.daily)*f;
-  if(bonus&&!lk.was&&!reduce) lk.flash=1;
+  if(bonus&&play&&!lk.was&&!reduce) lk.flash=1;
   lk.was=!!bonus; lk.flash=Math.max(0,lk.flash-dt/40);
   if(mode==='adventure'&&lvl&&lvl.goal) lk.prog+=(clamp(goalProgress()/lvl.goal.n,0,1)-lk.prog)*Math.min(1,dt*0.12);
   else lk.prog=0;
@@ -217,7 +222,8 @@ function drawModeWash(now){                             // behind the board, aft
   if(lk.flash>0.01){ ctx.globalAlpha=lk.flash*0.32; ctx.fillStyle='#E6D8FF'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
 }
 function drawModeRing(now){                             // just outside the board frame (the pressure / bonus rim sits inside it)
-  const o=15, w=B+2*o, rr=24, per=4*(w-2*rr)+2*Math.PI*rr;
+  const o=Math.max(6,Math.min(15,bx-5)), w=B+2*o, rr=Math.min(24,20+o-6),   // on a phone the margin is ~13 px: keep the ring on screen
+     per=4*(w-2*rr)+2*Math.PI*rr;
   const ring=(col,lw,dash,off)=>{ roundPath(ctx,bx-o,by-o,w,w,rr); ctx.setLineDash(dash||[]); ctx.lineDashOffset=off||0; ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke(); ctx.setLineDash([]); };
   if(lk.adv>0.01){                                       // the goal ring: faint track, bright fill = progress
     ring(`rgba(120,240,210,${0.18*lk.adv})`,3);
@@ -226,7 +232,7 @@ function drawModeRing(now){                             // just outside the boar
   }
   if(lk.daily>0.01) ring(`rgba(255,150,130,${0.7*lk.daily})`,3,[3,9],reduce?0:-now*0.012);
   if(lk.gold>0.01){ const sh=reduce?0.7:0.6+0.4*Math.sin(now*0.005);
-    ring(`rgba(255,206,72,${(0.3+0.4*sh)*lk.gold})`,6); ring(`rgba(255,244,190,${0.8*lk.gold})`,1.5); }
+    ring(`rgba(255,206,72,${(0.3+0.4*sh)*lk.gold})`,4); ring(`rgba(255,244,190,${0.8*lk.gold})`,1.5); }
 }
 
 /* text sprites. Every overlay word (popups, tags, COMBO, COLOR GONE, praise, banners) is

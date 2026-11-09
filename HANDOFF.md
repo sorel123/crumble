@@ -922,6 +922,7 @@ the board frame (15 px out; the pressure / bonus rim is inside it), so gems and 
 - **Golden hand (gold):** gold vignette on top of the old faint wash, plus a shimmering gold ring around the frame. Gone when the hand ends or is dead.
 - **Adventure (mint):** mint vignette and a ring that *fills with the goal* (`goalProgress()/goal.n`, eased) over a faint track: her progress, no numbers.
 - **Daily (coral):** coral vignette and a dashed ring that turns slowly (a "today only" ticket).
+- The ring is 15 px outside the frame but capped to the ~13 px phone margin (`o=max(6,min(15,bx-5))`), so it stays on screen. Bonus and gold are gated on `state==='play'` (nothing animates behind the game-over card); gold is skipped during Gold Vault; `resetLooks()` runs with `resetPressure()` and on a restored bonus.
 - All weights are eased (`lk.bonus/gold/adv/daily`, `dt*0.07`), so entering and leaving crossfade. Reduced motion: no sweep, no flash, static ring.
 - Pressure (6.6) still owns the board frame in Endless/Daily; a bonus halves the pressure wash as before. Colours are `TINTS`; tune the alphas in `drawModeWash` first if a look is too loud.
 - Test: "whole-screen mode looks (6.7)" (corner margin changes, a gem pixel does not, each fades out).
