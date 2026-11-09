@@ -117,6 +117,7 @@ Last updated 2026-11-09, after the Daily (plan PR 4.1b).
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
 | `js/save.js` | `snapshot`/`restore`, run autosave, best + stats |
+| `js/goals.js` | Goals card, unlock progress, play streak (4.2) |
 | `js/modes.js` | Adventure levels, goals, map, mode menu, saved progress (4.1) |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
@@ -764,3 +765,6 @@ Third mode (`mode==='daily'`), in `js/modes.js`. An Endless-style run (Undo, Res
 **For 4.2:** `daily.d` and `adv.lv` are plain per-day / per-level records; streaks and rotating goals can be derived from them plus lifetime `stats`. Tests set the phone's date with `setDay(page, iso)` in `tests/run.mjs`.
 
 Check on the iPhone: Daily from the start card or the mode chip; play a few moves, force-quit and reopen into it; compare the opening board with another phone on the same date.
+
+### 4.2 Goals, unlock progress, streak
+`js/goals.js`, store `crumble.goals` = `{v:1, streak:{cur,best,last}, days, done:[ids]}`. The streak counts days with at least one piece placed (`playedToday()` in `place()`); a missed day only pauses it (`streakNow()` is 0 until she plays, `best` is kept). Goals are lifetime ladders (`GOAL_FAMILIES`: lines, games, combo, sweeps, Adventure stars, play days, Blast rounds) derived from `stats`/`adv`; one rung per family shows, `checkGoals()` banners a reached rung once. First load with no save marks passed rungs done silently. Goals card (start card and mode menu) also shows the next score skin with a bar and the locked achievement looks with their hint. To add a goal, append a family.
