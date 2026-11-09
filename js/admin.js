@@ -2,11 +2,11 @@
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ developer panel ═══════
    Everything is driven by the two tables below — a new toggle or slider is one line. */
-const DEV_TOGGLES=[            // [CFG key, label]
-  ['SPECIALS','Specials (golden, star, transformations, Blast) — master'],
-  ['GOLDEN_ENABLED','Golden Hand'],
-  ['STAR_ENABLED','Star Gem'],
-  ['TRANSFORM_ENABLED','Transformations'],
+const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
+  ['SPECIALS.blast','Special: Blast Round (tap-to-start)'],
+  ['SPECIALS.star','Special: Star Gem'],
+  ['SPECIALS.golden','Special: Golden Hand'],
+  ['SPECIALS.transform','Special: Transformations'],
   ['UNLOCK_ALL','Unlock all skins'],
   ['UNLOCK_ALL_WORLDS','Unlock all worlds'],
   ['FX_COMBO_GLOW','Combo edge glow'],
@@ -22,11 +22,11 @@ const DEV_TOGGLES=[            // [CFG key, label]
   ['FX_CELL_TAGS','Point tags on cleared cells'],
   ['FX_MAGNET','Magnet: piece hops into its slot (off = glide + ghost)'],
   ['FX_COMBO_SLAM','COMBO slam + fireworks (combo 3+)'],
-  ['BLAST_ENABLED','Blast Round'],
   ['SHOW_TENSION','Debug readout']
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
-const DEV_ACTIONS=[['Blast Round',()=>{ if(!blast){ if(transform) endTransform(); startBlast(); } }],
+const DEV_ACTIONS=[['Fill Blast',()=>{ if(!blast){ blastCharge=CFG.BLAST_CHARGE; syncBlastBtn(); } }],
+  ['Blast Round',()=>{ if(!blast){ if(transform) endTransform(); startBlast(); } }],
   ...Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }])];
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
@@ -36,7 +36,8 @@ const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
 ];
 // one-tap previews of the chosen set's moments (Settings -> Sound)
 const DEV_PREVIEWS=[['Clear',()=>Sfx.clear(1,0,1)],['Combo ×4',()=>Sfx.combo(4,2,0)],['Praise',()=>Sfx.praise(2)],
-  ['Big praise',()=>Sfx.praise(4)],['Sweep',()=>Sfx.sweep(0)],['Golden',()=>Sfx.goldenWin()]];
+  ['Big praise',()=>Sfx.praise(4)],['Sweep',()=>Sfx.sweep(0)],['Golden',()=>Sfx.goldenWin()],
+  ['Blast start',()=>Sfx.blastStart()],['Blast ready',()=>Sfx.blastReady()],['Blast over',()=>Sfx.blastEnd()]];
 const DEV_SOUND_TOGGLES=[       // shown in the Sound section
   ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
 ];
@@ -72,6 +73,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['CLEAR_BLINK','Clear: blink frames',0,14,1],
   ['COLOR_GONE_BONUS','Colour-gone bonus (per colour)',0,200,10],
   ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1],
+  ['BLAST_CHARGE','Blast: charge to fill',2,40,1],
+  ['BLAST_CHARGE_MAX','Blast: most charge per clear',1,6,1],
   ['BLAST_SECONDS','Blast: round length (s)',8,40,1],
   ['BLAST_ADD','Blast: seconds per line',0,6,0.5],
   ['BLAST_MULT','Blast: score multiplier',1,4,0.5],
@@ -82,21 +85,24 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['GHOST_ALPHA','Landing ghost strength',0.2,1,0.05]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
-const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]]));   // the values written in the file
+const cfgGet=k=>{ const [a,b]=k.split('.'); return b?CFG[a][b]:CFG[a]; };
+const cfgSet=(k,v)=>{ const [a,b]=k.split('.'); if(b) CFG[a][b]=v; else CFG[a]=v; };
+const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)]));   // the values written in the file
 const DEV_STORE='crumble.dev.6';   // bumped when the drag went to glide + ghost (after plan 2.1), so older saved tuning doesn't override the new defaults
 function devSave(){
-  try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,CFG[k]])))); }catch(e){}
+  try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)])))); }catch(e){}
 }
 function devLoad(){
   try{
     const o=JSON.parse(localStorage.getItem(DEV_STORE)||'{}');
-    for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) CFG[k]=o[k];
+    for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);
     for(const [k,,options] of DEV_CHOICES) if(!options.some(x=>x.value===CFG[k])) CFG[k]=DEV_DEFAULTS[k];
   }catch(e){}
 }
 function devSnippet(){
   const f=v=>typeof v==='number'?+v.toFixed(4):typeof v==='string'?JSON.stringify(v):v;
-  return '// dev panel snapshot — paste over the matching CFG entries\n'+DEV_KEYS.map(k=>`  ${k}: ${f(CFG[k])},`).join('\n');
+  return '// dev panel snapshot — paste over the matching CFG entries\n'+DEV_KEYS.filter(k=>!k.includes('.')).map(k=>`  ${k}: ${f(CFG[k])},`).join('\n')
+    +`\n  SPECIALS: ${JSON.stringify(CFG.SPECIALS).replace(/"/g,'')},`;
 }
 function initDev(){
   el('adminBtn').hidden=!CFG.DEV_MODE;                   // the admin panel is reached from Settings, in dev mode only
@@ -108,11 +114,11 @@ function initDev(){
     const row=make('label','tog'), name=make('span'), inp=make('input');
     name.textContent=label; inp.type='checkbox';
     inp.onchange=()=>{
-      CFG[k]=inp.checked; devSave(); updateDbg();
+      cfgSet(k,inp.checked); devSave(); updateDbg(); syncBlastBtn();
       if(k==='UNLOCK_ALL') renderSkins();
       if(k==='UNLOCK_ALL_WORLDS') renderWorlds();
     };
-    refresh.push(()=>{ inp.checked=!!CFG[k]; });
+    refresh.push(()=>{ inp.checked=!!cfgGet(k); });
     row.append(name,inp); list.append(row);
   }
   const actions=make('div','devbtns');
@@ -186,9 +192,9 @@ function initDev(){
   el('devClose').onclick=e=>{ e.stopPropagation(); el('devPanel').hidden=true; paused=false; };
   el('devReset').onclick=e=>{
     e.stopPropagation();
-    Object.assign(CFG,DEV_DEFAULTS);
+    for(const k of DEV_KEYS) cfgSet(k,DEV_DEFAULTS[k]);
     try{ localStorage.removeItem(DEV_STORE); }catch(_){}
-    sync(); updateDbg(); renderSkins(); renderWorlds(); setSpeaker(CFG.PHONE_SPEAKER);
+    sync(); updateDbg(); renderSkins(); renderWorlds(); setSpeaker(CFG.PHONE_SPEAKER); syncBlastBtn();
   };
   el('devCopy').onclick=async e=>{
     e.stopPropagation();

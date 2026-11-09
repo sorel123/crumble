@@ -66,21 +66,22 @@ const CFG = {
   FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
   COLOR_GONE_BONUS: 60,   // points per colour wiped off the board by a clear ("COLOR GONE!")
 
-  // Blast Round — the bonus round. No meter: it is started on purpose (plan 4.5).
-  // A timed round of big-piece sweep/jackpot hands, a hot new look, and doubled points.
-  BLAST_ENABLED:  true,
+  // Blast Round — the reward round (plan 4.5a). Combos charge the ⚡ Blast button (never drains); full, it glows,
+  // and she taps it when she wants: a timed round of big-piece sweep/jackpot hands, its own look, doubled points.
+  BLAST_CHARGE:   12,     // charge to fill the button. A clear at combo 2+ adds min(combo-1, BLAST_CHARGE_MAX); nothing else charges it
+  BLAST_CHARGE_MAX: 3,    // most charge one clear can add
   BLAST_SECONDS:  20,     // round length when it starts
   BLAST_ADD:      2.5,    // seconds added per line cleared during the round (capped at BLAST_SECONDS)
   BLAST_MULT:     2,      // score multiplier during the round
   BIG_CAP:        4,      // the crowded-board small-piece bias stops growing past this many cells, so 5-9 cell pieces keep coming
   // star gem: a single-cell piece that clears its whole row and column
-  STAR_ENABLED:  true,   // master switch for star gems
   STAR_CHANCE:   0.035,  // odds each tray carries one, replacing a normal piece
   STAR_COMBO:    6,      // a combo this high (or higher) guarantees one in the next normal tray
 
-  GOLDEN_ENABLED: true,  // master switch for golden hands
-  SPECIALS: false,       // one switch for the rare specials together: golden hands, star gems, transformations, Blast Round. Off for now (plan 2.3); each is rebuilt and switched back on later. The per-special switches still apply when this is on
-  SPECIAL_FROM_TRAY: 6,  // no golden hand, star gem, transformation or Blast Round before this tray number, even with SPECIALS on (plan 3.1: the opening is calm)
+  // the specials, one switch each (plan 4.5). Each comes back on once it has been rebuilt to be a real highlight:
+  // Blast (4.5a) is back; star gem, golden hand and transformations are still paused. special(name) reads these.
+  SPECIALS: {blast:true, star:false, golden:false, transform:false},
+  SPECIAL_FROM_TRAY: 6,  // no special before this tray number (plan 3.1: the opening is calm); see specialOk()
   BIG_COMBO: 3,          // the loud celebration (COMBO slam, score orbs, COLOR GONE band, fireworks, punch zoom) starts at this combo; every clear below it is calm: a squash, point tags and one praise word
 
   LIFT:          1.0,    // cells between the finger and the bottom edge of the dragged piece (same gap for every piece height)
@@ -90,7 +91,6 @@ const CFG = {
   TIER_SWEEP:    0.85,   // ...above this a planned clean sweep (when off cooldown)
 
   // transformations — achievement-triggered event looks (own world + own tile skin), temporary
-  TRANSFORM_ENABLED:    true,  // master switch
   TRANSFORM_PLACEMENTS: 9,     // how many placements one lasts
   TRANSFORM_MULT:       1.5,   // score multiplier while active
   TRANSFORM_COOLDOWN:   8,     // trays that must pass after one ends before another can start

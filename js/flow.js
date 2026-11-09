@@ -37,13 +37,14 @@ function clearRunFx(){
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];
   chunks=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
-  blast=null; bigMode=false;
+  blast=null; bigMode=false; blastIntro=null; blastSparks=[]; blastShown=blastCharge;
+  if(!el('blastCard').hidden){ clearTimeout(blastCardT); el('blastCard').hidden=true; paused=false; }
   tags=[]; slams=[]; bands=[]; borderFlash=null;
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
 }
 function start(){
   layout();
-  grid=empty(); score=0; combo=0; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[];
+  grid=empty(); score=0; combo=0; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[]; blastCharge=0; specialEnd=-99;
   clearRunFx(); stats.games++;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;

@@ -4,7 +4,7 @@
    snapshot() returns the whole run as plain JSON data; restore(o) puts it back and returns true, or false (and
    changes nothing) if the data does not look right. Both are pure with respect to storage, so Undo (plan 3.2) can
    keep them in memory. saveRun()/loadRun() are the localStorage side. Not captured: effects in flight (they are
-   cosmetic), a live transformation and a live Blast Round (both end on restore; the board is unaffected).
+   cosmetic) and a live transformation (it ends on restore). A live Blast Round is kept and carries on (plan 4.5a).
    restore() never deals an opening: the saved board and tray are exactly what she left. */
 const RUN_STORE='crumble.run', STATS_STORE='crumble.stats';
 function snapshot(){
@@ -15,7 +15,9 @@ function snapshot(){
     score, combo, tension, sweepCool, trayNo, rescuesUsed, bestBeaten, lastTier,
     carry:carry.map(s=>SHAPES.indexOf(s)).filter(i=>i>=0),
     golden:golden?{want:golden.want,got:golden.got,pts:golden.pts}:null,
-    goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, transformCool
+    goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, transformCool,
+    blastCharge, specialEnd,
+    blast:blast?{t:Math.max(0,Math.round(blast.t)),pts:blast.pts,lines:blast.lines,best:blast.best,swaps:blast.swaps}:null
   };
 }
 const isInt=(v,a,b)=>Number.isInteger(v)&&v>=a&&v<=b;
@@ -39,6 +41,13 @@ function restore(o){
   goldenNext=!!o.goldenNext; goldenCool=Math.max(0,o.goldenCool|0); trayHadSweep=!!o.trayHadSweep;
   trayCombo=o.trayCombo|0; starForced=!!o.starForced; transformCool=Math.max(0,o.transformCool|0);
   resetWorld(); renderPips();
+  blastCharge=isInt(o.blastCharge,0,1e4)?Math.min(o.blastCharge,CFG.BLAST_CHARGE):0; blastShown=blastCharge;
+  specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
+  const b=o.blast;                                  // a live Blast Round carries on with the time it had left
+  if(b&&isNum(b.t)&&b.t>0&&isInt(b.pts,0,1e9)&&isInt(b.lines,0,1e6)){
+    blast={t:Math.min(b.t,CFG.BLAST_SECONDS*1000),pts:b.pts,lines:b.lines,best:b.best|0,swaps:b.swaps|0,tick:0};
+    curWorld='blast'; curSkin='rainbow'; buildCache(); ambient=spawnAmbient(worldDef('blast').effect);
+  }
   shownScore=score; el('scoreVal').textContent=score; el('bestVal').textContent=best;
   el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   updateDbg();
@@ -68,6 +77,7 @@ function syncActions(){
   el('helpBtn').disabled=!(stuck&&live&&rescueAllowed(best));
   const wait=stuck&&live&&canExit();
   el('endBtn').hidden=!wait; el('noMoves').hidden=!wait;
+  syncBlastBtn();
 }
 el('endBtn').onclick=e=>{ e.stopPropagation(); if(stuck&&state==='play') gameOver(); };
 el('undoBtn').onclick=e=>{ e.stopPropagation(); undo(); };
@@ -85,7 +95,7 @@ function loadRun(){
 }
 
 /* ═══════ best score + lifetime stats — their own key, loaded before the unlock check ═══════ */
-const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0};
+const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,blasts:0,bestBlast:0};   // blasts: rounds played; bestBlast: most points in one
 function saveStats(){
   try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'?score:0),...stats})); }catch(e){}
 }

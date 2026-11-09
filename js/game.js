@@ -24,7 +24,7 @@ function mobility(){
 
 // ═══ transformations — achievement-triggered event looks (own world + own tile skin) ═══
 function triggerTransform(id){
-  if(!CFG.SPECIALS || !CFG.TRANSFORM_ENABLED || blast || trayNo<CFG.SPECIAL_FROM_TRAY) return;    // a Blast Round owns the screen while it runs
+  if(!special('transform') || blast || trayNo<CFG.SPECIAL_FROM_TRAY) return;    // a Blast Round owns the screen while it runs
   if(!transform && transformCool>0) return;   // quiet period after one ends — makes the next feel earned
   const first=!discoveredWorlds.has(id);
   transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
@@ -40,29 +40,98 @@ function endTransform(){
   startFlip(CFG.HOME_WORLD,CFG.STYLE);
   renderPips();
 }
-/* ═══════ Blast Round ═══════
-   The meter (drawn as a bar by the board) fills with clears and drains after a pause.
-   Full: the look flips hot (rainbow gems, magenta sky), every tray is a sweep or a
-   big-piece jackpot hand, points double, and a timer runs that clears extend. */
+/* ═══════ the specials (plan 4.5) ═══════
+   One switch each in CFG.SPECIALS. Rules shared by all of them: never in trays 1-5, at most one live at a time,
+   and never two in a row (the tray right after one ends carries none). specialOk() is that gate. */
+const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name]);
+const specialLive=()=>!!(blast||transform||golden||tray.some(t=>t&&t.s.star));
+const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>specialEnd+1;
+
+/* ═══════ Blast Round (plan 4.5a): a reward she starts herself ═══════
+   Combos charge the ⚡ Blast button under the tray: a clear at combo 2+ adds min(combo-1, BLAST_CHARGE_MAX), one
+   small spark flies from the clear into the button, and nothing ever drains it. Full, it glows (one chime) and waits
+   for as long as she likes, through trays and save/resume. Tapping it starts a BLAST_SECONDS round: its own look
+   (hot magenta sky, rainbow gems, a light racing round the board), its own sting, big-piece sweep/jackpot hands,
+   ×BLAST_MULT points, +BLAST_ADD s per line. The clock waits while a hand is dealt, while Settings is open and
+   while the app is hidden. A round never ends her run: stuck mid-round, the hand is swapped (twice at most), then
+   the round ends early. At 0 s a results card shows points, lines, best combo and her Best Blast. */
+let blastCharge=0, blastShown=0, specialEnd=-99;  // charge (saved); what the button shows (catches up as sparks land); tray a special last ended in
+let blastIntro=null, blastSparks=[];               // the start effect; sparks flying to the button
+function blastBtnCentre(){
+  const r=el('blastBtn').getBoundingClientRect(), c=cvs.getBoundingClientRect();
+  return {x:r.left-c.left+r.width/2, y:r.top-c.top+r.height/2};
+}
+function chargeBlast(n,x,y){                       // place(): a combo clear at (x,y) adds n
+  if(!special('blast')||blast||trayNo<CFG.SPECIAL_FROM_TRAY||blastCharge>=CFG.BLAST_CHARGE) return;
+  n=Math.min(n,CFG.BLAST_CHARGE-blastCharge);
+  blastCharge+=n;
+  if(reduce||el('blastBtn').hidden) landSpark(n);
+  else blastSparks.push({x0:x,y0:y,t:0,n});
+}
+function landSpark(n){                             // a spark reached the button (or there was no flight)
+  const was=blastShown>=CFG.BLAST_CHARGE;
+  blastShown=Math.min(blastCharge,blastShown+n);
+  if(!was && blastShown>=CFG.BLAST_CHARGE) Sfx.blastReady();   // the one chime; after that it only glows
+  syncBlastBtn();
+}
+const blastReady=()=>blastCharge>=CFG.BLAST_CHARGE;
+// tappable right now: full, nothing else live, not mid-deal, mid-drag, stuck or paused
+const canBlast=()=>special('blast')&&blastReady()&&!blast&&state==='play'&&!paused&&!dealing&&!drag&&!stuck&&specialOk();
+function syncBlastBtn(){
+  const b=el('blastBtn'), on=special('blast')||!!blast;
+  b.hidden=!on||(stuck&&!blast);                  // stuck shows End run instead (no room for four buttons)
+  const f=blast?clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1):clamp(blastShown/CFG.BLAST_CHARGE,0,1);
+  b.style.setProperty('--f',f.toFixed(3));
+  const full=!blast&&blastShown>=CFG.BLAST_CHARGE;
+  b.classList.toggle('full',full); b.classList.toggle('live',!!blast);
+  b.disabled=!(full&&state==='play');
+  b.setAttribute('aria-label',blast?'Blast round running':full?'Start a Blast round':'Blast: combos charge it');
+}
+el('blastBtn').onclick=e=>{ e.stopPropagation(); if(canBlast()) startBlast(); };
 function startBlast(){
-  blast={t:CFG.BLAST_SECONDS*1000,pts:0,lines:0};
+  if(blast) return;
+  blastCharge=0; blastShown=0; blastSparks=[]; undoSnap=null;   // Undo can never give the charge back or replay the round
+  blast={t:CFG.BLAST_SECONDS*1000,pts:0,lines:0,best:0,swaps:0,tick:0};
+  stats.blasts++;
   startFlip('blast','rainbow');
-  pushBanner('BLAST ROUND','×'+CFG.BLAST_MULT+' · clear fast!','#FF7BD5');
-  if(!reduce){ spawnConfetti(); for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14}); }
-  shake=Math.max(shake,12*CFG.SHAKE); glowT=1.8; glowH=320;
-  Sfx.goldenWin();
-  dealLater();                                      // the leftover pieces are replaced by a blast hand (pickups wait for it)
+  blastIntro={t:0};
+  shake=Math.max(shake,10*CFG.SHAKE); glowT=1.8; glowH=320;
+  Sfx.blastStart();
+  hesVoid(); dealLater();                           // the leftover pieces are replaced by a blast hand (pickups wait for it)
+  syncActions();
 }
 function endBlast(){
-  const b=blast; blast=null;
-  if(b.pts>0) pushBanner('BLAST OVER','+'+b.pts+' · '+b.lines+' lines','#FF7BD5');
+  const b=blast; blast=null; specialEnd=trayNo;
+  const newBest=b.pts>stats.bestBlast;
+  stats.bestBlast=Math.max(stats.bestBlast,b.pts);
   startFlip(transform?transform.id:CFG.HOME_WORLD,transform?TRANSFORMS[transform.id].skin:CFG.STYLE);
-  Sfx.praise(b.lines>=6?3:2);
+  Sfx.blastEnd();
+  showBlastCard(b,newBest);
+  syncActions(); saveRun();
 }
-// the bar by the board: the timer draining (hot) during a round. There is no meter any more (plan 3.1): a round is
-// started on purpose (tap-to-start comes in plan 4.5), never by filling something up, and nothing drains while she thinks.
+// the results card: a reward moment, not a modal. Tap anywhere (or wait) and play goes on.
+let blastCardT=0;
+function showBlastCard(b,newBest){
+  if(state!=='play') return;
+  paused=true; drag=null;
+  el('bcPts').textContent='+'+b.pts.toLocaleString();
+  el('bcLines').textContent=b.lines+(b.lines===1?' line':' lines');
+  el('bcCombo').textContent=b.best>=2?'· best combo ×'+b.best:'';
+  el('bcBest').textContent=newBest&&b.pts>0?'NEW BEST BLAST!':'Best Blast '+stats.bestBlast.toLocaleString();
+  el('bcBest').classList.toggle('new',newBest&&b.pts>0);
+  el('blastCard').hidden=false;
+  clearTimeout(blastCardT); blastCardT=setTimeout(hideBlastCard,8000);
+}
+function hideBlastCard(){
+  clearTimeout(blastCardT);
+  if(el('blastCard').hidden) return;
+  el('blastCard').hidden=true; paused=false;
+  checkStuck();                                     // the leftover blast pieces may not fit the board she has now
+}
+el('blastCard').addEventListener('pointerdown',e=>{ e.stopPropagation(); hideBlastCard(); });
+// the round's timer, as a bar by the board (the button drains with it too)
 function drawBlastBar(now){
-  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED || !blast) return;
+  if(!blast) return;
   const above=by-hudH>=26, h=6, y=above?by-14:by+B+10, x0=bx+4, w=B-8;
   const f=clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1);
   const urgent=blast.t<5000, pulse=0.5+0.5*Math.sin(now*(urgent?0.02:0.006));
@@ -75,12 +144,55 @@ function drawBlastBar(now){
   ctx.restore(); ctx.globalAlpha=1;
   ctx.font='700 11px "Fredoka",Verdana,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   ctx.fillStyle='#FF9DE3';
-  ctx.fillText('BLAST  '+Math.ceil(blast.t/1000)+'s',x0,above?y-4:y+h+13);
+  ctx.fillText('BLAST  '+Math.max(0,Math.ceil(blast.t/1000))+'s',x0,above?y-4:y+h+13);
+}
+// Blast's own effects, drawn in the foreground layer and never over the board's gems: two lights racing round the
+// board's rim while a round runs, "BLAST!" slamming into the gap above the board, 3-2-1 there at the end, and the
+// charge sparks (one small particle each, combo clears only) flying from the clear into the button.
+function stepBlastFx(now,dt){
+  if(blast && !reduce){
+    const per=4*(B+18), seg=per*0.12, off=(now*0.0006%1)*per*(blast.t<5000?2:1);
+    ctx.save(); roundPath(ctx,bx-9,by-9,B+18,B+18,20);
+    ctx.setLineDash([seg,per/2-seg]); ctx.lineDashOffset=-off;
+    ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=4; ctx.stroke();
+    ctx.strokeStyle='rgba(255,123,213,.5)'; ctx.lineWidth=12; ctx.stroke();
+    ctx.restore();
+  }
+  const gapY=hudH+(by-hudH)*0.52, fs=Math.round(Math.min(W*0.13,(by-hudH)*0.62,58));
+  if(blastIntro){
+    const p=blastIntro; p.t+=dt;
+    if(p.t>=70||reduce) blastIntro=null;
+    else{
+      const pin=Math.min(1,p.t/7), out=p.t>58?(p.t-58)/12:0;
+      const sp=sprite('blastword|'+fs, textW('BLAST!',fs)+fs, fs*1.5, x=>
+        outlined(x,'BLAST!',fs,vgrad(x,-fs*0.5,fs*0.5,[[0,'#FFFFFF'],[0.35,'#FF9DE3'],[1,'#FF4FB8']]),[[fs*0.34,'rgba(255,176,32,.5)'],[fs*0.16,'rgba(40,6,30,.95)']]));
+      blit(sp,W/2,gapY,(2.4-1.4*easeOutBack(pin))*(1+0.3*out),Math.min(1,pin*2)*(1-out));
+    }
+  } else if(blast && blast.t>0 && blast.t<=3000){   // 3, 2, 1: each number pops in and shrinks away
+    const n=Math.ceil(blast.t/1000), k=1-(blast.t/1000-(n-1));   // 0 -> 1 over each second
+    const sp=sprite('blastnum|'+n+'|'+fs, fs*1.4, fs*1.5, x=>
+      outlined(x,String(n),fs,vgrad(x,-fs*0.5,fs*0.5,[[0,'#FFFFFF'],[0.4,'#FFE66B'],[1,'#FF7A3D']]),[[fs*0.16,'rgba(40,6,30,.95)']]));
+    blit(sp,W/2,gapY,reduce?1:1.4-0.5*easeOutCubic(Math.min(1,k*3)),reduce?1:1-Math.max(0,k-0.7)/0.3);
+  }
+  if(blastSparks.length){
+    const T=blastBtnCentre();
+    for(let i=blastSparks.length-1;i>=0;i--){
+      const s=blastSparks[i]; s.t+=dt/36;                     // ~0.6 s to the button
+      if(s.t>=1){ blastSparks.splice(i,1); landSpark(s.n); continue; }
+      const u=easeInOutQuad(s.t), v=1-u, cx=(s.x0+T.x)/2+cell*1.5, cy=Math.min(s.y0,T.y)-cell;
+      const x=v*v*s.x0+2*v*u*cx+u*u*T.x, y=v*v*s.y0+2*v*u*cy+u*u*T.y, r=cell*0.13;
+      ctx.globalAlpha=0.45; ctx.fillStyle='#FF9DE3'; ctx.beginPath(); ctx.arc(x,y,r*2,0,6.283); ctx.fill();
+      ctx.globalAlpha=1; ctx.fillStyle='#FFF4C2'; ctx.beginPath(); ctx.arc(x,y,r,0,6.283); ctx.fill();
+    }
+  }
 }
 function stepBlast(now,dt){
-  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED || state!=='play' || paused || !blast) return;
-  if(!dealing) blast.t-=dt*16.67;                    // the clock waits while her next hand is being dealt (she can't pick up)
-  if(blast.t<=0) endBlast();
+  if(!blast || state!=='play' || paused || document.hidden) return;   // hidden: iOS may still run a frame or two
+  if(blast.t>0 && !dealing) blast.t-=dt*16.67;      // the clock waits while her next hand is being dealt (she can't pick up)
+  const sec=Math.ceil(blast.t/1000);
+  if(sec<=3 && sec>=1 && sec!==blast.tick){ blast.tick=sec; Sfx.blastTick(sec); }
+  if(blast.t<=0 && !drag) endBlast();               // a drag in flight finishes first
+  else if(Math.round(now/250)!==stepBlast.q){ stepBlast.q=Math.round(now/250); syncBlastBtn(); }   // the button drains with the clock (4×/s is plenty)
 }
 function renderPips(){
   const box=el('transformPips'), n=CFG.TRANSFORM_PLACEMENTS;
@@ -139,7 +251,9 @@ function place(idx,r,c){
     hitWait=reduce?0:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
     if(s.star && total>=2) triggerTransform('starfield');
     combo++; trayCombo=Math.max(trayCombo,combo);
-    if(CFG.SPECIALS && CFG.STAR_ENABLED && combo>=CFG.STAR_COMBO) starForced=true;
+    if(combo>=2) chargeBlast(Math.min(combo-1,CFG.BLAST_CHARGE_MAX),bx+(c+s.cols/2)*cell,by+(r+s.rows/2)*cell);   // only combos charge Blast
+    if(blast) blast.best=Math.max(blast.best,combo);
+    if(special('star') && combo>=CFG.STAR_COMBO) starForced=true;
     if(combo>=5) triggerTransform('volcano');
     if(combo>=7) triggerTransform('storm');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
@@ -276,7 +390,7 @@ function place(idx,r,c){
     glowT=Math.max(glowT,1.4); Sfx.praise(3);
   }
   if(tray.every(v=>!v) && !dealing){                // (a Blast Round that just started is already dealing its own hand)
-    goldenNext = CFG.SPECIALS && CFG.GOLDEN_ENABLED && goldenCool<=0 && !transform      // a live transformation already is the moment
+    goldenNext = special('golden') && goldenCool<=0 && !transform      // a live transformation already is the moment
       && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
     trayHadSweep=false; trayCombo=0;
     dealLater();
@@ -288,7 +402,13 @@ const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
 // Stuck (plan 3.2): while Undo or a Rescue can get her out, the run waits for her (pieces dim, "No moves", End run offered).
 // Only when neither is left does it end by itself, after 700 ms so the last drop finishes landing; the timer re-checks.
 function checkStuck(){
-  stuck=!anyFits(); syncActions();
+  stuck=!anyFits();
+  if(stuck&&blast&&!dealing){                       // a Blast Round never ends her run: swap in a fresh hand, twice at most, then end the round
+    stuck=false;
+    if(blast.swaps<2){ blast.swaps++; dealLater(); syncActions(); return; }
+    blast.t=0; syncActions(); return;               // stepBlast ends it (results card); hiding the card checks again
+  }
+  syncActions();
   if(stuck&&!canExit()) setTimeout(()=>{ if(!dealing&&!anyFits()&&!canExit()) gameOver(); },700);
 }
 
@@ -321,7 +441,7 @@ function slotRect(i){ const w=B/3; return {x:bx+w*i,y:trayY,w,h:trayH}; }
 //    exactly there. Without one there is no ghost, it floats, and release sends it back to the tray.
 // drag.slot is that one answer: frame() draws from it and onUp() places from it.
 function onDown(e){
-  if(state!=='play'||paused||drag||dealing) return;   // one drag at a time (a second finger can't pick up another piece); none while a tray is being dealt
+  if(state!=='play'||paused||drag||dealing||(blast&&blast.t<=0)) return;   // one drag at a time (a second finger can't pick up another piece); none while a tray is being dealt
   ac();
   for(let i=0;i<3;i++){
     const R=slotRect(i);
