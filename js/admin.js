@@ -13,6 +13,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['FX_STAR_BURST','Star gem beams and burst'],
   ['FX_GOLD_TINT','Gold screen tint'],
   ['FX_SWEEP_FX','Sweep wash + confetti'],
+  ['FX_PRESSURE_SCREEN','Pressure on screen (6.6)'],
   ['FX_TENSION_BORDER','Tension border glow'],
   ['FX_PUNCH_ZOOM','Punch zoom on clears'],
   ['FX_CHUNKS','Clears burst into blocks'],

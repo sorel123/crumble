@@ -2014,6 +2014,51 @@ test('pace (6.1): a new run starts calm, hesitation samples carry the phase, ?de
   assert.match(r.dbg, /room \d\.\d\d/);
 });
 
+test('pressure on screen (6.6): follows phase and room, lets go with a relief flash, Adventure and the switch leave it off, gems are untouched', async ({ page }) => {
+  await play(page);
+  const settle = () => page.waitForTimeout(1600);
+  const read = () => page.evaluate(() => ({ p: scr.p, warm: scr.warm, relief: scr.relief }));
+  await page.evaluate(() => { pace = { ph: 'calm', n: 1, hold: 0, len: 0 }; roomNow = 0.9; });
+  await settle();
+  const calm = await read();
+  assert.ok(calm.p < 0.05, 'calm is quiet: ' + JSON.stringify(calm));
+  await page.evaluate(() => { pace = { ph: 'building', n: 1, hold: 0, len: 0 }; roomNow = 0.4; });
+  await settle();
+  const building = await read();
+  assert.ok(building.p > 0.1 && building.p < 0.5, 'building warms a little: ' + JSON.stringify(building));
+  // a gem's own pixels do not change with pressure: the layer is behind and around the board
+  const px = () => page.evaluate(() => { grid[4][4] = 2; shake = 0; const d = ctx.getImageData(Math.round((bx + 4.5 * cell) * dpr), Math.round((by + 4.5 * cell) * dpr), 1, 1).data; return [d[0], d[1], d[2]]; });
+  await page.evaluate(() => { pace.ph = 'calm'; roomNow = 0.9; }); await settle();
+  const gemCalm = await px(); await page.waitForTimeout(100);
+  await page.evaluate(() => { pace = { ph: 'edge', n: 1, hold: 3, len: 0 }; roomNow = 0.1; });
+  await settle();
+  const edge = await read();
+  assert.ok(edge.p > 0.7 && edge.warm > 0.8, 'edge is tight and warm: ' + JSON.stringify(edge));
+  await page.waitForTimeout(100);
+  const gemEdge = await px();
+  assert.ok(gemEdge.every((v, i) => Math.abs(v - gemCalm[i]) <= 3), 'a gem pixel is the same at full pressure (a wash over it would move it by 10+): ' + gemCalm + ' vs ' + gemEdge);
+  await page.evaluate(() => { pace = { ph: 'recovery', n: 1, hold: 0, len: 1 }; });
+  await settle();
+  const rec = await read();
+  assert.ok(rec.warm < edge.warm && rec.p > 0.7, 'recovery is amber, still tight: ' + JSON.stringify(rec));
+  await page.evaluate(() => { pace = { ph: 'relief', n: 1, hold: 0, len: 2 }; roomNow = 0.7; });
+  await page.waitForTimeout(150);
+  const flash = await read();
+  assert.ok(flash.relief > 0.3, 'getting out flashes: ' + JSON.stringify(flash));
+  await settle();
+  const after = await read();
+  assert.ok(after.p < 0.1 && after.relief === 0, 'and then it lets go: ' + JSON.stringify(after));
+  // a bonus keeps working under the pressure layer (the violet rim owns the rim)
+  const bon = await page.evaluate(() => { pace = { ph: 'edge', n: 1, hold: 3, len: 0 }; roomNow = 0.1; startBonus(); return bonus.left; });
+  await settle();
+  assert.equal(bon, 3); assert.ok((await read()).p > 0.7);
+  // off in Adventure and with the switch off
+  await page.evaluate(() => { bonus = null; CFG.FX_PRESSURE_SCREEN = false; }); await settle();
+  assert.equal((await read()).p, 0, 'the switch turns it off');
+  await page.evaluate(() => { CFG.FX_PRESSURE_SCREEN = true; mode = 'adventure'; }); await settle();
+  assert.equal((await read()).p, 0, 'Adventure keeps its own border');
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 for (const { name, fn } of tests) {
