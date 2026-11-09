@@ -81,11 +81,10 @@ Last updated 2026-11-09, after recorded music (plan PR 7.4).
 - **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
 - **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
-- **Undo (3.2):** the `↩ Undo` button under the tray puts the run back to just before the last placement, exactly (`snapshot()` taken first thing in `place()` via `noteUndo()`, restored by `undo()` in `save.js`; lifetime stats are rewound too). One move back, once per placement: a new run, a rescue and game over clear it (so it can never refund a rescue), and a bonus in progress is undone with the move (trays left and points come back).
-- **Stuck (3.2):** when no tray piece fits, the run waits instead of ending: pieces dim, "No moves" shows, and Undo, `🛟 Rescue` (needs a rescue left and `rescueAllowed()`, shared with the game-over card) and `End run` are offered. Only when neither Undo nor Rescue is available does it end on its own, 700 ms after the last drop (`checkStuck()` / `canExit()`). `syncActions()` keeps the buttons current.
+- **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
+- **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
 - **Pressure and recovery (6.1, Endless and Daily):** the dealer reads the *room* left on the board (`roomOf()`), not how full it is, and moves through phases: calm and building deal honest hands (no help), a cramped board is held on the edge for 2-3 trays, then a recovery hand she has to spot, and getting out earns guided relief trays. Losses are real now. See the 6.1 section at the end. Adventure keeps the old tension wave.
-- **Rescues** — on game over (if the run is worth saving): up to 2 per run. The first is free; the second is earned by clearing
-  `RESCUE_EARN_LINES` (30) lines after it ("RESCUE EARNED" banner); Adventure keeps both free. A rescue deals a recovery hand
+- **Rescues** — on game over (if the run is worth saving): one per run (`MAX_RESCUES`). `rescueAllowed()` is the single gate, so an ad can gate it later. A rescue deals a recovery hand
   (Endless/Daily; Adventure still gets the sweep/jackpot hand from `genRescue`) — she still has to find the play.
 - **Look**: themes (Classic default, Night, Daylight, Cotton Candy, Mint,
   Paper), home worlds (10, each with an ambient effect), tile skins (Blocks
@@ -171,7 +170,7 @@ Top to bottom:
 | (2.3) | Calm clears: everyday clears are a squash + point tags + one praise word; slam, orbs, COLOR GONE, fireworks, punch zoom from combo 3 (`CFG.BIG_COMBO`); `CFG.SPECIALS` (default off) pauses golden hands, star gems, transformations and Blast Round |
 | (3.1) | Relaxed opening: seeded opening board + verified first tray (a clear within the first move); no special in trays 1-5 (`SPECIAL_FROM_TRAY`); Blast meter, idle drain and auto-start removed |
 | (3.3) | Save and resume: `js/save.js` (`snapshot`/`restore`, autosave, `crumble.run`), best score and lifetime stats persisted (`crumble.stats`), `clearRunFx()` split out of `start()` |
-| (3.2) | Undo (one move, exact round-trip, saved) and a mid-run Rescue button, dimmed until nothing fits |
+| (3.2) | Undo and a mid-run Rescue button (both removed in 7.1) |
 | (3.4) | Dealer for obvious moves: `OBVIOUS`/`ALT` hand scoring, hesitation log in the `?dev` readout (`crumble.hes`), `tools/bot-sim.mjs` |
 | (4.5a) | Blast as a tap-to-start reward: combo-charged `⚡ Blast` button, own sting/look/3-2-1, results card, Best Blast; per-special flags `CFG.SPECIALS.{blast,star,golden,transform}` and `specialOk()`; a live round survives save/resume |
 | (4.5b) | Star gem rebuilt: dealt only when a cross is worth it (`starBest`, `STAR_MIN`), cooldown, beam in the tray + hint ring + drag count, charge-then-beams clear with star sparkles, per-gem points, own sounds, Blast button held while it is in the tray |
@@ -499,7 +498,6 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 | `ROOM_OK` / `ROOM_EDGE` | (6.1) where calm ends and the edge starts, in room (0-1) |
 | `EDGE_HOLD_MIN/MAX` / `RECOVERY_TRIES` / `RELIEF_TRAYS` | (6.1) how long the edge holds, how many tries at a way out, how long the relief lasts |
 | `HONEST_TRIES` / `BUILD_BIAS` / `GIFT_CHANCE` | (6.1) how light an honest hand is (the main difficulty knob), big pieces while building, guided hands in calm |
-| `RESCUE_EARN_LINES` | (6.1) lines after the first rescue that earn the second |
 | `TENSION_UP` / `TENSION_DOWN` / `TENSION_DRIFT` | (Adventure only) how fast the difficulty wave swings |
 | `TIER_SOLVABLE` / `TIER_JACKPOT` / `TIER_SWEEP` | where each help tier kicks in |
 | `GUIDE` | favour hands that can clear right now (0 = off) |

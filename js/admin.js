@@ -63,7 +63,6 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['GIFT_CHANCE','Pace: calm gift chance',0,1,0.01],
   ['HONEST_TRIES','Pace: honest hands looked at',1,36,1],
   ['BUILD_BIAS','Pace: building small-piece bias',0,1,0.05],
-  ['RESCUE_EARN_LINES','Lines to earn 2nd rescue',0,60,1],
   ['TENSION_UP','Adventure: tension up (no clear)',0,0.5,0.01],
   ['TENSION_DOWN','Tension down (clear)',0,0.5,0.01],
   ['TENSION_DRIFT','Tension drift (cramped)',0,0.3,0.01],

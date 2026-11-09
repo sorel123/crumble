@@ -2,7 +2,7 @@
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ modes ═══════
    Endless is the default and unchanged. Adventure is 30 short goal levels (no timer) on a map; each level is a
-   normal run with a goal, so Undo, the dealer, save/resume, specials and looks all work as they do anywhere.
+   normal run with a goal, so the dealer, save/resume, specials and looks all work as they do anywhere.
    Every mode keeps its own saved run (`crumble.run` endless, `crumble.run.adv`, `crumble.run.daily`), so
    switching never loses a game. Progress lives in `crumble.adv`, plain data meant to be extended:
      {v:1, lv:{ "7":{s:2, p:14, n:3, f:1} }}    s best stars (0-3), p fewest pieces, n times cleared, f failed tries */
@@ -55,7 +55,7 @@ const saveMode=()=>{ try{ localStorage.setItem(MODE_STORE,mode); }catch(e){} };
 /* ── Daily (plan 4.1b) ──
    One board a day, the same on every phone: the opening and every tray are dealt from a stream seeded by the date
    (and the tray number), so two phones on the same day start with the same board and tray. It is a normal Endless-style
-   run (Undo, Rescue, specials all work). Results: `crumble.daily` = {v:1, d:{"2026-11-09":{s:best score, l:most lines, n:times played}}},
+   run (the one Rescue and the specials work). Results: `crumble.daily` = {v:1, d:{"2026-11-09":{s:best score, l:most lines, n:times played}}},
    plain data for 4.2's streaks. The date is the phone's local date. */
 const daily={d:{}};
 let dk='';                                           // the date key of the Daily run in progress
@@ -153,7 +153,7 @@ function goalStep(total,swept){
   if(goalProgress()>=lvl.goal.n) levelWin();
 }
 function levelWin(){
-  state='won'; undoSnap=null; stuck=false; clearRun('adventure'); syncActions();
+  state='won'; stuck=false; clearRun('adventure'); syncActions();
   const L=lvl, stars=starsFor(L,lv.pieces), rec=advRec(L.id), first=rec.n===0;
   rec.n++; rec.s=Math.max(rec.s,stars); rec.p=rec.p?Math.min(rec.p,lv.pieces):lv.pieces; rec.f=0;
   saveAdv(); saveStats(); checkGoals();

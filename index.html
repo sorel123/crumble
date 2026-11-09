@@ -101,7 +101,7 @@
   .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
            justify-content:center;gap:16px;padding:28px;text-align:center;
            background:var(--overlay);
-           backdrop-filter:blur(5px);z-index:3}   /* above the action row (Undo, bonus, Rescue) */
+           backdrop-filter:blur(5px);z-index:3}   /* above the action row (bonus) */
   .overlay[hidden]{display:none}
   .title{font-size:clamp(46px,15vw,78px);font-weight:700;line-height:.92;letter-spacing:-.03em;
          text-shadow:0 0 40px rgba(255,212,92,.3)}
@@ -236,10 +236,7 @@
   </div>
   <button id="modeTag" type="button" aria-label="Choose how to play">Endless ▾</button>
   <div id="actions">
-    <button id="undoBtn" type="button" aria-label="Undo last move" disabled>↩ Undo</button>
     <div id="bonusChip" role="status" aria-label="Bonus meter"><span class="fill"></span><span class="txt">×2 bonus</span></div>
-    <button id="endBtn" type="button" hidden>End run</button>
-    <button id="helpBtn" type="button" aria-label="Rescue: get a new set of pieces" disabled>🛟 Rescue</button>
   </div>
   <div id="noMoves" hidden>No moves</div>
   <div id="goldChip" hidden></div>
