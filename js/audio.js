@@ -6,7 +6,7 @@
    noise buffer is built when the context is created (first user gesture,
    which browsers require) and reused by every noise hit.
    ═══════════════════════════════════════════════════════════════ */
-let actx=null,muted=false,master=null,nbuf=null,revIn=null,setSpeaker=()=>{},origBus=null,smpBus=null;
+let actx=null,sfxGain=1,muted=false,master=null,nbuf=null,revIn=null,setSpeaker=()=>{},origBus=null,smpBus=null;
 /* The whole chain, built on whatever context it's handed (the live one, or an
    offline one for rendering/tests): sounds -> master -> soft high-shelf ->
    safety limiter -> out, plus a small reverb send any sound can feed via
@@ -83,7 +83,7 @@ function noiseHit(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass',wet=0,atk
   f.frequency.setValueAtTime(hz(f0),t);
   if(f1!==f0) f.frequency.exponentialRampToValueAtTime(hz(f1),t+dur);
   g.gain.setValueAtTime(.0001,t);
-  g.gain.exponentialRampToValueAtTime(vol,t+atk);
+  g.gain.exponentialRampToValueAtTime(vol*sfxGain,t+atk);
   g.gain.exponentialRampToValueAtTime(.0001,t+dur);
   src.connect(f); f.connect(g); send(g,wet);
   src.loop=true;                                                    // a long hit just wraps the 1s buffer
@@ -99,7 +99,7 @@ function voice(t,{f0,f1=f0,dur,pdur=dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=
   bp.frequency.setValueAtTime(hz(bp0),t);
   bp.frequency.exponentialRampToValueAtTime(hz(bp1),t+pdur);
   out.gain.setValueAtTime(.0001,t);
-  out.gain.exponentialRampToValueAtTime(vol/det.length,t+atk);
+  out.gain.exponentialRampToValueAtTime(vol*sfxGain/det.length,t+atk);
   out.gain.exponentialRampToValueAtTime(.0001,t+dur);
   bp.connect(out); send(out,wet);
   for(const cents of det){
@@ -117,7 +117,7 @@ function tone(t,{f0,f1=f0,pdur=.03,dur=.1,vol=.1,atk=.002,type='sine',wet=0}){
   const o=actx.createOscillator(), g=actx.createGain();
   o.type=type; o.frequency.setValueAtTime(hz(f0),t);
   if(f1!==f0) o.frequency.exponentialRampToValueAtTime(hz(f1),t+pdur);
-  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+atk); g.gain.setTargetAtTime(0,t+atk,dur/4);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol*sfxGain,t+atk); g.gain.setTargetAtTime(0,t+atk,dur/4);
   o.connect(g); send(g,wet); o.start(t); o.stop(t+atk+dur*1.4+.02);
 }
 function boom(t,vol,wet=.1){
@@ -132,7 +132,7 @@ const BELLS={            // [frequency ratio, amplitude, share of the note's dec
   marimba:[[1,1,1],[3.99,.28,.3],[10.1,.07,.1]]
 };
 function bell(t,{f,dur=.9,vol=.08,wet=.25,kind='glock',atk=.003}){
-  const c=actx, out=c.createGain(); out.gain.value=vol; send(out,wet);
+  const c=actx, out=c.createGain(); out.gain.value=vol*sfxGain; send(out,wet);
   for(const [ratio,amp,share] of BELLS[kind]){
     const fr=f*ratio; if(fr>14000) continue;
     const o=c.createOscillator(), g=c.createGain(), d=dur*share;
@@ -199,6 +199,9 @@ const BELLS_SFX={
     bell(tc,{f:note(0)/2,dur:1,vol:.08,wet:.2,kind:'marimba'});
     for(let i=0;i<8;i++) noiseHit(tc+.06+i*.08,{dur:.045,f0:6500+Math.random()*3500,q:10,vol:.018,wet:.5});
   }); },
+  phew(total=1,delay=.07,combo=1){ if(combo>1) this.combo(combo,total,delay); else this.clear(total,delay,combo); play(delay+.04,t=>{                // (6.5) the narrow escape: the clear plus one stronger accent
+    [7,10,12].forEach((st,i)=>bell(t+i*.04,{f:note(st+5),dur:1,vol:.07,wet:.3})); }); },
+  fanfare(){ this.praise(3); },                                                            // (6.5) NEW BEST / LEVEL CLEARED
   deny(){ play(0,(t,p)=>{
     tone(t,{f0:175*p,f1:125*p,pdur:.09,dur:.13,vol:.1,atk:.006});             // a soft 'nope', not a buzz
     tone(t+.07,{f0:150*p,f1:110*p,pdur:.08,dur:.1,vol:.07,atk:.006});
@@ -246,7 +249,7 @@ function oNoise(t,{dur=.012,f0=3000,f1=f0,q=1,vol=.1,type='bandpass'}){
   f.frequency.setValueAtTime(hz(f0),t);
   if(f1!==f0) f.frequency.exponentialRampToValueAtTime(hz(f1),t+dur);
   g.gain.setValueAtTime(.0001,t);
-  g.gain.exponentialRampToValueAtTime(vol,t+Math.min(.004,dur/3));
+  g.gain.exponentialRampToValueAtTime(vol*sfxGain,t+Math.min(.004,dur/3));
   g.gain.exponentialRampToValueAtTime(.0001,t+dur);
   src.connect(f); f.connect(g); g.connect(origBus);
   src.start(t,Math.random()*Math.max(0,nbuf.duration-dur-.05)); src.stop(t+dur+.01);
@@ -257,7 +260,7 @@ function oVoice(t,{f0,f1=f0,dur,vol,bp0,bp1=bp0,q=4,type='sawtooth',det=[-8,0,8]
   bp.frequency.setValueAtTime(hz(bp0),t);
   bp.frequency.exponentialRampToValueAtTime(hz(bp1),t+dur);
   out.gain.setValueAtTime(.0001,t);
-  out.gain.exponentialRampToValueAtTime(vol/det.length,t+atk);
+  out.gain.exponentialRampToValueAtTime(vol*sfxGain/det.length,t+atk);
   out.gain.exponentialRampToValueAtTime(.0001,t+dur);
   bp.connect(out); out.connect(origBus);
   for(const cents of det){
@@ -298,6 +301,9 @@ const ORIG_SFX={
     });
     oVoice(t,{f0:base/2,f1:base/2,dur:.45,vol:.1,bp0:base,q:.6,type:'sine',det:[0],atk:.01});
   }); },
+  phew(total=1,delay=.1,combo=1){ if(combo>1) this.combo(combo,total,delay); else this.clear(total,delay); play(delay+.04,(t,p)=>{                    // (6.5) the narrow escape: the clear plus one stronger accent
+    [1.5,2,3].forEach((m,i)=>oVoice(t+i*.04,{f0:659*p*m,f1:659*p*m*1.01,dur:.45,vol:.07,bp0:1800,q:2,type:'triangle',det:[-4,4],atk:.006})); }); },
+  fanfare(){ this.goldenIn(); },                                                           // (6.5) NEW BEST / LEVEL CLEARED
   praise(tier){ if(tier>=3) this.goldenIn(); },          // the original game had no praise words; the big ones borrow its bell run
   sweep(delay=.1){ play(delay,(t,p)=>{
     oNoise(t,{dur:.02,f0:3500*p,q:.8,vol:.2});
@@ -381,7 +387,7 @@ function smp(name,{vol=1,rate=1,delay=0}={}){
   const b=bank[name]; if(!b||muted) return;
   try{
     const t=actx.currentTime+delay, src=actx.createBufferSource(), g=actx.createGain();
-    src.buffer=b.buf; src.playbackRate.value=rate; g.gain.value=vol;
+    src.buffer=b.buf; src.playbackRate.value=rate; g.gain.value=vol*sfxGain;
     src.connect(g); g.connect(smpBus); src.start(t,b.off);
   }catch(e){}
 }
@@ -389,13 +395,17 @@ const semis=n=>Math.pow(2,n/12);
 const PENTA_UP=[0,2,4,7,9,12,14,16,19,21];                  // combo links climb a major pentatonic scale
 function recordedSet(jingle,other){                          // jingle: 'pz' | 'st'; other: the other instrument
   return {
-    clear(total=1,delay=.07,combo=1){                        // a glass ting per line, pitched up the scale by combo
+    clear(total=1,delay=.07,combo=1){                        // (6.5) a crisp dry impact, then a glass tail per line, pitched up the scale by combo
       const step=PENTA_UP[Math.min(PENTA_UP.length-1,combo-1)];
-      for(let i=0;i<Math.min(3,total);i++) smp('glass',{vol:[.18,.09,.06][i],rate:semis(step+[0,7,12][i]),delay:delay+i*.06});   // ~-16dB
+      smp('pl_drop',{vol:.12*Math.min(1.6,1+.2*(total-1)),rate:.85,delay});                                                  // the impact (a placement's click, a touch lower and bigger with more lines)
+      for(let i=0;i<Math.min(3,total);i++) smp('glass',{vol:[.18,.09,.06][i],rate:semis(step+[0,7,12][i]),delay:delay+.02+i*.06});   // ~-16dB
     },
-    combo(combo=2,total=1,delay=.07){ this.clear(total,delay,combo); },
+    combo(combo=2,total=1,delay=.07){ this.clear(total,delay,combo); },     // the same sound, one step higher each link
+    phew(total=1,delay=.07,combo=1){ this.clear(total,delay,combo);         // (6.5) the narrow escape: the clear plus one stronger accent
+      [7,12,19].forEach((st,i)=>smp('glass',{vol:.13,rate:semis(st),delay:delay+.1+i*.045})); smp('swell',{vol:.1,rate:1.4,delay:delay+.08}); },
+    fanfare(){ smp(jingle+'10',{vol:.26,delay:.05}); },                      // (6.5) NEW BEST / LEVEL CLEARED
     praise(tier){ smp(jingle+['16','08','10','15'][tier-1],{vol:.2+.03*tier,delay:.18}); },   // only rising, happy jingles; ~-13 to -10dB
-    sweep(delay=.1){ smp(jingle+'02',{vol:.32,delay}); smp('glass',{vol:.1,rate:semis(12),delay}); },
+    sweep(delay=.1){ smp('pl_drop',{vol:.2,rate:.7,delay}); smp(jingle+'02',{vol:.32,delay}); smp('glass',{vol:.1,rate:semis(12),delay}); },   // (6.5) one short rising phrase that resolves; it owns the mix
     deny(){ smp('err',{vol:.07}); },
     star(n=6){ smp('swell',{vol:.14,rate:1.6,delay:0});                                      // charge
       smp(jingle+'02',{vol:.3,delay:.14}); smp('swell',{vol:.2,rate:.6,delay:.14});         // the hit: a low swell under the bright jingle
@@ -404,7 +414,7 @@ function recordedSet(jingle,other){                          // jingle: 'pz' | '
     starIn(){ [12,16,19,24].forEach((st,i)=>smp('glass',{vol:.1,rate:semis(st),delay:i*.06})); },
     starPick(){ smp('glass',{vol:.06,rate:semis(19)}); },
     goldenIn(){ smp('confirm',{vol:.16,delay:.05}); },
-    goldenWin(){ smp(other+'02',{vol:.32,delay:.15}); },
+    goldenWin(){ smp(other+'02',{vol:.32,delay:.15}); smp('swell',{vol:.14,rate:.6,delay:.15}); },   // (6.5) the old gong layer is this low swell now
     rescue(){ smp('rescue',{vol:.18}); },
     achieve(i=0){ [0,4,7,12].forEach((st,k)=>smp('glass',{vol:.1,rate:semis(st+[2,5,7,9][i%4]),delay:k*.075})); },
     transformShift(){ smp('swell',{vol:.16}); }
@@ -427,8 +437,6 @@ const Sfx={
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
   }
 };
-for(const fn of ['clear','combo','praise','sweep','deny','star','starIn','starPick','goldenIn','goldenWin','rescue','transformShift','achieve'])
-  Sfx[fn]=(...a)=>{ ac(); const set=SOUND_SETS[CFG.SND_SET]||SOUND_SETS.original; set[fn]&&set[fn](...a); };
 function setMuted(on,save=true){
   muted=on; el('mute').textContent=muted?'🔈':'🔊';
   const box=el('sndOn'); if(box) box.checked=!muted;
@@ -438,7 +446,7 @@ el('mute').onclick=e=>{ e.stopPropagation(); setMuted(!muted); };
 /* The bonus trays' own sounds (plan 6.2; they were the Blast Round's). Synthesized and the same in every sound set, so no
    other moment in the game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise
    (meter full), and a bell cadence over a soft hit (bonus over). */
-Object.assign(Sfx,{
+const SHARED_SFX={                                    // the same in every set (they are the bonus trays' and the golden hand's own)
   bonusReady(){ play(0,t=>{ [0,4,7,12].forEach((s,i)=>bell(t+i*.07,{f:784*semis(s),dur:.8,vol:.06,wet:.3})); }); },
   bonusStart(){ play(.02,t=>{
     noiseHit(t,{dur:.45,f0:300,f1:6000,q:1.2,vol:.06,wet:.2,atk:.38});                  // the whoosh up
@@ -448,13 +456,69 @@ Object.assign(Sfx,{
       voice(t+.46+i*.055,{f0:f,dur:.24,vol:.07,bp0:f*2,q:2,type:'sawtooth',det:[-7,7],wet:.2}); });
   }); },
   goldenStep(n){ play(0,t=>{ bell(t,{f:659*semis([0,2,4,7,9,12][Math.max(0,n-1)%6]),dur:.7,vol:.06,wet:.35}); bell(t+.07,{f:1318*semis([0,2,4,7,9,12][Math.max(0,n-1)%6]),dur:.5,vol:.03,wet:.35}); }); },   // a rising note per planned line
-  goldenGong(){ play(.2,t=>{                                                                  // the golden hand's payoff, layered over goldenWin: a deep gong and a chime cascade
-    boom(t,.3); tone(t,{f0:98,dur:1.4,vol:.08,type:'sine'});
-    for(let i=0;i<14;i++) bell(t+.3+i*.06,{f:note([0,2,4,7,9,12,14,16,19,21,24,21,19,16][i]+8),dur:.9,vol:.045,wet:.5});
-    [0,4,7,12].forEach(st=>bell(t+1.2,{f:392*semis(st+12),dur:2.2,vol:.05,wet:.55}));
-  }); },
   bonusEnd(){ play(.05,t=>{
     boom(t,.18);
     [19,16,12,7,12,19].forEach((s,i)=>bell(t+i*.09,{f:392*semis(s),dur:.9,vol:.065,wet:.3}));
   }); }
-});
+};
+
+/* ═══ one sound family: who gets the mix (plan 6.5) ═══
+   Every event the game raises (all but pickup/place, which are quiet ticks of their own) goes through a small arbiter.
+   Events raised in the same tick are collected and the highest priority plays in full; the others are dropped, played
+   ducked, or deferred until it is over. A winner then keeps the mix for `hold` seconds, so a clear a moment after a
+   clean sweep sits under it. Result: one main sound per moment, never a pile of jingles.
+     p     priority (0 = never audible next to anything else)
+     hold  seconds the event keeps the mix
+     same  what happens when something outranks it in the same tick: drop | duck | defer (play once the winner is over)
+   Outranked by a still-running winner from an earlier tick, a 'drop' event that matters (p>0) is ducked instead. */
+const DUCK=.4;
+const EVT={
+  starPick:  {p:0,hold:0,  same:'drop'},
+  clear:     {p:1,hold:.5, same:'duck'},     // the impact + glass tail; ducked under a jingle, dropped by a moment that carries its own impact (see arbFlush)
+  deny:      {p:1,hold:.2, same:'duck'},
+  combo:     {p:2,hold:.7, same:'duck'},     // the same clear sound, a step higher
+  goldenStep:{p:1,hold:.5, same:'duck'},     // sits beside the clear (same priority), under a combo
+  goldenIn:  {p:2,hold:.4, same:'duck'},
+  starIn:    {p:2,hold:.4, same:'duck'},
+  transformShift:{p:2,hold:.8,same:'defer'},
+  praise:    {p:a=>a[0]>=3?3:0,hold:.9,same:'drop'},   // small praise is just the word on screen; only the big tiers are heard
+  achieve:   {p:3,hold:1,  same:'defer'},
+  bonusReady:{p:3,hold:.9, same:'defer'},
+  bonusEnd:  {p:3,hold:1,  same:'duck'},
+  rescue:    {p:3,hold:.5, same:'duck'},
+  star:      {p:4,hold:1.1,same:'duck'},
+  phew:      {p:4,hold:.9, same:'duck'},       // a clear plus one stronger accent
+  bonusStart:{p:4,hold:1.2,same:'duck'},
+  fanfare:   {p:5,hold:1.3,same:'duck'},       // NEW BEST, LEVEL CLEARED
+  sweep:     {p:6,hold:1.6,same:'duck'},       // the biggest thing the board does
+  goldenWin: {p:6,hold:1.8,same:'duck'}
+};
+let arbQ=[], arbLead={p:0,until:0};
+function arbPlay(e,gain){
+  sfxGain=gain;                                      // the primitives scale their level by this while the event schedules its notes
+  try{ const set=SOUND_SETS[CFG.SND_SET]||SOUND_SETS.original, o=SHARED_SFX[e.fn]?SHARED_SFX:set; o[e.fn]&&o[e.fn](...e.a); }
+  catch(err){}
+  finally{ sfxGain=1; }
+}
+function arbFlush(){
+  const q=arbQ; arbQ=[]; if(!q.length||!actx) return;
+  const now=actx.currentTime, lead=now<arbLead.until?arbLead.p:0;
+  const top=Math.max(lead,...q.map(e=>e.p));
+  let hold=0; const later=[];
+  for(const e of q){
+    if(e.p>=top){ arbPlay(e,1); if(e.p>0) hold=Math.max(hold,e.hold); continue; }
+    const sameTick=q.some(o=>o.p>e.p);
+    const own=(e.fn==='clear'||e.fn==='combo')&&sameTick&&(top>=4||(e.fn==='clear'&&q.some(o=>o.fn==='combo')));   // a sweep, star, escape, bonus start... brings its own impact; a combo is the clear
+    const how=e.p===0||own?'drop':sameTick?e.same:(e.same==='drop'?'duck':e.same);
+    if(how==='duck') arbPlay(e,DUCK);
+    else if(how==='defer'){ if(e.late) arbPlay(e,DUCK); else later.push(e); }
+  }
+  if(hold>0) arbLead={p:top,until:Math.max(arbLead.until,now+hold)};
+  for(const e of later) setTimeout(()=>sfxEvent(e.fn,e.a,true),Math.max(0,(arbLead.until-now)*1000)+40);
+}
+function sfxEvent(fn,a,late=false){
+  const d=EVT[fn]; ac();
+  arbQ.push({fn,a,late,p:typeof d.p==='function'?d.p(a):d.p,hold:d.hold,same:d.same});
+  if(arbQ.length===1) queueMicrotask(arbFlush);
+}
+for(const fn of Object.keys(EVT)) Sfx[fn]=(...a)=>sfxEvent(fn,a);

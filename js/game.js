@@ -147,7 +147,7 @@ function goldenCelebrate(full,mult,extra){
     if(fx) goldenCele={t:0,full:true};
     for(let k=0;k<5;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
     shake=Math.max(shake,18*CFG.SHAKE); glowT=2.2;
-    Sfx.goldenWin(); Sfx.goldenGong();
+    Sfx.goldenWin();
     if(fx&&!reduce){
       goldenSparkle(18);
       for(let k=Math.min(70,fxRoom());k>0;k--){
@@ -315,6 +315,7 @@ function place(idx,r,c){
       stats.escapes=(stats.escapes|0)+1;
       if(!reduce){ borderFlash={t:-(maxDelay+4),col:'143,247,255'}; for(let k=0;k<2;k++) waves.push({x:bx+B/2,y:by+B/2,t:-(maxDelay+4)/14-k*0.2}); }
       pushBanner('PHEW!','that was close',"#8FF7FF",1.3);
+      Sfx.phew(total,beat,combo);                      // (6.5) the clear's own sound plus one stronger accent; it outranks the plain clear raised above
     }
     if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
@@ -360,7 +361,7 @@ function place(idx,r,c){
     bestBeaten=true;
     pushBanner('NEW BEST!','',"#8FF7FF");
     if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
-    glowT=Math.max(glowT,1.4); Sfx.praise(3);
+    glowT=Math.max(glowT,1.4); Sfx.fanfare();
   }
   if(tray.every(v=>!v) && !dealing){
     if(bonus){ bonus.left--; if(bonus.left<=0) endBonus(); else syncBonusChip(); }   // one bonus tray played

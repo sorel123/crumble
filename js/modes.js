@@ -157,7 +157,7 @@ function levelWin(){
   const L=lvl, stars=starsFor(L,lv.pieces), rec=advRec(L.id), first=rec.n===0;
   rec.n++; rec.s=Math.max(rec.s,stars); rec.p=rec.p?Math.min(rec.p,lv.pieces):lv.pieces; rec.f=0;
   saveAdv(); saveStats(); checkGoals();
-  pushBanner('LEVEL CLEARED','','#8FF7FF'); if(!reduce) spawnConfetti(); glowT=Math.max(glowT,1.4); Sfx.praise(3);
+  pushBanner('LEVEL CLEARED','','#8FF7FF'); if(!reduce) spawnConfetti(); glowT=Math.max(glowT,1.4); Sfx.fanfare();
   setTimeout(()=>showWin(stars,first),reduce?300:1200);
 }
 function showWin(stars,first){
