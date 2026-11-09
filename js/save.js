@@ -6,7 +6,7 @@
    keep them in memory. saveRun()/loadRun() are the localStorage side. Not captured: effects in flight (they are
    cosmetic) and a live transformation (it ends on resume; Undo keeps it). A live Blast Round is kept and carries on (plan 4.5a).
    restore() never deals an opening: the saved board and tray are exactly what she left. */
-const RUN_STORE='crumble.run', STATS_STORE='crumble.stats';
+const STATS_STORE='crumble.stats';   // the run's own key depends on the mode (modes.js: runStore)
 function snapshot(){
   return {
     v:1,
@@ -17,6 +17,7 @@ function snapshot(){
     golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies: Undo keeps the snapshot while the live hand goes on mutating its own
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     blastCharge, specialEnd,
+    lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:null,   // (4.1) this level run's counters
     tf:transform?{id:transform.id,remaining:transform.remaining}:null,   // Undo keeps a live look; resume (loadRun) ends it
     blast:blast?{t:Math.max(0,Math.round(blast.t)),pts:blast.pts,lines:blast.lines,best:blast.best,swaps:blast.swaps}:null
   };
@@ -28,6 +29,7 @@ function validSnapshot(o){
   if(!o.grid.every(r=>Array.isArray(r)&&r.length===N&&r.every(v=>isInt(v,-1,GEMS.length-1)))) return false;
   if(!o.tray.every(t=>t===null||(t&&isInt(t.s,-1,SHAPES.length-1)&&isInt(t.gi,0,GEMS.length-1)))) return false;
   if(!isInt(o.score,0,1e9)||!isInt(o.combo,0,1e4)||!isInt(o.trayNo,0,1e6)||!isInt(o.rescuesUsed,0,100)) return false;
+  if(mode==='adventure'){ const l=o.lv; if(!(l&&LEVELS[l.id-1]&&isInt(l.lines,0,1e6)&&isInt(l.pieces,0,1e6)&&isInt(l.combo,0,1e4))) return false; }
   return isNum(o.tension)&&isNum(o.sweepCool);
 }
 function restore(o,keepLive){
@@ -56,7 +58,8 @@ function restore(o,keepLive){
     blast={t:Math.min(b.t,CFG.BLAST_SECONDS*1000),pts:b.pts,lines:b.lines,best:b.best|0,swaps:b.swaps|0,tick:0};
     curWorld='blast'; curSkin='rainbow'; buildCache(); ambient=spawnAmbient(worldDef('blast').effect);
   }
-  shownScore=score; el('scoreVal').textContent=score; el('bestVal').textContent=best;
+  if(mode==='adventure'){ lvl=LEVELS[o.lv.id-1]; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:o.lv.combo,swept:!!o.lv.swept}; }
+  shownScore=score; el('scoreVal').textContent=score; syncHud();
   el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   updateDbg();
   if(tray.every(v=>!v)) dealLater(); else checkStuck();
@@ -106,12 +109,12 @@ el('helpBtn').onclick=e=>{ e.stopPropagation(); if(!el('helpBtn').disabled) resc
 let lastRunJson=null;
 function saveRun(){
   if(state!=='play'||dealing||tray.every(v=>!v)) return;          // mid-deal there is nothing consistent to keep; the deal saves when it ends
-  try{ const j=JSON.stringify(snapshot()); if(j!==lastRunJson){ localStorage.setItem(RUN_STORE,j); lastRunJson=j; } }catch(e){}
+  try{ const j=JSON.stringify(snapshot()); if(j!==lastRunJson){ localStorage.setItem(runStore(mode),j); lastRunJson=j; } }catch(e){}
   saveStats();
 }
-function clearRun(){ lastRunJson=null; try{ localStorage.removeItem(RUN_STORE); }catch(e){} }
+function clearRun(m=mode){ lastRunJson=null; try{ localStorage.removeItem(runStore(m)); }catch(e){} }
 function loadRun(){
-  try{ const s=localStorage.getItem(RUN_STORE); if(!s) return false; return restore(JSON.parse(s)); }
+  try{ const s=localStorage.getItem(runStore(mode)); if(!s) return false; return restore(JSON.parse(s)); }
   catch(e){ clearRun(); return false; }
 }
 

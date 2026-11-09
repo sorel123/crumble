@@ -38,6 +38,7 @@ let scoreHold=0, bestBeaten=false, hitWait=0;           // score count-up waits 
 let blast=null, bigMode=false, hudH=92;   // blast = live round {t (ms left), pts, lines, best (combo), swaps, tick}
 let tags=[], slams=[], bands=[], borderFlash=null;   // per-cell point tags, COMBO slams, COLOR GONE bands, board-border flash
 let paused=false;
+let mode='endless', lvl=null, lv={lines:0,pieces:0,combo:0,swept:false};   // (4.1) 'endless' | 'adventure' | 'daily'; lvl = the Adventure level being played; lv = this level run's counters (saved with the run)
 let curWorld='night', curSkin='jewel', bgFrom='night', bgT=1, flip=null;
 let ambient=[], ambientOld=[], ambientBurst=0, lightningT=0;
 let transform=null, transformCool=0, discoveredWorlds=new Set();
@@ -48,3 +49,11 @@ const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const easeOutCubic=t=>1-Math.pow(1-t,3);
 const easeOutBack=t=>{const c=1.9;return 1+(c+1)*Math.pow(t-1,3)+c*Math.pow(t-1,2);};
+
+/* seedable randomness (plan 4.1): a string in, the same numbers out on every phone. Level boards and the Daily use it. */
+function hashStr(str){ let h=2166136261>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function mulberry(a){ return ()=>{ a=(a+0x6D2B79F5)>>>0; let t=a; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return((t^(t>>>14))>>>0)/4294967296; }; }
+// The dealer's randomness goes through rnd(): Math.random, unless a seeded stream is switched on (a level board, the Daily).
+let rndSrc=null;
+const rnd=()=>rndSrc?rndSrc():Math.random();
+const seeded=(seed,fn)=>{ const old=rndSrc; rndSrc=mulberry(hashStr(seed)); try{ return fn(); } finally{ rndSrc=old; } };

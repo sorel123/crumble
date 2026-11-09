@@ -181,6 +181,27 @@
   .adv[open]{align-items:center}
   .setnote{font-size:13px;opacity:.65}
 
+
+  /* modes (plan 4.1) */
+  #modeTag{position:absolute;right:18px;top:calc(58px + env(safe-area-inset-top,0px));z-index:2;pointer-events:auto;
+        font-family:var(--font);font-size:12px;font-weight:700;color:var(--fg);background:var(--btn);border:0;
+        border-radius:999px;padding:5px 12px;min-height:28px;cursor:pointer}
+  button.mode{font-family:var(--font);color:var(--fg);background:var(--chip);border:2px solid var(--chip-line);border-radius:20px;
+        width:min(320px,100%);padding:16px 18px;cursor:pointer;display:flex;flex-direction:column;gap:3px;align-items:center}
+  button.mode b{font-size:22px;font-weight:700}
+  button.mode span{font-size:13px;font-weight:500;opacity:.75}
+  #mapCard{justify-content:flex-start;gap:10px;padding:calc(18px + env(safe-area-inset-top,0px)) 16px calc(18px + env(safe-area-inset-bottom,0px))}
+  #mapList{flex:1 1 auto;min-height:0;width:min(360px,100%);overflow-y:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:10px;padding:2px 2px 8px}
+  .nodes{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
+  .node{font-family:var(--font);color:var(--fg);background:var(--chip);border:2px solid var(--chip-line);border-radius:14px;
+        aspect-ratio:1/1.12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;padding:0}
+  .node .num{font-size:19px;font-weight:700;line-height:1}
+  .node .st{font-size:8.5px;letter-spacing:-.5px;color:var(--gold);min-height:10px}
+  .node.done{background:var(--sel-bg);border-color:var(--gold)}
+  .node.next{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold),0 0 16px var(--glow)}
+  .node:disabled{opacity:.4;cursor:not-allowed}
+  #winStars{letter-spacing:.08em}
+  #winCard .title{font-size:clamp(40px,13vw,64px)}
   @media (prefers-reduced-motion:reduce){button{transition:none}}
 </style>
 </head>
@@ -194,11 +215,12 @@
       <div class="pips" id="transformPips" hidden></div>
     </div>
     <div class="right">
-      <div><div class="lbl">Best</div><div class="best" id="bestVal">0</div></div>
+      <div><div class="lbl" id="bestLbl">Best</div><div class="best" id="bestVal">0</div></div>
       <button id="setBtn" aria-label="Settings">⚙️</button>
       <button id="mute" aria-label="Toggle sound">🔊</button>
     </div>
   </div>
+  <button id="modeTag" type="button" aria-label="Choose how to play">Endless ▾</button>
   <div id="actions">
     <button id="undoBtn" type="button" aria-label="Undo last move" disabled>↩ Undo</button>
     <button id="blastBtn" type="button" aria-label="Blast: combos charge it" disabled><span class="fill"></span><span class="txt">⚡ Blast</span></button>
@@ -214,6 +236,7 @@
     <h1 class="title">Crum<em>ble</em></h1>
     <p class="sub">Drag the three shapes onto the board. Fill a whole row or column and it clears. Empty the board for a clean sweep.</p>
     <button class="cta" id="startBtn">Play</button>
+    <button class="ghost" id="startAdv">Adventure</button>
     <button class="ghost" id="startSettings">Settings</button>
   </div>
 
@@ -255,12 +278,36 @@
     </div>
   </div>
 
+  <div class="overlay" id="menuCard" hidden>
+    <p class="eyebrow">How do you want to play?</p>
+    <button class="mode" id="menuEndless" type="button"><b>Endless</b><span id="menuBest"></span></button>
+    <button class="mode" id="menuAdv" type="button"><b>Adventure</b><span id="menuAdvSub"></span></button>
+    <button class="ghost" id="menuClose" type="button">Back to the game</button>
+  </div>
+
+  <div class="overlay" id="mapCard" hidden>
+    <p class="eyebrow">Adventure <span id="mapStars"></span></p>
+    <div id="mapList"></div>
+    <button class="ghost" id="mapBack" type="button">Back</button>
+  </div>
+
+  <div class="overlay" id="winCard" hidden>
+    <p class="eyebrow" id="winEye"></p>
+    <h2 class="title" id="winTitle">Cleared!</h2>
+    <p class="big" id="winStars">★★★</p>
+    <p class="sub" id="winMsg"></p>
+    <button class="cta" id="winNext" type="button">Next level</button>
+    <button class="ghost" id="winMap" type="button">Map</button>
+    <button class="ghost" id="winAgain" type="button">Play it again</button>
+  </div>
+
   <div class="overlay" id="overCard" hidden>
-    <p class="eyebrow">No room left</p>
+    <p class="eyebrow" id="overEye">No room left</p>
     <p class="big" id="overScore">0</p>
     <p class="sub" id="overMsg"></p>
     <button class="cta" id="reviveBtn">Keep going</button>
     <button class="ghost" id="againBtn">Start over</button>
+    <button class="ghost" id="overMenuBtn">Modes</button>
   </div>
 
   <div class="overlay" id="devPanel" hidden>
@@ -286,6 +333,7 @@
 <script src="js/draw.js"></script>
 <script src="js/flow.js"></script>
 <script src="js/save.js"></script>
+<script src="js/modes.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/main.js"></script>

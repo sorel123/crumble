@@ -163,7 +163,7 @@ function targetCells(a,cov){
 // can be spread over frames like the candidate search below (an awkward target can take several ms)
 function tileExact(T){ return runSteps(tileExactSteps(T)); }
 function* tileExactSteps(T){
-  const pool=SHAPES.slice().sort(()=>Math.random()-0.5);
+  const pool=SHAPES.slice().sort(()=>rnd()-0.5);
   const out=[];
   function rec(rem,only){                     // only: the shape to try first (the top level, one shape per step)
     if(rem.size===0) return true;
@@ -203,7 +203,7 @@ function* planSweepSteps(a){
     if(!T.length||T.length>15) continue;
     const tiles=yield* tileExactSteps(T); if(!tiles) continue;
     const hand=tiles.slice(0,3);
-    while(hand.length<3) hand.push(SHAPES[(Math.random()*4)|0]);
+    while(hand.length<3) hand.push(SHAPES[(rnd()*4)|0]);
     yield;
     if(evalHand(a,hand,6000).sweep) return hand;
   }
@@ -233,9 +233,9 @@ SHAPES.forEach(A=>{ if(!stackable(A)) PARTNERS.set(A,SHAPES.filter(B=>B.n>1&&pai
 let carry=[];   // awkward pieces from the last tray, whose partners should show up next
 function makeHand(density){
   const h=[weightedShape(density),weightedShape(density),weightedShape(density)];
-  if(carry.length && Math.random()<CFG.PAIR_CHANCE){
-    const ps=PARTNERS.get(carry[(Math.random()*carry.length)|0]);
-    if(ps&&ps.length) h[(Math.random()*3)|0]=ps[(Math.random()*ps.length)|0];
+  if(carry.length && rnd()<CFG.PAIR_CHANCE){
+    const ps=PARTNERS.get(carry[(rnd()*carry.length)|0]);
+    if(ps&&ps.length) h[(rnd()*3)|0]=ps[(rnd()*ps.length)|0];
   }
   return h;
 }
@@ -247,7 +247,7 @@ function weightedShape(density){
   const w=SHAPES.map(s=>(1/(1+Math.min(s.n,CFG.BIG_CAP)*dens*CFG.SMALL_BIAS))*(s.n===1?CFG.SINGLE_WEIGHT*(bigMode?0.3:1):1)
     *(bigMode&&s.n>=5?2.5:1)
     *(early&&!stackable(s)?CFG.EARLY_AWKWARD:1));
-  let r=Math.random()*w.reduce((x,y)=>x+y,0);
+  let r=rnd()*w.reduce((x,y)=>x+y,0);
   for(let i=0;i<SHAPES.length;i++){ r-=w[i]; if(r<=0) return SHAPES[i]; }
   return SHAPES[0];
 }
@@ -268,7 +268,7 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<candidates;i++){
     const hand=makeHand(density);
-    if(withStar) hand[(Math.random()*3)|0]=STAR;      // graded with the star in it, so the score is honest
+    if(withStar) hand[(rnd()*3)|0]=STAR;      // graded with the star in it, so the score is honest
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     let sc;
     if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
@@ -350,7 +350,7 @@ function* dealSteps(){
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
-  const wantStar=special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || Math.random()<CFG.STAR_CHANCE);
+  const wantStar=special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || rnd()<CFG.STAR_CHANCE);
 
   if(goldenNext && special('golden') && specialOk() && !blast){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }   // (4.5c) the shared special rules: trays 1-5, one live, never two in a row
 
@@ -366,6 +366,10 @@ function* dealSteps(){
     return;
   }
 
+  if(mode==='adventure'&&lvl&&lvl.goal.type==='sweep'){   // (4.1) a sweep level: a sweep is dealt whenever one can be built
+    const h=yield* planSweepSteps(a0);
+    if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; return; }
+  }
   if(tier==='sweep'){
     const h=yield* planSweepSteps(a0);
     if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; tension=0.5; return; }
@@ -382,19 +386,19 @@ function* dealSteps(){
    playable). So her first move is a clear, and every game starts the same relaxed way. */
 function seedOpening(){
   for(let attempt=0;attempt<200;attempt++){
-    const g=empty(), vert=Math.random()<0.5, rowsN=1+((Math.random()*2)|0);
-    const gap=rowsN===2?2+((Math.random()*2)|0):2+((Math.random()*3)|0);    // a 2-line gap is 2-3 wide: it takes one rectangle
-    const gs=(Math.random()*(N-gap+1))|0, l0=(Math.random()*(N-rowsN+1))|0;
+    const g=empty(), vert=rnd()<0.5, rowsN=1+((rnd()*2)|0);
+    const gap=rowsN===2?2+((rnd()*2)|0):2+((rnd()*3)|0);    // a 2-line gap is 2-3 wide: it takes one rectangle
+    const gs=(rnd()*(N-gap+1))|0, l0=(rnd()*(N-rowsN+1))|0;
     for(let k=0;k<rowsN;k++) for(let j=0;j<N;j++){
       if(j>=gs&&j<gs+gap) continue;
       const r=vert?j:l0+k, c=vert?l0+k:j;
-      g[r][c]={gi:(Math.random()*NCOLOR)|0,t:1,f:0,l:0};
+      g[r][c]={gi:(rnd()*NCOLOR)|0,t:1,f:0,l:0};
     }
     const bar=n=>SHAPES.find(s=>s.n===n&&(vert?s.cols===1:s.rows===1)&&s.rows*s.cols===n);   // a straight piece n long, lying along the line
     const rect=SHAPES.find(s=>s.n===gap*rowsN&&(vert?s.rows===gap&&s.cols===rowsN:s.cols===gap&&s.rows===rowsN)&&s.rows*s.cols===s.n);
     const key=rect&&rowsN>1?rect:bar(gap);
     if(!key) continue;
-    const hand=[key,weightedShape(0.2),weightedShape(0.2)].sort(()=>Math.random()-0.5);
+    const hand=[key,weightedShape(0.2),weightedShape(0.2)].sort(()=>rnd()-0.5);
     const a0=packGrid(g), ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     if(!ev.ok||ev.imm<1) continue;
     grid=g; trayNo=1; commitTray(hand,'OPENING'); return;
@@ -438,20 +442,20 @@ function praiseTier(lines,combo){
 }
 function praise(lines,combo){
   const tier=praiseTier(lines,combo);
-  const P=PRAISE[tier], word=P.words[(Math.random()*P.words.length)|0];
+  const P=PRAISE[tier], word=P.words[(rnd()*P.words.length)|0];
   praises.length=0;                                 // newest wins — words never stack up
   praises.push({t:0,tier,word,a:P.a,b:P.b});
   const x=W/2, y=by+B*0.3, n=Math.min(6+tier*6,fxRoom());
   for(let k=0;!reduce&&k<n;k++){
-    const ang=Math.random()*6.283, sp=2.5+Math.random()*(3+tier*1.6);
+    const ang=rnd()*6.283, sp=2.5+rnd()*(3+tier*1.6);
     bursts.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp*0.75,life:1,
-      r:cell*(0.1+Math.random()*0.13),col:Math.random()<.5?P.a:P.b});
+      r:cell*(0.1+rnd()*0.13),col:rnd()<.5?P.a:P.b});
   }
   if(tier>=3) waves.push({x,y,t:0});
   if(tier) Sfx.praise(tier);
 }
 function commitTray(shapes,label,plan){
-  tray=shapes.map(s=>({s,gi:s.star?STAR_GI:plan?GOLD:(Math.random()*NCOLOR)|0}));
+  tray=shapes.map(s=>({s,gi:s.star?STAR_GI:plan?GOLD:(rnd()*NCOLOR)|0}));
   golden=plan?{want:plan,got:{lines:0,sweep:false},pts:0}:null;
   if(plan){
     goldenCool=CFG.GOLDEN_COOLDOWN;

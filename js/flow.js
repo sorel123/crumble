@@ -7,21 +7,25 @@ async function gameOver(){
   state='over'; clearRun(); undoSnap=null; stuck=false; syncActions();
   blast=null;                                        // the round dies with the run; resetWorld() restores the look on restart
   const prevBest=best;
-  best=Math.max(best,score); el('bestVal').textContent=best;
-  stats.totalScore+=score; saveStats();
-  const newSkins=checkUnlocks();
-  el('overScore').textContent=score;
-  el('overMsg').textContent=(newSkins.length?'New skin unlocked: '+newSkins.join(', ')+'! ':'')
-    +(score>=1500?'That is a serious run.'
-    :score>=600?'Good chains. Save the big shapes for open space.'
-    :'Clear rows early — do not let the board fill up.');
+  stats.totalScore+=score;
+  el('overEye').textContent='No room left'; el('againBtn').textContent='Start over'; el('overMenuBtn').textContent='Modes';
+  if(mode==='adventure'&&lvl) levelFailed();
+  else {
+    best=Math.max(best,score); syncHud(); saveStats();
+    const newSkins=checkUnlocks();
+    el('overScore').textContent=score;
+    el('overMsg').textContent=(newSkins.length?'New skin unlocked: '+newSkins.join(', ')+'! ':'')
+      +(score>=1500?'That is a serious run.'
+      :score>=600?'Good chains. Save the big shapes for open space.'
+      :'Clear rows early — do not let the board fill up.');
+  }
   const btn=el('reviveBtn');
   btn.hidden=!rescueAllowed(prevBest);
   btn.textContent='Keep going';
   el('overCard').hidden=false;
 }
 // a rescue is on offer while she has one left and the run is worth saving (the game-over card and the mid-run button share this)
-const rescueAllowed=(bestRef)=>rescuesUsed<CFG.MAX_RESCUES && (score>=CFG.RESCUE_FLOOR || score>=bestRef*CFG.RESCUE_BEST_FRAC) && score>0;
+const rescueAllowed=(bestRef)=>rescuesUsed<CFG.MAX_RESCUES && (mode==='adventure' || ((score>=CFG.RESCUE_FLOOR || score>=bestRef*CFG.RESCUE_BEST_FRAC) && score>0));   // a level always offers its rescues
 async function rescue(){
   if(rescuesUsed>=CFG.MAX_RESCUES) return;
   rescuesUsed++; undoSnap=null; stuck=false;
@@ -47,7 +51,7 @@ function start(){
   grid=empty(); score=0; combo=0; rescuesUsed=0; tension=0; sweepCool=0; trayNo=0; carry=[]; blastCharge=0; specialEnd=-99;
   clearRunFx(); stats.games++;
   resetWorld();
-  shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
-  undoSnap=null; stuck=false; cancelDeal(); seedOpening(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
+  shownScore=0; el('scoreVal').textContent='0';
+  undoSnap=null; stuck=false; cancelDeal(); openBoard(); syncHud(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   syncActions(); saveRun();
 }

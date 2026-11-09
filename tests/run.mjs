@@ -1388,8 +1388,117 @@ test('achievements: Undo of the earning move takes the live look back, Undo insi
   assert.equal(await page.evaluate(() => paused || false), false, 'the card does not pause the game');
 });
 
+// ── Adventure (plan 4.1) ──
+const reloadGame = page => page.reload().then(() => page.waitForFunction(() => typeof state !== 'undefined' && !!cell));
+const openAdventure = async page => { await page.click('#startAdv'); await page.waitForSelector('#mapCard:not([hidden])'); };
+const clearOne = page => page.evaluate(() => {          // one placement that clears one line: row 0 is seven gems and a single dot lands in the gap
+  CFG.SPECIALS.golden = false;
+  const g = empty(); for (let c = 0; c < 7; c++) g[0][c] = { gi: 0, t: 1, f: 0, l: 0 }; g[5][5] = { gi: 2, t: 1, f: 0, l: 0 };
+  grid = g; const dot = SHAPES.find(s => s.n === 1);
+  tray = [{ s: dot, gi: 1 }, { s: dot, gi: 2 }, { s: dot, gi: 3 }]; place(0, 0, 7);
+});
+
+test('Adventure: 30 levels, each board is fair and every sweep level can be dealt', async ({ page }) => {
+  const r = await page.evaluate(() => LEVELS.map(L => {
+    const g = levelBoard(L), n = g.flat().filter(Boolean).length, full = linesFor(g);
+    return { id: L.id, type: L.goal.type, fill: L.fill, n, lines: full.rows.length + full.cols.length, sweep: !!planSweep(packGrid(g)), same: JSON.stringify(g) === JSON.stringify(levelBoard(L)) };
+  }));
+  assert.equal(r.length, 30);
+  assert.deepEqual(r.map(x => x.id), [...Array(30).keys()].map(i => i + 1));
+  for (const x of r) {
+    assert.ok(['lines', 'score', 'combo', 'sweep'].includes(x.type), 'level ' + x.id + ' goal type');
+    assert.equal(x.lines, 0, 'level ' + x.id + ' starts with no full line');
+    assert.ok(x.same, 'level ' + x.id + ' board is the same every time (so on every phone)');
+    if (x.type === 'sweep') assert.ok(x.sweep && x.n > 0, 'level ' + x.id + ' can be swept');
+    else assert.ok(x.n >= x.fill && x.n <= x.fill + 2, 'level ' + x.id + ' fill ' + x.n + ' vs ' + x.fill);
+  }
+});
+
+test('Adventure: the map opens only level 1, a level shows its goal, winning saves stars and opens the next', async ({ page }) => {
+  await openAdventure(page);
+  assert.equal(await page.locator('#mapList .node').count(), 30);
+  assert.equal(await page.locator('#mapList .node:not([disabled])').count(), 1, 'only level 1 is open');
+  await page.click('#mapList .node >> nth=0');
+  await page.waitForFunction(() => state === 'play' && mode === 'adventure');
+  assert.equal(await page.textContent('#bestLbl'), 'Lines');
+  assert.equal(await page.textContent('#bestVal'), '0/3');
+  assert.equal(await page.textContent('#modeTag'), 'Level 1 ▾');
+  assert.ok((await snap(page)).filled > 0, 'a level with no scatter opens like Endless, with its first move on the board');
+  const best0 = await page.evaluate(() => best);
+  await dealt(page);
+  await page.evaluate(() => { lv.lines = 2; });
+  await clearOne(page);
+  assert.equal(await page.evaluate(() => state), 'won');
+  await page.waitForSelector('#winCard:not([hidden])');
+  assert.match(await page.textContent('#winStars'), /★/);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.adv')));
+  assert.equal(saved.lv[1].n, 1); assert.ok(saved.lv[1].s >= 1);
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.run.adv')), null, 'a won level leaves no run behind');
+  assert.equal(await page.evaluate(() => best), best0, 'Adventure never touches the Endless best');
+  await page.click('#winMap'); await page.click('#mapBack'); await page.click('#menuClose');
+  assert.equal(await page.isVisible('#winCard'), true, 'closing the menu returns to the win card, not to an empty board');
+  await page.click('#winNext');
+  await page.waitForFunction(() => state === 'play' && lvl.id === 2);
+  assert.equal(await page.isVisible('#winCard'), false);
+  await page.click('#modeTag'); await page.click('#menuAdv');
+  assert.equal(await page.locator('#mapList .node:not([disabled])').count(), 2, 'level 2 is open now');
+  assert.equal(await page.locator('#mapList .node.next').getAttribute('data-id'), '2');
+});
+
+test('Adventure: goals count lines, score, combo and a clean sweep', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const out = {}; mode = 'adventure'; start();
+    lvl = LEVELS[0]; lv = { lines: 2, pieces: 0, combo: 0, swept: false }; out.lines = goalProgress();
+    lvl = LEVELS[2]; score = 120; out.score = goalProgress();
+    lvl = LEVELS[4]; lv.combo = 2; out.combo = goalProgress();
+    lvl = LEVELS.find(L => L.goal.type === 'sweep'); out.sweep0 = goalProgress(); lv.swept = true; out.sweep1 = goalProgress();
+    state = 'idle'; return out;
+  });
+  assert.deepEqual(r, { lines: 2, score: 120, combo: 2, sweep0: 0, sweep1: 1 });
+});
+
+test('Adventure: a level run survives a reload, Endless keeps its own run, Undo rewinds the level', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { score = 77; saveRun(); });
+  await page.click('#modeTag'); await page.click('#menuAdv'); await page.click('#mapList .node >> nth=0');
+  await page.waitForFunction(() => state === 'play' && mode === 'adventure'); await dealt(page);
+  await page.evaluate(() => { CFG.SPECIALS.golden = false; });
+  await clearOne(page); await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [lv.lines, lv.pieces]), [1, 1]);
+  await page.evaluate(() => { undo(); });
+  assert.deepEqual(await page.evaluate(() => [lv.lines, lv.pieces]), [0, 0], 'Undo takes the level counters back with the move');
+  await clearOne(page); await dealt(page);
+  await reloadGame(page);
+  assert.deepEqual(await page.evaluate(() => [state, mode, lvl.id, lv.lines, lv.pieces]), ['play', 'adventure', 1, 1, 1], 'reopens into the level, counters intact');
+  assert.equal(await page.textContent('#bestVal'), '1/3');
+  await page.click('#modeTag'); await page.click('#menuEndless');
+  await page.waitForFunction(() => mode === 'endless' && state === 'play');
+  assert.equal(await page.evaluate(() => score), 77, 'the Endless run was waiting, exactly as it was left');
+  assert.equal(await page.textContent('#bestLbl'), 'Best');
+});
+
+test('Adventure: running out of moves ends the try, three failed tries open the next level, Rescue stays on offer', async ({ page }) => {
+  await openAdventure(page); await page.click('#mapList .node >> nth=0');
+  await page.waitForFunction(() => state === 'play'); await dealt(page);
+  for (let k = 0; k < 3; k++) {
+    await page.evaluate(() => { score = 0; rescuesUsed = 0; gameOver(); });
+    await page.waitForSelector('#overCard:not([hidden])');
+    assert.match(await page.textContent('#overEye'), /Level 1/);
+    assert.equal(await page.textContent('#againBtn'), 'Try again');
+    assert.equal(await page.isVisible('#reviveBtn'), true, 'a level offers its Rescue even at score 0');
+    assert.equal(await page.evaluate(() => advRec(1).f), k + 1);
+    if (k < 2) { await page.click('#againBtn'); await page.waitForFunction(() => state === 'play' && lv.pieces === 0); await dealt(page); }
+  }
+  assert.equal(await page.evaluate(() => levelOpen(2)), true, 'after three misses the next level opens');
+  assert.equal(await page.evaluate(() => levelDone(1)), false);
+  await page.click('#overMenuBtn'); await page.waitForSelector('#mapCard:not([hidden])');
+  assert.equal(await page.locator('#mapList .node:not([disabled])').count(), 2);
+});
+
 let failed = 0;
+const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 for (const { name, fn } of tests) {
+  if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
   const { browser, page, errors } = await openGame(server.url);
   try {
