@@ -120,6 +120,7 @@ function place(idx,r,c){
   } else ({rows,cols}=linesFor(grid));
   const total=rows.length+cols.length;
   let gained=s.n, swept=false;
+  hesPlace(total>0);                               // the hesitation log (save.js): the tray's first drop, timed
 
   if(s.star){
     blasts.push({r,c,t:0});
@@ -328,7 +329,7 @@ function onDown(e){
       const s0=tray[i].s;
       drag={i,id:e.pointerId,x:e.clientX,y:e.clientY,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(s0)/cell,
             slot:null,snapK:0,sx:0,sy:0};             // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
-      updateSlot();
+      updateSlot(); hesPick();
       Sfx.pickup(); return;
     }
   }

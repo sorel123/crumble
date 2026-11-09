@@ -490,6 +490,80 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
   same.forEach(([a, b], k) => assert.equal(b, a, `board ${k}`));
 });
 
+// Plan 3.4: the dealer counts OBVIOUS clears (a 5-7/8 full line whose gap is one plain run the piece drops into)
+// and ALT, the room the hand's smallest piece of 2+ cells has (singles never count, so dots are not rewarded).
+test('obvious clears: 5-7 of 8 filled with one plain gap; half-empty lines and scattered gaps are not obvious', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const board = rows => packGrid(rows.map(r => [...r].map(ch => (ch === '1' ? 1 : null))));
+    const E = Array(8).fill('00000000');
+    const bar2 = SHAPES[1], vbar2 = SHAPES[2], bar4 = SHAPES[5], one = SHAPES[0], bar3 = SHAPES[3];
+    const ev = (rows, hand) => { const e = evalHand(board(rows), hand, 4000); return { imm: e.imm, obv: e.obvPieces, alt: e.alt }; };
+    const col = Array.from({ length: 8 }, (_, r) => (r < 6 ? '00010000' : '00000000'));     // column 3: rows 0-5 filled
+    const tight = ['01111111', ...Array(6).fill('11111111'), '00011111'];                // three spots for a single, 2 for a 2-bar
+    return {
+      run: [0b11111100, 0b11011011, 0b00001111, 0b11111110, 0xFF, 0b00111111].map(b => RUN_OK[b]),
+      gap2: ev(['11111100', ...E.slice(1)], [bar2, one, one]),
+      half: ev(['11110000', ...E.slice(1)], [bar4, one, one]),
+      split: ev(['11011011', ...E.slice(1)], [one, one, one]),
+      column: ev(col, [vbar2, bar2, one]),
+      alt: ev(tight, [one, bar3, bar2]),
+      altEmpty: ev(E, [one, bar2, bar3]),
+    };
+  });
+  assert.deepEqual(r.run, [1, 0, 0, 1, 0, 1], 'RUN_OK: 5-7 filled and one run of empties');
+  assert.deepEqual(r.gap2, { imm: 1, obv: 1, alt: 8 }, 'a 6/8 row with a 2-gap and a 2-bar: one obvious piece');
+  assert.equal(r.half.imm, 1); assert.equal(r.half.obv, 0, 'a 4/8 row is a clear, but not an obvious one');
+  assert.equal(r.split.imm, 0); assert.equal(r.split.obv, 0, 'two separate gaps: no single drop clears it');
+  assert.equal(r.column.obv, 1, 'columns count too, and only the piece that fits the gap');
+  assert.equal(r.alt.alt, 2, 'ALT counts the 2-bar\'s spots (2), not the single\'s');
+  assert.equal(r.altEmpty.alt, 8, 'ALT is capped at 8');
+});
+
+// The hesitation log (plan 3.4): deal to first pickup, pickup to the first drop, and whether it cleared.
+test('the hesitation log times the first drop of each tray, skips restored trays, persists, and shows in ?dev', async ({ page, server }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => hes.log.length), 0);
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
+  await page.waitForTimeout(400);
+  await dragPiece(page, 0, 0, 0);
+  let log = await page.evaluate(() => hes.log.slice());
+  assert.equal(log.length, 1);
+  assert.ok(log[0].pick >= 380, 'deal to first pickup counts the wait: ' + log[0].pick);
+  assert.ok(log[0].place >= 0 && log[0].place < 2000);
+  assert.equal(log[0].clr, 1, 'the first drop cleared');
+  await dragPiece(page, 1, 4, 4);
+  assert.equal(await page.evaluate(() => hes.log.length), 1, 'only the first drop of a tray is a sample');
+  // finish the tray, so a fresh one is dealt and timed; then Undo its first drop: the replay is not a sample
+  await dragPiece(page, 2, 6, 6); await dealt(page);
+  const mv = () => page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
+  let m = await mv(); await dragPiece(page, m.i, m.r, m.c);
+  assert.equal(await page.evaluate(() => hes.log.length), 2);
+  await page.click('#undoBtn');
+  m = await mv(); await dragPiece(page, m.i, m.r, m.c);
+  assert.equal(await page.evaluate(() => hes.log.length), 2, 'a tray put back by Undo gives no sample');
+  // a resumed run (force-quit) gives no bogus deal-to-pickup time for the tray it reopens on
+  await page.evaluate(() => saveRun());
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
+  assert.equal(await page.evaluate(() => hes.log.length), 2, 'the log survives a reload');
+  m = await mv(); await dragPiece(page, m.i, m.r, m.c);
+  assert.equal(await page.evaluate(() => hes.log.length), 2, 'a restored tray gives no sample');
+  // Settings open before the first drop throws the sample away
+  await page.evaluate(() => { hesDealt(); });
+  await page.evaluate(() => { el('setBtn') && el('setBtn').click(); });
+  await page.evaluate(() => { const d = el('setDone'); if (d) d.click(); });
+  m = await mv(); if (m) await dragPiece(page, m.i, m.r, m.c);
+  assert.equal(await page.evaluate(() => hes.log.length), 2, 'opening Settings voids the sample');
+  // on her phone there is no URL bar: five quick taps on the Settings note show the same numbers
+  await page.click('#setBtn');
+  for (let k = 0; k < 5; k++) await page.click('#setNote');
+  assert.match(await page.textContent('#setNote'), /^Last 2 trays \(2 kept\): first pickup [\d.]+s, pickup to drop [\d.]+s, first drop clears \d+%$/);
+  await page.click('#setDone');
+  await page.goto(server.url + '?dev');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  await page.waitForFunction(() => el('perfHud') && /hes pick [\d.]+s  place [\d.]+s  clr \d+%  n 2\/2/.test(el('perfHud').textContent), null, { timeout: 3000 });
+});
+
 test('slow frames shrink the particle budget, and it grows back', async ({ page }) => {
   await play(page);
   const before = await page.evaluate(() => { perf.fx = 1; return perf.fx; });   // start from a full budget: a slow CI runner may already have cut it

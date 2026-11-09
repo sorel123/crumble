@@ -83,13 +83,47 @@ function evalHand(a0,shapes,budget){
   }
   for(const p of PERMS){ dfs(lo0,hi0,p,0,0); if(res.sweep) break; }
   // 'guide': what clears RIGHT NOW with one obvious drop, no sequence — the easy, relaxing kind of hand
-  res.imm=0; res.immPieces=0;
+  // obvPieces (plan 3.4): how many pieces have an OBVIOUS clear (obviousLines below), the kind she sees without looking.
+  // alt: legal spots for the smallest piece of 2+ cells, capped at 8 — room to put the awkward one somewhere harmless.
+  // (Singles are left out of alt on purpose, or it would reward dots and fight SINGLE_WEIGHT.)
+  res.imm=0; res.immPieces=0; res.obvPieces=0; res.alt=0;
+  const ob=obviousLines(lo0,hi0);
+  let small=-1;
+  for(let k=0;k<3;k++) if(!shapes[k].star&&shapes[k].n>=2&&(small<0||shapes[k].n<shapes[small].n)) small=k;
   for(let k=0;k<3;k++){
-    let best=0;
-    for(const m of pm[k]){ if((lo0&m.lo)||(hi0&m.hi)) continue; const l=applyBits(lo0,hi0,shapes[k],m); if(l>best) best=l; }
+    let best=0, obv=false, spots=0;
+    for(const m of pm[k]){
+      if((lo0&m.lo)||(hi0&m.hi)) continue;
+      spots++;
+      const l=applyBits(lo0,hi0,shapes[k],m); if(l>best) best=l;
+      if(l&&!obv&&ob.length&&!shapes[k].star){
+        const alo=lo0|m.lo, ahi=hi0|m.hi;
+        for(let j=0;j<ob.length;j+=2) if((alo&ob[j])===ob[j]&&(ahi&ob[j+1])===ob[j+1]){ obv=true; break; }
+      }
+    }
     if(best){ res.immPieces++; if(best>res.imm) res.imm=best; }
+    if(obv) res.obvPieces++;
+    if(k===small) res.alt=Math.min(8,spots);
   }
   return res;
+}
+/* An obvious clear (plan 3.4): a drop that completes a line which already had 5-7 of its 8 cells filled, with
+   its empty cells in one single run (so the gap is one plain slot the piece drops into). A clear that needs
+   cells scattered along the line is not obvious. obviousLines returns those lines' full masks as a flat
+   [lo,hi, lo,hi, …] list; a drop is obvious if afterwards one of them is full. */
+const LINE_MASKS=[];
+for(let r=0;r<8;r++) LINE_MASKS.push(r<4?(0xFF<<(r*8))|0:0, r<4?0:(0xFF<<((r-4)*8))|0);
+for(let c=0;c<8;c++) LINE_MASKS.push((COL<<c)|0,(COL<<c)|0);
+const RUN_OK=new Uint8Array(256);            // by a line's 8 filled bits: 5-7 filled and the empties are one run
+for(let b=0;b<256;b++){ const e=~b&0xFF, x=e/(e&-e); RUN_OK[b]=(pop32(b)>=5&&e&&(x&(x+1))===0)?1:0; }
+function obviousLines(lo,hi){
+  const out=[];
+  for(let r=0;r<8;r++){ const b=(r<4?lo>>>(r*8):hi>>>((r-4)*8))&0xFF; if(RUN_OK[b]) out.push(LINE_MASKS[r*2],LINE_MASKS[r*2+1]); }
+  for(let c=0;c<8;c++){
+    let b=0; for(let r=0;r<4;r++){ if(lo&(1<<(r*8+c))) b|=1<<r; if(hi&(1<<(r*8+c))) b|=1<<(r+4); }
+    if(RUN_OK[b]) out.push(LINE_MASKS[16+c*2],LINE_MASKS[16+c*2+1]);
+  }
+  return out;
 }
 
 /* ── clean-sweep planner ───────────────────────────────────────
@@ -242,8 +276,9 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES){
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough
       +(bigMode?hand.reduce((a,s)=>a+s.n,0)*1.5:0);   // Blast Round: among playable clearing hands, prefer the chunkiest pieces
     if(ev.ok) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
+    if(ev.ok) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
-    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough && (!CFG.GUIDE||ev.imm>0)) break;
+    if(ev.ok && i>=7 && tier!=='honest' && ev.lines>=want && ev.rough<=bestRough && (!CFG.GUIDE||ev.obvPieces>0)) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
     yield;
   }
@@ -384,6 +419,7 @@ function commitTray(shapes,label,plan){
   }
   lastTier=label;
   carry=shapes.filter(x=>!stackable(x));
+  hesDealt();
   updateDbg();
 }
 // forgiving success rule: one line short of the plan is fine (min 1); a planned sweep needs a sweep or 3+ lines

@@ -29,7 +29,7 @@ function validSnapshot(o){
 }
 function restore(o){
   if(!validSnapshot(o)) return false;
-  cancelDeal(); clearRunFx(); undoSnap=null; stuck=false;
+  cancelDeal(); clearRunFx(); undoSnap=null; stuck=false; hesVoid();   // a restored tray (resume, Undo) gives no hesitation sample
   grid=o.grid.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0}));
   tray=o.tray.map(t=>t&&{s:t.s<0?STAR:SHAPES[t.s],gi:t.gi});
   score=o.score; combo=o.combo; tension=clamp(o.tension,0,1); sweepCool=Math.max(0,o.sweepCool|0); trayNo=o.trayNo;
@@ -100,3 +100,34 @@ function loadStats(){
 // App backgrounded (or about to be killed): keep the run as it stands. iOS can end a hidden web clip at any time.
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') saveRun(); });
 addEventListener('pagehide',saveRun);
+
+/* ═══════ hesitation log (plan 3.4) ═══════
+   The measurement the dealer is tuned against: for every tray, how long from the tray appearing to her first
+   pickup, how long from the pickup that led to the first drop to that drop, and whether that first drop cleared.
+   Recorded always (a few numbers per tray), shown only with ?dev, in the frame readout: rolling medians of the
+   last HES_WINDOW samples, with the sample count. The last HES_KEEP samples persist in `crumble.hes`, so after
+   she has played normally Jay can open ?dev on her phone and read them.
+   A sample is thrown away when it would not be a real hesitation: the tray came back through restore() (resume
+   after a force-quit, or Undo), or the app was hidden or Settings / Admin were open before the first drop. */
+const HES_STORE='crumble.hes', HES_KEEP=60, HES_WINDOW=20;
+const hes={log:[],dealtAt:0,firstPick:0,lastPick:0};
+function hesLoad(){
+  try{ const a=JSON.parse(localStorage.getItem(HES_STORE)||'[]');
+    if(Array.isArray(a)) hes.log=a.filter(s=>s&&isNum(s.pick)&&isNum(s.place)).slice(-HES_KEEP); }catch(e){}
+}
+function hesDealt(){ hes.dealtAt=performance.now(); hes.firstPick=hes.lastPick=0; }   // commitTray: a fresh tray is on screen
+function hesVoid(){ hes.dealtAt=0; }                  // this tray's sample is no longer honest
+function hesPick(){ if(!hes.dealtAt) return; const t=performance.now(); if(!hes.firstPick) hes.firstPick=t; hes.lastPick=t; }
+function hesPlace(cleared){                           // place(): only the tray's first drop makes a sample
+  if(!hes.dealtAt||!hes.firstPick){ hes.dealtAt=0; return; }
+  const now=performance.now();
+  hes.log.push({pick:Math.round(hes.firstPick-hes.dealtAt),place:Math.round(now-hes.lastPick),clr:cleared?1:0});
+  if(hes.log.length>HES_KEEP) hes.log.splice(0,hes.log.length-HES_KEEP);
+  hes.dealtAt=0;
+  try{ localStorage.setItem(HES_STORE,JSON.stringify(hes.log)); }catch(e){}
+}
+function hesSummary(){                                // {n, total, pick, place, clr} over the last HES_WINDOW samples (medians in ms)
+  const w=hes.log.slice(-HES_WINDOW), med=k=>{ const a=w.map(s=>s[k]).sort((x,y)=>x-y); return a.length?a[a.length>>1]:0; };
+  return {n:w.length,total:hes.log.length,pick:med('pick'),place:med('place'),clr:w.length?Math.round(100*w.filter(s=>s.clr).length/w.length):0};
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') hesVoid(); });

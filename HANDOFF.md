@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after Undo and the stuck rescue button (plan PR 3.2).
+Last updated 2026-11-09, after the dealer for obvious moves and the hesitation log (plan PR 3.4).
 
 ---
 
@@ -59,6 +59,7 @@ Last updated 2026-11-09, after Undo and the stuck rescue button (plan PR 3.2).
   - `crumble.dev.5` — Admin panel tuning overrides. Bump the key when defaults
     change so old saved tuning doesn't mask them.
   - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved; a live transformation or Blast Round is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
+  - `crumble.hes` — the hesitation log (3.4): the last 60 trays' `{pick, place, clr}` (ms from the tray appearing to her first pickup, ms from the pickup that led to the first drop to that drop, whether it cleared). Recorded in the player build too; only shown with `?dev`.
   - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore`), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
@@ -68,6 +69,7 @@ Last updated 2026-11-09, after Undo and the stuck rescue button (plan PR 3.2).
 - 8×8 board, drag-and-drop with magnet snap (one finger, one landing rule — see plan 2.1 below), line-clear preview in the piece's
   colour, 37 shapes (`RAW`).
 - Hand solver + tension wave (below) — every tray is fully playable in some order.
+- **Obvious moves (3.4):** the dealer prefers hands where one or two pieces have an *obvious* clear (a line already 5-7/8 full whose gap is one plain run the piece drops into), and where the hand's smallest piece of 2+ cells has room (`OBVIOUS`, `OBVIOUS_MAX`, `ALT`; see Hand solver). Measured with `tools/bot-sim.mjs`.
 - **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). No special (golden hand, star, transformation, Blast Round) appears in trays 1-5 even with `SPECIALS` on (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
 - **Specials are paused:** `CFG.SPECIALS: false` switches off golden hands, star gems, transformations and Blast Round together (the code is untouched; Jay wants them back later, rebuilt to be a real highlight). Flip it in `config.js` or the Admin panel (`?dev`) to see them; the per-special switches apply when it is on. Sections below still describe them as designed.
@@ -166,6 +168,7 @@ Top to bottom:
 | (3.1) | Relaxed opening: seeded opening board + verified first tray (a clear within the first move); no special in trays 1-5 (`SPECIAL_FROM_TRAY`); Blast meter, idle drain and auto-start removed |
 | (3.3) | Save and resume: `js/save.js` (`snapshot`/`restore`, autosave, `crumble.run`), best score and lifetime stats persisted (`crumble.stats`), `clearRunFx()` split out of `start()` |
 | (3.2) | Undo (one move, exact round-trip, saved) and a mid-run Rescue button, dimmed until nothing fits |
+| (3.4) | Dealer for obvious moves: `OBVIOUS`/`ALT` hand scoring, hesitation log in the `?dev` readout (`crumble.hes`), `tools/bot-sim.mjs` |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -382,6 +385,33 @@ takes their empty cells as a target, `tileExact` tries to tile that target with
 up to three shapes, then `evalHand` verifies before it's served. Falls back
 silently if any step fails. Gated by `SWEEP_COOLDOWN`.
 
+**Obvious moves (plan 3.4).** `evalHand` also returns `obvPieces`, the number of pieces with an obvious clear,
+and `alt`, the legal spots (capped at 8) for the hand's smallest piece of 2 or more cells. An obvious clear completes
+a line that already had 5-7 of its 8 cells filled with its empty cells in one single run (`RUN_OK`,
+`obviousLines()`), so the gap is one plain slot the piece drops into; a clear that needs cells scattered along the
+line, or a half-empty line, is not obvious. `pickHandSteps` adds `OBVIOUS × min(obvPieces, OBVIOUS_MAX) + ALT × alt`
+to every playable hand (`GUIDE` is unchanged), and its early stop wants one obvious piece, not just any clear.
+`OBVIOUS_MAX` (2) is the guard against over-generosity: one or two easy moves a tray, not three. Singles are left
+out of `alt` so it does not fight `SINGLE_WEIGHT` by rewarding dots.
+
+**Measure dealer changes with `tools/bot-sim.mjs`** (`node tools/bot-sim.mjs [trays] [seed] [KEY=value …]`, the
+overrides go into `CFG`, so `OBVIOUS=0 ALT=0` is the dealer before 3.4). A bot that plays an obvious clear when one
+exists, else the biggest piece where it sits most flush, plays the real game; trays are bucketed by board fill when
+dealt. It reports, per bucket: obvious clear available at deal, what the board allows (any shape), 2+ obvious
+pieces, all 3 obvious (too generous), clear per tray, clears per tray; and median fill and deal cost overall.
+Measured at 3.4 (seeds 2-4, 4000 trays each, before = `OBVIOUS=0 ALT=0`, averages of the three):
+
+| fill | obvious at deal | board allows | 2+ obvious | all 3 obvious | clear / tray |
+|---|---|---|---|---|---|
+| 30% | 64% → 65% | 67% → 65% | 39% → 50% | 13% → 14% | 93% → 93% |
+| 45% | 92% → 94% | 95% → 95% | 69% → 81% | 32% → 35% | 99% → 99% |
+| 60% (~55 trays) | 100% → 100% | 100% | 93% → 95% | noisy | 100% |
+
+Median board fill 34% before and after, 1.46 clears per tray before and after. Deal cost (desktop Chromium)
+median 3.9 → 4.0 ms, p95 6.6 → 6.7 ms; a rare deal (a sweep plan) takes ~50 ms before and after, spread over
+frames by `stepDeal`. The plan's "80% at 45% fill" already held before 3.4; the dealer gets nearly everything the
+board allows, so at low fill the board is the limit (see the next lever under the 3.4 notes).
+
 A debug readout (top-left, under the score) shows live tension and the tier
 just served. Off by default (`CFG.SHOW_TENSION: false`); Admin can turn it on.
 
@@ -595,3 +625,18 @@ drop (`place()` in the pointerup) cost 7-25 ms, about two thirds of it `genTray`
   renderer while the world flip draws; its sounds and first rainbow tiles (~5 ms) are still in the drop.
 - What to check on the phone: open with `?dev`, play some 3-line clears and a Blast Round, and read the
   count of frames over 20 ms.
+
+### Dealer for obvious moves (plan 3.4)
+
+- **Hesitation log** (`save.js`, `hes*`): for every tray, deal to first pickup, the pickup that led to the
+  first drop to that drop, and whether the first drop cleared. A sample is thrown away when the tray came back
+  through `restore()` (resume or Undo), or the app was hidden or Settings / Admin opened before the first drop.
+  Kept in `crumble.hes` (last 60), recorded in the player build; the `?dev` readout's third line shows the
+  medians of the last 20 and `n used/kept`: `hes pick 1.8s  place 0.9s  clr 55%  n 20/41`. **This is the
+  real metric**: the plan's "done" is the median pick time dropping on her phone. Her home-screen app has its
+  own storage and no URL bar, so to read her numbers there: open Settings and tap the note at the bottom
+  ("Saved as your default…") five times quickly; it turns into the same medians and counts.
+- **Dealer:** `OBVIOUS`/`OBVIOUS_MAX`/`ALT` (Hand solver above), Admin sliders for all three.
+- **Next lever (not built):** at low fill (15-30%) the board usually has no 5/8 line, so the bot finds an
+  obvious clear on only ~18% / ~64% of trays however the hand is chosen. Dealing a piece that *builds* a setup
+  line is the next step, in its own PR.
