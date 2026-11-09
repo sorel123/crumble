@@ -36,10 +36,10 @@ function start(){
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];
   chunks=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
-  blast=null; blastMeter=0; lastClearAt=performance.now(); bigMode=false;
+  blast=null; bigMode=false;
   tags=[]; slams=[]; bands=[]; borderFlash=null;
   confetti=[]; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
-  cancelDeal(); genTray(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
+  cancelDeal(); seedOpening(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
 }

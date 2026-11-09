@@ -24,7 +24,7 @@ function mobility(){
 
 // ═══ transformations — achievement-triggered event looks (own world + own tile skin) ═══
 function triggerTransform(id){
-  if(!CFG.SPECIALS || !CFG.TRANSFORM_ENABLED || blast) return;    // a Blast Round owns the screen while it runs
+  if(!CFG.SPECIALS || !CFG.TRANSFORM_ENABLED || blast || trayNo<CFG.SPECIAL_FROM_TRAY) return;    // a Blast Round owns the screen while it runs
   if(!transform && transformCool>0) return;   // quiet period after one ends — makes the next feel earned
   const first=!discoveredWorlds.has(id);
   transform={id,remaining:CFG.TRANSFORM_PLACEMENTS};
@@ -45,7 +45,6 @@ function endTransform(){
    Full: the look flips hot (rainbow gems, magenta sky), every tray is a sweep or a
    big-piece jackpot hand, points double, and a timer runs that clears extend. */
 function startBlast(){
-  blastMeter=0;
   blast={t:CFG.BLAST_SECONDS*1000,pts:0,lines:0};
   startFlip('blast','rainbow');
   pushBanner('BLAST ROUND','×'+CFG.BLAST_MULT+' · clear fast!','#FF7BD5');
@@ -60,35 +59,28 @@ function endBlast(){
   startFlip(transform?transform.id:CFG.HOME_WORLD,transform?TRANSFORMS[transform.id].skin:CFG.STYLE);
   Sfx.praise(b.lines>=6?3:2);
 }
-// the bar by the board: the meter filling (gold) in normal play, the timer draining (hot) during a round
+// the bar by the board: the timer draining (hot) during a round. There is no meter any more (plan 3.1): a round is
+// started on purpose (tap-to-start comes in plan 4.5), never by filling something up, and nothing drains while she thinks.
 function drawBlastBar(now){
-  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED) return;
+  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED || !blast) return;
   const above=by-hudH>=26, h=6, y=above?by-14:by+B+10, x0=bx+4, w=B-8;
-  const f=blast?clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1):blastMeter;
-  if(!blast && f<0.01) return;
-  const urgent=blast&&blast.t<5000, pulse=0.5+0.5*Math.sin(now*(urgent?0.02:0.006));
+  const f=clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1);
+  const urgent=blast.t<5000, pulse=0.5+0.5*Math.sin(now*(urgent?0.02:0.006));
   roundPath(ctx,x0,y,w,h,h/2); ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fill();
   const g=ctx.createLinearGradient(x0,0,x0+w,0);
-  if(blast){ g.addColorStop(0,'#FF7BD5'); g.addColorStop(1,urgent?'#FF3B3B':'#FFB020'); }
-  else { g.addColorStop(0,'#FFB020'); g.addColorStop(1,'#FFE07A'); }
+  g.addColorStop(0,'#FF7BD5'); g.addColorStop(1,urgent?'#FF3B3B':'#FFB020');
   ctx.save(); roundPath(ctx,x0,y,w,h,h/2); ctx.clip();
-  ctx.fillStyle=g; ctx.globalAlpha=blast?0.75+0.25*pulse:0.85; ctx.fillRect(x0,y,w*f,h);
+  ctx.fillStyle=g; ctx.globalAlpha=0.75+0.25*pulse; ctx.fillRect(x0,y,w*f,h);
   ctx.globalAlpha=0.35*pulse; ctx.fillStyle='#fff'; ctx.fillRect(x0+w*f-10,y,10,h);   // glowing tip
   ctx.restore(); ctx.globalAlpha=1;
   ctx.font='700 11px "Fredoka",Verdana,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-  ctx.fillStyle=blast?'#FF9DE3':'rgba(255,212,92,.85)';
-  const label=blast?('BLAST  '+Math.ceil(blast.t/1000)+'s'):(f>=1?'BLAST READY!':'BLAST');
-  ctx.fillText(label,x0,above?y-4:y+h+13);
-  if(!blast&&f>=1){ ctx.globalAlpha=0.4+0.4*pulse; ctx.fillStyle='#fff'; ctx.fillText(label,x0,above?y-4:y+h+13); ctx.globalAlpha=1; }
+  ctx.fillStyle='#FF9DE3';
+  ctx.fillText('BLAST  '+Math.ceil(blast.t/1000)+'s',x0,above?y-4:y+h+13);
 }
 function stepBlast(now,dt){
-  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED || state!=='play' || paused) return;
-  if(blast){
-    if(!dealing) blast.t-=dt*16.67;                  // the clock waits while her next hand is being dealt (she can't pick up)
-    if(blast.t<=0) endBlast();
-  } else if(blastMeter>0 && blastMeter<1 && now-lastClearAt>CFG.METER_IDLE){
-    blastMeter=Math.max(0,blastMeter-CFG.METER_DRAIN*dt);    // dawdle and it slips away
-  }
+  if(!CFG.SPECIALS || !CFG.BLAST_ENABLED || state!=='play' || paused || !blast) return;
+  if(!dealing) blast.t-=dt*16.67;                    // the clock waits while her next hand is being dealt (she can't pick up)
+  if(blast.t<=0) endBlast();
 }
 function renderPips(){
   const box=el('transformPips'), n=CFG.TRANSFORM_PLACEMENTS;
@@ -238,9 +230,7 @@ function place(idx,r,c){
     }
     if(!swept) praise(total,combo);
     tension=Math.max(0,tension-CFG.TENSION_DOWN);
-    lastClearAt=performance.now();
     if(blast){ blast.t=Math.min(CFG.BLAST_SECONDS*1000,blast.t+total*CFG.BLAST_ADD*1000+(swept?5000:0)); blast.lines+=total; }
-    else if(CFG.SPECIALS && CFG.BLAST_ENABLED) blastMeter=Math.min(1,swept?1:blastMeter+total*CFG.METER_LINE+(combo>1?CFG.METER_COMBO:0));
   } else {
     combo=0;
     tension=Math.min(1,tension+CFG.TENSION_UP);
@@ -277,7 +267,6 @@ function place(idx,r,c){
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
-  if(!blast && CFG.SPECIALS && CFG.BLAST_ENABLED && blastMeter>=1 && !transform) startBlast();   // deals a fresh big-piece tray itself
   if(!bestBeaten && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
     bestBeaten=true;
     pushBanner('NEW BEST!','',"#8FF7FF");

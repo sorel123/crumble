@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after calm clears (plan PR 2.3).
+Last updated 2026-11-09, after the relaxed opening (plan PR 3.1).
 
 ---
 
@@ -67,6 +67,7 @@ Last updated 2026-11-09, after calm clears (plan PR 2.3).
 - 8×8 board, drag-and-drop with magnet snap (one finger, one landing rule — see plan 2.1 below), line-clear preview in the piece's
   colour, 37 shapes (`RAW`).
 - Hand solver + tension wave (below) — every tray is fully playable in some order.
+- **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). No special (golden hand, star, transformation, Blast Round) appears in trays 1-5 even with `SPECIALS` on (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
 - **Specials are paused:** `CFG.SPECIALS: false` switches off golden hands, star gems, transformations and Blast Round together (the code is untouched; Jay wants them back later, rebuilt to be a real highlight). Flip it in `config.js` or the Admin panel (`?dev`) to see them; the per-special switches apply when it is on. Sections below still describe them as designed.
 - Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
@@ -77,7 +78,7 @@ Last updated 2026-11-09, after calm clears (plan PR 2.3).
 - **Transformations** — achievement-triggered temporary looks (Rainbow, Gold
   Vault, Volcano, Starfield, Storm) that also multiply points; discovering one
   adds its world to the home picker (`TRANSFORM_*`).
-- **Blast Round** — meter-triggered timed bonus round (below).
+- **Blast Round** — timed bonus round (below). There is no meter any more (3.1): the old meter filled with clears, drained while she dawdled, and auto-started a round. `startBlast()` is kept; it is only reachable from the Admin button until it returns as a tap-to-start (plan 4.5).
 - **Rescues** — on game over (if the run is worth saving): up to 2 per run, both
   free ("Keep going"). A rescue serves a sweep/jackpot
   hand from `genRescue` — she still has to find the play.
@@ -158,6 +159,7 @@ Top to bottom:
 | (2.1b) | Drag glides: piece always exactly at the finger, a ghost marks the landing slot (seating was "sticky, jumpy" on the phone) |
 | (2.2) | Frame budget: next tray dealt in slices after the clear, particle budget follows frame time, `?dev` frame readout, cache churn fixes |
 | (2.3) | Calm clears: everyday clears are a squash + point tags + one praise word; slam, orbs, COLOR GONE, fireworks, punch zoom from combo 3 (`CFG.BIG_COMBO`); `CFG.SPECIALS` (default off) pauses golden hands, star gems, transformations and Blast Round |
+| (3.1) | Relaxed opening: seeded opening board + verified first tray (a clear within the first move); no special in trays 1-5 (`SPECIAL_FROM_TRAY`); Blast meter, idle drain and auto-start removed |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -301,12 +303,10 @@ What changed to match:
 The bonus round, and the answer to "I want chains built to clear the board,
 with big pieces, and a reason to move fast."
 
-- **Meter** (`blastMeter`, the thin bar by the board): `METER_LINE` per line
-  cleared, `METER_COMBO` extra on a combo, a clean sweep fills it outright.
-  After `METER_IDLE` ms without a clear it drains at `METER_DRAIN` per frame —
-  dawdle and it slips away. That drain is the "move fast" pressure; tune it
-  first if it feels mean.
-- **Full → `startBlast()`**: look flips to the `blast` world (hot magenta,
+- **No meter (removed in plan 3.1).** It used to fill with clears and drain after
+  `METER_IDLE` ms of thinking, which is pressure she does not want. A round now
+  starts only from the Admin button; tap-to-start is plan 4.5.
+- **`startBlast()`**: look flips to the `blast` world (hot magenta,
   sparks) with the rainbow skin, banner, confetti, the leftover tray is
   replaced by a blast hand, and a timer starts at `BLAST_SECONDS`. Each line
   adds `BLAST_ADD` s (a sweep +5 s), capped at the start length. Points
@@ -319,7 +319,7 @@ with big pieces, and a reason to move fast."
 - **Ends** when the timer hits 0 (`stepBlast`): "BLAST OVER +pts · n lines",
   look flips home (or back to a live transformation). Game over kills it
   silently. No golden hand, star, or transformation can start during a round;
-  a round can't start while a transformation is live (the meter waits at 1).
+  a round can't start while a transformation is live.
 - Admin panel: a "Blast Round" button triggers one instantly; sliders for all
   of the above.
 
@@ -391,8 +391,8 @@ relaxing rather than work. Open questions from that:
   are the knobs.
 - Is guided dealing too generous now? Watch the debug readout; if every tray is
   a gift, lower `GUIDE` or raise `TIER_JACKPOT`.
-- Blast Round meter: is the idle drain fun pressure or mean? `METER_IDLE` /
-  `METER_DRAIN`.
+- The opening (3.1): does the first move feel like a gift or like the game is
+  playing itself? The pattern is in `seedOpening()`.
 
 ---
 
@@ -452,7 +452,7 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 | `TIDY` / `PAIR_CHANCE` | favour compact boards / partner pieces for awkward shapes |
 | `MAGNET_REACH` / `MAGNET_HOLD` / `LIFT` | drag feel (see plan 2.1) |
 | `CLEAR_STYLE` / `CLEAR_BLINK` / `CLEAR_STAGGER` | how a line clear looks |
-| `BLAST_*` / `METER_*` | Blast Round length, payout, and meter pressure |
+| `BLAST_*` | Blast Round length and payout |
 | `GOLDEN_*` / `STAR_*` / `TRANSFORM_*` | special-event frequency and payout |
 | `SHAKE` / `SPARKLE_RATE` / `FX_*` | visual intensity, each effect switchable |
 | `GEMS` hues | recolor everything |

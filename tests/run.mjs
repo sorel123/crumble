@@ -16,10 +16,10 @@ test('loads with no errors and shows the start card', async ({ page, errors }) =
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), [], 'no script errors (the blocked web font is expected)');
 });
 
-test('Play starts a run: empty board, three playable pieces', async ({ page }) => {
+test('Play starts a run: the seeded opening board, three playable pieces', async ({ page }) => {
   await play(page);
   const s = await snap(page);
-  assert.equal(s.filled, 0);
+  assert.ok(s.filled > 0 && s.filled < 20, 'the opening pattern is on the board (plan 3.1), not a full board');
   assert.equal(s.score, 0);
   assert.equal(s.tray.filter(Boolean).length, 3);
   assert.equal(await page.isVisible('#startCard'), false);
@@ -27,6 +27,7 @@ test('Play starts a run: empty board, three playable pieces', async ({ page }) =
 
 test('dragging a piece onto the board places it', async ({ page }) => {
   await play(page);
+  await setup(page, { rows: EMPTY });                    // the opening pattern is not what this is about
   const before = await snap(page);
   const n = before.tray[0].n;
   await dragPiece(page, 0, 3, 3);
@@ -42,7 +43,7 @@ test('dropping off the board returns the piece to the tray', async ({ page }) =>
   const before = await snap(page);
   await dragPiece(page, 1, 0, 0, { dy: 600 });          // far below the board
   const after = await snap(page);
-  assert.equal(after.filled, 0);
+  assert.equal(after.filled, before.filled);
   assert.deepEqual(after.tray, before.tray);
 });
 
@@ -310,6 +311,82 @@ test('calm clears: an everyday clear is a squash, point tags and one praise word
   assert.ok(big.slams === 1 && big.orbs > 0, 'slam and score orbs at combo 3');
 });
 
+test('the opening: 100 seeded new games each clear a line within the first three placements', async ({ page }) => {
+  const r = await page.evaluate(async () => {
+    const out = [];
+    const orig = Math.random;
+    for (let seed = 1; seed <= 100; seed++) {
+      let a = seed * 2654435761 >>> 0;                    // a fresh mulberry32 stream per game
+      Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      start();
+      const a0 = packGrid(grid), hand = tray.map(t => t.s), ev = evalHand(a0, hand, 6000);
+      out.push({ filled: countFlat(a0), ok: ev.ok, lines: ev.lines, imm: ev.imm, trayNo, label: lastTier, specials: tray.some(t => t.s.star) || !!golden || !!transform || !!blast });
+    }
+    Math.random = orig;
+    return out;
+  });
+  assert.equal(r.length, 100);
+  assert.ok(r.every(g => g.ok), 'all three pieces of the first tray are playable');
+  assert.ok(r.every(g => g.imm >= 1), 'a line is completed by one placement (imm counts what a single drop clears), well within three');
+  assert.ok(r.every(g => g.filled >= 4 && g.filled <= 16 && g.label === 'OPENING' && g.trayNo === 1), 'a modest seeded pattern, dealt as the opening tray');
+  assert.ok(r.every(g => !g.specials));
+  assert.ok(new Set(r.map(g => g.filled)).size > 3, 'the patterns vary');
+});
+
+test('the opening clear really works through the UI: drag the clearing piece, the line goes', async ({ page }) => {
+  await play(page);
+  const found = await page.evaluate(() => {
+    const a0 = packGrid(grid);
+    for (let i = 0; i < 3; i++) for (const m of placeMasks(tray[i].s)) {
+      if ((packBits(a0)[0] & m.lo) || (packBits(a0)[1] & m.hi)) continue;
+      const [lo, hi] = packBits(a0);
+      if (applyBits(lo, hi, tray[i].s, m) > 0) return { i, r: m.r, c: m.c };
+    }
+    return null;
+  });
+  assert.ok(found, 'a clearing drop exists');
+  const before = await snap(page);
+  await dragPiece(page, found.i, found.r, found.c);
+  const after = await snap(page);
+  assert.ok(after.score > before.score + before.tray[found.i].n - 1, 'it scored a clear');
+  assert.ok(after.filled < before.filled + before.tray[found.i].n, 'cells left the board');
+});
+
+test('trays 1-5 never carry a special, even with SPECIALS on; from tray 6 they can', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    CFG.SPECIALS = true; CFG.STAR_CHANCE = 1; CFG.MYSTERY_CHANCE = 1; CFG.GOLDEN_CHANCE = 1;
+    const early = [], late = [];
+    for (let n = 1; n <= 12; n++) {
+      trayNo = n - 1; starForced = true; goldenNext = true; goldenCool = 0; transform = null; transformCool = 0; grid = empty();
+      genTray();
+      (n <= 5 ? early : late).push({ star: tray.some(t => t.s.star), gold: !!golden, tf: !!transform });
+    }
+    const t = (trayNo = 2, transform = null, triggerTransform('rainbow'), !!transform);
+    CFG.SPECIALS = false;
+    return { early, late, earlyTransform: t };
+  });
+  assert.ok(r.early.every(x => !x.star && !x.gold && !x.tf), 'no star, golden hand or transformation in trays 1-5');
+  assert.ok(r.late.some(x => x.star || x.gold || x.tf), 'with SPECIALS on they do appear later');
+  assert.equal(r.earlyTransform, false, 'an achievement cannot start a transformation in the opening either');
+});
+
+test('Blast Round has no meter: clearing fills nothing, waiting drains nothing, nothing auto-starts', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(async () => {
+    CFG.SPECIALS = true; trayNo = 10; transformCool = 0;
+    const had = typeof blastMeter !== 'undefined' || 'METER_LINE' in CFG || 'METER_DRAIN' in CFG || 'METER_IDLE' in CFG;
+    grid = empty(); grid[0] = grid[0].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null));
+    tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+    place(0, 0, 0); place(1, 3, 3); place(2, 4, 4);        // a clear and the end of the tray
+    await new Promise(r => setTimeout(r, 400));
+    return { had, blast: !!blast };
+  });
+  assert.equal(r.had, false, 'no meter state or settings remain');
+  assert.equal(r.blast, false, 'a Blast Round never starts by itself');
+  await page.evaluate(() => { CFG.SPECIALS = false; });
+});
+
 test('specials are paused by one switch: no golden hand, star, transformation or Blast Round', async ({ page }) => {
   await play(page);
   assert.equal(await page.evaluate(() => CFG.SPECIALS), false, 'default is off');
@@ -321,7 +398,6 @@ test('specials are paused by one switch: no golden hand, star, transformation or
       stars += tray.filter(t => t && t.s.star).length; golds += golden ? 1 : 0;
     }
     triggerTransform('rainbow');
-    blastMeter = 1; lastClearAt = performance.now();
     return { stars, golds, transform: !!transform, blast: !!blast };
   });
   assert.deepEqual(r, { stars: 0, golds: 0, transform: false, blast: false });

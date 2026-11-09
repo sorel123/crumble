@@ -263,7 +263,8 @@ function* genGoldenSteps(a0,density){
 function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
   trayNo++;
-  if(CFG.SPECIALS && CFG.TRANSFORM_ENABLED && Math.random()<CFG.MYSTERY_CHANCE)
+  const specialsOk=trayNo>=CFG.SPECIAL_FROM_TRAY;      // trays 1-5 never carry a special
+  if(specialsOk && CFG.SPECIALS && CFG.TRANSFORM_ENABLED && Math.random()<CFG.MYSTERY_CHANCE)
     triggerTransform(TRANSFORM_IDS[(Math.random()*TRANSFORM_IDS.length)|0]);
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
@@ -273,9 +274,9 @@ function* dealSteps(){
   transformCool=Math.max(0,transformCool-1);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
-  const wantStar=CFG.SPECIALS && CFG.STAR_ENABLED && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
+  const wantStar=specialsOk && CFG.SPECIALS && CFG.STAR_ENABLED && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
 
-  if(goldenNext && !blast && CFG.SPECIALS){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }
+  if(goldenNext && specialsOk && !blast && CFG.SPECIALS){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }
 
   if(blast){                                        // Blast Round: a sweep if one can be built, else the best big-piece jackpot hand
     const h=yield* planSweepSteps(a0);
@@ -298,6 +299,31 @@ function* dealSteps(){
   const {hand}=yield* pickHandSteps(a0,density,tier,wantStar);
   if(hand.includes(STAR)) starForced=false;
   commitTray(hand,tier.toUpperCase()+(hand.includes(STAR)?'+STAR':''));
+}
+/* The opening (plan 3.1): a new game does not start on an empty board with random pieces. The board holds a
+   seeded pattern, one or two nearly-full lines each missing one gap of 2-4 cells, and the first tray is
+   verified with the solver to complete a line with a single obvious drop (plus the other two pieces still
+   playable). So her first move is a clear, and every game starts the same relaxed way. */
+function seedOpening(){
+  for(let attempt=0;attempt<200;attempt++){
+    const g=empty(), vert=Math.random()<0.5, rowsN=1+((Math.random()*2)|0);
+    const gap=rowsN===2?2+((Math.random()*2)|0):2+((Math.random()*3)|0);    // a 2-line gap is 2-3 wide: it takes one rectangle
+    const gs=(Math.random()*(N-gap+1))|0, l0=(Math.random()*(N-rowsN+1))|0;
+    for(let k=0;k<rowsN;k++) for(let j=0;j<N;j++){
+      if(j>=gs&&j<gs+gap) continue;
+      const r=vert?j:l0+k, c=vert?l0+k:j;
+      g[r][c]={gi:(Math.random()*NCOLOR)|0,t:1,f:0,l:0};
+    }
+    const bar=n=>SHAPES.find(s=>s.n===n&&(vert?s.cols===1:s.rows===1)&&s.rows*s.cols===n);   // a straight piece n long, lying along the line
+    const rect=SHAPES.find(s=>s.n===gap*rowsN&&(vert?s.rows===gap&&s.cols===rowsN:s.cols===gap&&s.rows===rowsN)&&s.rows*s.cols===s.n);
+    const key=rect&&rowsN>1?rect:bar(gap);
+    if(!key) continue;
+    const hand=[key,weightedShape(0.2),weightedShape(0.2)].sort(()=>Math.random()-0.5);
+    const a0=packGrid(g), ev=evalHand(a0,hand,CFG.NODE_BUDGET);
+    if(!ev.ok||ev.imm<1) continue;
+    grid=g; trayNo=1; commitTray(hand,'OPENING'); return;
+  }
+  grid=empty(); genTray();                                  // (unreachable in practice: 200 tries of a verified construction)
 }
 /* rescue hand: playable, and rich in clears (sweep if one can be built) */
 function genRescue(){
@@ -374,5 +400,5 @@ function updateDbg(){
   const gold=golden?`GOLDEN plan ${golden.want.sweep?'sweep':golden.want.lines+' lines'}, need ${goldenNeed(golden.want)}, got ${golden.got.sweep?'sweep+':''}${golden.got.lines} lines, ${golden.pts} pts`
     :goldenNext?'gold queued':goldenCool>0?`gold cooldown ${goldenCool}`:'gold ready';
   const star=!CFG.SPECIALS||!CFG.STAR_ENABLED?'star off':starForced?'star guaranteed':'star on';
-  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star} · meter ${blastMeter.toFixed(2)}`;
+  d.textContent=`tension ${tension.toFixed(2)} · ${lastTier} · ${gold} · ${star}`;
 }
