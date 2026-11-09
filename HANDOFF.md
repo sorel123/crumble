@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after Adventure levels (plan PR 4.1a).
+Last updated 2026-11-09, after the Daily (plan PR 4.1b).
 
 ---
 
@@ -60,7 +60,7 @@ Last updated 2026-11-09, after Adventure levels (plan PR 4.1a).
     change so old saved tuning doesn't mask them.
   - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved, and so are the Blast charge and a live Blast Round (it carries on with the time it had left); a live transformation is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
   - `crumble.hes` — the hesitation log (3.4): the last 60 trays' `{pick, place, clr}` (ms from the tray appearing to her first pickup, ms from the pickup that led to the first drop to that drop, whether it cleared). Recorded in the player build too; only shown with `?dev`.
-  - `crumble.mode`, `crumble.adv`, `crumble.run.adv` (4.1) — the mode she was in (`endless` / `adventure`), Adventure progress `{v:1, lv:{"7":{s:stars,p:fewest pieces,n:times cleared,f:failed tries}}}` (plain data on purpose: 4.2's goals and streaks extend it), and the Adventure level in progress. Each mode has its own run key (`runStore(mode)`), so switching modes never loses a game; `crumble.run` is still Endless.
+  - `crumble.mode`, `crumble.adv`, `crumble.run.adv`, `crumble.run.daily`, `crumble.daily` (4.1) — the mode she was in (`endless` / `adventure` / `daily`), Adventure progress `{v:1, lv:{"7":{s:stars,p:fewest pieces,n:times cleared,f:failed tries}}}` (plain data on purpose: 4.2's goals and streaks extend it), and the Adventure level in progress. Each mode has its own run key (`runStore(mode)`), so switching modes never loses a game; `crumble.run` is still Endless.
   - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, blasts, bestBlast`; the last two are Blast rounds played and the most points in one, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
@@ -173,6 +173,7 @@ Top to bottom:
 | (4.5a) | Blast as a tap-to-start reward: combo-charged `⚡ Blast` button, own sting/look/3-2-1, results card, Best Blast; per-special flags `CFG.SPECIALS.{blast,star,golden,transform}` and `specialOk()`; a live round survives save/resume |
 | (4.5b) | Star gem rebuilt: dealt only when a cross is worth it (`starBest`, `STAR_MIN`), cooldown, beam in the tray + hint ring + drag count, charge-then-beams clear with star sparkles, per-gem points, own sounds, Blast button held while it is in the tray |
 | (4.1a) | Adventure: 30 goal levels on a map (no timer), mode menu, one saved run per mode, `rnd()`/`seeded()` seam for seeded dealing, `tools/adventure-sim.mjs` |
+| (4.1b) | Daily: date-seeded opening and trays, results calendar, third mode in the menu; Adventure/Daily scores no longer leak into the saved best |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -749,3 +750,17 @@ Check on the iPhone: clear the board once (or hit a 5 combo): a card says NEW LO
 **Seeded dealing (for 4.1b, the Daily).** `rnd()` replaces `Math.random()` in `solver.js` and the golden chance in `place()`; `seeded(key, fn)` runs `fn` on a stream seeded from a string. `hashStr` and `mulberry` are in `shapes.js`.
 
 Check on the iPhone: open Adventure from the start card or the chip, play level 1 (clear 3 lines), see the stars, tap Next level; switch to Endless from the chip and find the old run waiting; force-quit mid-level and reopen into it.
+
+## Daily (plan 4.1b)
+
+Third mode (`mode==='daily'`), in `js/modes.js`. An Endless-style run (Undo, Rescue, specials all work) on a board that is the same on every phone for a given day.
+
+**Same board.** `dailyKey()` is the phone's local date, `YYYY-MM-DD`. `openBoard()` seeds the stream from `crumble-daily-<date>-open` before `seedOpening()`, and `dealSteps()` reseeds from `crumble-daily-<date>-<trayNo>` at every tray (via `rndSrc`), so the opening board, the first tray and each tray's dice are identical on two phones. Later trays also depend on how she played, so they match only while two players make the same moves. A test deals two phones with different `Math.random` seeds and checks the opening matches. Leaving the mode clears `rndSrc` (`leaveMode`).
+
+**Results.** `crumble.daily` = `{v:1, d:{"2026-11-09":{s:best score, l:most lines, n:times played}}}`, written at game over (`dailyOver`; a Rescue then a second game over counts as one play). The Daily card shows today's status, Play / Play again / Continue, and a month calendar (score under each played day, arrows back to the first played month). The HUD's right box is "Today" (today's best). The Daily never touches the Endless best; `saveStats` now only saves a live score into `best` in Endless (Adventure and the Daily were leaking into it).
+
+**Save/resume.** `snapshot()` carries `dk` and `lv.{lines,pieces}`; `loadRun()` for a Daily from an earlier date records its score and drops the run (a new day is a new board). A resumed Daily reseeds the stream, so a Rescue after a force-quit is still seeded.
+
+**For 4.2:** `daily.d` and `adv.lv` are plain per-day / per-level records; streaks and rotating goals can be derived from them plus lifetime `stats`. Tests set the phone's date with `setDay(page, iso)` in `tests/run.mjs`.
+
+Check on the iPhone: Daily from the start card or the mode chip; play a few moves, force-quit and reopen into it; compare the opening board with another phone on the same date.
