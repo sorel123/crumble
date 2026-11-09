@@ -625,6 +625,7 @@ function frame(now){
   if(CFG.FX_COMBO_GLOW && comboGlowV>0.02) edgeGlow(combo>4?'255,123,213':'255,212,92',comboGlowV);
   if(CFG.FX_SWEEP_FX) stepConfetti(dt);
   stepOrbs(now,dt);
+  stepBlastFx(now,dt);
   stepDeal();                                        // the next tray, a slice at a time, after this frame's drawing
   perf.work=performance.now()-t0;
   perfHud(now);

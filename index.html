@@ -43,6 +43,35 @@
   #actions button{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);font-family:var(--font);font-size:14px;font-weight:600;
         min-width:104px;height:40px;padding:0 14px;border-radius:12px;cursor:pointer;transition:opacity .15s}
   #actions button:disabled{opacity:.3;cursor:default}
+  /* the Blast button is its own meter (plan 4.5a): the fill is the charge, then the round's clock */
+  #blastBtn{position:relative;overflow:hidden;isolation:isolate}
+  #blastBtn .fill{position:absolute;inset:0;z-index:-1;transform-origin:0 50%;transform:scaleX(var(--f,0));
+        background:linear-gradient(90deg,rgba(255,123,213,.55),rgba(255,176,32,.6));transition:transform .25s ease-out}
+  #actions #blastBtn:disabled{opacity:.75}
+  #blastBtn.full{color:#fff;background:linear-gradient(90deg,#FF5FC8,#FFB020);opacity:1;
+        box-shadow:0 0 0 2px rgba(255,255,255,.75),0 0 18px rgba(255,123,213,.8)}
+  #blastBtn.full .fill{display:block;transform:none;z-index:0;background:rgba(255,255,255,.28);animation:blastGlow 1.4s ease-in-out infinite}
+  #blastBtn .txt{position:relative;z-index:1}
+  #blastBtn.full .txt{text-shadow:0 1px 3px rgba(80,0,40,.6)}
+  #blastBtn.live{color:#fff}
+  #blastBtn.nope{animation:blastNope .3s}
+  @keyframes blastNope{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+  #blastBtn.live .fill{background:linear-gradient(90deg,#FF5FC8,#FF8A3D);transition:transform .25s linear}
+  @keyframes blastGlow{0%,100%{opacity:0}50%{opacity:1}}   /* a slow shimmer on the button face; no sound after the one chime */
+  @media (prefers-reduced-motion:reduce){ #blastBtn.full .fill{animation:none;opacity:0} }
+  #blastCard{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(20,4,16,.35)}
+  #blastCard[hidden]{display:none}
+  #blastCard .bc{min-width:240px;padding:20px 28px 16px;border-radius:22px;text-align:center;color:#fff;
+        background:linear-gradient(160deg,#7A1350,#2A0620);box-shadow:0 0 0 2px rgba(255,157,227,.7),0 0 40px rgba(255,95,200,.55);
+        animation:bcIn .35s cubic-bezier(.2,1.6,.4,1)}
+  #blastCard .eyebrow{color:#FF9DE3}
+  #blastCard .bcpts{font-size:52px;font-weight:700;line-height:1.1;color:#FFE66B;text-shadow:0 0 18px rgba(255,176,32,.6)}
+  #blastCard .bcline{font-size:16px;font-weight:600;opacity:.9;margin-top:4px}
+  #blastCard .bcbest{font-size:15px;font-weight:600;margin-top:10px;opacity:.75}
+  #blastCard .bcbest.new{opacity:1;color:#8FF7FF;font-size:20px;font-weight:700;animation:bcIn .5s .25s cubic-bezier(.2,1.8,.4,1) both}
+  #blastCard .bctap{font-size:12px;opacity:.5;margin-top:12px}
+  @keyframes bcIn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+  @media (prefers-reduced-motion:reduce){ #blastCard .bc,#blastCard .bcbest.new{animation:none} }
   #noMoves{position:absolute;left:0;right:0;text-align:center;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:15px;font-weight:600;opacity:.8;pointer-events:none}
   #noMoves[hidden],#actions button[hidden]{display:none}
   #dbg{position:absolute;left:18px;top:calc(100px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
@@ -79,7 +108,7 @@
   .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
            justify-content:center;gap:16px;padding:28px;text-align:center;
            background:var(--overlay);
-           backdrop-filter:blur(5px)}
+           backdrop-filter:blur(5px);z-index:3}   /* above the action row (Undo, Blast, Rescue) */
   .overlay[hidden]{display:none}
   .title{font-size:clamp(46px,15vw,78px);font-weight:700;line-height:.92;letter-spacing:-.03em;
          text-shadow:0 0 40px rgba(255,212,92,.3)}
@@ -150,6 +179,7 @@
   </div>
   <div id="actions">
     <button id="undoBtn" type="button" aria-label="Undo last move" disabled>↩ Undo</button>
+    <button id="blastBtn" type="button" aria-label="Blast: combos charge it" disabled><span class="fill"></span><span class="txt">⚡ Blast</span></button>
     <button id="endBtn" type="button" hidden>End run</button>
     <button id="helpBtn" type="button" aria-label="Rescue: get a new set of pieces" disabled>🛟 Rescue</button>
   </div>
@@ -184,6 +214,16 @@
     <div class="devbtns">
       <button class="ghost" id="adminBtn" hidden>Admin</button>
       <button class="cta" id="setDone">Done</button>
+    </div>
+  </div>
+
+  <div id="blastCard" hidden>
+    <div class="bc">
+      <p class="eyebrow">Blast round</p>
+      <p class="bcpts" id="bcPts">+0</p>
+      <p class="bcline"><span id="bcLines"></span> <span id="bcCombo"></span></p>
+      <p class="bcbest" id="bcBest"></p>
+      <p class="bctap">tap to keep playing</p>
     </div>
   </div>
 

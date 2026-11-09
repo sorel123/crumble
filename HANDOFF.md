@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after the dealer for obvious moves and the hesitation log (plan PR 3.4).
+Last updated 2026-11-09, after Blast came back as a tap-to-start reward (plan PR 4.5a).
 
 ---
 
@@ -58,9 +58,9 @@ Last updated 2026-11-09, after the dealer for obvious moves and the hesitation l
     worlds (`saveSkinSave` / `loadSkinSave`, `lookV` for one-time migrations).
   - `crumble.dev.5` — Admin panel tuning overrides. Bump the key when defaults
     change so old saved tuning doesn't mask them.
-  - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved; a live transformation or Blast Round is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
+  - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved, and so are the Blast charge and a live Blast Round (it carries on with the time it had left); a live transformation is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
   - `crumble.hes` — the hesitation log (3.4): the last 60 trays' `{pick, place, clr}` (ms from the tray appearing to her first pickup, ms from the pickup that led to the first drop to that drop, whether it cleared). Recorded in the player build too; only shown with `?dev`.
-  - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore`), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
+  - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, blasts, bestBlast`; the last two are Blast rounds played and the most points in one, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
 
@@ -70,9 +70,9 @@ Last updated 2026-11-09, after the dealer for obvious moves and the hesitation l
   colour, 37 shapes (`RAW`).
 - Hand solver + tension wave (below) — every tray is fully playable in some order.
 - **Obvious moves (3.4):** the dealer prefers hands where one or two pieces have an *obvious* clear (a line already 5-7/8 full whose gap is one plain run the piece drops into), and where the hand's smallest piece of 2+ cells has room (`OBVIOUS`, `OBVIOUS_MAX`, `ALT`; see Hand solver). Measured with `tools/bot-sim.mjs`.
-- **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). No special (golden hand, star, transformation, Blast Round) appears in trays 1-5 even with `SPECIALS` on (`CFG.SPECIAL_FROM_TRAY`, 6).
+- **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). No special (golden hand, star, transformation, Blast Round) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
-- **Specials are paused:** `CFG.SPECIALS: false` switches off golden hands, star gems, transformations and Blast Round together (the code is untouched; Jay wants them back later, rebuilt to be a real highlight). Flip it in `config.js` or the Admin panel (`?dev`) to see them; the per-special switches apply when it is on. Sections below still describe them as designed.
+- **Specials, one switch each (4.5):** `CFG.SPECIALS = {blast:true, star:false, golden:false, transform:false}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **Blast is back (4.5a)**; star gem, golden hand and transformations are still off (their sections below describe them as they were). Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
 - Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
@@ -81,7 +81,7 @@ Last updated 2026-11-09, after the dealer for obvious moves and the hesitation l
 - **Transformations** — achievement-triggered temporary looks (Rainbow, Gold
   Vault, Volcano, Starfield, Storm) that also multiply points; discovering one
   adds its world to the home picker (`TRANSFORM_*`).
-- **Blast Round** — timed bonus round (below). There is no meter any more (3.1): the old meter filled with clears, drained while she dawdled, and auto-started a round. `startBlast()` is kept; it is only reachable from the Admin button until it returns as a tap-to-start (plan 4.5).
+- **Blast Round (4.5a)** — a reward she starts herself. Combos charge the `⚡ Blast` button under the tray (it is the meter: its fill is the charge, then the round's clock); full, it glows and she taps it whenever she likes for 20 s of big pieces at ×2, with its own look, sting and a results card. Details below.
 - **Undo (3.2):** the `↩ Undo` button under the tray puts the run back to just before the last placement, exactly (`snapshot()` taken first thing in `place()` via `noteUndo()`, restored by `undo()` in `save.js`; lifetime stats are rewound too). One move back, once per placement: a new run, a rescue and game over clear it (so it can never refund a rescue), and a Blast Round in progress is not undoable.
 - **Stuck (3.2):** when no tray piece fits, the run waits instead of ending: pieces dim, "No moves" shows, and Undo, `🛟 Rescue` (needs a rescue left and `rescueAllowed()`, shared with the game-over card) and `End run` are offered. Only when neither Undo nor Rescue is available does it end on its own, 700 ms after the last drop (`checkStuck()` / `canExit()`). `syncActions()` keeps the buttons current.
 - **Rescues** — on game over (if the run is worth saving): up to 2 per run, both
@@ -169,6 +169,7 @@ Top to bottom:
 | (3.3) | Save and resume: `js/save.js` (`snapshot`/`restore`, autosave, `crumble.run`), best score and lifetime stats persisted (`crumble.stats`), `clearRunFx()` split out of `start()` |
 | (3.2) | Undo (one move, exact round-trip, saved) and a mid-run Rescue button, dimmed until nothing fits |
 | (3.4) | Dealer for obvious moves: `OBVIOUS`/`ALT` hand scoring, hesitation log in the `?dev` readout (`crumble.hes`), `tools/bot-sim.mjs` |
+| (4.5a) | Blast as a tap-to-start reward: combo-charged `⚡ Blast` button, own sting/look/3-2-1, results card, Best Blast; per-special flags `CFG.SPECIALS.{blast,star,golden,transform}` and `specialOk()`; a live round survives save/resume |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -312,9 +313,8 @@ What changed to match:
 The bonus round, and the answer to "I want chains built to clear the board,
 with big pieces, and a reason to move fast."
 
-- **No meter (removed in plan 3.1).** It used to fill with clears and drain after
-  `METER_IDLE` ms of thinking, which is pressure she does not want. A round now
-  starts only from the Admin button; tap-to-start is plan 4.5.
+- **Started by her (plan 4.5a, see the end of this file).** The old meter filled with clears and drained after
+  `METER_IDLE` ms of thinking (removed in 3.1); now combos charge the `⚡ Blast` button and she taps it.
 - **`startBlast()`**: look flips to the `blast` world (hot magenta,
   sparks) with the rainbow skin, banner, confetti, the leftover tray is
   replaced by a blast hand, and a timer starts at `BLAST_SECONDS`. Each line
@@ -325,12 +325,11 @@ with big pieces, and a reason to move fast."
   penalty nearly off, 5+ cell pieces ×2.5 in the draw, 60 candidates, and a
   per-cell bonus in the hand score so the chunkiest *playable clearing* hand
   wins. If no big hand is playable it falls back to a normal jackpot hand.
-- **Ends** when the timer hits 0 (`stepBlast`): "BLAST OVER +pts · n lines",
+- **Ends** when the timer hits 0 (`stepBlast`): the results card (4.5a; was a "BLAST OVER" banner),
   look flips home (or back to a live transformation). Game over kills it
   silently. No golden hand, star, or transformation can start during a round;
   a round can't start while a transformation is live.
-- Admin panel: a "Blast Round" button triggers one instantly; sliders for all
-  of the above.
+- Admin panel: "Fill Blast" and "Blast Round" buttons; sliders for all of the above.
 
 Also in this pass: `TIER_SOLVABLE` 0.20→0.15 and `TIER_JACKPOT` 0.50→0.40
 (helpful hands come sooner — since lowered again in PR #5 to 0 / 0.30), and `BIG_CAP` — the crowded-board small-piece
@@ -488,7 +487,7 @@ which cuts ad revenue substantially. Decide that before building toward IAP.
 | `TIDY` / `PAIR_CHANCE` | favour compact boards / partner pieces for awkward shapes |
 | `MAGNET_REACH` / `MAGNET_HOLD` / `LIFT` | drag feel (see plan 2.1) |
 | `CLEAR_STYLE` / `CLEAR_BLINK` / `CLEAR_STAGGER` | how a line clear looks |
-| `BLAST_*` | Blast Round length and payout |
+| `BLAST_*` | Blast charge to fill (`BLAST_CHARGE`), round length and payout |
 | `GOLDEN_*` / `STAR_*` / `TRANSFORM_*` | special-event frequency and payout |
 | `SHAKE` / `SPARKLE_RATE` / `FX_*` | visual intensity, each effect switchable |
 | `GEMS` hues | recolor everything |
@@ -640,3 +639,47 @@ drop (`place()` in the pointerup) cost 7-25 ms, about two thirds of it `genTray`
 - **Next lever (not built):** at low fill (15-30%) the board usually has no 5/8 line, so the bot finds an
   obvious clear on only ~18% / ~64% of trays however the hand is chosen. Dealing a piece that *builds* a setup
   line is the next step, in its own PR.
+
+---
+
+## Blast as a tap-to-start reward (plan 4.5a)
+
+The first special to come back, rebuilt so it is earned, legible, chosen by her, and the loudest thing on screen.
+All of it is in the Blast section of `js/game.js` (plus `stepBlastFx` called from `frame()`, the button and card in
+`index.html`, and four sounds at the end of `js/audio.js`).
+
+- **Charge:** only combos. A clear at combo 2+ adds `min(combo-1, BLAST_CHARGE_MAX)` (3) to `blastCharge`; a lone
+  clear adds nothing, nothing charges in trays 1-5 or during a round, and nothing ever drains it. `BLAST_CHARGE` (12)
+  fills it. Measured with a bot (scratch copy of `tools/bot-sim.mjs`, seed 1, 20 000 placements): the "kid" bot
+  (obvious clear else most flush) earns ~0.39 charge per tray and a median game of 57 trays, so the first fill comes
+  around tray 35 and a typical game fills it once or twice; a clear-hunting bot earns ~0.72 per tray (every ~17 trays).
+  Tune `BLAST_CHARGE` against what she actually does.
+- **The button is the meter.** `#blastBtn` sits between Undo and Rescue; `--f` scales its fill. Each charging clear
+  sends one small spark (`blastSparks`, a single particle, no trail) from the clear into the button, and the fill
+  steps up when it lands (`blastShown` lags `blastCharge` until then). Full: the button turns hot pink/orange with a
+  white ring and a slow shimmer, `Sfx.blastReady` chimes once, and it then waits silently, for the rest of the run
+  if she ignores it. Hidden while stuck (End run takes its place).
+- **Tap** (`canBlast()`: full, nothing else live, `specialOk()`, not mid-deal / mid-drag / stuck / paused) →
+  `startBlast()`: charge to 0, Undo cleared (it can never give charge back or replay a round), `stats.blasts++`, the
+  look flips to the `blast` world with the rainbow skin, "BLAST!" slams into the gap above the board, two lights race
+  round the board's rim for the whole round, and `Sfx.blastStart` (rising whoosh into a low hit and a fast saw run;
+  no other moment uses it). The leftover tray is replaced by a blast hand.
+- **The round:** `BLAST_SECONDS` (20), big-piece sweep/jackpot hands (`bigMode`, unchanged), ×`BLAST_MULT`, +`BLAST_ADD`
+  s per line (capped at the start length), a timer bar above the board and the button draining with it. The clock
+  stops while a hand is dealt, while Settings/Admin is open, and while the app is hidden (`document.hidden`; the
+  `dt` cap in `frame()` covers the rest). 3-2-1 pops above the board with a tick (`Sfx.blastTick`).
+- **Never ends her run:** stuck mid-round, `checkStuck()` swaps in a fresh blast hand, at most twice per round
+  (`blast.swaps`), then ends the round early; after the card, the normal stuck rules apply.
+- **End:** at 0 s (a drag in flight lands first; no new pickup starts) `endBlast()` sets `specialEnd`, records
+  `stats.bestBlast`, flips the look home, plays `Sfx.blastEnd` and shows `#blastCard`: the round's points, lines,
+  best combo, and Best Blast (or NEW BEST BLAST!). The game is paused under it; a tap anywhere (or 8 s) dismisses it.
+- **Save/resume:** `snapshot()` carries `blastCharge`, `specialEnd` and a live round `{t, pts, lines, best, swaps}`;
+  `restore()` puts the round back in the blast look with its time left. Round trays give no hesitation sample.
+- **Admin:** per-special toggles, "Fill Blast" and "Blast Round" buttons, sliders for `BLAST_CHARGE`,
+  `BLAST_CHARGE_MAX`, `BLAST_SECONDS`, `BLAST_ADD`, `BLAST_MULT`, and sound previews for start/ready/over.
+- `.overlay` now has `z-index:3`, so the action row no longer shows through the start, settings and game-over cards.
+- Tests (`tests/run.mjs`, "Blast as a tap-to-start reward"): charge rules, spark → glow → one chime → tap starts,
+  the shared gate, the results card and stats, a drag finishing before the card, the clock while hidden and in
+  Settings, the bounded stuck swap, save/resume of charge and a live round, Undo and the hesitation log.
+- **What to check on the phone:** chain two or three clears in a row and watch a spark fly into the Blast button;
+  once it glows, tap it whenever she wants. Does she ask for it again?

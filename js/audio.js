@@ -399,3 +399,21 @@ function setMuted(on,save=true){
   if(save) saveSkinSave();
 }
 el('mute').onclick=e=>{ e.stopPropagation(); setMuted(!muted); };
+/* Blast Round's own sounds (plan 4.5a). Synthesized and the same in every sound set, so no other moment in the
+   game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise (ready),
+   a clock tick for 3-2-1, and a bell cadence over a soft hit (round over). */
+Object.assign(Sfx,{
+  blastReady(){ play(0,t=>{ [0,4,7,12].forEach((s,i)=>bell(t+i*.07,{f:784*semis(s),dur:.8,vol:.06,wet:.3})); }); },
+  blastStart(){ play(.02,t=>{
+    noiseHit(t,{dur:.45,f0:300,f1:6000,q:1.2,vol:.06,wet:.2,atk:.38});                  // the whoosh up
+    boom(t+.42,.3);
+    noiseHit(t+.42,{dur:.3,f0:2600,f1:500,q:.8,vol:.08,wet:.25});
+    [0,4,7,12,16,19].forEach((s,i)=>{ const f=392*semis(s);
+      voice(t+.46+i*.055,{f0:f,dur:.24,vol:.07,bp0:f*2,q:2,type:'sawtooth',det:[-7,7],wet:.2}); });
+  }); },
+  blastTick(n){ play(0,t=>tone(t,{f0:n===1?1320:990,dur:.12,vol:.06,type:'triangle'})); },
+  blastEnd(){ play(.05,t=>{
+    boom(t,.18);
+    [19,16,12,7,12,19].forEach((s,i)=>bell(t+i*.09,{f:392*semis(s),dur:.9,vol:.065,wet:.3}));
+  }); }
+});
