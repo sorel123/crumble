@@ -565,6 +565,34 @@ test('the hesitation log times the first drop of each tray, skips restored trays
   await page.waitForFunction(() => el('perfHud') && /hes pick [\d.]+s  place [\d.]+s  clr \d+%  n 2\/2/.test(el('perfHud').textContent), null, { timeout: 3000 });
 });
 
+test('Settings fits one screen; a look sets theme, world, skin and motif together and survives a reload; locked looks refuse', async ({ page }) => {
+  await page.click('#startSettings');
+  const fit = await page.evaluate(() => { const l = el('setList'); return { sh: l.scrollHeight, ch: l.clientHeight, done: el('setDone').getBoundingClientRect().bottom, vh: innerHeight }; });
+  assert.ok(fit.sh <= fit.ch + 1, `Settings scrolls: ${fit.sh} > ${fit.ch}`);
+  assert.ok(fit.done <= fit.vh, 'Done is on screen');
+  assert.equal(await page.locator('#lookGrid .look-btn').count(), 5);
+  assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'true', 'Classic is lit by default');
+  await page.click('#lookGrid [data-id=cotton]');
+  const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, cw: curWorld }));
+  assert.deepEqual(await look(), { t: 'cotton', w: 'blossom', s: 'clay', m: 'heart', cs: 'clay', cw: 'blossom' });
+  assert.equal(await page.getAttribute('#lookGrid [data-id=cotton]', 'aria-pressed'), 'true');
+  assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'false');
+  assert.ok(await page.locator('#lookGrid [data-id=neon]').isDisabled(), 'Neon is locked until its skin is earned');
+  await page.evaluate(() => el('lookGrid').querySelector('[data-id=neon]').click());
+  assert.equal((await look()).t, 'cotton', 'a locked look does nothing');
+  await page.click('#advLook summary');                          // mixing one setting leaves no preset lit
+  await page.click('#skinGrid [data-id=blocks]');
+  assert.equal(await page.locator('#lookGrid [aria-pressed=true]').count(), 0);
+  await page.click('#lookGrid [data-id=mint]');
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.deepEqual(await look(), { t: 'mint', w: 'forest', s: 'blocks', m: 'none', cs: 'blocks', cw: 'forest' });
+  await page.click('#startSettings');
+  assert.equal(await page.getAttribute('#lookGrid [data-id=mint]', 'aria-pressed'), 'true', 'the saved look is lit after a reload');
+  await page.evaluate(() => { unlocked.add('neon'); renderLooks(); });
+  await page.click('#lookGrid [data-id=neon]');
+  assert.equal((await look()).s, 'neon', 'an unlocked look can be picked');
+});
+
 test('slow frames shrink the particle budget, and it grows back', async ({ page }) => {
   await play(page);
   const before = await page.evaluate(() => { perf.fx = 1; return perf.fx; });   // start from a full budget: a slow CI runner may already have cut it
