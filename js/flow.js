@@ -5,7 +5,6 @@ async function gameOver(){
   if(state!=='play') return;
   if(paused){ setTimeout(gameOver,300); return; }
   state='over'; clearRun(); undoSnap=null; stuck=false; syncActions();
-  bonus=null; bonusTag=null;                         // the bonus dies with the run; resetWorld() restores the look on restart
   const prevBest=best;
   stats.totalScore+=score;
   el('overEye').textContent='No room left'; el('againBtn').textContent='Start over'; el('overMenuBtn').textContent='Modes';
