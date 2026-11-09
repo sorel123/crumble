@@ -392,22 +392,28 @@ test('the opening: 100 seeded new games each clear a line within the first three
         if ((lo0 & m.lo) || (hi0 & m.hi)) continue;
         if (applyBits(lo0, hi0, tray[i].s, m) > 0) { left = pop(_lo) + pop(_hi); break; }
       }
-      out.push({ filled: countFlat(a0), ok: ev.ok, lines: ev.lines, imm: ev.imm, trayNo, label: lastTier, left, specials: tray.some(t => t.s.star) || !!golden || !!transform || !!bonus });
+      out.push({ kind: openingKind, filled: countFlat(a0), ok: ev.ok, lines: ev.lines, imm: ev.imm, trayNo, label: lastTier, left, specials: tray.some(t => t.s.star) || !!golden || !!transform || !!bonus });
     }
     Math.random = orig;
     return out;
   });
   assert.equal(r.length, 100);
   assert.ok(r.every(g => g.ok), 'all three pieces of the first tray are playable');
-  assert.ok(r.every(g => g.imm >= 1), 'a line is completed by one placement (imm counts what a single drop clears), well within three');
-  assert.ok(r.every(g => g.filled >= 4 && g.filled <= 16 && g.label === 'OPENING' && g.trayNo === 1), 'a modest seeded pattern, dealt as the opening tray');
+  // plan 7.2: gift and busy openings clear with one drop; light ones clear within the hand (a set-up a tidy stacker finds)
+  assert.ok(r.every(g => g.kind === 'light' ? g.lines >= 1 : g.imm >= 1), 'a line is completed: one placement for gift and busy, within the hand for light');
+  assert.ok(r.every(g => (g.kind === 'light' ? g.filled >= 3 && g.filled <= 8 : g.filled >= 4 && g.filled <= 16) && g.label === 'OPENING' && g.trayNo === 1), 'a modest seeded pattern, dealt as the opening tray');
+  // plan 7.2: a weighted mix, 60% light / 25% gift / 15% busy (loose bounds, 100 games)
+  const mix = k => r.filter(g => g.kind === k).length;
+  assert.ok(mix('light') >= 48 && mix('light') <= 72, `about 60% light openings (got ${mix('light')}/100)`);
+  assert.ok(mix('gift') >= 14 && mix('gift') <= 36, `about 25% gift openings (got ${mix('gift')}/100)`);
+  assert.ok(mix('busy') >= 5 && mix('busy') <= 25, `about 15% busy openings (got ${mix('busy')}/100)`);
   assert.ok(r.every(g => !g.specials));
   assert.ok(new Set(r.map(g => g.filled)).size > 3, 'the patterns vary');
   // plan 6.0: most first clears leave blocks; about 1 in 8 sweep the board clean (the rest are the scattered gems)
   const sweeps = r.filter(g => g.left === 0).length;
-  assert.ok(r.every(g => g.left >= 0), 'every opening has a clearing drop');
-  assert.ok(sweeps >= 3 && sweeps <= 25, `about 1 in 8 openings sweep on move one (got ${sweeps}/100)`);
-  assert.ok(r.filter(g => g.left > 0).length >= 75, 'most first clears leave blocks on the board');
+  assert.ok(r.filter(g => g.kind !== 'light').every(g => g.left >= 0), 'every gift and busy opening has a clearing drop');
+  assert.ok(sweeps >= 3 && sweeps <= 25, `some openings sweep on move one (got ${sweeps}/100)`);
+  assert.ok(r.filter(g => g.kind !== 'light' && g.left > 0).length >= 0.7 * r.filter(g => g.kind !== 'light').length, 'most gift and busy first clears leave blocks on the board');
 });
 
 test('the opening clear really works through the UI: drag the clearing piece, the line goes', async ({ page }) => {
@@ -421,7 +427,8 @@ test('the opening clear really works through the UI: drag the clearing piece, th
     }
     return null;
   });
-  assert.ok(found, 'a clearing drop exists');
+  // a light opening (plan 7.2) has no single obvious drop, only a set-up the hand clears: no drag to test
+  if (!found) { assert.equal(await page.evaluate(() => openingKind), 'light', 'a gift or busy opening has a clearing drop'); return; }
   const before = await snap(page);
   await dragPiece(page, found.i, found.r, found.c);
   const after = await snap(page);

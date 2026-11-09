@@ -430,12 +430,33 @@ function* dealSteps(){
    Plan 6.0: most openings also scatter 2-4 gems outside the seeded lines, so the first clear leaves blocks
    instead of emptying the board (no clean-sweep bonus on move one). About 1 in 8 keep the board bare, so a
    sweep is still possible sometimes, never always. */
+let openingKind='busy';   // plan 7.2: which kind of opening the last game was dealt (light, gift or busy)
 function seedOpening(){
+  const u=rnd();                                           // plan 7.2: a weighted roll, so most games open calm
+  let kind=u<CFG.OPENING_LIGHT?'light':u<CFG.OPENING_LIGHT+CFG.OPENING_GIFT?'gift':'busy';
+  if(kind==='light'){                                      // 3-8 loose gems, at most 3 to a row or column: nothing is near complete
+    for(let attempt=0;attempt<200;attempt++){
+      const g=empty(), nLoose=3+((rnd()*6)|0), rowN=new Array(N).fill(0), colN=new Array(N).fill(0);
+      for(let placed=0,tries=0;placed<nLoose&&tries<300;tries++){
+        const r=(rnd()*N)|0, c=(rnd()*N)|0;
+        if(g[r][c]||rowN[r]>=3||colN[c]>=3) continue;
+        g[r][c]={gi:(rnd()*NCOLOR)|0,t:1,f:0,l:0}; rowN[r]++; colN[c]++; placed++;
+      }
+      const hand=[weightedShape(0.2),weightedShape(0.2),weightedShape(0.2)];
+      const ev=evalHand(packGrid(g),hand,CFG.NODE_BUDGET);
+      if(!ev.ok||ev.lines<1) continue;                     // a tidy stacker clears within the hand (a set-up, not a one-drop gift)
+      grid=g; trayNo=1; openingKind='light'; commitTray(hand,'OPENING'); return;
+    }
+    kind='busy';                                           // no light board with a clearing drop turned up: fall back to the 6.0 opening
+  }
+  openingKind=kind;
   for(let attempt=0;attempt<200;attempt++){
     const g=empty(), vert=rnd()<0.5, rowsN=1+((rnd()*2)|0);
     const gap=rowsN===2?2+((rnd()*2)|0):2+((rnd()*3)|0);    // a 2-line gap is 2-3 wide: it takes one rectangle
     const gs=(rnd()*(N-gap+1))|0, l0=(rnd()*(N-rowsN+1))|0;
-    const scatter=rnd()>=CFG.OPENING_SWEEP_CHANCE, nScatter=2+((rnd()*3)|0);
+    // gift: one obvious clear, and a sweep about a third of the time (no scattered gems); busy: the 6.0 opening
+    const scatter=kind==='gift' ? rnd()>=0.35 : rnd()>=CFG.OPENING_SWEEP_CHANCE;
+    const nScatter=kind==='gift' ? 1 : 2+((rnd()*3)|0);
     for(let k=0;k<rowsN;k++) for(let j=0;j<N;j++){
       if(j>=gs&&j<gs+gap) continue;
       const r=vert?j:l0+k, c=vert?l0+k:j;
