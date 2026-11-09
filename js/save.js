@@ -4,7 +4,7 @@
    snapshot() returns the whole run as plain JSON data; restore(o) puts it back and returns true, or false (and
    changes nothing) if the data does not look right. Both are pure with respect to storage, so Undo (plan 3.2) can
    keep them in memory. saveRun()/loadRun() are the localStorage side. Not captured: effects in flight (they are
-   cosmetic) and a live transformation (it ends on resume; Undo keeps it). A live Blast Round is kept and carries on (plan 4.5a).
+   cosmetic) and a live transformation (it ends on resume; Undo keeps it). The bonus meter and a live bonus (trays left, points it added) are kept (plan 6.2).
    restore() never deals an opening: the saved board and tray are exactly what she left. */
 const STATS_STORE='crumble.stats';   // the run's own key depends on the mode (modes.js: runStore)
 function snapshot(){
@@ -16,11 +16,11 @@ function snapshot(){
     carry:carry.map(s=>SHAPES.indexOf(s)).filter(i=>i>=0),
     golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies: Undo keeps the snapshot while the live hand goes on mutating its own
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
-    blastCharge, specialEnd,
+    bonusMeter, specialEnd,
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     tf:transform?{id:transform.id,remaining:transform.remaining}:null,   // Undo keeps a live look; resume (loadRun) ends it
-    blast:blast?{t:Math.max(0,Math.round(blast.t)),pts:blast.pts,lines:blast.lines,best:blast.best,swaps:blast.swaps}:null
+    bonus:bonus?{left:bonus.left,extra:bonus.extra}:null
   };
 }
 const isInt=(v,a,b)=>Number.isInteger(v)&&v>=a&&v<=b;
@@ -53,13 +53,14 @@ function restore(o,keepLive){
     ambient=spawnAmbient(worldDef(tf.id).effect); bgFrom=tf.id;
   }
   renderPips();
-  blastCharge=isInt(o.blastCharge,0,1e4)?Math.min(o.blastCharge,CFG.BLAST_CHARGE):0; blastShown=blastCharge;
+  bonusMeter=isInt(o.bonusMeter,0,1e4)?Math.min(o.bonusMeter,CFG.BONUS_METER):0; bonusTag=null;
   specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
-  const b=o.blast;                                  // a live Blast Round carries on with the time it had left
-  if(b&&isNum(b.t)&&b.t>0&&isInt(b.pts,0,1e9)&&isInt(b.lines,0,1e6)){
-    blast={t:Math.min(b.t,CFG.BLAST_SECONDS*1000),pts:b.pts,lines:b.lines,best:b.best|0,swaps:b.swaps|0,tick:0};
-    curWorld='blast'; curSkin='rainbow'; buildCache(); ambient=spawnAmbient(worldDef('blast').effect);
+  const b=o.bonus;                                  // a live bonus carries on with the trays it had left (the sky is back at once)
+  if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){
+    bonus={left:b.left,extra:b.extra};
+    curWorld='bonus'; ambient=spawnAmbient(worldDef('bonus').effect); ambientOld=[]; bgFrom='bonus'; bgT=1;
   }
+  syncBonusChip();
   if(mode==='adventure'){ lvl=LEVELS[o.lv.id-1]; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:o.lv.combo,swept:!!o.lv.swept}; }
   if(mode==='daily'){ dk=o.dk; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:0,swept:false}; rndSrc=mulberry(hashStr(dailySeed(trayNo+'-resume'))); }
   shownScore=score; el('scoreVal').textContent=score; syncHud();
@@ -73,9 +74,9 @@ function restore(o,keepLive){
    place() calls noteUndo() first, so undoSnap is the whole run as it stood before the last placement (plus the
    lifetime counters, so a replayed move is not counted twice). undo() puts it back through restore() and clears
    it: one move back, once per placement. A rescue, a new run and game over also clear it, so Undo can never
-   refund a rescue or reach into another run. The board goes back exactly; a Blast Round in progress cannot be undone. */
+   refund a rescue or reach into another run. The board goes back exactly; a bonus in progress is undone with it (its trays left and points come back with the board). */
 let undoSnap=null, stuck=false;
-function noteUndo(){ undoSnap=blast?null:{run:snapshot(),stats:{...stats}}; syncActions(); }
+function noteUndo(){ undoSnap={run:snapshot(),stats:{...stats}}; syncActions(); }
 function undo(){
   if(!undoSnap||state!=='play'||paused) return false;
   const u=undoSnap; undoSnap=null;
@@ -86,7 +87,7 @@ function undo(){
 }
 let goldChipTxt='';
 function syncGoldChip(){                          // (4.5c) what the golden hand still needs, always one short line under the tray
-  const st=golden&&!blast&&state==='play'&&!dealing?goldenState():null, c=el('goldChip');
+  const st=golden&&state==='play'&&!dealing?goldenState():null, c=el('goldChip');
   let txt='';
   if(st==='locked') txt='×'+(+CFG.GOLDEN_MULT.toFixed(1))+' locked in!';
   else if(st==='alive'){ const n=goldenLeft(golden); txt=golden.want.sweep&&!golden.got.lines?'Gold: clear the board for ×'+(+CFG.GOLDEN_MULT.toFixed(1)):'Gold: '+n+(n===1?' more line':' more lines')+' for ×'+(+CFG.GOLDEN_MULT.toFixed(1)); }
@@ -102,9 +103,9 @@ function syncActions(){
   el('helpBtn').disabled=!(stuck&&live&&rescueAllowed(best));
   const wait=stuck&&live&&canExit();
   el('endBtn').hidden=!wait; el('noMoves').hidden=!wait;
-  el('starNote').hidden=!(live&&!stats.starSeen&&!blast&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until she has used one
+  el('starNote').hidden=!(live&&!stats.starSeen&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until she has used one
   syncGoldChip();
-  syncBlastBtn();
+  syncBonusChip();
 }
 el('endBtn').onclick=e=>{ e.stopPropagation(); if(stuck&&state==='play') gameOver(); };
 el('undoBtn').onclick=e=>{ e.stopPropagation(); undo(); };
@@ -124,7 +125,7 @@ function loadRun(){
 }
 
 /* ═══════ best score + lifetime stats — their own key, loaded before the unlock check ═══════ */
-const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,blasts:0,bestBlast:0,starSeen:0};   // blasts: rounds played; bestBlast: most points in one
+const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,bonuses:0,starSeen:0};   // bonuses: bonus runs earned
 function saveStats(){
   try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'&&mode==='endless'?score:0),...stats})); }catch(e){}
 }

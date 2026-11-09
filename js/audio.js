@@ -435,12 +435,12 @@ function setMuted(on,save=true){
   if(save) saveSkinSave();
 }
 el('mute').onclick=e=>{ e.stopPropagation(); setMuted(!muted); };
-/* Blast Round's own sounds (plan 4.5a). Synthesized and the same in every sound set, so no other moment in the
-   game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise (ready),
-   a clock tick for 3-2-1, and a bell cadence over a soft hit (round over). */
+/* The bonus trays' own sounds (plan 6.2; they were the Blast Round's). Synthesized and the same in every sound set, so no
+   other moment in the game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise
+   (meter full), and a bell cadence over a soft hit (bonus over). */
 Object.assign(Sfx,{
-  blastReady(){ play(0,t=>{ [0,4,7,12].forEach((s,i)=>bell(t+i*.07,{f:784*semis(s),dur:.8,vol:.06,wet:.3})); }); },
-  blastStart(){ play(.02,t=>{
+  bonusReady(){ play(0,t=>{ [0,4,7,12].forEach((s,i)=>bell(t+i*.07,{f:784*semis(s),dur:.8,vol:.06,wet:.3})); }); },
+  bonusStart(){ play(.02,t=>{
     noiseHit(t,{dur:.45,f0:300,f1:6000,q:1.2,vol:.06,wet:.2,atk:.38});                  // the whoosh up
     boom(t+.42,.3);
     noiseHit(t+.42,{dur:.3,f0:2600,f1:500,q:.8,vol:.08,wet:.25});
@@ -453,8 +453,7 @@ Object.assign(Sfx,{
     for(let i=0;i<14;i++) bell(t+.3+i*.06,{f:note([0,2,4,7,9,12,14,16,19,21,24,21,19,16][i]+8),dur:.9,vol:.045,wet:.5});
     [0,4,7,12].forEach(st=>bell(t+1.2,{f:392*semis(st+12),dur:2.2,vol:.05,wet:.55}));
   }); },
-  blastTick(n){ play(0,t=>tone(t,{f0:n===1?1320:990,dur:.12,vol:.06,type:'triangle'})); },
-  blastEnd(){ play(.05,t=>{
+  bonusEnd(){ play(.05,t=>{
     boom(t,.18);
     [19,16,12,7,12,19].forEach((s,i)=>bell(t+i*.09,{f:392*semis(s),dur:.9,vol:.065,wet:.3}));
   }); }

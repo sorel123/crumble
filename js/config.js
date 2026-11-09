@@ -68,13 +68,12 @@ const CFG = {
   FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
   COLOR_GONE_BONUS: 60,   // points per colour wiped off the board by a clear ("COLOR GONE!")
 
-  // Blast Round — the reward round (plan 4.5a). Combos charge the ⚡ Blast button (never drains); full, it glows,
-  // and she taps it when she wants: a timed round of big-piece sweep/jackpot hands, its own look, doubled points.
-  BLAST_CHARGE:   12,     // charge to fill the button. A clear at combo 2+ adds min(combo-1, BLAST_CHARGE_MAX); nothing else charges it
-  BLAST_CHARGE_MAX: 3,    // most charge one clear can add
-  BLAST_SECONDS:  20,     // round length when it starts
-  BLAST_ADD:      2.5,    // seconds added per line cleared during the round (capped at BLAST_SECONDS)
-  BLAST_MULT:     2,      // score multiplier during the round
+  // Bonus trays (plan 6.2, replaces the Blast Round). Clears fill a small meter; when it is full the next BONUS_TRAYS
+  // trays pay x BONUS_MULT automatically. Dealing is untouched: the bonus only multiplies points.
+  BONUS_METER:    10,     // meter to fill: each clear adds its lines, plus 1 per combo step above the first (at most BONUS_COMBO_MAX)
+  BONUS_COMBO_MAX: 2,     // most extra meter one clear can add for its combo
+  BONUS_TRAYS:    3,      // trays the bonus lasts
+  BONUS_MULT:     2,      // score multiplier while it lasts
   BIG_CAP:        4,      // the crowded-board small-piece bias stops growing past this many cells, so 5-9 cell pieces keep coming
   // star gem (4.5b): a single-cell piece that clears its whole row and column. Dealt only when a cross is worth it.
   STAR_MIN:      9,      // a star is dealt only if some empty cell's row + column would clear at least this many gems
@@ -86,8 +85,8 @@ const CFG = {
   STAR_STAGGER:  0.7,    // frames of delay per cell of distance for its cross to go white-hot
 
   // the specials, one switch each (plan 4.5). Each comes back on once it has been rebuilt to be a real highlight:
-  // All four specials are back (Blast 4.5a, star 4.5b, golden hand 4.5c, transformations-as-achievements 4.5d). special(name) reads these.
-  SPECIALS: {blast:true, star:true, golden:true, transform:true},
+  // All four specials are back (bonus trays 6.2, star 4.5b, golden hand 4.5c, transformations-as-achievements 4.5d). special(name) reads these.
+  SPECIALS: {bonus:true, star:true, golden:true, transform:true},
   SPECIAL_FROM_TRAY: 6,  // no special before this tray number (plan 3.1: the opening is calm); see specialOk()
   BIG_COMBO: 3,          // the loud celebration (COMBO slam, score orbs, COLOR GONE band, fireworks, punch zoom) starts at this combo; every clear below it is calm: a squash, point tags and one praise word
 

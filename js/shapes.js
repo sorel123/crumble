@@ -35,7 +35,7 @@ let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blas
 let praises=[],bursts=[],lineFlashes=[];
 let chunks=[],orbs=[],rings=[],dust=[];      // juice: block chunks, score orbs, landing rings, landing dust
 let scoreHold=0, bestBeaten=false, hitWait=0;           // score count-up waits for the first orb; NEW BEST fires once a run
-let blast=null, bigMode=false, hudH=92;   // blast = live round {t (ms left), pts, lines, best (combo), swaps, tick}
+let bonus=null, hudH=92;   // bonus = live bonus trays {left (trays still to play, this one included), extra (points the x2 added)}
 let tags=[], slams=[], bands=[], borderFlash=null;   // per-cell point tags, COMBO slams, COLOR GONE bands, board-border flash
 let paused=false;
 let mode='endless', lvl=null, lv={lines:0,pieces:0,combo:0,swept:false};   // (4.1) 'endless' | 'adventure' | 'daily'; lvl = the Adventure level being played; lv = this level run's counters (saved with the run)

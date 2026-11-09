@@ -13,7 +13,7 @@ const RUNS = +(process.argv[2] || 40), SEED = +(process.argv[3] || 1);
 const srv = await serve();
 const { browser, page } = await openGame(srv.url, { seed: SEED });
 const out = await page.evaluate(RUNS => {
-  CFG.SPECIALS.golden = CFG.SPECIALS.star = CFG.SPECIALS.blast = CFG.SPECIALS.transform = false;
+  CFG.SPECIALS.golden = CFG.SPECIALS.star = CFG.SPECIALS.bonus = CFG.SPECIALS.transform = false;
   const flush = (s, r, c, g) => {
     let k = 0;
     for (const [dr, dc] of s.cells) for (const [a, b] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {

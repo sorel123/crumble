@@ -3,7 +3,7 @@
 /* ═══════ developer panel ═══════
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
-  ['SPECIALS.blast','Special: Blast Round (tap-to-start)'],
+  ['SPECIALS.bonus','Special: Bonus trays (x2)'],
   ['SPECIALS.star','Special: Star Gem'],
   ['SPECIALS.golden','Special: Golden Hand'],
   ['SPECIALS.transform','Special: Transformations'],
@@ -26,8 +26,8 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['SHOW_TENSION','Debug readout']
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
-const DEV_ACTIONS=[['Fill Blast',()=>{ if(!blast){ blastCharge=CFG.BLAST_CHARGE; syncBlastBtn(); } }],
-  ['Blast Round',()=>{ if(!blast){ if(transform) endTransform(); startBlast(); } }],
+const DEV_ACTIONS=[['Fill bonus meter',()=>{ if(!bonus){ bonusMeter=CFG.BONUS_METER; syncBonusChip(); } }],
+  ['Bonus trays',()=>{ if(!bonus){ if(transform) endTransform(); bonusMeter=0; startBonus(); } }],
   ...Object.keys(ACHIEVE).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]),
   ['Reset unlocks',()=>{ discoveredWorlds.clear(); newLook=false; saveSkinSave(); renderWorlds(); renderLooks(); syncLookDot(); }]];
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
@@ -39,7 +39,7 @@ const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
 // one-tap previews of the chosen set's moments (Settings -> Sound)
 const DEV_PREVIEWS=[['Clear',()=>Sfx.clear(1,0,1)],['Combo ×4',()=>Sfx.combo(4,2,0)],['Praise',()=>Sfx.praise(2)],
   ['Big praise',()=>Sfx.praise(4)],['Sweep',()=>Sfx.sweep(0)],['Golden',()=>Sfx.goldenWin()],
-  ['Blast start',()=>Sfx.blastStart()],['Blast ready',()=>Sfx.blastReady()],['Blast over',()=>Sfx.blastEnd()],['Star dealt',()=>Sfx.starIn()],['Star blast',()=>Sfx.star(9)]];
+  ['Bonus start',()=>Sfx.bonusStart()],['Bonus ready',()=>Sfx.bonusReady()],['Bonus over',()=>Sfx.bonusEnd()],['Star dealt',()=>Sfx.starIn()],['Star blast',()=>Sfx.star(9)]];
 const DEV_SOUND_TOGGLES=[       // shown in the Sound section
   ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
 ];
@@ -80,11 +80,10 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['CLEAR_BLINK','Clear: blink frames',0,14,1],
   ['COLOR_GONE_BONUS','Colour-gone bonus (per colour)',0,200,10],
   ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1],
-  ['BLAST_CHARGE','Blast: charge to fill',2,40,1],
-  ['BLAST_CHARGE_MAX','Blast: most charge per clear',1,6,1],
-  ['BLAST_SECONDS','Blast: round length (s)',8,40,1],
-  ['BLAST_ADD','Blast: seconds per line',0,6,0.5],
-  ['BLAST_MULT','Blast: score multiplier',1,4,0.5],
+  ['BONUS_METER','Bonus: meter to fill',3,30,1],
+  ['BONUS_COMBO_MAX','Bonus: most extra meter per combo',0,5,1],
+  ['BONUS_TRAYS','Bonus: trays it lasts',1,3,1],
+  ['BONUS_MULT','Bonus: score multiplier',1,4,0.5],
   ['BIG_CAP','Big-piece bias cap (cells)',1,9,1],
   ['GUIDE','Guided hands (obvious drops)',0,3,0.1],
   ['MAGNET_REACH','Magnet reach (cells)',0.3,1.5,0.05],
@@ -121,7 +120,7 @@ function initDev(){
     const row=make('label','tog'), name=make('span'), inp=make('input');
     name.textContent=label; inp.type='checkbox';
     inp.onchange=()=>{
-      cfgSet(k,inp.checked); devSave(); updateDbg(); syncBlastBtn();
+      cfgSet(k,inp.checked); devSave(); updateDbg(); syncBonusChip();
       if(k==='UNLOCK_ALL') renderSkins();
       if(k==='UNLOCK_ALL_WORLDS') renderWorlds();
     };
@@ -201,7 +200,7 @@ function initDev(){
     e.stopPropagation();
     for(const k of DEV_KEYS) cfgSet(k,DEV_DEFAULTS[k]);
     try{ localStorage.removeItem(DEV_STORE); }catch(_){}
-    sync(); updateDbg(); renderSkins(); renderWorlds(); setSpeaker(CFG.PHONE_SPEAKER); syncBlastBtn();
+    sync(); updateDbg(); renderSkins(); renderWorlds(); setSpeaker(CFG.PHONE_SPEAKER); syncBonusChip();
   };
   el('devCopy').onclick=async e=>{
     e.stopPropagation();

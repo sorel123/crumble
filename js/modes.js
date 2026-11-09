@@ -182,7 +182,7 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['setPanel','menuCard','mapCard','dailyCard','goalsCard','blastCard'].some(id=>!el(id).hidden); }
+function overlayOpen(){ return ['setPanel','menuCard','mapCard','dailyCard','goalsCard'].some(id=>!el(id).hidden); }
 function pauseForMenu(){ if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); } }
 function hideMenus(){ el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
 function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
