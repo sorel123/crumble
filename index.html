@@ -54,6 +54,8 @@
   #blastBtn .txt{position:relative;z-index:1}
   #blastBtn.full .txt{text-shadow:0 1px 3px rgba(80,0,40,.6)}
   #blastBtn.live{color:#fff}
+  #blastBtn.nope{animation:blastNope .3s}
+  @keyframes blastNope{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
   #blastBtn.live .fill{background:linear-gradient(90deg,#FF5FC8,#FF8A3D);transition:transform .25s linear}
   @keyframes blastGlow{0%,100%{opacity:0}50%{opacity:1}}   /* a slow shimmer on the button face; no sound after the one chime */
   @media (prefers-reduced-motion:reduce){ #blastBtn.full .fill{animation:none;opacity:0} }

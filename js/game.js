@@ -87,7 +87,11 @@ function syncBlastBtn(){
   b.disabled=!(full&&state==='play');
   b.setAttribute('aria-label',blast?'Blast round running':full?'Start a Blast round':'Blast: combos charge it');
 }
-el('blastBtn').onclick=e=>{ e.stopPropagation(); if(canBlast()) startBlast(); };
+el('blastBtn').onclick=e=>{                         // full but not right now (the tray after a special, mid-deal): a small "not yet" shake
+  e.stopPropagation();
+  if(canBlast()) return startBlast();
+  const b=el('blastBtn'); b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope');
+};
 function startBlast(){
   if(blast) return;
   blastCharge=0; blastShown=0; blastSparks=[]; undoSnap=null;   // Undo can never give the charge back or replay the round
