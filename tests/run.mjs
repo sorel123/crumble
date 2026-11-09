@@ -1859,6 +1859,21 @@ test('sound family (6.5): the real moves raise one main sound each (clear, sweep
   assert.ok(ph.includes('phew:1') && !ph.some(h => h.startsWith('clear:') || h.startsWith('combo:')), 'a narrow escape is the phew accent alone: ' + ph);
 });
 
+test('audio on first touch (7.0): a touch anywhere unlocks the context and starts the silent keep-alive, before the game sees it', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const before = { actx: actx === null, silent: silentEl === null };
+    // a resumed run's first gesture is a drag: the unlock must not depend on pointerdown reaching the game
+    const dispatch = type => document.getElementById('startBtn').parentElement.dispatchEvent(new Event(type, { bubbles: true }));
+    dispatch('touchend');
+    const after = { actx: typeof actx === 'object' && actx !== null, silent: silentEl !== null && silentEl.loop === true, src: silentEl && silentEl.src.slice(0, 5) };
+    return { before, after };
+  });
+  assert.deepEqual(r.before, { actx: true, silent: true }, 'nothing is started before the first touch');
+  assert.equal(r.after.actx, true, 'a touchend starts the audio context');
+  assert.equal(r.after.silent, true, 'the silent looping element is created');
+  assert.equal(r.after.src, 'blob:', 'it is a generated silent WAV, not a file');
+});
+
 test('sound family (6.5): every set can play every event, and the new family is the default for everyone once', async ({ page }) => {
   await play(page);
   const r = await page.evaluate(async () => {
