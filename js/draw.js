@@ -101,6 +101,68 @@ function glowSprite(hue){
   sp={cv,r}; if(GLOWS.size>40) GLOWS.clear(); GLOWS.set(hue,sp); return sp;
 }
 
+/* Pressure on screen (plan 6.6). One eased state, `scr`, that the room metric and the dealer's phase drive in Endless and Daily
+   (Adventure keeps its old border glow). 6.7 puts the bonus / golden / mode looks on this same layer: it reads `scr.p` (0 calm .. 1 tight),
+   `scr.warm` (0 cool .. 1 amber: a recovery is amber, an edge is red-orange) and `scr.relief` (a 1 -> 0 flash when she gets out).
+   Everything is drawn BEHIND the gems or around them (sky wash, vignette, board rim, a band behind the tray): no block or board
+   material is touched, and there is no number on screen. While a bonus runs its violet rim owns the rim and the wash is halved. */
+const scr={p:0,warm:0,relief:0,ph:'calm'};
+function pressureTarget(){                              // {p, warm} for the current phase and room
+  if(!CFG.FX_PRESSURE_SCREEN||!paced()||state==='over') return {p:0,warm:0};
+  const ph=pace.ph, lo=0.1, k=Math.max(0,Math.min(1,(CFG.ROOM_OK-roomNow)/(CFG.ROOM_OK-lo)));   // continuous with the room
+  if(ph==='relief') return {p:0,warm:0};               // the release: everything eases away
+  if(ph==='edge') return {p:Math.max(0.72,k),warm:1};
+  if(ph==='recovery') return {p:Math.max(0.8,k),warm:0.45};
+  return {p:k*0.55,warm:0.6*k};                        // calm: ~0; building: a faint warming
+}
+function resetPressure(snap){                         // a new run (snap=false: eases from nothing) or a restored one (snap=true: already where it should be)
+  const t=snap?pressureTarget():{p:0,warm:0};
+  scr.p=t.p; scr.warm=t.warm; scr.relief=0; scr.ph=pace.ph;
+}
+function stepPressure(dt){
+  const t=pressureTarget();
+  if(pace.ph!==scr.ph){                                // phase change: leaving edge/recovery into relief is the flash
+    if(pace.ph==='relief'&&(scr.ph==='edge'||scr.ph==='recovery')&&CFG.FX_PRESSURE_SCREEN&&paced()) scr.relief=1;
+    scr.ph=pace.ph;
+  }
+  const f=Math.min(1,dt*(t.p>scr.p?0.05:0.09));        // tightens slowly, lets go a bit faster
+  scr.p+=(t.p-scr.p)*f; scr.warm+=(t.warm-scr.warm)*f;
+  if(Math.abs(t.p-scr.p)<0.002) scr.p=t.p;
+  scr.relief=Math.max(0,scr.relief-dt/55);
+}
+let _vig=null;
+function vignetteSprite(){                              // one cached dark-warm vignette (clear in the middle), rebuilt only on resize
+  if(_vig&&_vig.W===W&&_vig.H===H&&_vig.B===B) return _vig.cv;
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(W*0.25)); cv.height=Math.max(1,Math.round(H*0.25));
+  const x=cv.getContext('2d'), w=cv.width, h=cv.height, g=x.createRadialGradient(w/2,h/2,Math.min(Math.hypot(w,h)/2-2,B*0.75*0.25),w/2,h/2,Math.hypot(w,h)/2);   // clear over the whole board (its half-diagonal), dark only in the margins
+  g.addColorStop(0,'rgba(40,0,0,0)'); g.addColorStop(1,'rgba(40,0,0,1)'); x.fillStyle=g; x.fillRect(0,0,w,h);
+  _vig={W,H,B,cv}; return cv;
+}
+function drawPressureWash(){                           // behind the board: a warm sky wash, a vignette, and the relief flash
+  const k=bonus?0.5:1;
+  if(scr.p>0.01){
+    ctx.globalAlpha=scr.p*0.10*k; ctx.fillStyle=`hsl(${28-18*scr.warm} 95% 55%)`; ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha=scr.p*0.5*k; ctx.drawImage(vignetteSprite(),0,0,W,H);
+    ctx.globalAlpha=1;
+  }
+  if(scr.relief>0.01&&!reduce){ ctx.globalAlpha=scr.relief*0.2; ctx.fillStyle='#BFF6FF'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+}
+function drawPressureRim(now){                         // the board frame: cool and still when comfortable, warm and breathing when tight
+  const p=scr.p, hue=200-(200-(12+28*(1-scr.warm)))*Math.min(1,p*1.1);   // cool blue -> amber (recovery) / red-orange (edge)
+  const beat=reduce?0.5:0.5+0.5*Math.sin(now*(0.0025+0.004*p)), a=0.45+0.4*p, w=p*(0.6+0.4*beat);
+  roundPath(ctx,bx-9,by-9,B+18,B+18,20);
+  ctx.strokeStyle=`hsla(${hue} 85% 62% / ${a*0.12*(1+w)})`; ctx.lineWidth=12+14*p+6*w; ctx.stroke();
+  ctx.strokeStyle=`hsla(${hue} 85% 62% / ${a*0.28})`;       ctx.lineWidth=5+6*p+2*w;  ctx.stroke();
+  ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;            ctx.lineWidth=2+2*p;      ctx.stroke();
+  if(scr.relief>0.01){ ctx.strokeStyle=`rgba(143,247,255,${scr.relief*0.8})`; ctx.lineWidth=4+8*scr.relief; ctx.stroke(); }
+}
+function drawTrayBand(){                               // the tray dims as the room shrinks: a soft dark band behind the pieces (never over them)
+  if(scr.p<0.02) return;
+  const a=slotRect(0), z=slotRect(2);
+  roundPath(ctx,a.x-6,a.y,z.x+z.w-a.x+12,a.h,14);
+  ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); ctx.globalAlpha=1;
+}
+
 /* text sprites. Every overlay word (popups, tags, COMBO, COLOR GONE, praise, banners) is
    rasterised ONCE — strokes, gradients and all — into its own little canvas, then blitted
    each frame with a transform. strokeText every frame is the single thing that makes iOS
@@ -257,6 +319,7 @@ function frame(now){
     ctx.globalAlpha=(1-flip.t/14)*0.5; ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
   }
 
+  stepPressure(dt); drawPressureWash();            // (6.6) pressure on screen, behind everything on the board
   ctx.save();
   if(shake>.2 && hitWait<=0) ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
   if(CFG.FX_PUNCH_ZOOM && punchT>0.01 && hitWait<=0){
@@ -270,6 +333,7 @@ function frame(now){
     const f=1-borderFlash.t/26;
     if(f<=0) borderFlash=null;
     else { roundPath(ctx,bx-9,by-9,B+18,B+18,20); ctx.strokeStyle=`rgba(${borderFlash.col},${0.9*f})`; ctx.lineWidth=5+6*f; ctx.stroke(); }
+  } else if(paced()&&CFG.FX_PRESSURE_SCREEN){ drawPressureRim(now);   // (6.6) Endless / Daily: the rim follows the room and the phase
   } else if(CFG.FX_TENSION_BORDER){                            // board border glow: calm (cool) -> warm as tension climbs
     const hue=200-185*tension, a=0.45+0.4*tension;       // layered strokes fake the glow — shadowBlur every frame is slow on iOS
     roundPath(ctx,bx-9,by-9,B+18,B+18,20);
@@ -278,6 +342,7 @@ function frame(now){
     ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;      ctx.lineWidth=2+2*tension;  ctx.stroke();
   }
 
+  drawTrayBand();                                    // (6.6) in the board layer, so nothing that flies over the tray (chunks, shards) is ever dimmed by it
   drawGoldPlan(now,!!(drag&&tray[drag.i]));           // (4.5c) before the held piece's preview, so the preview wins where they overlap
 
   if(drag&&tray[drag.i]){ drag.g=Math.min(1,drag.g+dt*0.2); updateSlot(); }   // the pickup lift moves the piece without a pointer event

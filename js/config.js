@@ -124,6 +124,7 @@ const CFG = {
   FX_GOLDEN_FANFARE: true,   // (4.5c) golden hand: planned-line glow, arrival sequence, completion celebration
   FX_GOLD_TINT:      true,   // faint full-screen gold wash while a golden hand is live
   FX_SWEEP_FX:       true,   // full-screen colour wash + confetti on a clean sweep
+  FX_PRESSURE_SCREEN: true, // (6.6) Endless/Daily: sky wash, vignette, board rim and tray band follow the room and phase (Adventure keeps the tension border)
   FX_TENSION_BORDER: true,   // board border glow: calm (cool) -> warm as tension rises
   FX_STAR_BURST:     true,   // star gem: beam through it in the tray, hint ring on the best cell, charge + beams + sparkles on the clear
   FX_PUNCH_ZOOM:     true,   // (combo BIG_COMBO+) brief 2-3% punch zoom

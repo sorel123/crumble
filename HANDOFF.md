@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after the sound family (plan PR 6.5).
+Last updated 2026-11-09, after pressure on screen (plan PR 6.6).
 
 ---
 
@@ -181,6 +181,7 @@ Top to bottom:
 | (6.2) | Bonus trays replace the Blast Round: a clear meter, then ×2 for the next 3 trays, automatically; Blast's button, timer, results card, big-piece hands and `canBlast` gating are gone. See the 6.2 section |
 | (6.5) | One sound family: an arbiter in `audio.js` gives each moment one main sound (priority, ducking, deferral); every clear has a dry impact under its glass tail; narrow escape (`Sfx.phew`) and NEW BEST / LEVEL CLEARED (`Sfx.fanfare`) are their own events; the Strings set, soft pickup tick and drop click are the default for everyone once (`sndV`). Section at the end |
 | (6.1) | Pressure and recovery: `roomOf()` measures room on the board; phases calm/building/edge/recovery/relief pick the tray (`paceTier`); honest trays return, edge trays only promise each piece a spot, recovery is a sequence she must see; the second rescue is earned; strong bot added to `tools/bot-sim.mjs`. See the 6.1 section |
+| (6.6) | Pressure on screen: one eased `scr` layer (sky wash, vignette, board rim, tray band, relief flash) driven by the room metric and phase in Endless/Daily. See the 6.6 section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -885,3 +886,27 @@ Tests: `calm clears` (single is quiet) and `6.3 animation hierarchy`.
 - **Defaults.** `CFG.SND_SET` is `'strings'` (recorded), `SND_PICKUP` `'soft'`, `SND_PLACE` `'drop'`. `saveSkinSave` writes `sndV:2`; a save without it is moved to Strings once on load (like `lookV`), and her later choice sticks. Original, Steel drum and Bells are still in Settings → Sound and all work with the arbiter. The recorded clear is `pl_drop` (rate .85) plus up to three `glass` tings; the recorded `phew` adds a glass chord and a low swell.
 - **Not done here:** music (6.8), the sound for mode / whole-screen states (6.7). I could not listen to it; the levels are chosen by ear-of-the-numbers (impact about a placement's loudness, glass unchanged). Retune `pl_drop` volume/rate in `recordedSet().clear` first if clears sound thin or boomy on the phone.
 - Tests: the "sound family (6.5)" block in `tests/run.mjs` uses a stand-in set (`spySet`) that records `event:sfxGain`, so priority and ducking are tested without audio hardware.
+
+## Pressure on screen (plan 6.6)
+
+The board now *looks* like the room metric from 6.1: she should feel it getting tense without a number. Code is the "Pressure on screen"
+block in `js/draw.js` (`scr`, `pressureTarget`, `stepPressure`, `drawPressureWash`, `drawPressureRim`, `drawTrayBand`); switch
+`CFG.FX_PRESSURE_SCREEN` (Admin toggle). Endless and Daily only (`paced()`); Adventure keeps the old `FX_TENSION_BORDER` glow.
+
+- **State.** `scr = {p, warm, relief, ph}`, eased each frame. `p` 0 calm .. 1 tight, `warm` 0 cool .. 1 red-orange, `relief` a 1 -> 0 flash.
+  Targets (`pressureTarget`): calm ~0; building a faint warming that follows `roomNow` between `ROOM_OK` and 0.1 (max p .55); edge p >= .72, warm 1;
+  recovery p >= .8, warm .45 (amber: tight but she can get out); relief 0. It tightens slowly (~0.05/frame) and lets go faster (~0.09).
+  Game over, the switch off and Adventure all target 0.
+- **Look.** Behind the gems or around the board only, so no block or board material changes (a test compares a gem pixel at calm and edge):
+  a warm sky wash (<= 10%), a cached dark-red vignette (<= 50%, clear over the whole board so only the margins darken), the board rim (cool blue -> amber/red-orange, wider and breathing faster as `p`
+  rises; static under reduced motion), and a soft dark band behind the tray (<= 28%, drawn in the board layer before any flying chunks) so the tray "dims" as room shrinks; the pieces themselves are
+  never dimmed (that still means "stuck", 0.3 alpha). No new text.
+- **Relief.** Entering `relief` from edge or recovery sets `scr.relief = 1`: a pale cyan wash and a cyan rim ring fade over ~55 frames (reduced motion: the rim ring only, no full-screen flash). `resetPressure()` runs on a new run (eases from calm) and on restore (snaps to where the saved phase says).
+  The narrow-escape cyan `borderFlash` and PHEW from 6.3 still fire on top.
+- **Bonus compatibility (for 6.7).** While `bonus` runs, `drawBonusRim` owns the rim and the pressure wash is halved; the bonus sky/ambient
+  (`startSky('bonus')`) is untouched, and pressure never changes the sky world. 6.7's golden, Adventure and Daily looks should read `scr` the same
+  way (add terms in `drawPressureWash`, or give them their own function called next to it) rather than start a second layer. Rim priority in `frame()`:
+  bonus, then `borderFlash`, then the pressure rim.
+- **Cost.** One fillRect, one drawImage of a 1/4-res cached vignette, one rim path with three strokes, one band fill. No per-frame allocations.
+- **Check on the phone:** play toward a cramped board: the rim should warm, the corners darken and the tray band deepen; clear out and a pale flash
+  should wash the screen. Tune `p` caps in `pressureTarget` if it is too loud or too faint. Test: "pressure on screen (6.6)".
