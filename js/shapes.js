@@ -27,6 +27,8 @@ const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
 let grid,tray,score=0,best=0,combo=0,rescuesUsed=0;
 let tension=0, sweepCool=0, lastTier='—', trayNo=0;
+let pace={ph:'calm',n:0,hold:0,len:0}, roomNow=1;   // (6.1) the dealer's phase (calm|building|edge|recovery|relief), trays dealt in it, the edge hold, relief length; room at the last deal
+let rescueLines=0;     // (6.1) lines cleared since the last rescue: RESCUE_EARN_LINES of them earn the second
 let starCool=0;        // trays until another star gem may be dealt
 let starForced=false;   // a big combo guaranteed the next normal tray a star gem
 let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts,plan}; plan = goldenSolve of the pieces left

@@ -194,7 +194,8 @@ function perfHud(now){
   let mx=0; for(const g of perf.gaps) if(g>mx) mx=g;
   const h=hesSummary(), sec=ms=>(ms/1000).toFixed(1)+'s';   // the hesitation log (plan 3.4): medians of the last 20 trays, n = samples used / kept
   perf.hud.textContent='max '+mx.toFixed(1)+'ms  >'+CFG.FRAME_BUDGET_MS+'ms: '+perf.over+'\nwork '+perf.work.toFixed(1)+'ms  fx '+Math.round(perf.fx*100)+'% ('+fxLive()+')'
-    +'\nhes pick '+sec(h.pick)+'  place '+sec(h.place)+'  clr '+h.clr+'%  n '+h.n+'/'+h.total;
+    +'\nhes pick '+sec(h.pick)+'  place '+sec(h.place)+'  clr '+h.clr+'%  n '+h.n+'/'+h.total
+    +(paced()?'\n'+pace.ph+' '+pace.n+(pace.ph==='edge'?'/'+pace.hold:'')+'  room '+roomNow.toFixed(2)+'  '+lastTier:'');   // (6.1) the dealer's phase
   perf.hud.style.color=mx>CFG.FRAME_BUDGET_MS?'#FFB3B3':'#fff';
 }
 
