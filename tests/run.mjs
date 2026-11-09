@@ -364,7 +364,9 @@ test('trays 1-5 never carry a special, even with every special on; from tray 6 t
     Object.assign(CFG.SPECIALS, { star: true, golden: true, transform: true }); CFG.STAR_CHANCE = 1; CFG.MYSTERY_CHANCE = 1; CFG.GOLDEN_CHANCE = 1;
     const early = [], late = [];
     for (let n = 1; n <= 12; n++) {
-      trayNo = n - 1; starForced = true; goldenNext = true; goldenCool = 0; transform = null; transformCool = 0; grid = empty();
+      trayNo = n - 1; starForced = true; starCool = 0; specialEnd = -99; goldenNext = true; goldenCool = 0; transform = null; transformCool = 0;
+      grid = empty(); for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (r !== c) grid[r][c] = { gi: 0, t: 1, f: 0, l: 0 };   // a board where a cross is worth 14
+      tray = [null, null, null];
       genTray();
       (n <= 5 ? early : late).push({ star: tray.some(t => t.s.star), gold: !!golden, tf: !!transform });
     }
@@ -393,9 +395,9 @@ test('Blast never starts by itself: a full button waits, and the old meter is go
   assert.equal(r.charge, await page.evaluate(() => CFG.BLAST_CHARGE), 'waiting drains nothing');
 });
 
-test('one switch per special: Blast is on, golden hand, star and transformations stay off', async ({ page }) => {
+test('one switch per special: Blast and the star gem are on, golden hand and transformations stay off', async ({ page }) => {
   await play(page);
-  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { blast: true, star: false, golden: false, transform: false });
+  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { blast: true, star: true, golden: false, transform: false });
   const r = await page.evaluate(() => {
     starForced = true; goldenNext = true; goldenCool = 0;
     let stars = 0, golds = 0;
@@ -406,11 +408,103 @@ test('one switch per special: Blast is on, golden hand, star and transformations
     triggerTransform('rainbow');
     return { stars, golds, transform: !!transform, blast: !!blast };
   });
-  assert.deepEqual(r, { stars: 0, golds: 0, transform: false, blast: false });
+  assert.deepEqual(r, { stars: 0, golds: 0, transform: false, blast: false }, 'on an empty board no cross is worth a star, so none is dealt');
   // ...and its own switch brings one back
   const on = await page.evaluate(() => { CFG.SPECIALS.transform = true; triggerTransform('rainbow'); const t = !!transform; CFG.SPECIALS.transform = false; return t; });
   assert.equal(on, true, 'switched on, a transformation starts');
 });
+
+// ---- star gem (plan 4.5b) ----
+const withDiag = async page => { await play(page); await page.evaluate(() => { window.diagBoard = () => { grid = empty(); for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (r !== c) grid[r][c] = { gi: 0, t: 1, f: 0, l: 0 }; }; }); };   // board full but the diagonal: a star's cross is worth 14
+
+test('star gem: dealt only when a cross is worth it, with a cooldown, and never two specials in a row', async ({ page }) => {
+  await withDiag(page);
+  const r = await page.evaluate(() => {
+    const out = {};
+    grid = empty(); out.empty = starBest(grid).n;
+    diagBoard(); out.diag = starBest(grid).n; out.at = starAt(3, 3);
+    const deal = (setup) => { trayNo = 9; starForced = true; starCool = 0; specialEnd = -99; tray = [null, null, null]; setup && setup(); genTray(); return tray.some(t => t && t.s.star); };
+    grid = empty(); out.emptyDealt = deal();
+    for (let i = 0; i < 5; i++) { grid = empty(); for (let k = 0; k < 6; k++) { grid[0][k] = { gi: 0, t: 1, f: 0, l: 0 }; grid[1][k] = { gi: 0, t: 1, f: 0, l: 0 }; } out.thin = (out.thin || starBest(grid).n); }
+    diagBoard(); out.worth = deal();
+    diagBoard(); out.cool = starCool;                                       // set by the deal above
+    diagBoard(); trayNo = 20; starForced = true; tray = [null, null, null]; genTray(); out.coolHeld = tray.some(t => t && t.s.star);
+    diagBoard(); out.again = deal(() => { specialEnd = 9; });                // a special ended in tray 9: tray 10 (the one dealt) carries none
+    diagBoard(); out.afterGap = deal(() => { specialEnd = 8; });
+    diagBoard(); out.blast = deal(() => { blast = { t: 5000, pts: 0, lines: 0, best: 0, swaps: 0, tick: 0 }; }); blast = null;
+    diagBoard(); out.live = deal(() => { tray = [{ s: STAR, gi: STAR_GI }, null, null]; });
+    return out;
+  });
+  assert.equal(r.empty, 0); assert.equal(r.diag, 14); assert.equal(r.at, 14);
+  assert.equal(r.emptyDealt, false, 'an empty board is not worth a star');
+  assert.ok(r.thin < 9, 'two short rows are worth less than STAR_MIN');
+  assert.equal(r.worth, true, 'a worthwhile cross and a forced star: dealt');
+  assert.equal(r.cool, 8, 'the cooldown starts when it is dealt');
+  assert.equal(r.coolHeld, false, 'no second star during the cooldown');
+  assert.equal(r.again, false, 'never two specials in a row');
+  assert.equal(r.afterGap, true, 'one tray later it can come');
+  assert.equal(r.blast, false, 'none during a Blast Round');
+  assert.equal(r.live, false, 'none while another is live');
+});
+
+test('star gem: it clears exactly its row and column, pays per gem, ends the special streak and survives Undo and resume', async ({ page }) => {
+  await withDiag(page);
+  const r = await page.evaluate(async () => {
+    diagBoard(); trayNo = 12; combo = 0; score = 0;
+    tray = [{ s: STAR, gi: STAR_GI }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+    const sn = snapshot(), seenBefore = stats.starSeen;
+    place(0, 3, 3);
+    const left = []; for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (grid[r][c]) left.push([r, c]);
+    const out = { seenBefore, score, end: specialEnd, trayNo, seen: stats.starSeen, rowGone: grid[3].every(v => !v),
+      colGone: grid.every(row => !row[3]), left: left.length, kept: grid[0][1] !== null && grid[0][2] !== null };
+    undo(); out.undone = tray[0] && tray[0].s.star && grid[3][0] !== null; out.endUndone = specialEnd; out.scoreUndone = score;
+    const j = JSON.parse(JSON.stringify(snapshot())); tray = [null, null, null]; restore(j);
+    out.resumed = tray[0] && tray[0].s.star; out.cool = starCool;
+    return out;
+  });
+  assert.equal(r.rowGone && r.colGone, true, 'the whole row and the whole column are gone');
+  assert.equal(r.left, 42, 'only the cross left the board');
+  assert.equal(r.kept, true, 'everything else stays');
+  assert.ok(r.score >= 14 * 14, 'a 14-gem cross pays per gem (' + r.score + ')');
+  assert.equal(r.end, 12, 'placing it sets specialEnd to its tray');
+  assert.equal(r.seenBefore, 0); assert.equal(r.seen, 1, 'the first-star label is used up');
+  assert.equal(r.undone, true, 'Undo puts the star and the board back');
+  assert.equal(r.endUndone, -99); assert.equal(r.scoreUndone, 0);
+  assert.equal(r.resumed, true, 'a star in hand survives save/resume');
+});
+
+test('star gem: the first one shows a one-line label, Blast reads as held while a star is in the tray, no hesitation sample', async ({ page }) => {
+  await withDiag(page);
+  const r = await page.evaluate(() => {
+    diagBoard(); trayNo = 12; stats.starSeen = 0; blastCharge = blastShown = CFG.BLAST_CHARGE;
+    tray = [{ s: STAR, gi: STAR_GI }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }]; dealing = null; syncActions();
+    const out = { note: !el('starNote').hidden, btnDisabled: el('blastBtn').disabled, held: el('blastBtn').classList.contains('held'), full: el('blastBtn').classList.contains('full') };
+    tray = [null, null, null]; hes.dealtAt = 5; commitTray([STAR, SHAPES[0], SHAPES[0]], 'T'); out.hes = hes.dealtAt;
+    stats.starSeen = 1; syncActions(); out.noteAfter = !el('starNote').hidden;
+    tray = [{ s: SHAPES[0], gi: 1 }, null, null]; syncActions(); out.btnFree = !el('blastBtn').disabled;
+    return out;
+  });
+  assert.equal(r.note, true, 'the first star ever is explained once');
+  assert.equal(r.noteAfter, false, 'and never again');
+  assert.equal(r.btnDisabled, true); assert.equal(r.held, true); assert.equal(r.full, false);
+  assert.equal(r.btnFree, true, 'Blast is tappable again once the star is gone');
+  assert.equal(r.hes, 0, 'a star tray gives no hesitation sample');
+});
+
+test('star gem: tray beam, hint ring and the clear animation draw without errors and finish within 600 ms', async ({ page, errors }) => {
+  await withDiag(page);
+  const r = await page.evaluate(async () => {
+    diagBoard(); trayNo = 12; combo = 0;
+    tray = [{ s: STAR, gi: STAR_GI }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+    await new Promise(r => setTimeout(r, 300));
+    const t0 = performance.now(); place(0, 3, 3);
+    while ((shatters.length || blasts.length) && performance.now() - t0 < 2000) await new Promise(r => setTimeout(r, 16));
+    return performance.now() - t0;
+  });
+  assert.ok(r < 700, 'from drop to empty cells: ' + Math.round(r) + ' ms');
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
+});
+
 
 test('a 3-line clear: the next tray is dealt after the clear starts (frame times logged)', async ({ page }) => {
   await play(page);
@@ -674,7 +768,7 @@ test('a force-quit mid-run reopens to the same board, tray, score and combo (the
   assert.equal(after.startHidden, true);
   assert.deepEqual({ ...after, startHidden: 0, shown: 0 }, { ...before, startHidden: 0, shown: 0 });
   assert.equal(after.shown, String(before.score), 'the HUD shows the saved score');
-  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
   const g = await geometry(page);                                                         // and it is playable: a placement still works
   const mv = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
   const n0 = (await snap(page)).tray.filter(Boolean).length;
@@ -758,7 +852,7 @@ test('no storage: the game still plays', async ({ page, errors }) => {
   const mv = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
   await dragPiece(page, mv.i, mv.r, mv.c);
   assert.equal((await snap(page)).state, 'play');
-  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
 });
 
 test('the service worker takes control and caches the game', async ({ page }) => {

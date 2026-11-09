@@ -53,6 +53,7 @@
   #blastBtn.full .fill{display:block;transform:none;z-index:0;background:rgba(255,255,255,.28);animation:blastGlow 1.4s ease-in-out infinite}
   #blastBtn .txt{position:relative;z-index:1}
   #blastBtn.full .txt{text-shadow:0 1px 3px rgba(80,0,40,.6)}
+  #blastBtn.held{opacity:.5;filter:grayscale(.6)}
   #blastBtn.live{color:#fff}
   #blastBtn.nope{animation:blastNope .3s}
   @keyframes blastNope{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
@@ -73,7 +74,8 @@
   @keyframes bcIn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
   @media (prefers-reduced-motion:reduce){ #blastCard .bc,#blastCard .bcbest.new{animation:none} }
   #noMoves{position:absolute;left:0;right:0;text-align:center;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:15px;font-weight:600;opacity:.8;pointer-events:none}
-  #noMoves[hidden],#actions button[hidden]{display:none}
+  #starNote{position:absolute;left:0;right:0;text-align:center;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:15px;font-weight:600;opacity:.9;pointer-events:none}
+  #starNote[hidden],#noMoves[hidden],#actions button[hidden]{display:none}
   #dbg{position:absolute;left:18px;top:calc(100px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
   #dbg[hidden]{display:none}
@@ -198,6 +200,7 @@
     <button id="helpBtn" type="button" aria-label="Rescue: get a new set of pieces" disabled>🛟 Rescue</button>
   </div>
   <div id="noMoves" hidden>No moves</div>
+  <div id="starNote" hidden>The star clears its row and column</div>
   <div id="dbg"></div>
 
   <div class="overlay" id="startCard">

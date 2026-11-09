@@ -189,11 +189,16 @@ const BELLS_SFX={
     tone(t,{f0:175*p,f1:125*p,pdur:.09,dur:.13,vol:.1,atk:.006});             // a soft 'nope', not a buzz
     tone(t+.07,{f0:150*p,f1:110*p,pdur:.08,dur:.1,vol:.07,atk:.006});
   }); },
-  star(){ play(.02,t=>{
-    noiseHit(t,{dur:.14,f0:3500,f1:900,q:2,vol:.035,wet:.2});                                // zap: a falling noise sweep
-    [0,2,4,7,9].forEach((st,i)=>bell(t+.04+i*.04,{f:note(st+5),dur:.6,vol:.05,wet:.35}));   // glassy rising chime
-    for(let i=0;i<5;i++) noiseHit(t+.12+i*.06,{dur:.04,f0:7000+Math.random()*3000,q:10,vol:.016,wet:.4});
+  star(n=6){ play(.02,t=>{                                                                      // charge, then the hit at t+.14 as the beams fire
+    noiseHit(t,{dur:.14,f0:900,f1:5200,q:3,vol:.03,wet:.3});                                 // rising whoosh while it charges
+    boom(t+.14,.2,.2);                                                                       // the hit
+    noiseHit(t+.14,{dur:.2,f0:4500,f1:700,q:2,vol:.05,wet:.25});                             // falling zap along the beams
+    const k=Math.min(10,3+Math.ceil(n/2));
+    for(let i=0;i<k;i++) bell(t+.17+i*.035,{f:note([0,2,4,7,9,12,14,16,19,21][i%10]+5),dur:.7,vol:.045,wet:.35});   // chime cascade, timed to the ripple
+    for(let i=0;i<5;i++) noiseHit(t+.22+i*.05,{dur:.04,f0:7000+Math.random()*3000,q:10,vol:.016,wet:.4});
   }); },
+  starIn(){ play(0,t=>{ [12,16,19,24].forEach((st,i)=>bell(t+i*.06,{f:note(st),dur:.9,vol:.045,wet:.4})); }); },   // it has been dealt
+  starPick(){ play(0,t=>{ noiseHit(t,{dur:.12,f0:1800,f1:6000,q:4,vol:.018,wet:.3}); bell(t+.04,{f:note(19),dur:.5,vol:.03,wet:.3}); }); },
   goldenIn(){ play(.05,t=>{
     noiseHit(t,{dur:.18,f0:5000,f1:10000,q:6,vol:.02,wet:.4});
     [5,8,10,13].forEach((st,i)=>bell(t+i*.06,{f:note(st),dur:.7,vol:.05,wet:.4}));          // bright bell run
@@ -293,15 +298,19 @@ const ORIG_SFX={
     oNoise(t,{dur:.01,f0:1500*p,q:1,vol:.04});
     oVoice(t,{f0:130*p,f1:95*p,dur:.14,vol:.14,bp0:500*p,bp1:250*p,q:2});
   }); },
-  star(){ play(.02,(t,p)=>{
-    oNoise(t,{dur:.03,f0:6000*p,q:.8,vol:.12});
-    oVoice(t,{f0:1400*p,f1:220*p,dur:.28,vol:.11,bp0:3200,bp1:500,q:3,type:'sawtooth'});
-    [1,1.25,1.5,2,2.5].forEach((m,i)=>{
-      const f=784*p*m;
-      oVoice(t+.05+i*.045,{f0:f,f1:f*1.01,dur:.45,vol:.07,bp0:f*2,q:2,type:'triangle',det:[-4,4],atk:.006});
-    });
-    for(let i=0;i<6;i++) oNoise(t+.12+i*.06,{dur:.04,f0:(7000+Math.random()*4000)*p,q:10,vol:.04});
+  star(n=6){ play(.02,(t,p)=>{
+    oNoise(t,{dur:.14,f0:1000*p,f1:5000*p,q:2,vol:.05});                                     // charge
+    oVoice(t+.14,{f0:150*p,f1:48*p,dur:.4,vol:.2,bp0:600,bp1:150,q:1.5,type:'sine'});        // the hit
+    oVoice(t+.14,{f0:1800*p,f1:200*p,dur:.3,vol:.1,bp0:3200,bp1:500,q:3,type:'sawtooth'});   // zap
+    const k=Math.min(9,3+Math.ceil(n/2));
+    for(let i=0;i<k;i++){
+      const f=784*p*[1,1.125,1.25,1.5,1.667,2,2.25,2.5,3][i%9];
+      oVoice(t+.17+i*.035,{f0:f,f1:f*1.01,dur:.4,vol:.06,bp0:f*2,q:2,type:'triangle',det:[-4,4],atk:.006});
+    }
+    for(let i=0;i<6;i++) oNoise(t+.22+i*.05,{dur:.04,f0:(7000+Math.random()*4000)*p,q:10,vol:.04});
   }); },
+  starIn(){ play(0,(t,p)=>{ [1.5,2,2.5,3].forEach((m,i)=>oVoice(t+i*.06,{f0:659*p*m,f1:659*p*m*1.01,dur:.5,vol:.05,bp0:1800,q:2,type:'triangle',det:[-4,4],atk:.006})); }); },
+  starPick(){ play(0,(t,p)=>{ oNoise(t,{dur:.1,f0:2000*p,f1:6500*p,q:3,vol:.04}); }); },
   goldenIn(){ play(.05,(t,p)=>{
     oNoise(t,{dur:.18,f0:5000*p,f1:11000*p,q:6,vol:.03});
     [1,1.5,2,3].forEach((m,i)=>{
@@ -367,7 +376,12 @@ function recordedSet(jingle,other){                          // jingle: 'pz' | '
     praise(tier){ smp(jingle+['16','08','10','15'][tier-1],{vol:.2+.03*tier,delay:.18}); },   // only rising, happy jingles; ~-13 to -10dB
     sweep(delay=.1){ smp(jingle+'02',{vol:.32,delay}); smp('glass',{vol:.1,rate:semis(12),delay}); },
     deny(){ smp('err',{vol:.07}); },
-    star(){ smp('glass',{vol:.2,rate:semis(7),delay:.02}); smp('glass',{vol:.12,rate:semis(19),delay:.09}); },
+    star(n=6){ smp('swell',{vol:.14,rate:1.6,delay:0});                                      // charge
+      smp(jingle+'02',{vol:.3,delay:.14}); smp('swell',{vol:.2,rate:.6,delay:.14});         // the hit: a low swell under the bright jingle
+      const k=Math.min(9,3+Math.ceil(n/2));
+      for(let i=0;i<k;i++) smp('glass',{vol:.11,rate:semis(PENTA_UP[i%10]+7),delay:.17+i*.035}); },   // glass cascade up the scale
+    starIn(){ [12,16,19,24].forEach((st,i)=>smp('glass',{vol:.1,rate:semis(st),delay:i*.06})); },
+    starPick(){ smp('glass',{vol:.06,rate:semis(19)}); },
     goldenIn(){ smp('confirm',{vol:.16,delay:.05}); },
     goldenWin(){ smp(other+'02',{vol:.32,delay:.15}); },
     rescue(){ smp('rescue',{vol:.18}); },
@@ -391,7 +405,7 @@ const Sfx={
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
   }
 };
-for(const fn of ['clear','combo','praise','sweep','deny','star','goldenIn','goldenWin','rescue','transformShift'])
+for(const fn of ['clear','combo','praise','sweep','deny','star','starIn','starPick','goldenIn','goldenWin','rescue','transformShift'])
   Sfx[fn]=(...a)=>{ ac(); const set=SOUND_SETS[CFG.SND_SET]||SOUND_SETS.original; set[fn]&&set[fn](...a); };
 function setMuted(on,save=true){
   muted=on; el('mute').textContent=muted?'🔈':'🔊';

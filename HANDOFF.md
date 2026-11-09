@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after Settings became look presets (plan PR 4.3).
+Last updated 2026-11-09, after the star gem was rebuilt (plan PR 4.5b).
 
 ---
 
@@ -72,12 +72,12 @@ Last updated 2026-11-09, after Settings became look presets (plan PR 4.3).
 - **Obvious moves (3.4):** the dealer prefers hands where one or two pieces have an *obvious* clear (a line already 5-7/8 full whose gap is one plain run the piece drops into), and where the hand's smallest piece of 2+ cells has room (`OBVIOUS`, `OBVIOUS_MAX`, `ALT`; see Hand solver). Measured with `tools/bot-sim.mjs`.
 - **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). No special (golden hand, star, transformation, Blast Round) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
-- **Specials, one switch each (4.5):** `CFG.SPECIALS = {blast:true, star:false, golden:false, transform:false}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **Blast is back (4.5a)**; star gem, golden hand and transformations are still off (their sections below describe them as they were). Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
+- **Specials, one switch each (4.5):** `CFG.SPECIALS = {blast:true, star:true, golden:false, transform:false}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **Blast is back (4.5a)**, **the star gem is back (4.5b)**; golden hand and transformations are still off (their sections below describe them as they were). Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
 - Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
 - **Golden hand** — a bonus tray that multiplies its points (`GOLDEN_*`).
-- **Star gem** — a 1-cell piece that clears its row and column (`STAR_*`).
+- **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
 - **Transformations** — achievement-triggered temporary looks (Rainbow, Gold
   Vault, Volcano, Starfield, Storm) that also multiply points; discovering one
   adds its world to the home picker (`TRANSFORM_*`).
@@ -171,6 +171,7 @@ Top to bottom:
 | (3.2) | Undo (one move, exact round-trip, saved) and a mid-run Rescue button, dimmed until nothing fits |
 | (3.4) | Dealer for obvious moves: `OBVIOUS`/`ALT` hand scoring, hesitation log in the `?dev` readout (`crumble.hes`), `tools/bot-sim.mjs` |
 | (4.5a) | Blast as a tap-to-start reward: combo-charged `⚡ Blast` button, own sting/look/3-2-1, results card, Best Blast; per-special flags `CFG.SPECIALS.{blast,star,golden,transform}` and `specialOk()`; a live round survives save/resume |
+| (4.5b) | Star gem rebuilt: dealt only when a cross is worth it (`starBest`, `STAR_MIN`), cooldown, beam in the tray + hint ring + drag count, charge-then-beams clear with star sparkles, per-gem points, own sounds, Blast button held while it is in the tray |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -684,3 +685,18 @@ All of it is in the Blast section of `js/game.js` (plus `stepBlastFx` called fro
   Settings, the bounded stuck swap, save/resume of charge and a live round, Undo and the hesitation log.
 - **What to check on the phone:** chain two or three clears in a row and watch a spark fly into the Blast button;
   once it glows, tap it whenever she wants. Does she ask for it again?
+
+---
+
+## Star gem rebuilt (plan 4.5b)
+
+A rare, mid-game, full-board moment. The star is a 1-cell piece that leaves no gem and clears its whole row and column.
+
+- **When it is dealt.** `dealSteps()` asks `special('star') && specialOk() && starCool<=0 && starBest(grid).n>=STAR_MIN && (starForced || random<STAR_CHANCE)`. `starBest(grid)` (solver.js) is the most gems any empty cell's row + column would clear (plus up to 3 cells that reach it); `starAt(r,c)` is the count for one cell. Defaults: `STAR_MIN` 9 (of at most 15), `STAR_CHANCE` 0.15 per eligible tray, `STAR_COOL` 8 trays (`starCool`, saved), a combo >= `STAR_COMBO` sets `starForced` but it still waits for a worthwhile board. A sweep tray still takes precedence. The hand is graded with the star in it (unchanged), so the other two pieces stay playable.
+- **Special rules.** Placing it sets `specialEnd=trayNo`, so the next tray carries none. It is never dealt in trays 1-5, during Blast or a transformation. While a star sits in the tray a full Blast button reads as disabled (`.held`, dimmed, no glow; derived in `syncBlastBtn` from `specialLive()`). A star tray records no hesitation sample (`hesVoid`).
+- **Seeing it.** In the tray a prismatic beam runs through the gem the whole width and height of its slot. On the board a soft ring pulses on the best cell(s), so she need not count. While dragging, the beams run the full board, a twinkle sits on each gem that would go, and a label over the landing cell reads `N gems` (a star after it when that is the best available). The first star ever shows a one-line note under the tray ("The star clears its row and column") until she has placed one (`stats.starSeen`, persisted in `crumble.stats`).
+- **The clear** (under ~600 ms): `STAR_CHARGE` (8 frames) of a ring pulling in and the star swelling, then beams to the four edges (`blasts`, `b.t` starts negative = the charge), the cross gems go white-hot outward from the star (`STAR_STAGGER` frames per cell) and burst into star sparkles instead of the line squash, edge flash, a bigger shake, and a `STAR BLAST / N gems` banner (the praise word is skipped for it). Reduced motion: no charge, no stagger, no shake. Switch: `FX_STAR_BURST` (also covers the tray beam and hint).
+- **Sound.** `Sfx.starIn` (dealt), `starPick` (picked up), `star(n)` (rising charge, low hit, falling zap, chime cascade timed to the ripple), in all four sound sets. Admin has preview buttons.
+- **Points.** `STAR_PER_GEM` (14) per gem cleared x the usual combo factor, never less than the line formula. It counts as a clear for combo and Blast charge.
+- **Compatibility.** Save/resume stores the star piece and `starCool`; Undo restores the star and `specialEnd`; `stats.starSeen` rides along with the Undo stats copy.
+- Admin: toggle plus `STAR_MIN`, `STAR_CHANCE`, `STAR_COOL`, `STAR_PER_GEM`. Tests: "star gem" scenarios in `tests/run.mjs` (deal rules, clear and score, Undo/resume, label/Blast/hesitation, animation under 700 ms).

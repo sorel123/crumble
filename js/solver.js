@@ -295,6 +295,19 @@ function* genGoldenSteps(a0,density){
   commitTray(hand,'GOLDEN·'+(ev.sweep?'SWEEP':'JACKPOT'),{sweep:ev.sweep,lines:ev.lines});
   return true;
 }
+/* Star gem (4.5b): what its cross is worth. For every empty cell, the gems in its row plus its column (the star
+   itself leaves none). Returns the best total and up to 3 cells that reach it, so the board can point at them. */
+function starBest(g=grid){
+  const rowN=new Array(N).fill(0), colN=new Array(N).fill(0);
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(g[r][c]){ rowN[r]++; colN[c]++; }
+  let n=0, cells=[];
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(!g[r][c]){
+    const v=rowN[r]+colN[c];
+    if(v>n){ n=v; cells=[[r,c]]; } else if(v===n&&n>0&&cells.length<3) cells.push([r,c]);
+  }
+  return {n,cells};
+}
+const starAt=(r,c,g=grid)=>g[r].reduce((a,v)=>a+(v?1:0),0)+g.reduce((a,row)=>a+(row[c]?1:0),0);   // gems a star dropped on (r,c) would clear
 function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
   trayNo++;
@@ -307,9 +320,11 @@ function* dealSteps(){
   sweepCool=Math.max(0,sweepCool-1);
   goldenCool=Math.max(0,goldenCool-1);
   transformCool=Math.max(0,transformCool-1);
+  starCool=Math.max(0,starCool-1);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
-  const wantStar=specialsOk && special('star') && !transform && !blast && (starForced || Math.random()<CFG.STAR_CHANCE);   // one spotlight at a time
+  // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
+  const wantStar=special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || Math.random()<CFG.STAR_CHANCE);
 
   if(goldenNext && specialsOk && !blast && special('golden')){ goldenNext=false; if(yield* genGoldenSteps(a0,density)) return; }
 
@@ -332,7 +347,7 @@ function* dealSteps(){
   }
 
   const {hand}=yield* pickHandSteps(a0,density,tier,wantStar);
-  if(hand.includes(STAR)) starForced=false;
+  if(hand.includes(STAR)){ starForced=false; starCool=CFG.STAR_COOL; }
   commitTray(hand,tier.toUpperCase()+(hand.includes(STAR)?'+STAR':''));
 }
 /* The opening (plan 3.1): a new game does not start on an empty board with random pieces. The board holds a
@@ -419,8 +434,9 @@ function commitTray(shapes,label,plan){
   }
   lastTier=label;
   carry=shapes.filter(x=>!stackable(x));
-  if(blast) hesVoid(); else hesDealt();             // a Blast Round hand is no normal hesitation sample
-  updateDbg();
+  if(shapes.includes(STAR)) Sfx.starIn();
+  if(blast||shapes.includes(STAR)) hesVoid(); else hesDealt();   // a Blast hand or a star tray is no normal hesitation sample             // a Blast Round hand is no normal hesitation sample
+  updateDbg(); syncActions();
 }
 // forgiving success rule: one line short of the plan is fine (min 1); a planned sweep needs a sweep or 3+ lines
 const goldenNeed=w=>w.sweep?'sweep or 3 lines':Math.max(1,w.lines-1)+' lines';

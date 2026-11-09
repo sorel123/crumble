@@ -276,6 +276,19 @@ function frame(now){
     ctx.globalAlpha=1;
     if(!CFG.FX_MAGNET)                                          // gliding (default): a ghost marks exactly where it lands; with the magnet on, the piece itself sits there
       for(const [dr,dc] of gh.s.cells) gem(tray[drag.i].gi,bx+(gh.c+dc)*cell,by+(gh.r+dr)*cell,cell,1,CFG.GHOST_ALPHA,0);
+    if(gh.s.star && CFG.FX_STAR_BURST){            // (4.5b) full-length beams, a twinkle on every gem that would go, and the count
+      const bn=starAt(gh.r,gh.c), best=starBest(grid).n, tw=reduce?0.7:0.6+0.4*Math.sin(now*0.012);
+      ctx.globalAlpha=0.55*tw; ctx.fillStyle='#fff';
+      ctx.fillRect(bx,by+(gh.r+.5)*cell-1.5,B,3); ctx.fillRect(bx+(gh.c+.5)*cell-1.5,by,3,B);
+      for(let q=0;q<N;q++){
+        if(grid[gh.r][q]) star(bx+(q+.5)*cell,by+(gh.r+.5)*cell,cell*0.3*tw,0.95);
+        if(grid[q][gh.c]) star(bx+(gh.c+.5)*cell,by+(q+.5)*cell,cell*0.3*tw,0.95);
+      }
+      ctx.globalAlpha=1;
+      const txt=bn+(bn===1?' gem':' gems')+(bn>=best&&bn>0?' ★':''), fs=Math.round(cell*0.5);
+      const sp=sprite('stn|'+txt+'|'+fs,textW(txt,fs)+fs,fs*1.5,x=>outlined(x,txt,fs,bn>=best&&bn>0?'#FFE66B':'#fff',[[fs*0.25,'rgba(30,10,50,.9)']]));
+      blit(sp,bx+(gh.c+.5)*cell,Math.max(by+fs*0.6,by+gh.r*cell-cell*0.55),1,1);
+    }
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 
@@ -358,15 +371,27 @@ function frame(now){
   }
 
   for(let i=blasts.length-1;i>=0;i--){                 // star blast: prismatic beams out along the row and column
-    const b=blasts[i]; b.t+=dt*0.045;
+    const b=blasts[i]; b.t+=dt*0.06;                   // ~17 frames of beams, after the charge (b.t starts below 0)
     if(b.t>=1){ blasts.splice(i,1); continue; }
-    const p=easeOutCubic(b.t), a=(1-b.t)*0.95, reach=p*B*1.25;
-    const cx=bx+(b.c+.5)*cell, cy=by+(b.r+.5)*cell, hue=(b.t*300+200)%360;
+    const cx=bx+(b.c+.5)*cell, cy=by+(b.r+.5)*cell;
+    if(b.t<0){                                         // the charge: a ring pulls in to the star and it swells white
+      const k=1+b.t/(CFG.STAR_CHARGE*0.06);            // 0 -> 1 over the charge
+      const rr=cell*(2.4-1.8*k);
+      ctx.globalAlpha=0.35+0.5*k; ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(1,cell*0.12*k);
+      ctx.beginPath(); ctx.arc(cx,cy,rr,0,6.283); ctx.stroke();
+      const fr=cell*(0.5+1.1*k), fg=ctx.createRadialGradient(cx,cy,0,cx,cy,fr);
+      fg.addColorStop(0,`rgba(255,255,255,${0.4+0.6*k})`); fg.addColorStop(1,'rgba(235,225,255,0)');
+      ctx.globalAlpha=1; ctx.fillStyle=fg; ctx.fillRect(cx-fr,cy-fr,fr*2,fr*2);
+      continue;
+    }
+    const p=easeOutCubic(b.t), a=(1-b.t)*0.95, reach=p*B*1.25, hue=(b.t*300+200)%360;
     const th=cell*(1.1-0.6*b.t);
     const beam=(x0,y0,x1,y1,horiz)=>{
       const g=horiz?ctx.createLinearGradient(x0,0,x1,0):ctx.createLinearGradient(0,y0,0,y1);
       g.addColorStop(0,'rgba(255,255,255,0)'); g.addColorStop(.5,`rgba(255,255,255,${a})`); g.addColorStop(1,'rgba(255,255,255,0)');
-      ctx.fillStyle=`hsla(${hue} 100% 70% / ${a*0.5})`;                // colored halo under a white core
+      const rb=horiz?ctx.createLinearGradient(x0,0,x1,0):ctx.createLinearGradient(0,y0,0,y1);   // a rainbow halo under the white core
+      for(let q=0;q<=4;q++) rb.addColorStop(q/4,`hsla(${(hue+q*55)%360} 100% 68% / ${a*0.55})`);
+      ctx.fillStyle=rb;
       if(horiz) ctx.fillRect(x0,y0-th*0.9,x1-x0,th*1.8); else ctx.fillRect(x0-th*0.9,y0,th*1.8,y1-y0);
       ctx.fillStyle=g;
       if(horiz) ctx.fillRect(x0,y0-th/2,x1-x0,th); else ctx.fillRect(x0-th/2,y0,th,y1-y0);
@@ -387,12 +412,12 @@ function frame(now){
     const s=shatters[i]; s.t+=dt;
     if(s.t<0){                                       // blink phase, timed from the clear itself so the line flashes in unison
       const since=s.t-s.t0, on=since<3||since>=5;
-      gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,CFG.CLEAR_BLINK>0&&on?0.95:0.15); continue;
+      gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,s.star?(since<(reduce?0:CFG.STAR_CHARGE)?0.15:0.95):CFG.CLEAR_BLINK>0&&on?0.95:0.15); continue;   // a star's cross waits, then goes white-hot as the beam reaches it
     }
     if(s.t>=POP){
       const g=GEMS[s.gi], cx=bx+(s.c+.5)*cell, cy=by+(s.r+.5)*cell;
       const room=fxRoom()>0;                               // the bits below are skipped once the particle budget is spent
-      if(room && squash && !reduce){                       // two little squares drift off the bar
+      if(room && squash && !reduce && !s.star){                       // two little squares drift off the bar
         for(let k=0;k<2;k++) shards.push({x:cx+(Math.random()-.5)*cell*.6,y:cy+(Math.random()-.5)*cell*.3,vx:(Math.random()-.5)*2,vy:-1-Math.random()*2,r:cell*(.05+Math.random()*.05),life:1,sq:true});
       } else if(room && !squash && CFG.FX_CHUNKS && !reduce){
         const ang=Math.atan2(cy-s.oy,cx-s.ox)+(Math.random()-.5)*.5;   // away from the placed piece
@@ -401,14 +426,14 @@ function frame(now){
           vr:(Math.random()-.5)*.5,sz:cell*.86,life:1,gi:s.gi,
           col:`hsl(${g.h} ${g.s}% 60%)`,hi:`hsl(${g.h} ${g.s}% 84%)`});
       }
-      for(let k=0;room&&k<(reduce?1:3);k++){               // a few bright specks per gem
+      for(let k=0;room&&k<(reduce?1:s.star?4:3);k++){               // a few bright specks per gem
         const a=Math.random()*6.283,sp=2+Math.random()*4;
         shards.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,r:cell*(.05+Math.random()*.08),life:1});
       }
       shatters.splice(i,1); continue;
     }
     const p=s.t/POP, e=easeOutCubic(p);
-    if(squash){                                          // thins to a bright sliver along the line, stretching slightly into it
+    if(squash&&!s.star){                                 // thins to a bright sliver along the line, stretching slightly into it
       const thin=Math.max(0.04,1-e*0.97), wide=1+0.12*e;
       if(s.horiz) gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,wide,1,0.55+0.45*e,false,thin);
       else        gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,thin,1,0.55+0.45*e,false,wide);
@@ -460,6 +485,16 @@ function frame(now){
     ctx.globalAlpha=1;
   }
 
+  if(CFG.FX_STAR_BURST && !reduce && tray.some(t=>t&&t.s.star)){   // (4.5b) a soft ring on the best cell(s), so she need not count
+    const sb=starBest(grid), k=0.5+0.5*Math.sin(now*0.006);
+    for(const [r,c] of sb.cells){
+      const x=bx+(c+.5)*cell, y=by+(r+.5)*cell;
+      ctx.globalAlpha=0.35+0.4*k; ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(1.5,cell*0.07);
+      ctx.beginPath(); ctx.arc(x,y,cell*(0.3+0.12*k),0,6.283); ctx.stroke();
+      star(x,y,cell*0.2,0.35+0.4*k);
+    }
+    ctx.globalAlpha=1;
+  }
   for(let i=0;i<3;i++){
     const t=tray[i]; if(!t) continue;
     if(drag&&drag.i===i) continue;
@@ -470,6 +505,18 @@ function frame(now){
     const gold=t.gi===GOLD;
     if(gold) goldGlow(ox+s.cols*tc/2,oy+s.rows*tc/2,Math.max(s.cols,s.rows)*tc*0.95+tc*0.6,now,i);
     if(s.star) goldGlow(ox+tc/2,oy+tc/2,tc*1.5,now,i,'235,225,255');
+    if(s.star && CFG.FX_STAR_BURST){                                     // (4.5b) its reach, drawn through it: a beam along the whole slot each way
+      const cx=ox+tc/2, cy=oy+tc/2, ph=reduce?0.5:0.5+0.5*Math.sin(now*0.005+i), hh=(now*0.05)%360;
+      const hb=ctx.createLinearGradient(R.x,0,R.x+R.w,0), vb=ctx.createLinearGradient(0,R.y,0,R.y+R.h);
+      for(const gr of [hb,vb]){
+        gr.addColorStop(0,'rgba(255,255,255,0)'); gr.addColorStop(.3,`hsla(${hh} 100% 75% / ${0.35+0.3*ph})`);
+        gr.addColorStop(.5,`rgba(255,255,255,${0.8+0.2*ph})`); gr.addColorStop(.7,`hsla(${(hh+120)%360} 100% 75% / ${0.35+0.3*ph})`);
+        gr.addColorStop(1,'rgba(255,255,255,0)');
+      }
+      const th=Math.max(2,tc*0.12);
+      ctx.fillStyle=hb; ctx.fillRect(R.x,cy-th/2,R.w,th);
+      ctx.fillStyle=vb; ctx.fillRect(cx-th/2,R.y,th,R.h);
+    }
     const pulse=s.star&&!reduce?1+0.08*Math.sin(now*0.004+i*2):1;         // star breathes gently
     let tp=1, trSrc;                                                     // tray flips after the board, staggered per slot
     if(flip){
