@@ -1810,7 +1810,9 @@ test('sound family (6.5): the highest-priority event in a tick plays in full, th
   await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
   assert.deepEqual(await fire(['Sfx.combo(4)', 'Sfx.praise(1)']), ['combo:1'], 'a small praise is only the word on screen');
   await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
-  assert.deepEqual(await fire(['Sfx.clear(4)', 'Sfx.praise(4)']), ['praise:1'], 'a big praise is the main sound of its moment; the clear gives way');
+  assert.deepEqual(await fire(['Sfx.clear(4)', 'Sfx.praise(4)']), ['clear:' + (await page.evaluate(() => DUCK)), 'praise:1'], 'a big praise is the main sound of its moment; the clear sits under it');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.clear(1)', 'Sfx.goldenStep(1)']), ['clear:1'], 'a golden step (a shared synth sound, so not recorded by the stand-in set) no longer silences its clear');
   await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
   assert.deepEqual(await fire(['Sfx.clear(1)', 'Sfx.phew(1)']), ['phew:1'], 'the narrow escape replaces the clear (it carries its own)');
   await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });

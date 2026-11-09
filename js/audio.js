@@ -199,7 +199,7 @@ const BELLS_SFX={
     bell(tc,{f:note(0)/2,dur:1,vol:.08,wet:.2,kind:'marimba'});
     for(let i=0;i<8;i++) noiseHit(tc+.06+i*.08,{dur:.045,f0:6500+Math.random()*3500,q:10,vol:.018,wet:.5});
   }); },
-  phew(total=1,delay=.07,combo=1){ this.clear(total,delay,combo); play(delay+.04,t=>{                // (6.5) the narrow escape: the clear plus one stronger accent
+  phew(total=1,delay=.07,combo=1){ if(combo>1) this.combo(combo,total,delay); else this.clear(total,delay,combo); play(delay+.04,t=>{                // (6.5) the narrow escape: the clear plus one stronger accent
     [7,10,12].forEach((st,i)=>bell(t+i*.04,{f:note(st+5),dur:1,vol:.07,wet:.3})); }); },
   fanfare(){ this.praise(3); },                                                            // (6.5) NEW BEST / LEVEL CLEARED
   deny(){ play(0,(t,p)=>{
@@ -301,7 +301,7 @@ const ORIG_SFX={
     });
     oVoice(t,{f0:base/2,f1:base/2,dur:.45,vol:.1,bp0:base,q:.6,type:'sine',det:[0],atk:.01});
   }); },
-  phew(total=1,delay=.1){ this.clear(total,delay); play(delay+.04,(t,p)=>{                    // (6.5) the narrow escape: the clear plus one stronger accent
+  phew(total=1,delay=.1,combo=1){ if(combo>1) this.combo(combo,total,delay); else this.clear(total,delay); play(delay+.04,(t,p)=>{                    // (6.5) the narrow escape: the clear plus one stronger accent
     [1.5,2,3].forEach((m,i)=>oVoice(t+i*.04,{f0:659*p*m,f1:659*p*m*1.01,dur:.45,vol:.07,bp0:1800,q:2,type:'triangle',det:[-4,4],atk:.006})); }); },
   fanfare(){ this.goldenIn(); },                                                           // (6.5) NEW BEST / LEVEL CLEARED
   praise(tier){ if(tier>=3) this.goldenIn(); },          // the original game had no praise words; the big ones borrow its bell run
@@ -474,10 +474,10 @@ const SHARED_SFX={                                    // the same in every set (
 const DUCK=.4;
 const EVT={
   starPick:  {p:0,hold:0,  same:'drop'},
-  clear:     {p:1,hold:.5, same:'drop'},     // the impact + glass tail; any bigger moment carries its own impact
+  clear:     {p:1,hold:.5, same:'duck'},     // the impact + glass tail; ducked under a jingle, dropped by a moment that carries its own impact (see arbFlush)
   deny:      {p:1,hold:.2, same:'duck'},
-  combo:     {p:2,hold:.7, same:'drop'},     // the same clear sound, a step higher
-  goldenStep:{p:2,hold:.5, same:'duck'},
+  combo:     {p:2,hold:.7, same:'duck'},     // the same clear sound, a step higher
+  goldenStep:{p:1,hold:.5, same:'duck'},     // sits beside the clear (same priority), under a combo
   goldenIn:  {p:2,hold:.4, same:'duck'},
   starIn:    {p:2,hold:.4, same:'duck'},
   transformShift:{p:2,hold:.8,same:'defer'},
@@ -508,7 +508,8 @@ function arbFlush(){
   for(const e of q){
     if(e.p>=top){ arbPlay(e,1); if(e.p>0) hold=Math.max(hold,e.hold); continue; }
     const sameTick=q.some(o=>o.p>e.p);
-    const how=e.p===0?'drop':sameTick?e.same:(e.same==='drop'?'duck':e.same);
+    const own=(e.fn==='clear'||e.fn==='combo')&&sameTick&&(top>=4||(e.fn==='clear'&&q.some(o=>o.fn==='combo')));   // a sweep, star, escape, bonus start... brings its own impact; a combo is the clear
+    const how=e.p===0||own?'drop':sameTick?e.same:(e.same==='drop'?'duck':e.same);
     if(how==='duck') arbPlay(e,DUCK);
     else if(how==='defer'){ if(e.late) arbPlay(e,DUCK); else later.push(e); }
   }
