@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, lookV:2, sndV:2
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, lookV:2, sndV:2
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -32,6 +32,7 @@ function loadSkinSave(){
     if(o.sndV!==2) CFG.SND_SET='strings';                          // 6.5: everyone starts on the new sound family once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
+    if(typeof o.music==='boolean') CFG.MUSIC=o.music;                // 6.8: music is on for everyone until she turns it off
   }catch(e){}
 }
 // call whenever `best` changes; returns the names of any skins newly earned
@@ -177,12 +178,13 @@ function buildSettingsUI(){
   for(const [id,label] of SOUND_STYLES) el('sndSetRow').append(make(label,id,v=>{
     CFG.SND_SET=v; renderSndSet(); saveSkinSave(); ac(); setTimeout(()=>Sfx.clear(1,0,1),60); }));   // a quick taste of the style
   el('sndOn').onchange=()=>setMuted(!el('sndOn').checked);
-  renderThemes(); renderSndSet(); el('sndOn').checked=!muted;
+  el('musicOn').onchange=()=>{ CFG.MUSIC=el('musicOn').checked; saveSkinSave(); if(CFG.MUSIC) ac(); musicSync(); };
+  renderThemes(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC;
 }
 function openSettings(){
   if(newLook){ newLook=false; syncLookDot(); saveSkinSave(); }
   if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); }           // the game waits while Settings is open
-  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted;
+  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC;
   el('setPanel').hidden=false;
 }
 el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };

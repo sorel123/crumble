@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after whole-screen mode looks (plan PR 6.7).
+Last updated 2026-11-09, after calm music (plan PR 6.8).
 
 ---
 
@@ -114,6 +114,7 @@ Last updated 2026-11-09, after whole-screen mode looks (plan PR 6.7).
 | `js/render.js` | `layout`, tile renderers, `SKINS`, `buildCache` |
 | `js/samples.js` | `SAMPLES` base64 MP3 data (~190 KB, data only) |
 | `js/audio.js` | synth sets, recorded bank, `Sfx` |
+| `js/music.js` | generative calm music, tension layer, ducking (6.8) |
 | `js/game.js` | `place`, bonus trays, input |
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
@@ -927,3 +928,31 @@ the board frame (15 px out; the pressure / bonus rim is inside it), so gems and 
 - Pressure (6.6) still owns the board frame in Endless/Daily; a bonus halves the pressure wash as before. Colours are `TINTS`; tune the alphas in `drawModeWash` first if a look is too loud.
 - Test: "whole-screen mode looks (6.7)" (corner margin changes, a gem pixel does not, each fades out).
 
+## Calm music (plan 6.8)
+
+Jay asked if music was worthwhile; a quiet bed under a puzzle game is, as long as it stays out of the way of the sound family and
+gets tense with the board. Code is `js/music.js` (loaded after `audio.js`; also in `sw.js` `ASSETS`).
+
+- **Generated, not recorded.** The plan said "CC0 loops from Kenney", but kenney.nl could not be reached from the build sandbox, so
+  the music is made in Web Audio like the original synth sounds: no download, no licence, nothing to attribute, and it can follow the
+  board. Three pieces in `MUSIC_TRACKS` (Morning in C, Drift in D, Lantern in F; 60-68 bpm), each an 8-bar loop of slow chords (a
+  four-voice sine+triangle pad and a triangle bass) with sparse bells and a soft echo, all in a major pentatonic so nothing can
+  clash. `musicPlan(track,bar)` is pure and seeded: the loop is identical every time round. If Jay would rather have recorded loops,
+  drop CC0 files in as base64 and play them through `createMusic`'s `mix` node; the intensity layer and ducking would not change.
+- **Intensity layer.** `musicTarget()` reads `scr.p` (6.6) so music and screen agree: calm ~0, building barely registers, an edge is
+  ~1, game over 0, Adventure 0 (it has no room phases). The engine eases it (1.8 s up, 1.1 s down, so relief lets go quickly) and
+  `setI` fades in a low triangle drone with a faint minor-ninth beating against it, a soft two-thump heartbeat on beats 1 and 3
+  (from intensity .28), a pad filter that closes from 2600 to 1500 Hz, and thins the bells (`musicDensity`). It is a layer on the same
+  chords, so nothing starts or stops.
+- **Ducking.** `arbFlush` (audio.js) calls `musicDuck(priority,hold)` for the event that won the tick: `musicDuckLevel` is .64 for a
+  clear, .5 for combos / deals / achievements, .38 for star / phew / bonus start / fanfare, .28 for a sweep or golden win; it dips in
+  ~40 ms and comes back over ~0.45 s after the event's `hold`. The star pickup tick (priority 0) does not duck. Overlapping ducks keep the deeper one.
+- **Settings.** Settings -> Sound has a Music switch (`CFG.MUSIC`, on by default; saved as `music` in `crumble.skins`). It is independent of
+  Sound effects (the mute button). Level is `CFG.MUSIC_VOL` (.5; Admin slider) x .5 and sits near -29 dBFS rms, about 12 dB under a placed block. It goes through the
+  phone-speaker high-pass (6.4) on its own filter pair, not through the limiter.
+- **Lifecycle.** `ac()` calls `musicSync()` when the context is first made (the first tap), so it begins on the start card with a ~4 s fade. A new run (`start()`)
+  picks another piece, taking over at the next 8-bar phrase. Backgrounding the tab stops it (`visibilitychange`); returning restarts it.
+- **Not done / could not check.** Nobody has listened to it (no audio in the cloud). Tests render it offline: loop is identical, bells stay in the scale, a
+  tight board differs from a calm one, levels (peak < -12 dBFS), ducking dips it > 6 dB, the switch, the intensity easing, the arbiter hook. If it
+  is too quiet or too present on the phone, change `MUSIC_VOL` (or the `.5` in `musicLevel()`) first; if the heartbeat is annoying raise the `.28` threshold in `E.sched`.
+  Whole-screen mode states (6.7) have no music of their own yet; a bonus or golden hand would be a natural place for a brighter variant.
