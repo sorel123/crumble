@@ -1284,7 +1284,7 @@ test('golden hand: celebration never blocks play, rains only outside the board, 
   assert.ok(ms < 1500, 'the next tray was playable after ' + Math.round(ms) + ' ms');
   const m = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; });
   await dragPiece(page, m.i, m.r, m.c);                // she can play straight away, through the glow
-  await page.waitForTimeout(2600);
+  await page.waitForFunction(() => goldRain.length + (goldenCele ? 1 : 0) === 0, null, { timeout: 15000, polling: 100 });   // waits for the celebration to end, however long a slow runner takes
   assert.equal(await page.evaluate(() => goldRain.length + (goldenCele ? 1 : 0)), 0, 'everything has finished');
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
 });
