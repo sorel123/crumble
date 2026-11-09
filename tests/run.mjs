@@ -74,6 +74,11 @@ test('running out of moves ends the run', async ({ page }) => {
   const rows = Array.from({ length: 8 }, (_, r) => [...'11111111'].map((ch, c) => (c === r || c === (r + 1) % 8 ? '0' : ch)).join(''));
   await setup(page, { rows, trayShapes: [0, 3, 9] });
   await dragPiece(page, 0, 0, 0);
+  await page.waitForFunction(() => stuck, null, { timeout: 3000 });
+  await page.waitForTimeout(1500);
+  assert.equal((await snap(page)).state, 'play', 'Undo is still available, so the run waits');
+  assert.equal(await page.isVisible('#noMoves'), true); assert.equal(await page.isVisible('#endBtn'), true);
+  await page.click('#endBtn');
   await page.waitForFunction(() => !el('overCard').hidden, null, { timeout: 5000 });
   assert.equal((await snap(page)).state, 'over');
 });
@@ -686,6 +691,121 @@ test('a new deploy shows "Update ready" after the run, and tapping it reloads on
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   const keys = await page.evaluate(() => caches.keys());
   assert.deepEqual(keys, ['crumble-deploy2'], 'the old cache is gone');
+});
+
+// Undo and the stuck rescue button (plan 3.2).
+const exact = page => page.evaluate(() => JSON.stringify(snapshot()));
+const firstMove = page => page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
+
+test('Undo puts the run back exactly (including a clearing move), once per placement', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.isDisabled('#undoBtn'), true, 'nothing to undo at the start');
+  const g = await geometry(page);
+  // a plain move
+  const a = await exact(page);
+  const mv = await firstMove(page);
+  await dragPiece(page, mv.i, mv.r, mv.c); await dealt(page);
+  assert.notEqual(await exact(page), a);
+  assert.equal(await page.isDisabled('#undoBtn'), false);
+  await page.click('#undoBtn');
+  assert.equal(await exact(page), a, 'the exact round-trip');
+  assert.equal(await page.isDisabled('#undoBtn'), true, 'only one move back');
+  // a move that clears a line
+  await setup(page, { rows: ['11111110', ...EMPTY.slice(1)], trayShapes: [0, 1, 2] });
+  await page.evaluate(() => { tray[0] = { s: SHAPES.find(s => s.cols === 1 && s.rows === 1), gi: 1 }; });
+  const b = await exact(page);
+  await dragPiece(page, 0, 0, 7); await frames(page, 3);
+  assert.equal((await snap(page)).rows[0], '00000000', 'the line cleared');
+  await page.click('#undoBtn');
+  assert.equal(await exact(page), b, 'the cleared line and the piece are back');
+  assert.equal((await snap(page)).rows[0], '11111110');
+  void g;
+});
+
+test('Undo is saved, survives a reload, and cannot refund a rescue or reach into a new run', async ({ page }) => {
+  await play(page);
+  const mv = await firstMove(page);
+  await dragPiece(page, mv.i, mv.r, mv.c); await dealt(page);
+  await page.click('#undoBtn');
+  const after = await exact(page);
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.run')), after, 'saved right after the undo');
+  await reload(page);
+  assert.equal(await exact(page), after, 'the undone state is what a force-quit reopens to');
+  // a rescue clears Undo
+  const mv2 = await firstMove(page);
+  await dragPiece(page, mv2.i, mv2.r, mv2.c); await dealt(page);
+  await page.evaluate(() => { rescuesUsed = 0; score = 500; stuck = true; syncActions(); });
+  await page.click('#helpBtn');
+  assert.equal(await page.isDisabled('#undoBtn'), true);
+  // a new run clears Undo
+  await page.evaluate(() => start());
+  assert.equal(await page.isDisabled('#undoBtn'), true);
+});
+
+test('Undo during the 700 ms before game over cancels it', async ({ page }) => {
+  await play(page);
+  // a crowded board with one 2x2 hole; the tray holds a 1x1 and a 2x2. The 1x1 goes into the hole, the 2x2 then fits nowhere: stuck.
+  await setup(page, { rows: ['00111111', '00111111', '11011011', '10110110', '11011011', '10110110', '11011011', '10110110'] });   // isolated holes below: no line is complete, no 2x2 fits except the top-left hole
+  await page.evaluate(() => {
+    const one = SHAPES.find(s => s.cols === 1 && s.rows === 1), two = SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2);
+    tray = [{ s: one, gi: 1 }, { s: two, gi: 1 }, null]; score = 10;
+  });
+  await dragPiece(page, 0, 0, 0);
+  await page.waitForFunction(() => stuck === true, null, { timeout: 2000 });
+  assert.equal(await page.isDisabled('#undoBtn'), false);
+  await page.waitForTimeout(2000);
+  assert.equal(await page.evaluate(() => state), 'play', 'stuck with Undo available: the run waits, it does not end');
+  await page.click('#undoBtn');
+  assert.equal(await page.evaluate(() => stuck), false);
+  assert.equal(await page.isVisible('#noMoves'), false);
+  // with no way out left, it ends by itself after the short wait
+  await page.evaluate(() => { undoSnap = null; score = 0; tray = [null, { s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }, null]; grid[0][0] = grid[0][1] = grid[1][0] = grid[1][1] = { gi: 0, t: 1, f: 0, l: 0 }; checkStuck(); });
+  await page.waitForFunction(() => !el('overCard').hidden, null, { timeout: 3000 });
+});
+
+test('a stuck board with a rescue available does not end the run; tapping Rescue continues it', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => {
+    grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => ((r + c) % 2 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+    tray = [0, 1, 2].map(() => ({ s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }));
+    rescuesUsed = 0; score = 500; undoSnap = null; checkStuck();
+  });
+  await page.waitForTimeout(2000);
+  assert.equal(await page.evaluate(() => state), 'play'); assert.equal(await page.isVisible('#overCard'), false);
+  assert.equal(await page.isDisabled('#helpBtn'), false);
+  await page.click('#helpBtn');
+  const a = await page.evaluate(() => ({ state, rescuesUsed, fits: anyFits(), stuck }));
+  assert.deepEqual(a, { state: 'play', rescuesUsed: 1, fits: true, stuck: false });
+});
+
+test('the rescue button is disabled whenever any piece fits, and spends a rescue when stuck', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const out = [];
+    for (let k = 0; k < 40; k++) {                                  // random boards and trays: the button state follows "nothing fits" exactly
+      grid = Array.from({ length: 8 }, () => Array.from({ length: 8 }, () => (Math.random() < 0.7 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+      for (let r = 0; r < 8; r++) if (grid[r].every(v => v)) grid[r][0] = null;
+      tray = [0, 1, 2].map(() => ({ s: SHAPES[(Math.random() * SHAPES.length) | 0], gi: 1 }));
+      rescuesUsed = 0; score = 500; state = 'play'; checkStuck();
+      out.push({ fits: anyFits(), disabled: el('helpBtn').disabled });
+    }
+    return out;
+  });
+  for (const x of r) assert.equal(x.disabled, x.fits, 'disabled exactly when a piece fits');
+  assert.ok(r.some(x => x.fits) && r.some(x => !x.fits), 'the sample covered both cases');
+  await page.waitForTimeout(900);                                    // any pending game-over timers from that loop
+  await page.evaluate(() => { state = 'play'; el('overCard').hidden = true; });
+  // stuck with a rescue left: pressing it spends one and deals a playable tray
+  const o = await page.evaluate(() => {
+    grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => ((r + c) % 2 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+    tray = [0, 1, 2].map(() => ({ s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }));
+    rescuesUsed = 0; score = 500; checkStuck();
+    return { fits: anyFits(), disabled: el('helpBtn').disabled };
+  });
+  assert.equal(o.fits, false); assert.equal(o.disabled, false);
+  await page.click('#helpBtn');
+  const after = await page.evaluate(() => ({ rescuesUsed, state, fits: anyFits(), over: !el('overCard').hidden, disabled: el('helpBtn').disabled }));
+  assert.equal(after.rescuesUsed, 1); assert.equal(after.state, 'play'); assert.equal(after.fits, true); assert.equal(after.over, false); assert.equal(after.disabled, true);
 });
 
 const server = await serve();

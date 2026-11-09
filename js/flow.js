@@ -4,7 +4,7 @@
 async function gameOver(){
   if(state!=='play') return;
   if(paused){ setTimeout(gameOver,300); return; }
-  state='over'; clearRun();
+  state='over'; clearRun(); undoSnap=null; stuck=false; syncActions();
   blast=null;                                        // the round dies with the run; resetWorld() restores the look on restart
   const prevBest=best;
   best=Math.max(best,score); el('bestVal').textContent=best;
@@ -16,20 +16,20 @@ async function gameOver(){
     :score>=600?'Good chains. Save the big shapes for open space.'
     :'Clear rows early — do not let the board fill up.');
   const btn=el('reviveBtn');
-  const canRescue=rescuesUsed<CFG.MAX_RESCUES
-    && (score>=CFG.RESCUE_FLOOR || score>=prevBest*CFG.RESCUE_BEST_FRAC) && score>0;
-  btn.hidden=!canRescue;
+  btn.hidden=!rescueAllowed(prevBest);
   btn.textContent='Keep going';
   el('overCard').hidden=false;
 }
+// a rescue is on offer while she has one left and the run is worth saving (the game-over card and the mid-run button share this)
+const rescueAllowed=(bestRef)=>rescuesUsed<CFG.MAX_RESCUES && (score>=CFG.RESCUE_FLOOR || score>=bestRef*CFG.RESCUE_BEST_FRAC) && score>0;
 async function rescue(){
   if(rescuesUsed>=CFG.MAX_RESCUES) return;
-  rescuesUsed++;
+  rescuesUsed++; undoSnap=null; stuck=false;
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
   Sfx.rescue();
   combo=0; tension=0.5; goldenNext=false; cancelDeal(); genRescue();
   el('overCard').hidden=true; state='play';
-  saveRun();
+  syncActions(); saveRun();
 }
 // everything in flight that a new run, or a restored one, starts without (effects, banners, drag, the Blast Round)
 function clearRunFx(){
@@ -47,6 +47,6 @@ function start(){
   clearRunFx(); stats.games++;
   resetWorld();
   shownScore=0; el('scoreVal').textContent='0'; el('bestVal').textContent=best;
-  cancelDeal(); seedOpening(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
-  saveRun();
+  undoSnap=null; stuck=false; cancelDeal(); seedOpening(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
+  syncActions(); saveRun();
 }

@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after save and resume (plan PR 3.3).
+Last updated 2026-11-09, after Undo and the stuck rescue button (plan PR 3.2).
 
 ---
 
@@ -58,7 +58,7 @@ Last updated 2026-11-09, after save and resume (plan PR 3.3).
     worlds (`saveSkinSave` / `loadSkinSave`, `lookV` for one-time migrations).
   - `crumble.dev.5` — Admin panel tuning overrides. Bump the key when defaults
     change so old saved tuning doesn't mask them.
-  - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved; a live transformation or Blast Round is not (it ends on restore). Effects in flight are not saved. **Undo (3.2) should reuse `snapshot()`/`restore()`** (both pure, no storage).
+  - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved; a live transformation or Blast Round is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
   - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore`), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
@@ -80,6 +80,8 @@ Last updated 2026-11-09, after save and resume (plan PR 3.3).
   Vault, Volcano, Starfield, Storm) that also multiply points; discovering one
   adds its world to the home picker (`TRANSFORM_*`).
 - **Blast Round** — timed bonus round (below). There is no meter any more (3.1): the old meter filled with clears, drained while she dawdled, and auto-started a round. `startBlast()` is kept; it is only reachable from the Admin button until it returns as a tap-to-start (plan 4.5).
+- **Undo (3.2):** the `↩ Undo` button under the tray puts the run back to just before the last placement, exactly (`snapshot()` taken first thing in `place()` via `noteUndo()`, restored by `undo()` in `save.js`; lifetime stats are rewound too). One move back, once per placement: a new run, a rescue and game over clear it (so it can never refund a rescue), and a Blast Round in progress is not undoable.
+- **Stuck (3.2):** when no tray piece fits, the run waits instead of ending: pieces dim, "No moves" shows, and Undo, `🛟 Rescue` (needs a rescue left and `rescueAllowed()`, shared with the game-over card) and `End run` are offered. Only when neither Undo nor Rescue is available does it end on its own, 700 ms after the last drop (`checkStuck()` / `canExit()`). `syncActions()` keeps the buttons current.
 - **Rescues** — on game over (if the run is worth saving): up to 2 per run, both
   free ("Keep going"). A rescue serves a sweep/jackpot
   hand from `genRescue` — she still has to find the play.
@@ -163,6 +165,7 @@ Top to bottom:
 | (2.3) | Calm clears: everyday clears are a squash + point tags + one praise word; slam, orbs, COLOR GONE, fireworks, punch zoom from combo 3 (`CFG.BIG_COMBO`); `CFG.SPECIALS` (default off) pauses golden hands, star gems, transformations and Blast Round |
 | (3.1) | Relaxed opening: seeded opening board + verified first tray (a clear within the first move); no special in trays 1-5 (`SPECIAL_FROM_TRAY`); Blast meter, idle drain and auto-start removed |
 | (3.3) | Save and resume: `js/save.js` (`snapshot`/`restore`, autosave, `crumble.run`), best score and lifetime stats persisted (`crumble.stats`), `clearRunFx()` split out of `start()` |
+| (3.2) | Undo (one move, exact round-trip, saved) and a mid-run Rescue button, dimmed until nothing fits |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:

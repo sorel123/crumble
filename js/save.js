@@ -29,7 +29,7 @@ function validSnapshot(o){
 }
 function restore(o){
   if(!validSnapshot(o)) return false;
-  cancelDeal(); clearRunFx();
+  cancelDeal(); clearRunFx(); undoSnap=null; stuck=false;
   grid=o.grid.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0}));
   tray=o.tray.map(t=>t&&{s:t.s<0?STAR:SHAPES[t.s],gi:t.gi});
   score=o.score; combo=o.combo; tension=clamp(o.tension,0,1); sweepCool=Math.max(0,o.sweepCool|0); trayNo=o.trayNo;
@@ -43,8 +43,35 @@ function restore(o){
   el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   updateDbg();
   if(tray.every(v=>!v)) dealLater(); else checkStuck();
+  syncActions();
   return true;
 }
+/* ═══════ Undo (plan 3.2) and the mid-run rescue button ═══════
+   place() calls noteUndo() first, so undoSnap is the whole run as it stood before the last placement (plus the
+   lifetime counters, so a replayed move is not counted twice). undo() puts it back through restore() and clears
+   it: one move back, once per placement. A rescue, a new run and game over also clear it, so Undo can never
+   refund a rescue or reach into another run. The board goes back exactly; a Blast Round in progress cannot be undone. */
+let undoSnap=null, stuck=false;
+function noteUndo(){ undoSnap=blast?null:{run:snapshot(),stats:{...stats}}; syncActions(); }
+function undo(){
+  if(!undoSnap||state!=='play'||paused) return false;
+  const u=undoSnap; undoSnap=null;
+  if(!restore(u.run)){ syncActions(); return false; }
+  Object.assign(stats,u.stats);
+  syncActions(); saveRun();
+  return true;
+}
+const canExit=()=>!!undoSnap||rescueAllowed(best);               // a way out of being stuck other than ending the run
+function syncActions(){
+  const live=state==='play'&&!dealing;
+  el('undoBtn').disabled=!(undoSnap&&state==='play');
+  el('helpBtn').disabled=!(stuck&&live&&rescueAllowed(best));
+  const wait=stuck&&live&&canExit();
+  el('endBtn').hidden=!wait; el('noMoves').hidden=!wait;
+}
+el('endBtn').onclick=e=>{ e.stopPropagation(); if(stuck&&state==='play') gameOver(); };
+el('undoBtn').onclick=e=>{ e.stopPropagation(); undo(); };
+el('helpBtn').onclick=e=>{ e.stopPropagation(); if(!el('helpBtn').disabled) rescue(); };
 let lastRunJson=null;
 function saveRun(){
   if(state!=='play'||dealing||tray.every(v=>!v)) return;          // mid-deal there is nothing consistent to keep; the deal saves when it ends

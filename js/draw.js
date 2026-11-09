@@ -477,7 +477,7 @@ function frame(now){
     }
     const tsq=tp<1?(tp<0.5?1-tp*2:(tp-0.5)*2):1;
     for(const [dr,dc] of s.cells)
-      gem(t.gi,ox+dc*tc,oy+dr*tc,tc,pulse*tsq,1,gold?goldShimmer(now,s,dr,dc):0,true,pulse,trSrc);
+      gem(t.gi,ox+dc*tc,oy+dr*tc,tc,pulse*tsq,stuck?0.3:1,gold?goldShimmer(now,s,dr,dc):0,true,pulse,trSrc);
   }
 
   if(ret){
