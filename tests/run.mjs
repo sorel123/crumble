@@ -1697,6 +1697,66 @@ test('share card: where the share sheet cannot take files, the picture is saved 
   assert.equal(dl.suggestedFilename(), 'crumble-score.png');
 });
 
+test('phone speaker mode cuts the bass of the Original synth sounds too (6.4), not just the rest', async ({ page }) => {
+  // render a quiet sine through the Original chain on an offline context; bass should only be cut with the speaker on
+  const level = (on, hz) => page.evaluate(async ({ on, hz }) => {
+    const keep = CFG.PHONE_SPEAKER; CFG.PHONE_SPEAKER = on;
+    try {
+      const c = new OfflineAudioContext(1, 44100, 44100), ch = buildChain(c);
+      const o = c.createOscillator(), g = c.createGain(); g.gain.value = .05;   // well under the compressor's threshold
+      o.frequency.value = hz; o.connect(g); g.connect(ch.orig); o.start(0);
+      const d = (await c.startRendering()).getChannelData(0).subarray(4410);     // skip the first 0.1 s
+      return Math.sqrt(d.reduce((s, x) => s + x * x, 0) / d.length);
+    } finally { CFG.PHONE_SPEAKER = keep; }
+  }, { on, hz });
+  const bassOff = await level(false, 100), bassOn = await level(true, 100);
+  const midOff = await level(false, 1000), midOn = await level(true, 1000);
+  assert.ok(bassOn < bassOff * .3, `100 Hz is cut with the speaker on (${bassOn.toFixed(5)} vs ${bassOff.toFixed(5)})`);
+  assert.ok(midOn > midOff * .9, `1 kHz passes with the speaker on (${midOn.toFixed(5)} vs ${midOff.toFixed(5)})`);
+});
+
+test('Original pickup and place follow the Admin volume sliders (6.4)', async ({ page }) => {
+  await play(page);
+  // spy on the synth voices the Original sounds are built from; each call's gain is what the slider scales
+  const out = await page.evaluate(() => {
+    const seen = [], oV = oVoice, oN = oNoise;
+    oVoice = (...a) => { seen.push(a[1].vol); return oV(...a); };
+    oNoise = (...a) => { seen.push(a[1].vol); return oN(...a); };
+    const res = {};
+    try {
+      CFG.SND_PICKUP = 'original'; CFG.SND_PLACE = 'original';
+      for (const v of [1, .5, 0]) {
+        CFG.SND_PICKUP_VOL = v; CFG.SND_PLACE_VOL = v;
+        seen.length = 0; Sfx.pickup(); res['pick' + v] = seen.splice(0);
+        seen.length = 0; Sfx.place();  res['place' + v] = seen.splice(0);
+      }
+    } finally { oVoice = oV; oNoise = oN; CFG.SND_PICKUP_VOL = 1; CFG.SND_PLACE_VOL = 1; }
+    return res;
+  });
+  for (const k of ['pick', 'place']) {
+    const full = out[k + '1'];
+    assert.ok(full.length >= 2, `${k}: the original voices played`);
+    full.forEach((v, i) => {
+      assert.ok(Math.abs(out[k + '0.5'][i] - v * .5) < 1e-9, `${k}: half the slider halves voice ${i}`);
+    });
+    assert.equal(out[k + '0'].length, 0, `${k}: slider at 0 plays nothing`);
+  }
+});
+
+test('phone speaker defaults on for touch devices unless she has chosen (6.4)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const out = {};
+    localStorage.removeItem('crumble.speaker'); CFG.PHONE_SPEAKER = false; speakerDefault();
+    out.touchDefault = CFG.PHONE_SPEAKER;                       // the harness device has touch on
+    localStorage.setItem('crumble.speaker', 'false'); CFG.PHONE_SPEAKER = false; speakerDefault();
+    out.savedOff = CFG.PHONE_SPEAKER;                           // a saved choice wins
+    localStorage.removeItem('crumble.speaker');
+    return out;
+  });
+  assert.equal(r.touchDefault, true, 'touch device: speaker mode on by default');
+  assert.equal(r.savedOff, false, 'a saved Settings choice is not overridden');
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 for (const { name, fn } of tests) {

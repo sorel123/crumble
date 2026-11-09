@@ -139,7 +139,7 @@ function initDev(){
   for(const [k,label] of DEV_SOUND_TOGGLES){
     const row=make('label','tog'), name=make('span'), inp=make('input');
     name.textContent=label; inp.type='checkbox';
-    inp.onchange=()=>{ CFG[k]=inp.checked; devSave(); setSpeaker(CFG.PHONE_SPEAKER); };
+    inp.onchange=()=>{ CFG[k]=inp.checked; devSave(); setSpeaker(CFG.PHONE_SPEAKER); try{ localStorage.setItem('crumble.speaker',String(inp.checked)); }catch(e){} };
     refresh.push(()=>{ inp.checked=!!CFG[k]; });
     row.append(name,inp); list.append(row);
   }
