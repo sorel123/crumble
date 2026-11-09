@@ -74,6 +74,11 @@ test('running out of moves ends the run', async ({ page }) => {
   const rows = Array.from({ length: 8 }, (_, r) => [...'11111111'].map((ch, c) => (c === r || c === (r + 1) % 8 ? '0' : ch)).join(''));
   await setup(page, { rows, trayShapes: [0, 3, 9] });
   await dragPiece(page, 0, 0, 0);
+  await page.waitForFunction(() => stuck, null, { timeout: 3000 });
+  await page.waitForTimeout(1500);
+  assert.equal((await snap(page)).state, 'play', 'Undo is still available, so the run waits');
+  assert.equal(await page.isVisible('#noMoves'), true); assert.equal(await page.isVisible('#endBtn'), true);
+  await page.click('#endBtn');
   await page.waitForFunction(() => !el('overCard').hidden, null, { timeout: 5000 });
   assert.equal((await snap(page)).state, 'over');
 });
@@ -748,10 +753,29 @@ test('Undo during the 700 ms before game over cancels it', async ({ page }) => {
   await dragPiece(page, 0, 0, 0);
   await page.waitForFunction(() => stuck === true, null, { timeout: 2000 });
   assert.equal(await page.isDisabled('#undoBtn'), false);
+  await page.waitForTimeout(2000);
+  assert.equal(await page.evaluate(() => state), 'play', 'stuck with Undo available: the run waits, it does not end');
   await page.click('#undoBtn');
-  await page.waitForTimeout(1000);
-  assert.equal(await page.evaluate(() => state), 'play', 'the game-over timer saw she was no longer stuck');
   assert.equal(await page.evaluate(() => stuck), false);
+  assert.equal(await page.isVisible('#noMoves'), false);
+  // with no way out left, it ends by itself after the short wait
+  await page.evaluate(() => { undoSnap = null; score = 0; tray = [null, { s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }, null]; grid[0][0] = grid[0][1] = grid[1][0] = grid[1][1] = { gi: 0, t: 1, f: 0, l: 0 }; checkStuck(); });
+  await page.waitForFunction(() => !el('overCard').hidden, null, { timeout: 3000 });
+});
+
+test('a stuck board with a rescue available does not end the run; tapping Rescue continues it', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => {
+    grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => ((r + c) % 2 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+    tray = [0, 1, 2].map(() => ({ s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }));
+    rescuesUsed = 0; score = 500; undoSnap = null; checkStuck();
+  });
+  await page.waitForTimeout(2000);
+  assert.equal(await page.evaluate(() => state), 'play'); assert.equal(await page.isVisible('#overCard'), false);
+  assert.equal(await page.isDisabled('#helpBtn'), false);
+  await page.click('#helpBtn');
+  const a = await page.evaluate(() => ({ state, rescuesUsed, fits: anyFits(), stuck }));
+  assert.deepEqual(a, { state: 'play', rescuesUsed: 1, fits: true, stuck: false });
 });
 
 test('the rescue button is disabled whenever any piece fits, and spends a rescue when stuck', async ({ page }) => {

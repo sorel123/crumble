@@ -43,6 +43,8 @@
   #actions button{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);font-family:var(--font);font-size:14px;font-weight:600;
         min-width:104px;height:40px;padding:0 14px;border-radius:12px;cursor:pointer;transition:opacity .15s}
   #actions button:disabled{opacity:.3;cursor:default}
+  #noMoves{position:absolute;left:0;right:0;text-align:center;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:15px;font-weight:600;opacity:.8;pointer-events:none}
+  #noMoves[hidden],#actions button[hidden]{display:none}
   #dbg{position:absolute;left:18px;top:calc(100px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
   #dbg[hidden]{display:none}
@@ -148,8 +150,10 @@
   </div>
   <div id="actions">
     <button id="undoBtn" type="button" aria-label="Undo last move" disabled>↩ Undo</button>
+    <button id="endBtn" type="button" hidden>End run</button>
     <button id="helpBtn" type="button" aria-label="Rescue: get a new set of pieces" disabled>🛟 Rescue</button>
   </div>
+  <div id="noMoves" hidden>No moves</div>
   <div id="dbg"></div>
 
   <div class="overlay" id="startCard">

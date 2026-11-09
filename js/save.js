@@ -61,10 +61,15 @@ function undo(){
   syncActions(); saveRun();
   return true;
 }
+const canExit=()=>!!undoSnap||rescueAllowed(best);               // a way out of being stuck other than ending the run
 function syncActions(){
+  const live=state==='play'&&!dealing;
   el('undoBtn').disabled=!(undoSnap&&state==='play');
-  el('helpBtn').disabled=!(stuck&&state==='play'&&!dealing&&rescueAllowed(best));
+  el('helpBtn').disabled=!(stuck&&live&&rescueAllowed(best));
+  const wait=stuck&&live&&canExit();
+  el('endBtn').hidden=!wait; el('noMoves').hidden=!wait;
 }
+el('endBtn').onclick=e=>{ e.stopPropagation(); if(stuck&&state==='play') gameOver(); };
 el('undoBtn').onclick=e=>{ e.stopPropagation(); undo(); };
 el('helpBtn').onclick=e=>{ e.stopPropagation(); if(!el('helpBtn').disabled) rescue(); };
 let lastRunJson=null;

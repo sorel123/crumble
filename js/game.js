@@ -284,8 +284,12 @@ function place(idx,r,c){
   if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
 const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
-// the timer re-checks, so an Undo or a rescue within those 700 ms cancels the game over
-function checkStuck(){ stuck=!anyFits(); if(stuck) setTimeout(()=>{ if(!dealing&&!anyFits()) gameOver(); },700); syncActions(); }
+// Stuck (plan 3.2): while Undo or a Rescue can get her out, the run waits for her (pieces dim, "No moves", End run offered).
+// Only when neither is left does it end by itself, after 700 ms so the last drop finishes landing; the timer re-checks.
+function checkStuck(){
+  stuck=!anyFits(); syncActions();
+  if(stuck&&!canExit()) setTimeout(()=>{ if(!dealing&&!anyFits()&&!canExit()) gameOver(); },700);
+}
 
 /* The next tray is dealt after the clear has started, not inside the drop (plan 2.2). Choosing a hand
    is the most expensive thing the game does (~5-15 ms; more for a Blast Round hand), and it used to run
