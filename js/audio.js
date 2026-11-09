@@ -67,11 +67,39 @@ function ac(){
     speakerDefault();
     actx=new (window.AudioContext||window.webkitAudioContext)();
     ({master,revIn,nbuf,setSpeaker,smp:smpBus,orig:origBus,mus:musBus}=buildChain(actx));
+    // iOS can interrupt the context (a call, Siri, the app switcher): ask for it back when it's not running
+    actx.addEventListener('statechange',()=>{ if(actx.state!=='running') actx.resume().catch(()=>{}); });
     loadBank(); musicSync();
   }
   if(actx.state!=='running') actx.resume().catch(()=>{});
   return actx;
 }
+/* Phase 7.0: first touch unlocks sound, in Safari too. iOS only accepts a resume() made inside a touch or
+   click; a pointerdown in the middle of a drag (a resumed run skips the start card) is not one of those. So
+   every touchend/click/pointerup/key at document level, capture phase, runs unlockAudio() before the game sees
+   it. A silent looping <audio> element is played after the first unlock: it keeps the ring/silent switch from
+   muting Web Audio (iOS treats a playing media element as playback, not ambient). Re-played on every gesture
+   and when the page comes back, in case iOS paused it. */
+let silentEl=null;
+function silentUrl(){                                  // a 0.25 s silent mono WAV, built once, no file to ship
+  const n=11025, b=new DataView(new ArrayBuffer(44+n*2)), s=(o,t)=>{ for(let i=0;i<t.length;i++) b.setUint8(o+i,t.charCodeAt(i)); };
+  s(0,'RIFF'); b.setUint32(4,36+n*2,true); s(8,'WAVE'); s(12,'fmt '); b.setUint32(16,16,true);
+  b.setUint16(20,1,true); b.setUint16(22,1,true); b.setUint32(24,11025,true); b.setUint32(28,22050,true);
+  b.setUint16(32,2,true); b.setUint16(34,16,true); s(36,'data'); b.setUint32(40,n*2,true);
+  return URL.createObjectURL(new Blob([b.buffer],{type:'audio/wav'}));
+}
+function unlockAudio(){
+  try{ ac(); }catch(e){}
+  try{
+    if(!silentEl){ silentEl=new Audio(silentUrl()); silentEl.loop=true; silentEl.preload='auto'; }
+    if(silentEl.paused) silentEl.play().catch(()=>{});
+  }catch(e){}
+}
+for(const ev of ['touchend','pointerup','click','keydown'])
+  document.addEventListener(ev,unlockAudio,{capture:true,passive:true});
+document.addEventListener('visibilitychange',()=>{      // back from the background: iOS may have paused both
+  if(document.visibilityState==='visible'&&actx) unlockAudio();
+});
 const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger — physical sounds only, never musical ones
 const hz=f=>clamp(f,20,12000);
 function send(node,wet){                             // dry to master, plus `wet` of it into the reverb
