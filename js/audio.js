@@ -69,7 +69,7 @@ function ac(){
     ({master,revIn,nbuf,setSpeaker,smp:smpBus,orig:origBus,mus:musBus}=buildChain(actx));
     loadBank(); musicSync();
   }
-  if(actx.state==='suspended') actx.resume().catch(()=>{});
+  if(actx.state!=='running') actx.resume().catch(()=>{});
   return actx;
 }
 const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger — physical sounds only, never musical ones
@@ -517,7 +517,7 @@ function arbFlush(){
     if(how==='duck') arbPlay(e,DUCK);
     else if(how==='defer'){ if(e.late) arbPlay(e,DUCK); else later.push(e); }
   }
-  if(hold>0){ arbLead={p:top,until:Math.max(arbLead.until,now+hold)}; musicDuck(win,hold); }   // 6.8: the music dips under whatever won
+  if(hold>0){ arbLead={p:top,until:Math.max(arbLead.until,now+hold)}; if(!muted) musicDuck(win,hold); }   // 6.8: the music dips under whatever won
   for(const e of later) setTimeout(()=>sfxEvent(e.fn,e.a,true),Math.max(0,(arbLead.until-now)*1000)+40);
 }
 function sfxEvent(fn,a,late=false){

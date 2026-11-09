@@ -32,7 +32,7 @@ function loadSkinSave(){
     if(o.sndV!==2) CFG.SND_SET='strings';                          // 6.5: everyone starts on the new sound family once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
-    if(typeof o.music==='boolean') CFG.MUSIC=o.music;                // 6.8: music is on for everyone until she turns it off
+    if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
   }catch(e){}
 }
 // call whenever `best` changes; returns the names of any skins newly earned

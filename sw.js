@@ -3,7 +3,7 @@
 //
 // ASSET_HASH must change whenever a precached file changes, or phones keep the old game.
 // `npm run stamp` rewrites it; `npm test` fails if it is stale.
-const ASSET_HASH='878614417c';
+const ASSET_HASH='eea75d0f5a';
 const CACHE='crumble-'+ASSET_HASH;
 const ASSETS=["./","index.html","manifest.json","icon-120.png","icon-152.png","icon-180.png","icon-192.png","icon-512.png","js/config.js","js/worlds.js","js/shapes.js","js/solver.js","js/render.js","js/samples.js","js/audio.js","js/music.js","js/game.js","js/draw.js","js/flow.js","js/save.js","js/modes.js","js/goals.js","js/share.js","js/ui.js","js/admin.js","js/main.js","js/update.js"];
 

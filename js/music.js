@@ -104,14 +104,16 @@ function createMusic(c,out){
   E.duck=(level,secs,at=c.currentTime)=>{
     const g=duck.gain;
     if(at<E.duckEnd&&level>E.duckLvl) level=E.duckLvl;           // already ducked deeper: keep that, just stretch it
-    E.duckLvl=level; E.duckEnd=Math.max(E.duckEnd,at+secs);
-    g.cancelScheduledValues(at); g.setValueAtTime(at>c.currentTime?1:g.value,at);
+    E.duckLvl0=at<E.duckEnd?E.duckLvl:1; E.duckLvl=level; E.duckEnd=Math.max(E.duckEnd,at+secs);
+    const cur=at>c.currentTime?1:(at<E.duckEnd?E.duckLvl0:1);   // where it is now, tracked here rather than read back from the param
+    g.cancelScheduledValues(at); g.setValueAtTime(cur,at);
     g.setTargetAtTime(level,at,.04); g.setTargetAtTime(1,E.duckEnd,.45);
   };
   E.sched=until=>{                                              // schedule every beat that starts before `until`
     while(E.running&&E.next<until){
-      const t=E.next, b=E.beat, spb=60/MUSIC_TRACKS[E.track].bpm;
+      const t=E.next, b=E.beat;
       if(b===0){ if(E.bar%MUSIC_BARS===0) E.track=E.nextTrack; E.cur=E.chord(t,E.bar); }
+      const spb=60/MUSIC_TRACKS[E.track].bpm;
       const P=E.cur;
       for(const s of P.bells) if(s.beat>=b&&s.beat<b+1&&s.q<s.p0*musicDensity(E.i)) E.bell(t+(s.beat-b)*spb,s.midi,.7+.3*s.q/s.p0);
       if(E.i>.28&&(b===0||b===2)) E.beat1(t,Math.min(1,(E.i-.2)*1.3));
@@ -122,6 +124,7 @@ function createMusic(c,out){
     if(!E.running) return; E.running=false;
     const t=c.currentTime; vol.gain.cancelScheduledValues(t); vol.gain.setValueAtTime(vol.gain.value,t); vol.gain.setTargetAtTime(0,t,secs/3);
     for(const o of [...drone,ninth]) try{ o.stop(t+secs*2); }catch(e){}
+    setTimeout(()=>{ try{ vol.disconnect(); fb.disconnect(); }catch(e){} },secs*3000+800);   // let a dead engine (and its echo loop) go
   };
   return E;
 }
@@ -135,7 +138,8 @@ function musicTick(){
   const now=actx.currentTime, dt=Math.max(0,Math.min(1,now-musicLast)); musicLast=now;
   const t=musicTarget(); musicMi+=(t-musicMi)*(1-Math.exp(-dt/(t>musicMi?1.8:1.1)));       // tightens slowly, lets go a little faster
   if(musicLvl!==musicLevel()){ musicLvl=musicLevel(); musicE.setLevel(musicLvl); }   // the Admin slider
-  musicE.setI(musicMi,now); musicE.sched(now+.7);
+  if(Math.abs(musicMi-musicE.i)>.003||(t===0&&musicE.i!==0)) musicE.setI(musicMi<.003&&t===0?0:musicMi,now);   // not every tick forever
+  musicE.sched(now+.7);
 }
 function musicSync(){                                           // call whenever the switch, the tab or the context changes
   const want=CFG.MUSIC&&actx&&!document.hidden;
