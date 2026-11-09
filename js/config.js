@@ -129,9 +129,9 @@ const CFG = {
   FX_PUNCH_ZOOM:     true,   // (combo BIG_COMBO+) brief 2-3% punch zoom
 
   // sound — variant + volume for the two most-heard effects, set on the settings panel
-  SND_SET:        'original', // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)
-  SND_PICKUP:     'original', // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
-  SND_PLACE:      'original', // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
+  SND_SET:        'strings',  // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)
+  SND_PICKUP:     'soft',     // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
+  SND_PLACE:      'drop',     // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
   SND_PICKUP_VOL: 1,
   SND_PLACE_VOL:  1,
   PHONE_SPEAKER:  false,      // synth sounds only: cut the bass a phone speaker can't play (it just distorts)

@@ -1790,6 +1790,96 @@ test('phone speaker defaults on for touch devices unless she has chosen (6.4)', 
   assert.equal(r.savedOff, false, 'a saved Settings choice is not overridden');
 });
 
+// ---- one sound family (plan 6.5) ----
+// A stand-in sound set records what the arbiter lets through and at what level (sfxGain while the event schedules its notes).
+const spySet = page => page.evaluate(() => {
+  window.heard = [];
+  const rec = n => (...a) => { heard.push(n + ':' + sfxGain); };
+  SOUND_SETS.spy = Object.fromEntries(Object.keys(EVT).map(n => [n, rec(n)]));
+  CFG.SND_SET = 'spy'; arbLead = { p: 0, until: 0 };
+});
+const tick = page => page.evaluate(() => new Promise(r => setTimeout(r, 0)));
+const heardNow = page => page.evaluate(() => heard.splice(0));
+
+test('sound family (6.5): the highest-priority event in a tick plays in full, the rest drop, duck or wait', async ({ page }) => {
+  await play(page); await spySet(page);
+  const fire = async fns => { await page.evaluate(f => { for (const x of f) eval(x); }, fns); await tick(page); return heardNow(page); };
+  assert.deepEqual(await fire(['Sfx.clear(1)']), ['clear:1'], 'a lone clear plays in full');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.clear(1)', 'Sfx.combo(3)']), ['combo:1'], 'a combo replaces the plain clear: one clear sound, not two');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.combo(4)', 'Sfx.praise(1)']), ['combo:1'], 'a small praise is only the word on screen');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.clear(4)', 'Sfx.praise(4)']), ['praise:1'], 'a big praise is the main sound of its moment; the clear gives way');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.clear(1)', 'Sfx.phew(1)']), ['phew:1'], 'the narrow escape replaces the clear (it carries its own)');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.clear(3)', 'Sfx.sweep()']), ['sweep:1'], 'a clean sweep owns the mix');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.sweep()', 'Sfx.fanfare()']), ['sweep:1', 'fanfare:' + (await page.evaluate(() => DUCK))], 'NEW BEST on a sweep is ducked under it, not stacked');
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.starPick()', 'Sfx.deny()']), ['deny:1'], 'the star pickup tick gives way to a bigger sound');
+});
+
+test('sound family (6.5): a winner keeps the mix for a moment, and first-time achievements wait for it instead of stacking', async ({ page }) => {
+  await play(page); await spySet(page);
+  const fire = async fns => { await page.evaluate(f => { for (const x of f) eval(x); }, fns); await tick(page); return heardNow(page); };
+  const duck = await page.evaluate(() => DUCK);
+  assert.deepEqual(await fire(['Sfx.sweep()', 'Sfx.achieve(0)', 'Sfx.transformShift()']), ['sweep:1'], 'the achievement run and the sky shift wait for the sweep phrase');
+  assert.deepEqual(await fire(['Sfx.clear(1)']), ['clear:' + duck], 'a clear right after a sweep sits under it, still heard');
+  const later = await page.evaluate(() => new Promise(r => { const t0 = performance.now(); const id = setInterval(() => {
+    if (heard.length >= 2 || performance.now() - t0 > 5000) { clearInterval(id); r(heard.splice(0)); } }, 50); }));
+  assert.ok(later.some(h => h.startsWith('achieve:')), 'the achievement sound still arrives, after the sweep: ' + later);
+  await page.evaluate(() => { arbLead = { p: 0, until: 0 }; });
+  assert.deepEqual(await fire(['Sfx.deny()']), ['deny:1'], 'with nothing running, the next sound is full level');
+});
+
+test('sound family (6.5): the real moves raise one main sound each (clear, sweep, narrow escape)', async ({ page }) => {
+  await play(page); await spySet(page);
+  const raised = () => page.evaluate(() => new Promise(r => setTimeout(() => r(heard.splice(0)), 20)));
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { heard.length = 0; });
+  await dragPiece(page, 0, 0, 0);
+  const one = (await raised()).filter(h => !/^(place|pickup)/.test(h));
+  assert.deepEqual(one, ['clear:1'], 'a plain clear is one clear sound: ' + one);
+  await dealt(page);
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 8)], trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { heard.length = 0; arbLead = { p: 0, until: 0 }; });
+  await dragPiece(page, 0, 0, 0);
+  const sw = await raised();
+  assert.ok(sw.includes('sweep:1') && !sw.some(h => h.startsWith('clear:')), 'a clean sweep is the sweep phrase alone: ' + sw);
+  await dealt(page);
+  const CRAMPED = ['01111111', '01111111', '01111111', '00111111', '01011111', '01101111', '01110011', '01111100'];
+  await setup(page, { rows: CRAMPED, trayShapes: [4, 0, 0] });
+  await page.evaluate(() => { paceSet('edge'); heard.length = 0; arbLead = { p: 0, until: 0 }; });
+  await dragPiece(page, 0, 0, 0);
+  const ph = await raised();
+  assert.ok(ph.includes('phew:1') && !ph.some(h => h.startsWith('clear:') || h.startsWith('combo:')), 'a narrow escape is the phew accent alone: ' + ph);
+});
+
+test('sound family (6.5): every set can play every event, and the new family is the default for everyone once', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(async () => {
+    const out = { bad: [], dflt: CFG.SND_SET, pick: CFG.SND_PICKUP, place: CFG.SND_PLACE };
+    for (const set of ['strings', 'steel', 'bells', 'original']) {
+      CFG.SND_SET = set; arbLead = { p: 0, until: 0 };
+      for (const n of Object.keys(EVT)) {
+        try { Sfx[n](n === 'clear' ? 2 : n === 'combo' ? 3 : n === 'praise' ? 4 : n === 'star' ? 6 : n === 'achieve' || n === 'goldenStep' ? 1 : undefined); await new Promise(r => setTimeout(r, 0)); arbLead = { p: 0, until: 0 }; }
+        catch (e) { out.bad.push(set + ':' + n + ':' + e.message); }
+      }
+    }
+    // a saved game from before the family: the old sound choice is replaced once, a later choice sticks
+    localStorage.setItem('crumble.skins', JSON.stringify({ sndSet: 'original', lookV: 2 }));
+    CFG.SND_SET = 'bells'; loadSkinSave(); out.migrated = CFG.SND_SET;
+    saveSkinSave(); CFG.SND_SET = 'bells'; saveSkinSave(); CFG.SND_SET = 'steel'; loadSkinSave(); out.kept = CFG.SND_SET;
+    return out;
+  });
+  assert.deepEqual(r.bad, [], 'no set throws on any event');
+  assert.equal(r.dflt, 'strings'); assert.equal(r.pick, 'soft'); assert.equal(r.place, 'drop');
+  assert.equal(r.migrated, 'strings', 'an old saved sound choice moves to the family once');
+  assert.equal(r.kept, 'bells', 'after that, her choice is kept');
+});
+
 // ---- pressure and recovery (plan 6.1) ----
 const rowsBoard = rows => `grid = ${JSON.stringify(rows)}.map(r => [...r].map(ch => (ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null)));`;
 const HALF = ['11111111', '11111111', '11111111', '11111111', '00000000', '00000000', '00000000', '00000000'];        // 32 gems, all in one half

@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after the animation hierarchy (plan PR 6.3).
+Last updated 2026-11-09, after the sound family (plan PR 6.5).
 
 ---
 
@@ -179,6 +179,7 @@ Top to bottom:
 | (6.0) | Opening no longer sweeps on move one: 2-4 scattered gems outside the seeded lines, and about 1 in 8 openings keep the board bare (`CFG.OPENING_SWEEP_CHANCE`); the opening test counts sweeps |
 | (6.4) | Audio routing: the Original synth chain has its own speaker filter (`ohp1`/`ohp2`, set by `setSpeaker` with the other pair), so phone-speaker mode cuts its bass too; `ORIG_SFX.pickup/place` take the Admin volumes (`SND_PICKUP_VOL`, `SND_PLACE_VOL`). `PHONE_SPEAKER` defaults on for touch devices (`speakerDefault()`, run in `ac()`) unless a choice is saved: `crumble.speaker` (written by the Admin toggle) or `PHONE_SPEAKER` in `crumble.dev.6` |
 | (6.2) | Bonus trays replace the Blast Round: a clear meter, then ×2 for the next 3 trays, automatically; Blast's button, timer, results card, big-piece hands and `canBlast` gating are gone. See the 6.2 section |
+| (6.5) | One sound family: an arbiter in `audio.js` gives each moment one main sound (priority, ducking, deferral); every clear has a dry impact under its glass tail; narrow escape (`Sfx.phew`) and NEW BEST / LEVEL CLEARED (`Sfx.fanfare`) are their own events; the Strings set, soft pickup tick and drop click are the default for everyone once (`sndV`). Section at the end |
 | (6.1) | Pressure and recovery: `roomOf()` measures room on the board; phases calm/building/edge/recovery/relief pick the tray (`paceTier`); honest trays return, edge trays only promise each piece a spot, recovery is a sequence she must see; the second rescue is earned; strong bot added to `tools/bot-sim.mjs`. See the 6.1 section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
@@ -873,3 +874,14 @@ Four tiers, so the big moments stand out. In `place()` (`game.js`), `single` = o
 - **Clean sweep:** unchanged and still the biggest (confetti, four rings, banner, shake 16, a world).
 - **Placement:** compress/settle `q` 0.11 over ~100 ms (was 0.16 over ~130 ms), 3 dust bits instead of 6, same ring. Board and block material are untouched.
 Tests: `calm clears` (single is quiet) and `6.3 animation hierarchy`.
+
+## One sound family (plan 6.5)
+
+**The idea:** one main sound per moment. Pickup is a very quiet tick, placement a short dry click, a clear is that click's impact plus a pitched glass tail, a combo is the *same* clear a step higher up the pentatonic scale, a narrow escape (PHEW) is that clear plus one stronger accent, and a clean sweep is one short rising phrase that owns the mix. No pile of jingles.
+
+- **The arbiter (`audio.js`, `EVT`, `sfxEvent`, `arbFlush`).** Every `Sfx.*` event except pickup/place goes through it. Events raised in the same tick are collected (a microtask) and the highest priority `p` plays at full level; the others are dropped, ducked (`DUCK` .4), or deferred until the winner is over (`same`: `drop` / `duck` / `defer`). A winner then holds the mix for `hold` seconds (`arbLead`), so the next clear after a sweep is heard, ducked, not on top of it. Priorities, lowest to highest: star pickup tick 0, clear 1, combo 2, deals 2, praise (tier 3+ only; smaller praise is just the word on screen) 3, achievements / bonus ready / bonus over / rescue 3, star / phew / bonus start 4, fanfare 5, sweep and golden win 6. To add an event: write it in each set, add an `EVT` row, and raise it with `Sfx.name(...)`.
+- **Ducking works by `sfxGain`**, a module variable the arbiter sets while one event schedules its notes; `smp`, `noiseHit`, `voice`, `tone`, `bell`, `oNoise` and `oVoice` multiply their level by it. Keep any new primitive honest: multiply by `sfxGain`.
+- **New events:** `Sfx.phew(total,delay,combo)` (the clear plus an accent, raised next to the plain clear; the arbiter drops the plain one) and `Sfx.fanfare()` (NEW BEST, LEVEL CLEARED; it used to be `praise(3)`). The golden hand's extra gong layer is gone (`goldenGong`); `goldenWin` is the one sound.
+- **Defaults.** `CFG.SND_SET` is `'strings'` (recorded), `SND_PICKUP` `'soft'`, `SND_PLACE` `'drop'`. `saveSkinSave` writes `sndV:2`; a save without it is moved to Strings once on load (like `lookV`), and her later choice sticks. Original, Steel drum and Bells are still in Settings → Sound and all work with the arbiter. The recorded clear is `pl_drop` (rate .85) plus up to three `glass` tings; the recorded `phew` adds a glass chord and a low swell.
+- **Not done here:** music (6.8), the sound for mode / whole-screen states (6.7). I could not listen to it; the levels are chosen by ear-of-the-numbers (impact about a placement's loudness, glass unchanged). Retune `pl_drop` volume/rate in `recordedSet().clear` first if clears sound thin or boomy on the phone.
+- Tests: the "sound family (6.5)" block in `tests/run.mjs` uses a stand-in set (`spySet`) that records `event:sfxGain`, so priority and ducking are tested without audio hardware.
