@@ -115,24 +115,28 @@ function pressureTarget(){                              // {p, warm} for the cur
   if(ph==='recovery') return {p:Math.max(0.8,k),warm:0.45};
   return {p:k*0.55,warm:0.6*k};                        // calm: ~0; building: a faint warming
 }
+function resetPressure(snap){                         // a new run (snap=false: eases from nothing) or a restored one (snap=true: already where it should be)
+  const t=snap?pressureTarget():{p:0,warm:0};
+  scr.p=t.p; scr.warm=t.warm; scr.relief=0; scr.ph=pace.ph;
+}
 function stepPressure(dt){
   const t=pressureTarget();
   if(pace.ph!==scr.ph){                                // phase change: leaving edge/recovery into relief is the flash
-    if(pace.ph==='relief'&&(scr.ph==='edge'||scr.ph==='recovery')&&CFG.FX_PRESSURE_SCREEN) scr.relief=1;
+    if(pace.ph==='relief'&&(scr.ph==='edge'||scr.ph==='recovery')&&CFG.FX_PRESSURE_SCREEN&&paced()) scr.relief=1;
     scr.ph=pace.ph;
   }
   const f=Math.min(1,dt*(t.p>scr.p?0.05:0.09));        // tightens slowly, lets go a bit faster
   scr.p+=(t.p-scr.p)*f; scr.warm+=(t.warm-scr.warm)*f;
   if(Math.abs(t.p-scr.p)<0.002) scr.p=t.p;
-  scr.relief=Math.max(0,scr.relief-dt/(reduce?25:55));
+  scr.relief=Math.max(0,scr.relief-dt/55);
 }
 let _vig=null;
 function vignetteSprite(){                              // one cached dark-warm vignette (clear in the middle), rebuilt only on resize
-  if(_vig&&_vig.W===W&&_vig.H===H) return _vig.cv;
+  if(_vig&&_vig.W===W&&_vig.H===H&&_vig.B===B) return _vig.cv;
   const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(W*0.25)); cv.height=Math.max(1,Math.round(H*0.25));
-  const x=cv.getContext('2d'), w=cv.width, h=cv.height, g=x.createRadialGradient(w/2,h/2,Math.min(w,h)*0.35,w/2,h/2,Math.hypot(w,h)/2);
+  const x=cv.getContext('2d'), w=cv.width, h=cv.height, g=x.createRadialGradient(w/2,h/2,Math.min(Math.hypot(w,h)/2-2,B*0.75*0.25),w/2,h/2,Math.hypot(w,h)/2);   // clear over the whole board (its half-diagonal), dark only in the margins
   g.addColorStop(0,'rgba(40,0,0,0)'); g.addColorStop(1,'rgba(40,0,0,1)'); x.fillStyle=g; x.fillRect(0,0,w,h);
-  _vig={W,H,cv}; return cv;
+  _vig={W,H,B,cv}; return cv;
 }
 function drawPressureWash(){                           // behind the board: a warm sky wash, a vignette, and the relief flash
   const k=bonus?0.5:1;
@@ -141,7 +145,7 @@ function drawPressureWash(){                           // behind the board: a wa
     ctx.globalAlpha=scr.p*0.5*k; ctx.drawImage(vignetteSprite(),0,0,W,H);
     ctx.globalAlpha=1;
   }
-  if(scr.relief>0.01){ ctx.globalAlpha=scr.relief*(reduce?0.10:0.2); ctx.fillStyle='#BFF6FF'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+  if(scr.relief>0.01&&!reduce){ ctx.globalAlpha=scr.relief*0.2; ctx.fillStyle='#BFF6FF'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
 }
 function drawPressureRim(now){                         // the board frame: cool and still when comfortable, warm and breathing when tight
   const p=scr.p, hue=200-(200-(12+28*(1-scr.warm)))*Math.min(1,p*1.1);   // cool blue -> amber (recovery) / red-orange (edge)
@@ -338,6 +342,7 @@ function frame(now){
     ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;      ctx.lineWidth=2+2*tension;  ctx.stroke();
   }
 
+  drawTrayBand();                                    // (6.6) in the board layer, so nothing that flies over the tray (chunks, shards) is ever dimmed by it
   drawGoldPlan(now,!!(drag&&tray[drag.i]));           // (4.5c) before the held piece's preview, so the preview wins where they overlap
 
   if(drag&&tray[drag.i]){ drag.g=Math.min(1,drag.g+dt*0.2); updateSlot(); }   // the pickup lift moves the piece without a pointer event
@@ -578,7 +583,6 @@ function frame(now){
     }
     ctx.globalAlpha=1;
   }
-  drawTrayBand();
   for(let i=0;i<3;i++){
     const t=tray[i]; if(!t) continue;
     if(drag&&drag.i===i) continue;

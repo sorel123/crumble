@@ -59,7 +59,7 @@ function restore(o,keepLive){
   const pc=o.pace, PH=['calm','building','edge','recovery','relief'];   // (6.1) older saves have none: start calm
   pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
   rescueLines=isInt(o.rescueLines,0,1e6)?o.rescueLines:0;
-  roomNow=roomOf(packGrid(grid));
+  roomNow=roomOf(packGrid(grid)); resetPressure(true);
   const b=o.bonus;                                  // a live bonus carries on with the trays it had left (the sky is back at once)
   if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){
     bonus={left:b.left,extra:b.extra};

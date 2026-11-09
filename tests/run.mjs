@@ -2057,6 +2057,8 @@ test('pressure on screen (6.6): follows phase and room, lets go with a relief fl
   assert.equal((await read()).p, 0, 'the switch turns it off');
   await page.evaluate(() => { CFG.FX_PRESSURE_SCREEN = true; mode = 'adventure'; }); await settle();
   assert.equal((await read()).p, 0, 'Adventure keeps its own border');
+  const fresh = await page.evaluate(() => { mode = 'endless'; pace = { ph: 'edge', n: 1, hold: 3, len: 0 }; scr.p = 0.9; scr.relief = 1; start(); return { p: scr.p, relief: scr.relief }; });
+  assert.deepEqual(fresh, { p: 0, relief: 0 }, 'a new run starts with no pressure on screen');
 });
 
 let failed = 0;

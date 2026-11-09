@@ -898,10 +898,10 @@ block in `js/draw.js` (`scr`, `pressureTarget`, `stepPressure`, `drawPressureWas
   recovery p >= .8, warm .45 (amber: tight but she can get out); relief 0. It tightens slowly (~0.05/frame) and lets go faster (~0.09).
   Game over, the switch off and Adventure all target 0.
 - **Look.** Behind the gems or around the board only, so no block or board material changes (a test compares a gem pixel at calm and edge):
-  a warm sky wash (<= 10%), a cached dark-red vignette (<= 50%), the board rim (cool blue -> amber/red-orange, wider and breathing faster as `p`
-  rises; static under reduced motion), and a soft dark band behind the tray (<= 28%) so the tray "dims" as room shrinks; the pieces themselves are
+  a warm sky wash (<= 10%), a cached dark-red vignette (<= 50%, clear over the whole board so only the margins darken), the board rim (cool blue -> amber/red-orange, wider and breathing faster as `p`
+  rises; static under reduced motion), and a soft dark band behind the tray (<= 28%, drawn in the board layer before any flying chunks) so the tray "dims" as room shrinks; the pieces themselves are
   never dimmed (that still means "stuck", 0.3 alpha). No new text.
-- **Relief.** Entering `relief` from edge or recovery sets `scr.relief = 1`: a pale cyan wash and a cyan rim ring fade over ~55 frames (25 reduced).
+- **Relief.** Entering `relief` from edge or recovery sets `scr.relief = 1`: a pale cyan wash and a cyan rim ring fade over ~55 frames (reduced motion: the rim ring only, no full-screen flash). `resetPressure()` runs on a new run (eases from calm) and on restore (snaps to where the saved phase says).
   The narrow-escape cyan `borderFlash` and PHEW from 6.3 still fire on top.
 - **Bonus compatibility (for 6.7).** While `bonus` runs, `drawBonusRim` owns the rim and the pressure wash is halved; the bonus sky/ambient
   (`startSky('bonus')`) is untouched, and pressure never changes the sky world. 6.7's golden, Adventure and Daily looks should read `scr` the same
