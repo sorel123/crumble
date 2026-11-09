@@ -1743,6 +1743,20 @@ test('Original pickup and place follow the Admin volume sliders (6.4)', async ({
   }
 });
 
+test('phone speaker defaults on for touch devices unless she has chosen (6.4)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const out = {};
+    localStorage.removeItem('crumble.speaker'); CFG.PHONE_SPEAKER = false; speakerDefault();
+    out.touchDefault = CFG.PHONE_SPEAKER;                       // the harness device has touch on
+    localStorage.setItem('crumble.speaker', 'false'); CFG.PHONE_SPEAKER = false; speakerDefault();
+    out.savedOff = CFG.PHONE_SPEAKER;                           // a saved choice wins
+    localStorage.removeItem('crumble.speaker');
+    return out;
+  });
+  assert.equal(r.touchDefault, true, 'touch device: speaker mode on by default');
+  assert.equal(r.savedOff, false, 'a saved Settings choice is not overridden');
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 for (const { name, fn } of tests) {

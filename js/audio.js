@@ -48,8 +48,19 @@ function buildChain(c){
   og.connect(ohp1); ohp1.connect(ohp2); ohp2.connect(ocomp); ocomp.connect(c.destination);
   return {master:m,revIn:rin,nbuf:nb,setSpeaker,smp,orig:og};
 }
+/* phone-speaker default (6.4): on for touch devices unless she has chosen either way (the Settings toggle
+   saves crumble.speaker; the Admin panel's saved tuning counts too). A web page can't tell headphones apart. */
+function speakerDefault(){
+  try{
+    if(localStorage.getItem('crumble.speaker')!==null) return;
+    const dev=JSON.parse(localStorage.getItem(DEV_STORE)||'{}');
+    if(dev.PHONE_SPEAKER!==undefined) return;
+  }catch(e){}
+  CFG.PHONE_SPEAKER=matchMedia('(pointer: coarse)').matches||navigator.maxTouchPoints>0;
+}
 function ac(){
   if(!actx){
+    speakerDefault();
     actx=new (window.AudioContext||window.webkitAudioContext)();
     ({master,revIn,nbuf,setSpeaker,smp:smpBus,orig:origBus}=buildChain(actx));
     loadBank();
