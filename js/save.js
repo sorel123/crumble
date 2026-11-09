@@ -130,7 +130,7 @@ function loadRun(){
 }
 
 /* ═══════ best score + lifetime stats — their own key, loaded before the unlock check ═══════ */
-const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,bonuses:0,starSeen:0};   // bonuses: bonus runs earned
+const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,bonuses:0,starSeen:0,escapes:0};   // bonuses: bonus runs earned
 function saveStats(){
   try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'&&mode==='endless'?score:0),...stats})); }catch(e){}
 }

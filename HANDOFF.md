@@ -869,7 +869,7 @@ a rhythm instead. Adventure is untouched (its levels and stars are calibrated on
 Four tiers, so the big moments stand out. In `place()` (`game.js`), `single` = one line, no star:
 - **Single clear:** crisp and quiet. A ~100 ms squash collapse (6 frames), one speck per gem, one `+N` score label. No per-cell tags, ring, line flash or screen shake; glow at half strength.
 - **Multi-line (2+) and star:** the old full set: point tags, ring, line flash, shake scaled by lines, squash squares plus three specks. Combo 3+ still adds slam, orbs, fireworks as before.
-- **Narrow escape** (`CFG.FX_NARROW_ESCAPE`, Admin toggle): the pace phase was edge or recovery before the drop and room is back above `ROOM_EDGE` after the clear (never on a sweep): a cyan board rim, two soft rings and a `PHEW!` banner. Counts `stats.escapes`.
+- **Narrow escape** (`CFG.FX_NARROW_ESCAPE`, Admin toggle): room was below `ROOM_EDGE` before the drop and is back above it after the clear (so it fires once, not on every clear in an edge tray) (never on a sweep): a cyan board rim, two soft rings and a `PHEW!` banner. Counts `stats.escapes`.
 - **Clean sweep:** unchanged and still the biggest (confetti, four rings, banner, shake 16, a world).
 - **Placement:** compress/settle `q` 0.11 over ~100 ms (was 0.16 over ~130 ms), 3 dust bits instead of 6, same ring. Board and block material are untouched.
 Tests: `calm clears` (single is quiet) and `6.3 animation hierarchy`.

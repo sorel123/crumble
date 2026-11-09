@@ -173,6 +173,7 @@ function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
+  const roomBefore=paced()?roomOf(packGrid(grid)):1;   // (6.3) how cramped the board was before this drop, for the narrow escape
   const bump=CFG.FX_LAND_BUMP&&!reduce;
   if(!s.star) s.cells.forEach(([dr,dc])=>{ grid[r+dr][c+dc]={gi:t.gi,t:1,f:1,l:bump?1:0}; });   // f = a brief glint, l = the landing thump; a star leaves no gem
   if(bump){                                        // the thump: a ring spreads out from under the piece, dust kicks out sideways
@@ -210,7 +211,7 @@ function place(idx,r,c){
   if(total>0){
     ambientBurst=1;
     const single=total===1&&!s.star;                  // (6.3) the everyday clear is crisp and quiet; 2+ lines, a star or a sweep are bigger
-    const wasTight=paced()&&(pace.ph==='edge'||pace.ph==='recovery');   // (6.3) for the narrow escape, judged on the board after this clear
+    const wasTight=roomBefore<CFG.ROOM_EDGE;   // (6.3) for the narrow escape, judged on the board after this clear
     const loud=combo+1>=CFG.BIG_COMBO;                // combo is bumped just below; this clear's own number
     if(CFG.FX_PUNCH_ZOOM && !reduce && loud && total>=2) punchT=1;
     hitWait=reduce?0:s.star?starMs:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
