@@ -6,7 +6,7 @@
    Every mode keeps its own saved run (`crumble.run` endless, `crumble.run.adv`, `crumble.run.daily`), so
    switching never loses a game. Progress lives in `crumble.adv`, plain data meant to be extended:
      {v:1, lv:{ "7":{s:2, p:14, n:3, f:1} }}    s best stars (0-3), p fewest pieces, n times cleared, f failed tries */
-const MODE_STORE='crumble.mode', ADV_STORE='crumble.adv';
+const MODE_STORE='crumble.mode', ADV_STORE='crumble.adv', DAILY_STORE='crumble.daily';
 const runStore=m=>m==='adventure'?'crumble.run.adv':m==='daily'?'crumble.run.daily':'crumble.run';
 const CHAPTERS=['First steps','Warming up','Getting good','Tricky boards','Crumble master'];
 // [goal type, goal n, gems already on the board]: fill 0 opens like Endless (a nearly full line and a first move that clears it,
@@ -47,10 +47,45 @@ const starsFor=(L,pieces)=>pieces<=L.par[0]?3:pieces<=L.par[1]?2:1;
 const starStr=n=>'★'.repeat(n)+'☆'.repeat(3-n);
 
 function loadModes(){
-  try{ const m=localStorage.getItem(MODE_STORE); if(m==='adventure') mode=m; }catch(e){}
-  loadAdv();
+  try{ const m=localStorage.getItem(MODE_STORE); if(m==='adventure'||m==='daily') mode=m; }catch(e){}
+  loadAdv(); loadDaily();
 }
 const saveMode=()=>{ try{ localStorage.setItem(MODE_STORE,mode); }catch(e){} };
+
+/* ── Daily (plan 4.1b) ──
+   One board a day, the same on every phone: the opening and every tray are dealt from a stream seeded by the date
+   (and the tray number), so two phones on the same day start with the same board and tray. It is a normal Endless-style
+   run (Undo, Rescue, specials all work). Results: `crumble.daily` = {v:1, d:{"2026-11-09":{s:best score, l:most lines, n:times played}}},
+   plain data for 4.2's streaks. The date is the phone's local date. */
+const daily={d:{}};
+let dk='';                                           // the date key of the Daily run in progress
+function dailyKey(d=new Date()){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function loadDaily(){
+  try{
+    const o=JSON.parse(localStorage.getItem(DAILY_STORE)||'{}');
+    if(o&&o.d&&typeof o.d==='object') for(const k in o.d){
+      const r=o.d[k]; if(!/^\d{4}-\d\d-\d\d$/.test(k)||!r) continue;
+      daily.d[k]={s:isInt(r.s,0,1e9)?r.s:0,l:isInt(r.l,0,1e6)?r.l:0,n:isInt(r.n,0,1e6)?r.n:0};
+    }
+  }catch(e){}
+}
+function recordDaily(key,sc,lines,again){        // again: the same run reaching game over a second time (after a Rescue) is not another play
+  const r=daily.d[key]||(daily.d[key]={s:0,l:0,n:0});
+  if(!again) r.n++; r.s=Math.max(r.s,sc|0); r.l=Math.max(r.l,lines|0);
+  try{ localStorage.setItem(DAILY_STORE,JSON.stringify({v:1,d:daily.d})); }catch(e){}
+  return r;
+}
+const dailyBest=()=>(daily.d[dk||dailyKey()]||{s:0}).s;
+const dailySeed=tag=>'crumble-daily-'+dk+'-'+tag;
+const fmtScore=n=>n>=10000?Math.round(n/1000)+'k':n>=1000?(n/1000).toFixed(1)+'k':String(n);
+function dailyOver(){                                // the game-over card, for a Daily
+  const r=recordDaily(dk,score,lv.lines,lv.rec); lv.rec=true;
+  el('overEye').textContent='Daily · '+new Date(dk+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  el('overScore').textContent=score;
+  el('overMsg').textContent=score>=r.s&&score>0?'Your best today!':'Best today: '+r.s+'. Same board, try again.';
+  el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Calendar';
+  syncHud();
+}
 
 /* ── the level's board ── */
 // A scatter of small pieces, no full line, the same on every phone (seeded by the level). A sweep level gets one or
@@ -82,7 +117,8 @@ function levelBoard(L){
 }
 // called by start(): the board a new run opens with
 function openBoard(){
-  lv={lines:0,pieces:0,combo:0,swept:false};
+  lv={lines:0,pieces:0,combo:0,swept:false}; rndSrc=null;
+  if(mode==='daily'){ dk=dailyKey(); rndSrc=mulberry(hashStr(dailySeed('open'))); seedOpening(); rndSrc=null; return; }
   if(mode==='adventure'&&lvl&&lvl.fill>0){ grid=levelBoard(lvl); trayNo=0; genTray(); }
   else seedOpening();
   if(mode==='adventure'&&lvl) pushBanner('LEVEL '+lvl.id,goalText(lvl.goal));
@@ -97,6 +133,7 @@ function goalProgress(){
 function syncHud(){
   const adventure=mode==='adventure'&&lvl;
   let lbl='Best', val=best;
+  if(mode==='daily'){ lbl='Today'; val=dailyBest(); }
   if(adventure){
     const g=lvl.goal, p=Math.min(goalProgress(),g.n);
     if(g.type==='lines'){ lbl='Lines'; val=p+'/'+g.n; }
@@ -105,10 +142,11 @@ function syncHud(){
     else { lbl='Goal'; val='Empty it'; }
   }
   el('bestLbl').textContent=lbl; el('bestVal').textContent=val;
-  el('modeTag').textContent=adventure?'Level '+lvl.id+' ▾':'Endless ▾';
+  el('modeTag').textContent=adventure?'Level '+lvl.id+' ▾':mode==='daily'?'Daily ▾':'Endless ▾';
 }
 // place() calls this after every placement
 function goalStep(total,swept){
+  if(mode==='daily'&&state==='play'){ lv.pieces++; lv.lines+=total; return; }
   if(mode!=='adventure'||!lvl||state!=='play') return;
   lv.pieces++; lv.lines+=total; lv.combo=Math.max(lv.combo,combo); if(swept) lv.swept=true;
   syncHud();
@@ -144,12 +182,14 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['setPanel','menuCard','mapCard','blastCard'].some(id=>!el(id).hidden); }
+function overlayOpen(){ return ['setPanel','menuCard','mapCard','dailyCard','blastCard'].some(id=>!el(id).hidden); }
 function pauseForMenu(){ if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); } }
-function hideMenus(){ el('menuCard').hidden=true; el('mapCard').hidden=true; el('winCard').hidden=true; paused=false; }
-function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; }      // keep what she was doing; it is waiting when she comes back
+function hideMenus(){ el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
+function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
 function openMenu(){
-  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true;
+  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true;
+  const today=daily.d[dailyKey()], liveD=peekRun('daily');
+  el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'Same board for everyone, once a day';
   el('menuAdvSub').textContent=advStars()?'★ '+advStars()+' of '+LEVELS.length*3+' · level '+nextLevel().id:'Goal levels, no timer';
   el('menuBest').textContent=best?'Best '+best:'Play as long as you can';
   el('menuCard').hidden=false;
@@ -172,7 +212,7 @@ function playLevel(id){
   syncHud();
 }
 function openMap(){
-  pauseForMenu(); el('menuCard').hidden=true; el('winCard').hidden=true;
+  pauseForMenu(); el('menuCard').hidden=true; el('winCard').hidden=true; el('dailyCard').hidden=true;
   const list=el('mapList'); list.textContent='';
   const nxt=nextLevel().id, live=peekRun('adventure'), liveId=live&&live.lv?live.lv.id:0;
   el('mapStars').textContent='★ '+advStars()+' / '+LEVELS.length*3;
@@ -202,5 +242,45 @@ el('mapBack').onclick=e=>{ e.stopPropagation(); openMenu(); };
 el('winNext').onclick=e=>{ e.stopPropagation(); playLevel(Math.min(lvl.id+1,LEVELS.length)); };
 el('winMap').onclick=e=>{ e.stopPropagation(); openMap(); };
 el('winAgain').onclick=e=>{ e.stopPropagation(); el('winCard').hidden=true; start(); };
-el('overMenuBtn').onclick=e=>{ e.stopPropagation(); el('overCard').hidden=true; if(mode==='adventure') openMap(); else openMenu(); };
+el('overMenuBtn').onclick=e=>{ e.stopPropagation(); el('overCard').hidden=true; if(mode==='adventure') openMap(); else if(mode==='daily') openDaily(); else openMenu(); };
 el('startAdv').onclick=e=>{ e.stopPropagation(); ac(); openMap(); };
+
+/* ── the Daily card: today's board and a results calendar ── */
+let calY=0, calM=0;
+function playDaily(){
+  leaveMode(); hideMenus(); mode='daily'; lvl=null; saveMode();
+  const o=peekRun('daily');
+  if(!(o&&o.dk===dailyKey()&&loadRun())) start();
+  syncHud();
+}
+function openDaily(month){
+  pauseForMenu(); el('menuCard').hidden=true; el('mapCard').hidden=true; el('winCard').hidden=true;
+  const now=new Date(), key=dailyKey(now), today=daily.d[key], live=peekRun('daily');
+  if(!month){ calY=now.getFullYear(); calM=now.getMonth(); }
+  const inProg=live&&live.dk===key;
+  el('dailyDate').textContent=now.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+  el('dailyStatus').textContent=inProg?'In progress · '+live.score+' points':today?'Best today: '+today.s+' · played '+today.n+(today.n===1?' time':' times'):'Not played yet';
+  el('dailyPlay').textContent=inProg?'Continue':today?'Play again':"Play today's";
+  const days=Object.keys(daily.d).filter(k=>daily.d[k].n>0), top=days.reduce((a,k)=>Math.max(a,daily.d[k].s),0);
+  el('dailyTotals').textContent=days.length?days.length+(days.length===1?' day':' days')+' played · best day '+top:'Play today and your first day lands here';
+  const first=days.sort()[0], fy=first?+first.slice(0,4):now.getFullYear(), fm=first?+first.slice(5,7)-1:now.getMonth();
+  el('calTitle').textContent=new Date(calY,calM,1).toLocaleDateString(undefined,{month:'long',year:'numeric'});
+  el('calPrev').disabled=calY*12+calM<=fy*12+fm; el('calNext').disabled=calY*12+calM>=now.getFullYear()*12+now.getMonth();
+  const g=el('calGrid'); g.textContent='';
+  for(const d of 'SMTWTFS'){ const h=document.createElement('span'); h.className='dow'; h.textContent=d; g.append(h); }
+  const lead=new Date(calY,calM,1).getDay(), n=new Date(calY,calM+1,0).getDate();
+  for(let i=0;i<lead;i++) g.append(document.createElement('span'));
+  for(let d=1;d<=n;d++){
+    const k=dailyKey(new Date(calY,calM,d)), r=daily.d[k], c=document.createElement('span');
+    c.className='day'+(r&&r.n?' on':'')+(k===key?' today':'')+(k>key?' future':'');
+    c.innerHTML='<b></b><i></i>'; c.firstChild.textContent=d; c.lastChild.textContent=r&&r.n?fmtScore(r.s):'';
+    g.append(c);
+  }
+  el('dailyCard').hidden=false;
+}
+el('menuDaily').onclick=e=>{ e.stopPropagation(); openDaily(); };
+el('startDaily').onclick=e=>{ e.stopPropagation(); ac(); openDaily(); };
+el('dailyPlay').onclick=e=>{ e.stopPropagation(); playDaily(); };
+el('dailyBack').onclick=e=>{ e.stopPropagation(); openMenu(); };
+el('calPrev').onclick=e=>{ e.stopPropagation(); calM--; if(calM<0){ calM=11; calY--; } openDaily(true); };
+el('calNext').onclick=e=>{ e.stopPropagation(); calM++; if(calM>11){ calM=0; calY++; } openDaily(true); };

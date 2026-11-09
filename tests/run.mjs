@@ -1435,6 +1435,7 @@ test('Adventure: the map opens only level 1, a level shows its goal, winning sav
   assert.equal(saved.lv[1].n, 1); assert.ok(saved.lv[1].s >= 1);
   assert.equal(await page.evaluate(() => localStorage.getItem('crumble.run.adv')), null, 'a won level leaves no run behind');
   assert.equal(await page.evaluate(() => best), best0, 'Adventure never touches the Endless best');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.stats')).best), best0, '... nor the saved one');
   await page.click('#winMap'); await page.click('#mapBack'); await page.click('#menuClose');
   assert.equal(await page.isVisible('#winCard'), true, 'closing the menu returns to the win card, not to an empty board');
   await page.click('#winNext');
@@ -1493,6 +1494,72 @@ test('Adventure: running out of moves ends the try, three failed tries open the 
   assert.equal(await page.evaluate(() => levelDone(1)), false);
   await page.click('#overMenuBtn'); await page.waitForSelector('#mapCard:not([hidden])');
   assert.equal(await page.locator('#mapList .node:not([disabled])').count(), 2);
+});
+
+// ── Daily (plan 4.1b) ──
+// The phone's date, for a test: `new Date()` with no argument answers the day set here, in this page and after a reload.
+const FAKE_DATE = `(()=>{const R=Date,f=()=>+localStorage.getItem('fakeNow')||0;globalThis.Date=class extends R{constructor(...a){a.length?super(...a):f()?super(f()):super();}};})();`;
+const setDay = async (page, iso) => {
+  if (!page.__fake) { await page.addInitScript(FAKE_DATE); await page.evaluate(FAKE_DATE); page.__fake = true; }
+  await page.evaluate(t => localStorage.setItem('fakeNow', t), String(new Date(iso + 'T12:00:00Z').getTime()));
+};
+const dailyOn = (page, iso = '2026-11-09') => setDay(page, iso);
+
+test('Daily: two phones on the same day get the same board and trays, whatever their dice; another day differs', async ({ page }) => {
+  await dailyOn(page);
+  const deal = (seed, key) => page.evaluate(({ seed, key }) => {
+    dailyKey = () => key; let a = seed >>> 0; Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    mode = 'daily'; start(); const out = [];
+    const sig = () => JSON.stringify([grid.map(r => r.map(g => g ? g.gi : -1)), tray.map(t => t && [SHAPES.indexOf(t.s), t.gi]), trayNo]);
+    out.push(sig());
+    for (let k = 0; k < 4; k++) { finishDealNow(); const i = tray.findIndex(t => t); const s = tray[i].s; let done = false;
+      for (let r = 0; r <= N - s.rows && !done; r++) for (let c = 0; c <= N - s.cols && !done; c++) if (canPlace(s, r, c, grid)) { place(i, r, c); done = true; }
+      finishDealNow(); out.push(sig()); }
+    function finishDealNow() { if (dealing) { runSteps(dealing.it); dealing = null; } }
+    return out;
+  }, { seed, key });
+  const a = await deal(1, '2026-11-09'), b = await deal(99, '2026-11-09'), c = await deal(1, '2026-11-10');
+  assert.equal(a[0], b[0], 'the opening board and first tray are identical');
+  assert.notEqual(a[0], c[0], 'a different day is a different board');
+  assert.equal(await page.evaluate(() => mode), 'daily');
+});
+
+test('Daily: from the menu; the run is its own, resumes, and a new day drops yesterday\'s run but keeps its score', async ({ page }) => {
+  await dailyOn(page);
+  await page.click('#startDaily'); await page.waitForSelector('#dailyCard:not([hidden])');
+  assert.equal(await page.textContent('#dailyPlay'), "Play today's");
+  await page.click('#dailyPlay');
+  await page.waitForFunction(() => state === 'play' && mode === 'daily'); await dealt(page);
+  assert.equal(await page.textContent('#modeTag'), 'Daily ▾'); assert.equal(await page.textContent('#bestLbl'), 'Today');
+  const best0 = await page.evaluate(() => best);
+  await page.evaluate(() => { score = 640; lv.lines = 7; saveRun(); });
+  await reloadGame(page);
+  assert.deepEqual(await page.evaluate(() => [state, mode, score, lv.lines]), ['play', 'daily', 640, 7], 'a Daily reopens where it was left');
+  await setDay(page, '2026-11-10');                                       // midnight passes while the game is closed
+  await reloadGame(page);
+  assert.equal(await page.evaluate(() => state), 'idle', 'yesterday\'s run does not carry over');
+  assert.deepEqual(await page.evaluate(() => daily.d['2026-11-09']), { s: 640, l: 7, n: 1 }, 'but its score counts');
+  assert.equal(await page.evaluate(() => best), best0, 'the Daily never touches the Endless best');
+});
+
+test('Daily: game over records the day once, shows Today\'s best, and the calendar marks the day', async ({ page }) => {
+  await dailyOn(page);
+  await page.evaluate(() => { mode = 'daily'; start(); });
+  await dealt(page);
+  await page.evaluate(() => { score = 300; lv.lines = 4; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.match(await page.textContent('#overEye'), /Daily/); assert.equal(await page.textContent('#againBtn'), 'Play again');
+  assert.equal(await page.textContent('#overMenuBtn'), 'Calendar');
+  await page.evaluate(() => { state = 'play'; score = 500; gameOver(); });         // a Rescue and a second game over: one play
+  assert.deepEqual(await page.evaluate(() => daily.d['2026-11-09']), { s: 500, l: 4, n: 1 });
+  await page.click('#overMenuBtn'); await page.waitForSelector('#dailyCard:not([hidden])');
+  assert.equal(await page.locator('#calGrid .day.on').count(), 1);
+  assert.match(await page.textContent('#calGrid .day.on'), /500/);
+  assert.equal(await page.textContent('#dailyStatus'), 'Best today: 500 · played 1 time');
+  assert.equal(await page.textContent('#dailyPlay'), 'Play again');
+  assert.equal(await page.isDisabled('#calNext'), true); assert.equal(await page.isDisabled('#calPrev'), true);
+  await page.click('#dailyPlay'); await page.waitForFunction(() => state === 'play' && lv.pieces === 0);
+  assert.equal(await page.textContent('#bestVal'), '500');
 });
 
 let failed = 0;

@@ -17,7 +17,8 @@ function snapshot(){
     golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies: Undo keeps the snapshot while the live hand goes on mutating its own
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     blastCharge, specialEnd,
-    lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:null,   // (4.1) this level run's counters
+    lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
+    dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     tf:transform?{id:transform.id,remaining:transform.remaining}:null,   // Undo keeps a live look; resume (loadRun) ends it
     blast:blast?{t:Math.max(0,Math.round(blast.t)),pts:blast.pts,lines:blast.lines,best:blast.best,swaps:blast.swaps}:null
   };
@@ -30,6 +31,7 @@ function validSnapshot(o){
   if(!o.tray.every(t=>t===null||(t&&isInt(t.s,-1,SHAPES.length-1)&&isInt(t.gi,0,GEMS.length-1)))) return false;
   if(!isInt(o.score,0,1e9)||!isInt(o.combo,0,1e4)||!isInt(o.trayNo,0,1e6)||!isInt(o.rescuesUsed,0,100)) return false;
   if(mode==='adventure'){ const l=o.lv; if(!(l&&LEVELS[l.id-1]&&isInt(l.lines,0,1e6)&&isInt(l.pieces,0,1e6)&&isInt(l.combo,0,1e4))) return false; }
+  if(mode==='daily'&&!(typeof o.dk==='string'&&/^\d{4}-\d\d-\d\d$/.test(o.dk)&&o.lv&&isInt(o.lv.lines,0,1e6)&&isInt(o.lv.pieces,0,1e6))) return false;
   return isNum(o.tension)&&isNum(o.sweepCool);
 }
 function restore(o,keepLive){
@@ -59,6 +61,7 @@ function restore(o,keepLive){
     curWorld='blast'; curSkin='rainbow'; buildCache(); ambient=spawnAmbient(worldDef('blast').effect);
   }
   if(mode==='adventure'){ lvl=LEVELS[o.lv.id-1]; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:o.lv.combo,swept:!!o.lv.swept}; }
+  if(mode==='daily'){ dk=o.dk; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:0,swept:false}; rndSrc=mulberry(hashStr(dailySeed(trayNo+'-resume'))); }
   shownScore=score; el('scoreVal').textContent=score; syncHud();
   el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   updateDbg();
@@ -114,14 +117,16 @@ function saveRun(){
 }
 function clearRun(m=mode){ lastRunJson=null; try{ localStorage.removeItem(runStore(m)); }catch(e){} }
 function loadRun(){
-  try{ const s=localStorage.getItem(runStore(mode)); if(!s) return false; return restore(JSON.parse(s)); }
+  try{ const s=localStorage.getItem(runStore(mode)); if(!s) return false; const o=JSON.parse(s);
+    if(mode==='daily'&&o&&o.dk!==dailyKey()){ if(o.dk&&/^\d{4}-\d\d-\d\d$/.test(o.dk)&&o.lv) recordDaily(o.dk,o.score|0,o.lv.lines|0); clearRun(); return false; }   // yesterday's unfinished Daily: its score counts, the run does not carry over
+    return restore(o); }
   catch(e){ clearRun(); return false; }
 }
 
 /* ═══════ best score + lifetime stats — their own key, loaded before the unlock check ═══════ */
 const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,blasts:0,bestBlast:0,starSeen:0};   // blasts: rounds played; bestBlast: most points in one
 function saveStats(){
-  try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'?score:0),...stats})); }catch(e){}
+  try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'&&mode==='endless'?score:0),...stats})); }catch(e){}
 }
 function loadStats(){
   try{

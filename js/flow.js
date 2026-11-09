@@ -10,6 +10,7 @@ async function gameOver(){
   stats.totalScore+=score;
   el('overEye').textContent='No room left'; el('againBtn').textContent='Start over'; el('overMenuBtn').textContent='Modes';
   if(mode==='adventure'&&lvl) levelFailed();
+  else if(mode==='daily') dailyOver();
   else {
     best=Math.max(best,score); syncHud(); saveStats();
     const newSkins=checkUnlocks();

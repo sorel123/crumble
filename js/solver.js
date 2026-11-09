@@ -339,6 +339,7 @@ const starAt=(r,c,g=grid)=>g[r].reduce((a,v)=>a+(v?1:0),0)+g.reduce((a,row)=>a+(
 function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
   trayNo++;
+  if(mode==='daily') rndSrc=mulberry(hashStr(dailySeed(trayNo)));   // (4.1b) every tray of the Daily is dealt from the date's stream, so two phones see the same dice
   const specialsOk=trayNo>=CFG.SPECIAL_FROM_TRAY;      // trays 1-5 never carry a special
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
