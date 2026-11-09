@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after calm music (plan PR 6.8).
+Last updated 2026-11-09, after recorded music (plan PR 7.4).
 
 ---
 
@@ -114,7 +114,7 @@ Last updated 2026-11-09, after calm music (plan PR 6.8).
 | `js/render.js` | `layout`, tile renderers, `SKINS`, `buildCache` |
 | `js/samples.js` | `SAMPLES` base64 MP3 data (~190 KB, data only) |
 | `js/audio.js` | synth sets, recorded bank, `Sfx` |
-| `js/music.js` | generative calm music, tension layer, ducking (6.8) |
+| `js/music.js` | recorded music loops (`music/*.m4a`), picker, pressure response, ducking (7.4) |
 | `js/game.js` | `place`, bonus trays, input |
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
@@ -928,7 +928,41 @@ the board frame (15 px out; the pressure / bonus rim is inside it), so gems and 
 - Pressure (6.6) still owns the board frame in Endless/Daily; a bonus halves the pressure wash as before. Colours are `TINTS`; tune the alphas in `drawModeWash` first if a look is too loud.
 - Test: "whole-screen mode looks (6.7)" (corner margin changes, a gem pixel does not, each fades out).
 
-## Calm music (plan 6.8)
+## Recorded music (plan 7.4; replaces the generated score of 6.8)
+
+Jay found the synthesised music "pretty bad" and asked for much better, tween-friendly, with a few options to choose from. `js/music.js`
+now plays four recorded loops in `music/` (loaded after `audio.js`; also in `sw.js` `ASSETS`). Nothing is synthesised; if a file cannot be
+fetched the game is quiet (no fallback). Ducking, the intensity hook (`musicTarget`/`musicTick`), `musicSync`/`musicNewRun`/`musicDuck` and the 7.0 audio unlock are unchanged.
+
+- **Tracks.** All by Abstraction Music / Tallbeard Studios (Ben Burnes), "Music Loop Bundle", https://tallbeard.itch.io/music-loop-bundle, dedicated to
+  the public domain under **CC0 1.0** (the bundle's licence text; no attribution needed, commercial use fine; it only asks not to use the music for NFTs or AI training, or to resell it unmodified).
+  We got the files through the `jfpx/cc0-media-library` music-v1 release zip (sha256 checked against its SHA256SUMS), because kenney.nl, opengameart, itch and
+  archive.org are blocked from the cloud sandbox. The `jfpx` catalog is the provenance record: it lists the OpenGameArt/itch source and a licence file per track.
+
+  | file | name | mood | catalog id (original title) | length |
+  |---|---|---|---|---|
+  | `music/sunny-lofi.m4a` | Sunny Lo-fi | warm, bright, laid-back (~86 bpm) | `abstraction-4e6836606331898f144502c1` ("Sketchbook 2024-09-25", LoFi) | 90 s |
+  | `music/bounce.m4a` | Bounce | playful, funky (~92 bpm) | `abstraction-36d4672d475a362f4c61d313` ("Sketchbook 2024-05-22", Funk) | 50 s |
+  | `music/daydream.m4a` | Daydream | dreamy, calm | `abstraction-6b13391bc1b3862dbf2cd5c9` ("Sketchbook 2024-06-12", Ambient) | 48 s |
+  | `music/momentum.m4a` | Momentum | a little more driving (~129 bpm) | `abstraction-417fa91b83fab8b8be52a4e5` ("Sketchbook 2024-10-30", Electronic) | 54 s |
+
+  Transcoded from the creator's Ogg loops with `ffmpeg -map 0:a:0 -map_metadata -1 -c:a aac -b:a 96k -ar 44100 -movflags +faststart` (80k for Sunny Lo-fi), which also drops the
+  embedded album art. Each is under 1 MB. The AAC edit list keeps the exact length, so decodeAudioData's buffer is the same number of samples as the original loop (checked in Chromium).
+  **To swap a track**, drop in a new file under a NEW name (the music cache never clears) and edit `MUSIC_TRACKS`; add its source and licence to this table.
+- **Chosen by metadata, not by ear.** There is no audio in the cloud, so I picked by style tags, tempo, brightness and a measured loop seam (the end meets the start within ~0.03 of full scale),
+  and I trimmed the level of each loop (`gain` in `MUSIC_TRACKS`) towards the same loudness. Jay vetoes by ear; to swap, see above. Other loops in that release that could be tried:
+  the Chiptune, Silly and Jazz styles. Safari's loop seam is unchecked: if it clicks there, loop with `loopStart/loopEnd` or crossfade the ends.
+- **Picker.** Settings -> Sound: the Music control is a dropdown next to Sound effects (`#musicPick`: Shuffle / Sunny / Bounce / Daydream / Momentum / Off; `CFG.MUSIC_PICK`, saved as `musicPick` in `crumble.skins`; Shuffle by default).
+  Off is the old music switch (`CFG.MUSIC`, so a saved `music:false` still means Off). It is a dropdown rather than chips because a chip row made Settings scroll (the "Settings fits one screen" test). Shuffle moves to another loop at each new run (crossfade ~1.4 s); a chosen track stays across runs.
+- **Pressure.** `musicTarget()` (from `scr.p`, 6.6) feeds `setI`: the low-pass opens from 6.5 kHz (calm) to 18 kHz (tight) and the level lifts by up to 30% (`musicLpHz`, `musicLift`). No extra layer.
+- **Loading.** Lazy: `musicLoad(idx)` fetches and decodes a loop the first time it is wanted; only the playing loop stays decoded (a 90 s stereo loop is ~30 MB of float samples).
+  `sw.js` serves `/music/` from its own cache, `crumble-music`, filled on first play and kept across game updates (not precached, so installing the game stays small).
+- **Level.** Unchanged: `CFG.MUSIC_VOL` (.5; Admin slider) x .5 through the phone-speaker high-pass on `musBus`, not the limiter. The loops are louder than the old synth bed (about -17 dB rms before that gain), so if they sit too loud, lower `MUSIC_VOL` first.
+- **Tests.** Offline rendering with a stand-in loop (quiet, pressure brightens and lifts, ducking dips > 6 dB), the real files decode and are under 1 MB with a closed seam, the picker/switch/saving, the arbiter hook, the cache name.
+
+## Calm music (plan 6.8, superseded by 7.4)
+
+The generated score that 7.4 replaced (Web Audio pads and bells; kenney.nl could not be reached then). Kept for history; its code is gone.
 
 Jay asked if music was worthwhile; a quiet bed under a puzzle game is, as long as it stays out of the way of the sound family and
 gets tense with the board. Code is `js/music.js` (loaded after `audio.js`; also in `sw.js` `ASSETS`).

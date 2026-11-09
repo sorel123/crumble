@@ -132,6 +132,7 @@
   .motifs button{font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--fg);
         background:var(--chip);border:2px solid var(--chip-line);
         border-radius:999px;padding:8px 16px;min-height:38px;cursor:pointer}
+  #setList select{font-family:var(--font);font-size:13px;font-weight:600;color:var(--fg);background:var(--chip);border:2px solid var(--chip-line);border-radius:999px;padding:6px 10px;min-height:36px;max-width:120px}
   .motifs button[aria-pressed="true"]{background:var(--sel-bg);border-color:var(--gold);color:var(--sel-fg)}
 
   .pips{display:flex;gap:5px;margin-top:6px;align-items:center}
@@ -273,7 +274,7 @@
       </details>
       <p class="setgroup">Sound</p>
       <div class="togpair"><label class="tog"><span>Sound effects</span><input type="checkbox" id="sndOn"></label>
-      <label class="tog"><span>Music</span><input type="checkbox" id="musicOn"></label></div>
+      <label class="tog"><span>Music</span><select id="musicPick" aria-label="Music"></select></label></div>
       <p class="lbl section-lbl">Sound style</p>
       <div class="motifs" id="sndSetRow"></div>
     </div>
