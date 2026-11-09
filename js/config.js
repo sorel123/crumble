@@ -39,6 +39,8 @@ const CFG = {
   SINGLE_WEIGHT: 0.35,   // multiplier on the 1-cell piece (density bias otherwise floods the tray with them)
   EARLY_TRAYS:   4,      // opening trays that favor stackable pieces (bars and rectangles)
   OPENING_SWEEP_CHANCE: 0.125, // plan 6.0: odds an opening has no scattered gems, so its first clear can sweep (~1 in 8)
+  OPENING_LIGHT: 0.6,    // plan 7.2: odds an opening is light (3-8 loose gems, nothing near complete)
+  OPENING_GIFT:  0.25,   // plan 7.2: odds it is a gift (one obvious clear, sometimes a sweep); the rest (~15%) are busy (the 6.0 opening)
   EARLY_AWKWARD: 0.15,   // weight multiplier for non-rectangles during those trays
   PAIR_CHANCE:   0.7,    // odds a tray carries a partner for an awkward piece (L/J/T/S/Z) from the previous tray
   TIDY:          2.0,    // how much hand choice favors a compact board (0 = ignore; higher = flatter, fewer holes)
