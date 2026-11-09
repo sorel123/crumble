@@ -15,7 +15,7 @@ function snapshot(){
     score, combo, tension, sweepCool, trayNo, rescuesUsed, bestBeaten, lastTier,
     carry:carry.map(s=>SHAPES.indexOf(s)).filter(i=>i>=0),
     golden:golden?{want:golden.want,got:golden.got,pts:golden.pts}:null,
-    goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, transformCool,
+    goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     blastCharge, specialEnd,
     blast:blast?{t:Math.max(0,Math.round(blast.t)),pts:blast.pts,lines:blast.lines,best:blast.best,swaps:blast.swaps}:null
   };
@@ -39,7 +39,7 @@ function restore(o){
   carry=(Array.isArray(o.carry)?o.carry:[]).filter(i=>isInt(i,0,SHAPES.length-1)).map(i=>SHAPES[i]);
   golden=o.golden&&o.golden.want&&o.golden.got?{want:o.golden.want,got:o.golden.got,pts:o.golden.pts|0}:null;
   goldenNext=!!o.goldenNext; goldenCool=Math.max(0,o.goldenCool|0); trayHadSweep=!!o.trayHadSweep;
-  trayCombo=o.trayCombo|0; starForced=!!o.starForced; transformCool=Math.max(0,o.transformCool|0);
+  trayCombo=o.trayCombo|0; starForced=!!o.starForced; starCool=isInt(o.starCool,0,1e3)?o.starCool:0; transformCool=Math.max(0,o.transformCool|0);
   resetWorld(); renderPips();
   blastCharge=isInt(o.blastCharge,0,1e4)?Math.min(o.blastCharge,CFG.BLAST_CHARGE):0; blastShown=blastCharge;
   specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
@@ -77,6 +77,7 @@ function syncActions(){
   el('helpBtn').disabled=!(stuck&&live&&rescueAllowed(best));
   const wait=stuck&&live&&canExit();
   el('endBtn').hidden=!wait; el('noMoves').hidden=!wait;
+  el('starNote').hidden=!(live&&!stats.starSeen&&!blast&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until she has used one
   syncBlastBtn();
 }
 el('endBtn').onclick=e=>{ e.stopPropagation(); if(stuck&&state==='play') gameOver(); };
@@ -95,7 +96,7 @@ function loadRun(){
 }
 
 /* ═══════ best score + lifetime stats — their own key, loaded before the unlock check ═══════ */
-const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,blasts:0,bestBlast:0};   // blasts: rounds played; bestBlast: most points in one
+const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,blasts:0,bestBlast:0,starSeen:0};   // blasts: rounds played; bestBlast: most points in one
 function saveStats(){
   try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'?score:0),...stats})); }catch(e){}
 }

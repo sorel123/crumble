@@ -74,13 +74,18 @@ const CFG = {
   BLAST_ADD:      2.5,    // seconds added per line cleared during the round (capped at BLAST_SECONDS)
   BLAST_MULT:     2,      // score multiplier during the round
   BIG_CAP:        4,      // the crowded-board small-piece bias stops growing past this many cells, so 5-9 cell pieces keep coming
-  // star gem: a single-cell piece that clears its whole row and column
-  STAR_CHANCE:   0.035,  // odds each tray carries one, replacing a normal piece
-  STAR_COMBO:    6,      // a combo this high (or higher) guarantees one in the next normal tray
+  // star gem (4.5b): a single-cell piece that clears its whole row and column. Dealt only when a cross is worth it.
+  STAR_MIN:      9,      // a star is dealt only if some empty cell's row + column would clear at least this many gems
+  STAR_CHANCE:   0.15,   // odds per eligible tray (the board qualifies, specialOk(), cooldown over)
+  STAR_COOL:     8,      // trays after a star is dealt before the next may be
+  STAR_COMBO:    6,      // a combo this high (or higher) guarantees one in the next eligible tray
+  STAR_PER_GEM:  14,     // points per gem cleared (x the combo factor); never less than the line formula
+  STAR_CHARGE:   8,      // frames the star charges before its beams fire (drop to empty board, charge included, stays under ~600 ms)
+  STAR_STAGGER:  0.7,    // frames of delay per cell of distance for its cross to go white-hot
 
   // the specials, one switch each (plan 4.5). Each comes back on once it has been rebuilt to be a real highlight:
   // Blast (4.5a) is back; star gem, golden hand and transformations are still paused. special(name) reads these.
-  SPECIALS: {blast:true, star:false, golden:false, transform:false},
+  SPECIALS: {blast:true, star:true, golden:false, transform:false},
   SPECIAL_FROM_TRAY: 6,  // no special before this tray number (plan 3.1: the opening is calm); see specialOk()
   BIG_COMBO: 3,          // the loud celebration (COMBO slam, score orbs, COLOR GONE band, fireworks, punch zoom) starts at this combo; every clear below it is calm: a squash, point tags and one praise word
 
@@ -101,6 +106,7 @@ const CFG = {
   FX_GOLD_TINT:      true,   // faint full-screen gold wash while a golden hand is live
   FX_SWEEP_FX:       true,   // full-screen colour wash + confetti on a clean sweep
   FX_TENSION_BORDER: true,   // board border glow: calm (cool) -> warm as tension rises
+  FX_STAR_BURST:     true,   // star gem: beam through it in the tray, hint ring on the best cell, charge + beams + sparkles on the clear
   FX_PUNCH_ZOOM:     true,   // (combo BIG_COMBO+) brief 2-3% punch zoom
 
   // sound — variant + volume for the two most-heard effects, set on the settings panel

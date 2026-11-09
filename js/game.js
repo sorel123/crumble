@@ -83,9 +83,10 @@ function syncBlastBtn(){
   const f=blast?clamp(blast.t/(CFG.BLAST_SECONDS*1000),0,1):clamp(blastShown/CFG.BLAST_CHARGE,0,1);
   b.style.setProperty('--f',f.toFixed(3));
   const full=!blast&&blastShown>=CFG.BLAST_CHARGE;
-  b.classList.toggle('full',full); b.classList.toggle('live',!!blast);
-  b.disabled=!(full&&state==='play');
-  b.setAttribute('aria-label',blast?'Blast round running':full?'Start a Blast round':'Blast: combos charge it');
+  const held=full&&specialLive();                  // full but another special is on (a star in the tray): it reads as disabled until that is over
+  b.classList.toggle('full',full&&!held); b.classList.toggle('live',!!blast); b.classList.toggle('held',held);
+  b.disabled=!(full&&state==='play')||held;
+  b.setAttribute('aria-label',blast?'Blast round running':held?'Blast waits until the star gem is used':full?'Start a Blast round':'Blast: combos charge it');
 }
 el('blastBtn').onclick=e=>{                         // full but not right now (the tray after a special, mid-deal): a small "not yet" shake
   e.stopPropagation();
@@ -228,6 +229,8 @@ function place(idx,r,c){
   }
   tray[idx]=null;
   if(!s.star) Sfx.place(s.n);
+  let starGems=0, starMs=0;                        // the star (4.5b): gems its cross takes, and its own timing
+  if(s.star){ starGems=starAt(r,c); specialEnd=trayNo; stats.starSeen=1; starMs=CFG.FX_STAR_BURST&&!reduce?CFG.STAR_CHARGE:0; }
 
   let rows,cols;
   if(s.star){                                     // its whole row and column, full or not (each counts if it held a gem)
@@ -239,20 +242,20 @@ function place(idx,r,c){
   hesPlace(total>0);                               // the hesitation log (save.js): the tray's first drop, timed
 
   if(s.star){
-    blasts.push({r,c,t:0});
-    waves.push({x:bx+(c+.5)*cell,y:by+(r+.5)*cell,t:0});
+    blasts.push({r,c,t:-starMs*0.06});               // the beams fire after the charge (b.t runs 0.06 per frame)
+    waves.push({x:bx+(c+.5)*cell,y:by+(r+.5)*cell,t:-starMs*0.026});
     for(let k=0;!reduce&&k<10;k++){
       const along=Math.random()*B, onRow=k%2===0;
       sparkles.push({x:onRow?bx+along:bx+(c+.5)*cell,y:onRow?by+(r+.5)*cell:by+along,t:Math.random()*0.5});
     }
-    Sfx.star();
+    if(starGems>0) Sfx.star(starGems);
   }
 
   if(total>0){
     ambientBurst=1;
     const loud=combo+1>=CFG.BIG_COMBO;                // combo is bumped just below; this clear's own number
     if(CFG.FX_PUNCH_ZOOM && !reduce && loud && total>=2) punchT=1;
-    hitWait=reduce?0:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
+    hitWait=reduce?0:s.star?starMs:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
     if(s.star && total>=2) triggerTransform('starfield');
     combo++; trayCombo=Math.max(trayCombo,combo);
     if(combo>=2) chargeBlast(Math.min(combo-1,CFG.BLAST_CHARGE_MAX),bx+(c+s.cols/2)*cell,by+(r+s.rows/2)*cell);   // only combos charge Blast
@@ -261,6 +264,8 @@ function place(idx,r,c){
     if(combo>=5) triggerTransform('volcano');
     if(combo>=7) triggerTransform('storm');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
+    if(s.star) gained=s.n+Math.max(gained-s.n,Math.round(CFG.STAR_PER_GEM*starGems*(1+(combo-1)*CFG.COMBO_STEP)));   // a star pays per gem
+    if(s.star&&starGems>0) pushBanner('STAR BLAST',starGems+(starGems===1?' gem':' gems'),'#E6D8FF');
     if(!s.star){                                   // a star gets its own cross-shaped blast instead
       const st=-(reduce?0:CFG.CLEAR_BLINK)*0.16;        // sweeps start with the pop, not the blink
       rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:st}));
@@ -280,10 +285,10 @@ function place(idx,r,c){
       lastGi=g.gi; cleared++;
       // optional blink, then the collapse ripples outward from the placed piece
       const d=Math.hypot(rr+0.5-cr,cc+0.5-cc0);
-      const delay=(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;
+      const delay=s.star?starMs+d*(reduce?0:CFG.STAR_STAGGER):(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;   // a star's cross lights up from the star outward after its charge
       maxDelay=Math.max(maxDelay,delay);
       cellsGone.push([rr,cc,delay]);
-      shatters.push({r:rr,c:cc,gi:g.gi,horiz,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
+      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
       if(CFG.FX_SCORE_ORBS && loud && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
         dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
@@ -323,8 +328,8 @@ function place(idx,r,c){
       cols.forEach(c2=>lineFlashes.push({horiz:false,idx:c2,t:ft,hue:glowH,k}));
     }
     shake=Math.min(11,3.5+total*1.8)*CFG.SHAKE;
-    if(s.star) shake=Math.max(shake,12*CFG.SHAKE);
-    const beat=(reduce?0:CFG.CLEAR_BLINK)/60+.02;                        // lands as the blink turns into the pop
+    if(s.star){ shake=Math.max(shake,12*CFG.SHAKE); if(!reduce) borderFlash={t:-starMs,col:'235,225,255'}; }
+    const beat=(s.star?starMs:reduce?0:CFG.CLEAR_BLINK)/60+.02;                        // lands as the blink turns into the pop
     if(combo>1) Sfx.combo(combo,total,beat); else Sfx.clear(total,beat);
     // the points number sits high on the board's right side, clear of the COMBO slam and the COLOR GONE band
     const slammed=CFG.FX_COMBO_SLAM&&loud;
@@ -348,7 +353,7 @@ function place(idx,r,c){
       Sfx.sweep();
       tension=0;
     }
-    if(!swept) praise(total,combo);
+    if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
     tension=Math.max(0,tension-CFG.TENSION_DOWN);
     if(blast){ blast.t=Math.min(CFG.BLAST_SECONDS*1000,blast.t+total*CFG.BLAST_ADD*1000+(swept?5000:0)); blast.lines+=total; }
   } else {
@@ -429,7 +434,7 @@ function stepDeal(){
   const end=performance.now()+CFG.DEAL_SLICE_MS;
   let r;
   do r=dealing.it.next(); while(!r.done && performance.now()<end);
-  if(r.done){ dealing=null; checkStuck(); saveRun(); }
+  if(r.done){ dealing=null; checkStuck(); syncActions(); saveRun(); }
 }
 function cancelDeal(){ if(dealing){ dealing.it.return(); dealing=null; } }   // a new run or a rescue deals its own tray
 
@@ -454,7 +459,7 @@ function onDown(e){
       drag={i,id:e.pointerId,x:e.clientX,y:e.clientY,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(s0)/cell,
             slot:null,snapK:0,sx:0,sy:0};             // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
       updateSlot(); hesPick();
-      Sfx.pickup(); return;
+      Sfx.pickup(); if(tray[i]&&tray[i].s.star) Sfx.starPick(); return;
     }
   }
 }

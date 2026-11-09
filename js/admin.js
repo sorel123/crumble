@@ -10,6 +10,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['UNLOCK_ALL','Unlock all skins'],
   ['UNLOCK_ALL_WORLDS','Unlock all worlds'],
   ['FX_COMBO_GLOW','Combo edge glow'],
+  ['FX_STAR_BURST','Star gem beams and burst'],
   ['FX_GOLD_TINT','Gold screen tint'],
   ['FX_SWEEP_FX','Sweep wash + confetti'],
   ['FX_TENSION_BORDER','Tension border glow'],
@@ -37,7 +38,7 @@ const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
 // one-tap previews of the chosen set's moments (Settings -> Sound)
 const DEV_PREVIEWS=[['Clear',()=>Sfx.clear(1,0,1)],['Combo ×4',()=>Sfx.combo(4,2,0)],['Praise',()=>Sfx.praise(2)],
   ['Big praise',()=>Sfx.praise(4)],['Sweep',()=>Sfx.sweep(0)],['Golden',()=>Sfx.goldenWin()],
-  ['Blast start',()=>Sfx.blastStart()],['Blast ready',()=>Sfx.blastReady()],['Blast over',()=>Sfx.blastEnd()]];
+  ['Blast start',()=>Sfx.blastStart()],['Blast ready',()=>Sfx.blastReady()],['Blast over',()=>Sfx.blastEnd()],['Star dealt',()=>Sfx.starIn()],['Star blast',()=>Sfx.star(9)]];
 const DEV_SOUND_TOGGLES=[       // shown in the Sound section
   ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
 ];
@@ -66,7 +67,10 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['GOLDEN_COOLDOWN','Golden hand cooldown (trays)',0,10,1],
   ['GOLDEN_MULT','Golden multiplier (found it)',1,6,0.5],
   ['GOLDEN_PARTIAL','Golden multiplier (partial)',1,4,0.5],
-  ['STAR_CHANCE','Star gem chance (per tray)',0,0.5,0.01],
+  ['STAR_MIN','Star gem: gems the best cross must clear',1,15,1],
+  ['STAR_CHANCE','Star gem chance (per eligible tray)',0,1,0.01],
+  ['STAR_COOL','Star gem cooldown (trays)',0,20,1],
+  ['STAR_PER_GEM','Star gem points per gem',0,40,1],
   ['STAR_COMBO','Star gem guaranteed at combo',2,10,1],
   ['SWEEP_COOLDOWN','Sweep cooldown (trays)',0,10,1],
   ['LIFT','Piece lift above finger (cells)',0,3,0.05],
