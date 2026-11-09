@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after Blast came back as a tap-to-start reward (plan PR 4.5a).
+Last updated 2026-11-09, after Settings became look presets (plan PR 4.3).
 
 ---
 
@@ -90,6 +90,7 @@ Last updated 2026-11-09, after Blast came back as a tap-to-start reward (plan PR
 - **Look**: themes (Classic default, Night, Daylight, Cotton Candy, Mint,
   Paper), home worlds (10, each with an ambient effect), tile skins (Blocks
   default, Jewels, Clay; Candy/Glass/Neon/Pixel unlock by best score), motifs.
+- **Look presets (4.3):** Settings opens on a grid of complete looks (`LOOKS` in `ui.js`: theme + world + skin + motif, each tile a little board drawn by `lookPreview`). Settings fits one 390×844 screen (a test checks it does not scroll); mixing theme/world/skin/motif one by one lives under **Advanced: mix your own**. No separate save: the chosen look is the four saved settings, and `currentLook()` lights the preset they match (none lit = she mixed her own). To add a look (4.5d's unlockable transformation looks), append a `LOOKS` entry; an optional `need()` returns a lock label (e.g. `'1600 pts'`) while locked, and the tile then shows it and cannot be picked. Neon is the example, locked until its skin is earned. Previews build lazily on first Settings open.
 - **Settings** (player-facing, pauses the game): look + sound, saved as her
   defaults. **Admin** panel (all tuning sliders and test buttons) is reached
   from Settings' footer only when the URL has `?dev` (`CFG.DEV_MODE`).

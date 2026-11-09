@@ -32,20 +32,20 @@ function loadSkinSave(){
 function checkUnlocks(){
   const news=[];
   for(const s of PICKABLE_SKINS) if(!unlocked.has(s.id) && best>=s.unlock){ unlocked.add(s.id); news.push(s.name); }
-  if(news.length){ saveSkinSave(); renderSkins(); }
+  if(news.length){ saveSkinSave(); renderSkins(); if(el('lookGrid').children.length) renderLooks(); }
   return news;
 }
 function setSkin(id){
   if(!isUnlocked(id)) return;
   CFG.STYLE=id; if(!transform){ curSkin=id; buildCache(); }       // mid-transformation it applies when that ends
-  renderSkins(); saveSkinSave();
+  renderSkins(); renderLooks(); saveSkinSave();
 }
-function setMotif(id){ CFG.MOTIF=id; buildCache(); renderMotifs(); saveSkinSave(); }
+function setMotif(id){ CFG.MOTIF=id; buildCache(); renderMotifs(); renderLooks(); saveSkinSave(); }
 function setWorld(id){
   if(!isWorldUnlocked(id)) return;
   CFG.HOME_WORLD=id;
   if(!transform){ curWorld=id; ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1; }
-  renderWorlds(); saveSkinSave();
+  renderWorlds(); renderLooks(); saveSkinSave();
 }
 function renderSkins(){
   el('skinGrid').querySelectorAll('button').forEach(b=>{
@@ -90,6 +90,65 @@ function buildSkinsUI(){
   });
   renderWorlds(); renderSkins(); renderMotifs();
 }
+/* ═══════ looks: complete presets (plan 4.3). A look is a theme + world + skin + motif picked together; the Advanced
+   panel still mixes them one by one. To add one (e.g. a 4.5d transformation reward), append an entry: `need()` returns
+   a short label while it is locked ('' / absent = open), and its tile shows that label and cannot be picked. The
+   chosen look is not stored on its own: it is the four saved settings, so `currentLook()` finds the preset they match
+   (none = she mixed her own, no tile lit). */
+const LOOKS=[
+  {id:'classic', name:'Classic',      theme:'classic',  world:'night',   style:'blocks', motif:'none'},
+  {id:'night',   name:'Night Jewels', theme:'night',    world:'ocean',   style:'jewel',  motif:'none'},
+  {id:'cotton',  name:'Cotton Candy', theme:'cotton',   world:'blossom', style:'clay',   motif:'heart'},
+  {id:'mint',    name:'Mint Garden',  theme:'mint',     world:'forest',  style:'blocks', motif:'none'},
+  {id:'neon',    name:'Neon',         theme:'night',    world:'neon',    style:'neon',   motif:'none',
+    need:()=>isUnlocked('neon')?'':SKINS.find(s=>s.id==='neon').unlock+' pts'}
+];
+const lookLocked=l=>l.need?l.need():'';
+function currentLook(){
+  return LOOKS.find(l=>l.theme===CFG.THEME && l.world===CFG.HOME_WORLD && l.style===CFG.STYLE && l.motif===CFG.MOTIF)||null;
+}
+function setLook(id){
+  const l=LOOKS.find(x=>x.id===id); if(!l || lookLocked(l)) return;
+  CFG.THEME=l.theme; CFG.STYLE=l.style; CFG.MOTIF=l.motif; CFG.HOME_WORLD=l.world;
+  applyTheme();
+  if(!transform){                                  // mid-transformation the skin and world apply when it ends
+    curSkin=l.style; buildCache();
+    curWorld=l.world; ambient=spawnAmbient(worldDef(l.world).effect); ambientOld=[]; bgFrom=l.world; bgT=1;
+  }
+  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); saveSkinSave();
+}
+function lookPreview(cv,l){            // a little board in the look's own sky, panel and tiles
+  const S=Math.round(96*Math.min(2,dpr||1)); cv.width=cv.height=S; const x=cv.getContext('2d');
+  const t=THEMES.find(h=>h.id===l.theme)||THEMES[0], w=worldDef(l.world);
+  const sky=t.light?{top:t.top,bottom:t.bot}:w;
+  const g=x.createLinearGradient(0,0,0,S); g.addColorStop(0,sky.top); g.addColorStop(1,sky.bottom);
+  x.fillStyle=g; x.fillRect(0,0,S,S);
+  const m=S*.12, bw=S-m*2, n=5, c=bw/n;
+  x.fillStyle=t.light?t.panel:'rgba(0,0,0,.34)'; roundPath(x,m,m,bw,bw,S*.07); x.fill();
+  const skin=SKINS.find(k=>k.id===l.style)||SKINS[0], tiles=GEMS.slice(0,6).map(gm=>{
+    const tc=skin.render(c,gm); if(l.motif!=='none') stampMotif(tc,c,l.motif); return tc; });
+  const pat=[[0,0,1,1,0],[0,2,2,1,0],[3,2,0,0,4],[3,0,0,4,4],[5,5,5,0,0]];
+  pat.forEach((row,r)=>row.forEach((k,col)=>{
+    if(!k && (r+col)%2===0) return;                            // empty cells stay slots
+    if(!k){ x.fillStyle=t.light?t.slot:'rgba(255,255,255,.055)'; roundPath(x,m+col*c+1,m+r*c+1,c-2,c-2,c*.1); x.fill(); return; }
+    x.drawImage(tiles[k%6],m+col*c,m+r*c,c,c);
+  }));
+}
+function renderLooks(){
+  const grid=el('lookGrid'), cur=currentLook();
+  if(!grid.children.length) for(const l of LOOKS){
+    const b=document.createElement('button'); b.type='button'; b.className='look-btn'; b.dataset.id=l.id;
+    const cv=document.createElement('canvas'); b.append(cv, Object.assign(document.createElement('span'),{textContent:l.name}));
+    b.onclick=e=>{ e.stopPropagation(); setLook(l.id); };
+    grid.append(b); lookPreview(cv,l);
+  }
+  grid.querySelectorAll('button').forEach(b=>{
+    const l=LOOKS.find(x=>x.id===b.dataset.id), lock=lookLocked(l);
+    b.disabled=!!lock; b.setAttribute('aria-pressed',String(cur===l));
+    let s=b.querySelector('.lock'); if(s) s.remove();
+    if(lock){ s=document.createElement('span'); s.className='lock'; s.textContent='🔒 '+lock; b.append(s); }
+  });
+}
 /* ═══════ the player's Settings: look + sound, saved as her defaults.
    (The admin panel — tuning, testing — opens from its footer in dev mode.) */
 const SOUND_STYLES=[['original','Original'],['strings','Strings'],['steel','Steel drum'],['bells','Bells']];
@@ -103,7 +162,7 @@ function buildSettingsUI(){
   const make=(label,id,fn)=>{ const b=document.createElement('button'); b.type='button'; b.dataset.id=id;
     b.textContent=label; b.onclick=e=>{ e.stopPropagation(); fn(id); }; return b; };
   for(const t of THEMES) el('themeGrid').append(Object.assign(make(t.name,t.id,id=>{
-    CFG.THEME=id; applyTheme(); renderThemes(); saveSkinSave(); }),{className:'skin-btn'}));
+    CFG.THEME=id; applyTheme(); renderThemes(); renderLooks(); saveSkinSave(); }),{className:'skin-btn'}));
   for(const [id,label] of SOUND_STYLES) el('sndSetRow').append(make(label,id,v=>{
     CFG.SND_SET=v; renderSndSet(); saveSkinSave(); ac(); setTimeout(()=>Sfx.clear(1,0,1),60); }));   // a quick taste of the style
   el('sndOn').onchange=()=>setMuted(!el('sndOn').checked);
@@ -111,7 +170,7 @@ function buildSettingsUI(){
 }
 function openSettings(){
   if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); }           // the game waits while Settings is open
-  renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted;
+  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted;
   el('setPanel').hidden=false;
 }
 el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };
