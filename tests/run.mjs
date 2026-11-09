@@ -97,7 +97,7 @@ test('completing a row clears it and scores', async ({ page }) => {
   assert.ok(s.score > 0, 'the clear scored');
 });
 
-test('running out of moves ends the run', async ({ page }) => {
+test('running out of moves ends the run after the landing wait', async ({ page }) => {
   await play(page);
   // Two holes in every row and column (a doubled diagonal): filling one completes no line,
   // and a 1x3 bar and a 2x2 square fit nowhere in what is left.
@@ -105,12 +105,11 @@ test('running out of moves ends the run', async ({ page }) => {
   await setup(page, { rows, trayShapes: [0, 3, 9] });
   await dragPiece(page, 0, 0, 0);
   await page.waitForFunction(() => stuck, null, { timeout: 3000 });
-  await page.waitForTimeout(1500);
-  assert.equal((await snap(page)).state, 'play', 'Undo is still available, so the run waits');
-  assert.equal(await page.isVisible('#noMoves'), true); assert.equal(await page.isVisible('#endBtn'), true);
-  await page.click('#endBtn');
+  assert.equal(await page.isVisible('#noMoves'), true, 'No moves shows while the last drop lands');
+  assert.equal(await page.locator('#undoBtn, #helpBtn, #endBtn').count(), 0, 'no Undo, Rescue or End run button');
   await page.waitForFunction(() => !el('overCard').hidden, null, { timeout: 5000 });
   assert.equal((await snap(page)).state, 'over');
+  assert.equal(await page.isVisible('#reviveBtn'), await page.evaluate(() => rescueAllowed(best)), 'the card offers the rescue exactly when the gate allows it');
 });
 
 // ── The drag (plan 2.1): one finger, one destination ──
@@ -511,7 +510,7 @@ test('star gem: dealt only when a cross is worth it, with a cooldown, and never 
   assert.equal(r.live, false, 'none while another is live');
 });
 
-test('star gem: it clears exactly its row and column, pays per gem, ends the special streak and survives Undo and resume', async ({ page }) => {
+test('star gem: it clears exactly its row and column, pays per gem, ends the special streak and survives save/resume', async ({ page }) => {
   await withDiag(page);
   const r = await page.evaluate(async () => {
     diagBoard(); trayNo = 12; combo = 0; score = 0;
@@ -521,8 +520,7 @@ test('star gem: it clears exactly its row and column, pays per gem, ends the spe
     const left = []; for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (grid[r][c]) left.push([r, c]);
     const out = { seenBefore, score, end: specialEnd, trayNo, seen: stats.starSeen, rowGone: grid[3].every(v => !v),
       colGone: grid.every(row => !row[3]), left: left.length, kept: grid[0][1] !== null && grid[0][2] !== null };
-    undo(); out.undone = tray[0] && tray[0].s.star && grid[3][0] !== null; out.endUndone = specialEnd; out.scoreUndone = score;
-    const j = JSON.parse(JSON.stringify(snapshot())); tray = [null, null, null]; restore(j);
+    const j = JSON.parse(JSON.stringify(sn)); tray = [null, null, null]; restore(j);
     out.resumed = tray[0] && tray[0].s.star; out.cool = starCool;
     return out;
   });
@@ -532,8 +530,6 @@ test('star gem: it clears exactly its row and column, pays per gem, ends the spe
   assert.ok(r.score >= 14 * 14, 'a 14-gem cross pays per gem (' + r.score + ')');
   assert.equal(r.end, 12, 'placing it sets specialEnd to its tray');
   assert.equal(r.seenBefore, 0); assert.equal(r.seen, 1, 'the first-star label is used up');
-  assert.equal(r.undone, true, 'Undo puts the star and the board back');
-  assert.equal(r.endUndone, -99); assert.equal(r.scoreUndone, 0);
   assert.equal(r.resumed, true, 'a star in hand survives save/resume');
 });
 
@@ -692,14 +688,15 @@ test('the hesitation log times the first drop of each tray, skips restored trays
   assert.equal(log[0].clr, 1, 'the first drop cleared');
   await dragPiece(page, 1, 4, 4);
   assert.equal(await page.evaluate(() => hes.log.length), 1, 'only the first drop of a tray is a sample');
-  // finish the tray, so a fresh one is dealt and timed; then Undo its first drop: the replay is not a sample
+  // finish the tray, so a fresh one is dealt and timed; then restore it before its first drop: the replay is not a sample
   await dragPiece(page, 2, 6, 6); await dealt(page);
   const mv = () => page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
+  const pre = await page.evaluate(() => JSON.stringify(snapshot()));
   let m = await mv(); await dragPiece(page, m.i, m.r, m.c);
   assert.equal(await page.evaluate(() => hes.log.length), 2);
-  await page.click('#undoBtn');
+  await page.evaluate(p => restore(JSON.parse(p)), pre);
   m = await mv(); await dragPiece(page, m.i, m.r, m.c);
-  assert.equal(await page.evaluate(() => hes.log.length), 2, 'a tray put back by Undo gives no sample');
+  assert.equal(await page.evaluate(() => hes.log.length), 2, 'a tray put back by restore() gives no sample');
   // a resumed run (force-quit) gives no bogus deal-to-pickup time for the tray it reopens on
   await page.evaluate(() => saveRun());
   await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
@@ -954,56 +951,33 @@ test('a new deploy shows "Update ready" after the run, and tapping it reloads on
   assert.deepEqual(keys, ['crumble-deploy2'], 'the old cache is gone');
 });
 
-// Undo and the stuck rescue button (plan 3.2).
+// No Undo, no mid-run Rescue, no End run (plan 7.1): running out of moves ends the run; the game-over card has one rescue.
 const exact = page => page.evaluate(() => JSON.stringify(snapshot()));
 const firstMove = page => page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; return null; });
-
-test('Undo puts the run back exactly (including a clearing move), once per placement', async ({ page }) => {
-  await play(page);
-  assert.equal(await page.isDisabled('#undoBtn'), true, 'nothing to undo at the start');
-  const g = await geometry(page);
-  // a plain move
-  const a = await exact(page);
-  const mv = await firstMove(page);
-  await dragPiece(page, mv.i, mv.r, mv.c); await dealt(page);
-  assert.notEqual(await exact(page), a);
-  assert.equal(await page.isDisabled('#undoBtn'), false);
-  await page.click('#undoBtn');
-  assert.equal(await exact(page), a, 'the exact round-trip');
-  assert.equal(await page.isDisabled('#undoBtn'), true, 'only one move back');
-  // a move that clears a line
-  await setup(page, { rows: ['11111110', ...EMPTY.slice(1)], trayShapes: [0, 1, 2] });
-  await page.evaluate(() => { tray[0] = { s: SHAPES.find(s => s.cols === 1 && s.rows === 1), gi: 1 }; });
-  const b = await exact(page);
-  await dragPiece(page, 0, 0, 7); await frames(page, 3);
-  assert.equal((await snap(page)).rows[0], '00000000', 'the line cleared');
-  await page.click('#undoBtn');
-  assert.equal(await exact(page), b, 'the cleared line and the piece are back');
-  assert.equal((await snap(page)).rows[0], '11111110');
-  void g;
+const crowd = page => page.evaluate(() => {          // a checkerboard: no 2x2 fits anywhere, so the trays are stuck
+  grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => ((r + c) % 2 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+  tray = [0, 1, 2].map(() => ({ s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }));
 });
 
-test('Undo is saved, survives a reload, and cannot refund a rescue or reach into a new run', async ({ page }) => {
+test('there is no Undo, mid-run Rescue or End run button', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.locator('#undoBtn, #helpBtn, #endBtn').count(), 0);
+  const mv = await firstMove(page);
+  await dragPiece(page, mv.i, mv.r, mv.c); await dealt(page);
+  assert.equal(await page.locator('#undoBtn, #helpBtn, #endBtn').count(), 0, 'still none after a move');
+});
+
+test('a run is saved after every move and reopens exactly after a reload', async ({ page }) => {
   await play(page);
   const mv = await firstMove(page);
   await dragPiece(page, mv.i, mv.r, mv.c); await dealt(page);
-  await page.click('#undoBtn');
   const after = await exact(page);
-  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.run')), after, 'saved right after the undo');
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.run')), after, 'saved right after the move');
   await reload(page);
-  assert.equal(await exact(page), after, 'the undone state is what a force-quit reopens to');
-  // a rescue clears Undo
-  const mv2 = await firstMove(page);
-  await dragPiece(page, mv2.i, mv2.r, mv2.c); await dealt(page);
-  await page.evaluate(() => { rescuesUsed = 0; score = 500; stuck = true; syncActions(); });
-  await page.click('#helpBtn');
-  assert.equal(await page.isDisabled('#undoBtn'), true);
-  // a new run clears Undo
-  await page.evaluate(() => start());
-  assert.equal(await page.isDisabled('#undoBtn'), true);
+  assert.equal(await exact(page), after, 'the state a force-quit reopens to');
 });
 
-test('Undo during the 700 ms before game over cancels it', async ({ page }) => {
+test('a board with no fit shows No moves while the last drop lands, then the run ends', async ({ page }) => {
   await play(page);
   // a crowded board with one 2x2 hole; the tray holds a 1x1 and a 2x2. The 1x1 goes into the hole, the 2x2 then fits nowhere: stuck.
   await setup(page, { rows: ['00111111', '00111111', '11011011', '10110110', '11011011', '10110110', '11011011', '10110110'] });   // isolated holes below: no line is complete, no 2x2 fits except the top-left hole
@@ -1013,60 +987,33 @@ test('Undo during the 700 ms before game over cancels it', async ({ page }) => {
   });
   await dragPiece(page, 0, 0, 0);
   await page.waitForFunction(() => stuck === true, null, { timeout: 2000 });
-  assert.equal(await page.isDisabled('#undoBtn'), false);
-  await page.waitForTimeout(2000);
-  assert.equal(await page.evaluate(() => state), 'play', 'stuck with Undo available: the run waits, it does not end');
-  await page.click('#undoBtn');
-  assert.equal(await page.evaluate(() => stuck), false);
-  assert.equal(await page.isVisible('#noMoves'), false);
-  // with no way out left, it ends by itself after the short wait
-  await page.evaluate(() => { undoSnap = null; score = 0; tray = [null, { s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }, null]; grid[0][0] = grid[0][1] = grid[1][0] = grid[1][1] = { gi: 0, t: 1, f: 0, l: 0 }; checkStuck(); });
+  assert.equal(await page.isVisible('#noMoves'), true);
+  assert.equal(await page.evaluate(() => state), 'play', 'the landing wait: the run is not over yet');
   await page.waitForFunction(() => !el('overCard').hidden, null, { timeout: 3000 });
+  assert.equal(await page.evaluate(() => state), 'over');
+  assert.equal(await page.isVisible('#noMoves'), false);
 });
 
-test('a stuck board with a rescue available does not end the run; tapping Rescue continues it', async ({ page }) => {
+test('the one rescue: offered on the game-over card of a run worth saving, spent once, then the run is over', async ({ page }) => {
   await play(page);
-  await page.evaluate(() => {
-    grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => ((r + c) % 2 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
-    tray = [0, 1, 2].map(() => ({ s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }));
-    rescuesUsed = 0; score = 500; undoSnap = null; checkStuck();
-  });
-  await page.waitForTimeout(2000);
-  assert.equal(await page.evaluate(() => state), 'play'); assert.equal(await page.isVisible('#overCard'), false);
-  assert.equal(await page.isDisabled('#helpBtn'), false);
-  await page.click('#helpBtn');
-  const a = await page.evaluate(() => ({ state, rescuesUsed, fits: anyFits(), stuck }));
-  assert.deepEqual(a, { state: 'play', rescuesUsed: 1, fits: true, stuck: false });
-});
-
-test('the rescue button is disabled whenever any piece fits, and spends a rescue when stuck', async ({ page }) => {
-  await play(page);
-  const r = await page.evaluate(() => {
-    const out = [];
-    for (let k = 0; k < 40; k++) {                                  // random boards and trays: the button state follows "nothing fits" exactly
-      grid = Array.from({ length: 8 }, () => Array.from({ length: 8 }, () => (Math.random() < 0.7 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
-      for (let r = 0; r < 8; r++) if (grid[r].every(v => v)) grid[r][0] = null;
-      tray = [0, 1, 2].map(() => ({ s: SHAPES[(Math.random() * SHAPES.length) | 0], gi: 1 }));
-      rescuesUsed = 0; score = 500; state = 'play'; checkStuck();
-      out.push({ fits: anyFits(), disabled: el('helpBtn').disabled });
-    }
+  const flags = await page.evaluate(() => {
+    const out = {};
+    rescuesUsed = 0; score = 0; out.zero = rescueAllowed(best);
+    score = 500; out.worth = rescueAllowed(best);
+    rescuesUsed = 1; out.spent = rescueAllowed(best); rescuesUsed = 0;
     return out;
   });
-  for (const x of r) assert.equal(x.disabled, x.fits, 'disabled exactly when a piece fits');
-  assert.ok(r.some(x => x.fits) && r.some(x => !x.fits), 'the sample covered both cases');
-  await page.waitForTimeout(900);                                    // any pending game-over timers from that loop
-  await page.evaluate(() => { state = 'play'; el('overCard').hidden = true; });
-  // stuck with a rescue left: pressing it spends one and deals a playable tray
-  const o = await page.evaluate(() => {
-    grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => ((r + c) % 2 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
-    tray = [0, 1, 2].map(() => ({ s: SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2), gi: 1 }));
-    rescuesUsed = 0; score = 500; checkStuck();
-    return { fits: anyFits(), disabled: el('helpBtn').disabled };
-  });
-  assert.equal(o.fits, false); assert.equal(o.disabled, false);
-  await page.click('#helpBtn');
-  const after = await page.evaluate(() => ({ rescuesUsed, state, fits: anyFits(), over: !el('overCard').hidden, disabled: el('helpBtn').disabled }));
-  assert.equal(after.rescuesUsed, 1); assert.equal(after.state, 'play'); assert.equal(after.fits, true); assert.equal(after.over, false); assert.equal(after.disabled, true);
+  assert.deepEqual(flags, { zero: false, worth: true, spent: false });
+  await crowd(page);
+  await page.evaluate(() => { rescuesUsed = 0; score = 500; checkStuck(); });
+  await page.waitForSelector('#overCard:not([hidden])', { timeout: 3000 });
+  assert.equal(await page.isVisible('#reviveBtn'), true, 'the card offers the one rescue');
+  await page.click('#reviveBtn');
+  const after = await page.evaluate(() => ({ rescuesUsed, state, fits: anyFits(), over: !el('overCard').hidden, stuck }));
+  assert.deepEqual(after, { rescuesUsed: 1, state: 'play', fits: true, over: false, stuck: false });
+  await page.evaluate(() => { score = 500; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isVisible('#reviveBtn'), false, 'a second game over has no rescue: the run is over');
 });
 
 /* ═══════ Bonus trays (plan 6.2, replaced the Blast Round) ═══════ */
@@ -1201,7 +1148,7 @@ test('while a bonus runs the sky shifts and the rim pulses, but the board materi
   assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
 });
 
-test('the bonus is saved and resumed (meter and trays left), Undo takes a bonus move back with its points, and a new run starts clean', async ({ page }) => {
+test('the bonus is saved and resumed (meter and trays left), a bonus move doubles its points, and a new run starts clean', async ({ page }) => {
   await play(page);
   await page.evaluate(() => { trayNo = 10; bonusMeter = 6; bonus = { left: 2, extra: 40 }; syncBonusChip(); saveRun(); });
   const stored = await page.evaluate(() => { const o = JSON.parse(localStorage.getItem('crumble.run')); return { m: o.bonusMeter, b: o.bonus }; });
@@ -1212,11 +1159,10 @@ test('the bonus is saved and resumed (meter and trays left), Undo takes a bonus 
   await dealt(page);
   const u = await page.evaluate(() => {
     grid = empty(); grid[0] = grid[0].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null)); tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
-    const s0 = score, x0 = bonus.extra; place(0, 0, 0); const moved = { gain: score - s0, extra: bonus.extra - x0 };
-    undo(); return { moved, score: score === s0, extra: bonus && bonus.extra === x0, left: bonus && bonus.left };
+    const s0 = score, x0 = bonus.extra; place(0, 0, 0);
+    return { gain: score - s0, extra: bonus.extra - x0 };
   });
-  assert.ok(u.moved.gain > 0 && u.moved.extra > 0, 'the move was doubled');
-  assert.deepEqual([u.score, u.extra, u.left], [true, true, 2], 'Undo restores the points, the extra and the trays left');
+  assert.ok(u.gain > 0 && u.extra > 0, 'the move was doubled');
   const n = await page.evaluate(() => { start(); return { bonus, meter: bonusMeter, world: curWorld === CFG.HOME_WORLD, chip: el('bonusChip').textContent.trim() }; });
   assert.deepEqual(n, { bonus: null, meter: 0, world: true, chip: '×2 bonus' });
 });
@@ -1344,13 +1290,14 @@ test('golden hand: the arrival sequence does not block input and the plan draws 
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
 });
 
-test('golden hand: save/resume and Undo keep the hand and re-plan it', async ({ page }) => {
+test('golden hand: save/resume and restore keep the hand and re-plan it', async ({ page }) => {
   await play(page);
   await page.evaluate(goldHand);
   const r = await page.evaluate(() => {
+    const pre = JSON.parse(JSON.stringify(snapshot()));
     place(0, 0, 0);
     const out = { cleared: golden.got.lines };
-    undo(); out.undone = golden && golden.got.lines; out.undoneIds = golden.plan.ids.slice().sort(); out.undoneTray = tray.filter(Boolean).length;
+    restore(pre); out.undone = golden && golden.got.lines; out.undoneIds = golden.plan.ids.slice().sort(); out.undoneTray = tray.filter(Boolean).length;
     place(0, 0, 0);
     const j = JSON.parse(JSON.stringify(snapshot())); golden = null; tray = [null, null, null]; restore(j);
     out.got = golden && golden.got.lines; out.ids = golden && golden.plan.ids.slice().sort(); out.left = tray.filter(Boolean).length; out.live = specialLive();
@@ -1440,24 +1387,17 @@ test('achievements: unlocked looks open in Settings, persist across a reload, an
   assert.deepEqual(await page.evaluate(() => [CFG.STYLE, CFG.HOME_WORLD, discoveredWorlds.has('volcano')]), ['volcano', 'volcano', true], 'the earned look survives a reload');
 });
 
-test('achievements: Undo of the earning move takes the live look back, Undo inside one keeps it, resume ends it; the card never blocks play', async ({ page }) => {
+test('achievements: a clean sweep starts its look, resume ends a live look, the card never blocks play', async ({ page }) => {
   await ach(page);
   const r = await page.evaluate(() => {
     const out = {}; CFG.SPECIALS.golden = false; discoveredWorlds.clear();
     grid = empty(); for (let c = 0; c < 7; c++) grid[0][c] = { gi: 0, t: 1, f: 0, l: 0 };
     tray = [{ s: SHAPES.find(s => s.cells.length === 1), gi: 1 }, { s: SHAPES.find(s => s.cells.length === 1), gi: 2 }, { s: SHAPES.find(s => s.cells.length === 1), gi: 3 }];
-    noteUndo(); place(0, 0, 7); // a clear that empties the board: a clean sweep
-    out.live = transform && transform.id; undoSnap && 0;
+    place(0, 0, 7); // a clear that empties the board: a clean sweep
+    out.live = transform && transform.id;
     return out;
   });
   assert.equal(r.live, 'rainbow', 'a clean sweep starts Rainbow');
-  await page.evaluate(() => { undo(); });
-  assert.equal(await page.evaluate(() => !!transform), false, 'undoing the sweep takes the live look back');
-  const kept = await page.evaluate(() => {
-    transform = { id: 'volcano', remaining: 5 }; tray = [{ s: SHAPES[0], gi: 1 }, null, null]; place(0, 6, 0);
-    undo(); return transform && [transform.id, transform.remaining];
-  });
-  assert.deepEqual(kept, ['volcano', 5], 'Undo inside a live look keeps it, with its moves back');
   const saved = await page.evaluate(() => { const o = JSON.parse(JSON.stringify(snapshot())); transform = { id: 'volcano', remaining: 5 }; restore(o); return !!transform; });
   assert.equal(saved, false, 'resume ends a live transformation');
   await page.evaluate(() => { trayNo = 10; transformCool = 0; specialEnd = -99; triggerTransform('starfield'); });
@@ -1534,7 +1474,7 @@ test('Adventure: goals count lines, score, combo and a clean sweep', async ({ pa
   assert.deepEqual(r, { lines: 2, score: 120, combo: 2, sweep0: 0, sweep1: 1 });
 });
 
-test('Adventure: a level run survives a reload, Endless keeps its own run, Undo rewinds the level', async ({ page }) => {
+test('Adventure: a level run survives a reload, Endless keeps its own run', async ({ page }) => {
   await play(page); await dealt(page);
   await page.evaluate(() => { score = 77; saveRun(); });
   await page.click('#modeTag'); await page.click('#menuAdv'); await page.click('#mapList .node >> nth=0');
@@ -1542,9 +1482,6 @@ test('Adventure: a level run survives a reload, Endless keeps its own run, Undo 
   await page.evaluate(() => { CFG.SPECIALS.golden = false; });
   await clearOne(page); await dealt(page);
   assert.deepEqual(await page.evaluate(() => [lv.lines, lv.pieces]), [1, 1]);
-  await page.evaluate(() => { undo(); });
-  assert.deepEqual(await page.evaluate(() => [lv.lines, lv.pieces]), [0, 0], 'Undo takes the level counters back with the move');
-  await clearOne(page); await dealt(page);
   await reloadGame(page);
   assert.deepEqual(await page.evaluate(() => [state, mode, lvl.id, lv.lines, lv.pieces]), ['play', 'adventure', 1, 1, 1], 'reopens into the level, counters intact');
   assert.equal(await page.textContent('#bestVal'), '1/3');
@@ -1978,53 +1915,51 @@ test('hands by phase (6.1): honest and recovery are playable, edge pieces each h
   assert.equal(r.star, 0, 'no star on edge or recovery trays');
 });
 
-test('rescues (6.1): the first is free, the second is earned by 30 lines; Adventure keeps both free', async ({ page }) => {
+test('rescue (plan 7.1): one per run on the game-over card; Adventure offers it too', async ({ page }) => {
   await play(page);
   const r = await page.evaluate(() => {
     const out = {};
     score = 500; rescuesUsed = 0; out.first = rescueAllowed(best);
-    rescue(); out.afterFirst = { used: rescuesUsed, allowed: rescueAllowed(best), ph: pace.ph, lines: rescueLines };
-    banners.length = 0;
-    grid = empty(); for (let c = 0; c < 7; c++) grid[0][c] = { gi: 0, t: 1, f: 0, l: 0 };
-    rescueLines = CFG.RESCUE_EARN_LINES - 1; tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, null]; place(0, 0, 7);
-    out.earned = { allowed: rescueAllowed(best), banner: banners.some(b => b.txt === 'RESCUE EARNED') };
-    rescueLines = 0; mode = 'adventure'; out.adv = rescueAllowed(best); mode = 'endless';
+    rescue(); out.afterFirst = { used: rescuesUsed, allowed: rescueAllowed(best), ph: pace.ph };
+    rescuesUsed = 0; mode = 'adventure'; out.adv = rescueAllowed(best);
+    rescuesUsed = 1; out.advSpent = rescueAllowed(best); mode = 'endless';
     return out;
   });
   assert.equal(r.first, true);
-  assert.deepEqual(r.afterFirst, { used: 1, allowed: false, ph: 'recovery', lines: 0 });
-  assert.deepEqual(r.earned, { allowed: true, banner: true });
+  assert.deepEqual(r.afterFirst, { used: 1, allowed: false, ph: 'recovery' });
   assert.equal(r.adv, true);
+  assert.equal(r.advSpent, false);
 });
 
-test('pace (6.1): save/resume and Undo keep the phase and the earned-rescue count; an old save starts calm', async ({ page }) => {
+test('pace (6.1): save/resume and restore keep the phase; an old save starts calm', async ({ page }) => {
   await play(page);
-  await page.evaluate(() => { pace = { ph: 'edge', n: 2, hold: 3, len: 0 }; rescueLines = 12; rescuesUsed = 1; saveRun(); });
+  await page.evaluate(() => { pace = { ph: 'edge', n: 2, hold: 3, len: 0 }; rescuesUsed = 1; saveRun(); });
   await reload(page);
-  const a = await page.evaluate(() => ({ pace, rescueLines }));
-  assert.deepEqual(a, { pace: { ph: 'edge', n: 2, hold: 3, len: 0 }, rescueLines: 12 });
+  const a = await page.evaluate(() => ({ pace }));
+  assert.deepEqual(a, { pace: { ph: 'edge', n: 2, hold: 3, len: 0 } });
   const u = await page.evaluate(() => {
     const mv = (() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return [i, r, c]; })();
-    place(...mv); pace = { ph: 'relief', n: 1, hold: 0, len: 2 }; rescueLines = 40; undo();
-    const back = { pace: { ...pace }, rescueLines };
-    const o = snapshot(); delete o.pace; delete o.rescueLines; restore(o);
-    return { back, old: { pace: { ...pace }, rescueLines } };
+    const pre = JSON.parse(JSON.stringify(snapshot()));
+    place(...mv); pace = { ph: 'relief', n: 1, hold: 0, len: 2 }; restore(pre);
+    const back = { pace: { ...pace } };
+    const o = snapshot(); delete o.pace; restore(o);
+    return { back, old: { pace: { ...pace } } };
   });
-  assert.deepEqual(u.back, { pace: { ph: 'edge', n: 2, hold: 3, len: 0 }, rescueLines: 12 }, 'Undo puts the rhythm back');
-  assert.deepEqual(u.old, { pace: { ph: 'calm', n: 0, hold: 0, len: 0 }, rescueLines: 0 });
+  assert.deepEqual(u.back, { pace: { ph: 'edge', n: 2, hold: 3, len: 0 } }, 'restore puts the rhythm back');
+  assert.deepEqual(u.old, { pace: { ph: 'calm', n: 0, hold: 0, len: 0 } });
 });
 
 test('pace (6.1): a new run starts calm, hesitation samples carry the phase, ?dev shows phase and room', async ({ page }) => {
   await play(page);
   const r = await page.evaluate(() => {
-    pace = { ph: 'edge', n: 2, hold: 3, len: 0 }; rescueLines = 9; start();
-    const fresh = { pace: { ...pace }, rescueLines };
+    pace = { ph: 'edge', n: 2, hold: 3, len: 0 }; start();
+    const fresh = { pace: { ...pace } };
     pace.ph = 'building'; hesDealt(); hesPick(); const mv = (() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return [i, r, c]; })();
     place(...mv);
     CFG.SHOW_TENSION = true; updateDbg();
     return { fresh, ph: hes.log[hes.log.length - 1].ph, dbg: el('dbg').textContent };
   });
-  assert.deepEqual(r.fresh, { pace: { ph: 'calm', n: 0, hold: 0, len: 0 }, rescueLines: 0 }, 'a new run starts calm (the opening tray is dealt by seedOpening, outside the phases)');
+  assert.deepEqual(r.fresh, { pace: { ph: 'calm', n: 0, hold: 0, len: 0 } }, 'a new run starts calm (the opening tray is dealt by seedOpening, outside the phases)');
   assert.equal(r.ph, 'building');
   assert.match(r.dbg, /room \d\.\d\d/);
 });

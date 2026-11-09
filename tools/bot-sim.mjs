@@ -20,7 +20,7 @@
 // Plan 6.1 (pressure and recovery) adds:
 //   BOT=strong     a strong bot instead: it searches the tray (every piece, every spot, a beam of the best 10 boards
 //                  per step, scored on the room left, roomBits) and plays the first move of the best sequence.
-//   RESCUE=1       use rescues when stuck (the game's own rule: the first free, the second earned).
+//   RESCUE=1       use rescues when stuck (the game's own rule: one rescue per run, on the game-over card).
 // and reports, per game (a game ends when no tray piece fits, so without RESCUE=1 it is "trays to the first stuck"):
 // the median and quartiles of trays per game, the share of trays dealt in each phase, how often a recovery
 // tray was cleared, relief moments (a relief phase starting) per game and the median trays between them,

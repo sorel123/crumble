@@ -83,7 +83,7 @@ function chargeBonus(lines,comboNow){               // place(): a clear of `line
 }
 function syncBonusChip(){
   const c=el('bonusChip'), on=special('bonus')||!!bonus||!!bonusTag;
-  c.hidden=!on||stuck;                              // stuck shows End run instead (no room for four buttons)
+  c.hidden=!on;
   const full=!bonus&&bonusMeter>=CFG.BONUS_METER;
   const f=bonus?1:clamp(bonusMeter/CFG.BONUS_METER,0,1);
   c.style.setProperty('--f',f.toFixed(3));
@@ -169,7 +169,6 @@ function goldenSparkle(n){                             // twinkles only on empty
     sparkles.push({x:bx+(c+.2+Math.random()*.6)*cell,y:by+(r+.2+Math.random()*.6)*cell,t:Math.random()*0.5}); }
 }
 function place(idx,r,c){
-  noteUndo();                                      // the state just before this placement, for the one-move Undo (save.js)
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
@@ -319,9 +318,6 @@ function place(idx,r,c){
     }
     if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
-    if(paced()&&rescuesUsed===1&&rescueLines<CFG.RESCUE_EARN_LINES&&rescueLines+total>=CFG.RESCUE_EARN_LINES)
-      pushBanner('RESCUE EARNED','🛟 one more save',"#8FF7FF");   // (6.1) the second rescue is earned, not given
-    rescueLines+=total;
   } else {
     combo=0;
     if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
@@ -376,12 +372,12 @@ function place(idx,r,c){
   if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
 const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
-// Stuck (plan 3.2): while Undo or a Rescue can get her out, the run waits for her (pieces dim, "No moves", End run offered).
-// Only when neither is left does it end by itself, after 700 ms so the last drop finishes landing; the timer re-checks.
+// Stuck (plan 7.1): no tray piece fits. The pieces dim and "No moves" shows while the last drop lands; after 700 ms
+// the run ends (the timer re-checks, so a piece that fits by then keeps it going). The game-over card has the one rescue.
 function checkStuck(){
   stuck=!anyFits();
   syncActions();
-  if(stuck&&!canExit()) setTimeout(()=>{ if(!dealing&&!anyFits()&&!canExit()) gameOver(); },700);
+  if(stuck) setTimeout(()=>{ if(!dealing&&!anyFits()) gameOver(); },700);
 }
 
 /* The next tray is dealt after the clear has started, not inside the drop (plan 2.2). Choosing a hand

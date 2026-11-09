@@ -2,9 +2,8 @@
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ run snapshot ═══════
    snapshot() returns the whole run as plain JSON data; restore(o) puts it back and returns true, or false (and
-   changes nothing) if the data does not look right. Both are pure with respect to storage, so Undo (plan 3.2) can
-   keep them in memory. saveRun()/loadRun() are the localStorage side. Not captured: effects in flight (they are
-   cosmetic) and a live transformation (it ends on resume; Undo keeps it). The bonus meter and a live bonus (trays left, points it added) are kept (plan 6.2).
+   changes nothing) if the data does not look right. Both are pure with respect to storage. saveRun()/loadRun() are the
+   localStorage side. Not captured: effects in flight (they are cosmetic) and a live transformation (it ends on resume). The bonus meter and a live bonus (trays left, points it added) are kept (plan 6.2).
    restore() never deals an opening: the saved board and tray are exactly what she left. */
 const STATS_STORE='crumble.stats';   // the run's own key depends on the mode (modes.js: runStore)
 function snapshot(){
@@ -14,13 +13,12 @@ function snapshot(){
     tray:tray.map(t=>t?{s:t.s.star?-1:SHAPES.indexOf(t.s),gi:t.gi}:null),
     score, combo, tension, sweepCool, trayNo, rescuesUsed, bestBeaten, lastTier,
     carry:carry.map(s=>SHAPES.indexOf(s)).filter(i=>i>=0),
-    golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies: Undo keeps the snapshot while the live hand goes on mutating its own
+    golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies, so the snapshot does not move while the live hand goes on
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     bonusMeter, specialEnd,
-    pace:{...pace}, rescueLines,                    // (6.1) the dealer's phase, so resume and Undo keep the rhythm
+    pace:{...pace},                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
-    tf:transform?{id:transform.id,remaining:transform.remaining}:null,   // Undo keeps a live look; resume (loadRun) ends it
     bonus:bonus?{left:bonus.left,extra:bonus.extra}:null
   };
 }
@@ -35,9 +33,9 @@ function validSnapshot(o){
   if(mode==='daily'&&!(typeof o.dk==='string'&&/^\d{4}-\d\d-\d\d$/.test(o.dk)&&o.lv&&isInt(o.lv.lines,0,1e6)&&isInt(o.lv.pieces,0,1e6))) return false;
   return isNum(o.tension)&&isNum(o.sweepCool);
 }
-function restore(o,keepLive){
+function restore(o){
   if(!validSnapshot(o)) return false;
-  cancelDeal(); clearRunFx(); undoSnap=null; stuck=false; hesVoid();   // a restored tray (resume, Undo) gives no hesitation sample
+  cancelDeal(); clearRunFx(); stuck=false; hesVoid();   // a restored tray (resume) gives no hesitation sample
   grid=o.grid.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0}));
   tray=o.tray.map(t=>t&&{s:t.s<0?STAR:SHAPES[t.s],gi:t.gi});
   score=o.score; combo=o.combo; tension=clamp(o.tension,0,1); sweepCool=Math.max(0,o.sweepCool|0); trayNo=o.trayNo;
@@ -48,17 +46,11 @@ function restore(o,keepLive){
   goldenNext=!!o.goldenNext; goldenCool=Math.max(0,o.goldenCool|0); trayHadSweep=!!o.trayHadSweep;
   trayCombo=o.trayCombo|0; starForced=!!o.starForced; starCool=isInt(o.starCool,0,1e3)?o.starCool:0; transformCool=Math.max(0,o.transformCool|0);
   resetWorld(); transformCool=Math.max(0,o.transformCool|0);   // (resetWorld clears the cooldown)
-  const tf=o.tf;
-  if(keepLive&&tf&&TRANSFORMS[tf.id]&&isInt(tf.remaining,1,99)){    // Undo: the look she had is still live
-    transform={id:tf.id,remaining:tf.remaining}; curWorld=tf.id; curSkin=TRANSFORMS[tf.id].skin; buildCache();
-    ambient=spawnAmbient(worldDef(tf.id).effect); bgFrom=tf.id;
-  }
   renderPips();
   bonusMeter=isInt(o.bonusMeter,0,1e4)?Math.min(o.bonusMeter,CFG.BONUS_METER):0; bonusTag=null;
   specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
   const pc=o.pace, PH=['calm','building','edge','recovery','relief'];   // (6.1) older saves have none: start calm
   pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
-  rescueLines=isInt(o.rescueLines,0,1e6)?o.rescueLines:0;
   roomNow=roomOf(packGrid(grid)); resetPressure(true);
   const b=o.bonus;                                  // a live bonus carries on with the trays it had left (the sky is back at once)
   if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){
@@ -76,21 +68,10 @@ function restore(o,keepLive){
   syncActions();
   return true;
 }
-/* ═══════ Undo (plan 3.2) and the mid-run rescue button ═══════
-   place() calls noteUndo() first, so undoSnap is the whole run as it stood before the last placement (plus the
-   lifetime counters, so a replayed move is not counted twice). undo() puts it back through restore() and clears
-   it: one move back, once per placement. A rescue, a new run and game over also clear it, so Undo can never
-   refund a rescue or reach into another run. The board goes back exactly; a bonus in progress is undone with it (its trays left and points come back with the board). */
-let undoSnap=null, stuck=false;
-function noteUndo(){ undoSnap={run:snapshot(),stats:{...stats}}; syncActions(); }
-function undo(){
-  if(!undoSnap||state!=='play'||paused) return false;
-  const u=undoSnap; undoSnap=null;
-  if(!restore(u.run,true)){ syncActions(); return false; }
-  Object.assign(stats,u.stats);
-  syncActions(); saveRun();
-  return true;
-}
+/* ═══════ the board's own state ═══════
+   No Undo and no mid-run Rescue (plan 7.1). `stuck` is only the landing wait: no tray piece fits, the pieces dim and
+   "No moves" shows for a moment, then the run ends (checkStuck). */
+let stuck=false;
 let goldChipTxt='';
 function syncGoldChip(){                          // (4.5c) what the golden hand still needs, always one short line under the tray
   const st=golden&&state==='play'&&!dealing?goldenState():null, c=el('goldChip');
@@ -102,20 +83,13 @@ function syncGoldChip(){                          // (4.5c) what the golden hand
   if(txt&&txt!==goldChipTxt){ c.textContent=txt; c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
   goldChipTxt=txt;
 }
-const canExit=()=>!!undoSnap||rescueAllowed(best);               // a way out of being stuck other than ending the run
 function syncActions(){
   const live=state==='play'&&!dealing;
-  el('undoBtn').disabled=!(undoSnap&&state==='play');
-  el('helpBtn').disabled=!(stuck&&live&&rescueAllowed(best));
-  const wait=stuck&&live&&canExit();
-  el('endBtn').hidden=!wait; el('noMoves').hidden=!wait;
+  el('noMoves').hidden=!(stuck&&live);
   el('starNote').hidden=!(live&&!stats.starSeen&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until she has used one
   syncGoldChip();
   syncBonusChip();
 }
-el('endBtn').onclick=e=>{ e.stopPropagation(); if(stuck&&state==='play') gameOver(); };
-el('undoBtn').onclick=e=>{ e.stopPropagation(); undo(); };
-el('helpBtn').onclick=e=>{ e.stopPropagation(); if(!el('helpBtn').disabled) rescue(); };
 let lastRunJson=null;
 function saveRun(){
   if(state!=='play'||dealing||tray.every(v=>!v)) return;          // mid-deal there is nothing consistent to keep; the deal saves when it ends
@@ -154,7 +128,7 @@ addEventListener('pagehide',saveRun);
    last HES_WINDOW samples, with the sample count. The last HES_KEEP samples persist in `crumble.hes`, so after
    she has played normally Jay can open ?dev on her phone and read them.
    A sample is thrown away when it would not be a real hesitation: the tray came back through restore() (resume
-   after a force-quit, or Undo), or the app was hidden or Settings / Admin were open before the first drop. */
+   after a force-quit), or the app was hidden or Settings / Admin were open before the first drop. */
 const HES_STORE='crumble.hes', HES_KEEP=60, HES_WINDOW=20;
 const hes={log:[],dealtAt:0,firstPick:0,lastPick:0};
 function hesLoad(){
