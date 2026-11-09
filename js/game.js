@@ -96,6 +96,7 @@ function renderPips(){
   kids[n].textContent='×'+CFG.TRANSFORM_MULT;
 }
 function place(idx,r,c){
+  noteUndo();                                      // the state just before this placement, for the one-move Undo (save.js)
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
@@ -282,7 +283,9 @@ function place(idx,r,c){
   stats.placed++; stats.lines+=total; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
   if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
-function checkStuck(){ if(!tray.some(v=>v&&fitsAnywhere(v.s,grid))) setTimeout(gameOver,700); }
+const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
+// the timer re-checks, so an Undo or a rescue within those 700 ms cancels the game over
+function checkStuck(){ stuck=!anyFits(); if(stuck) setTimeout(()=>{ if(!dealing&&!anyFits()) gameOver(); },700); syncActions(); }
 
 /* The next tray is dealt after the clear has started, not inside the drop (plan 2.2). Choosing a hand
    is the most expensive thing the game does (~5-15 ms; more for a Blast Round hand), and it used to run

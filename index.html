@@ -39,6 +39,10 @@
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--best)}
   #mute,#setBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
         width:40px;height:40px;border-radius:12px;font-size:17px;cursor:pointer}
+  #actions{position:absolute;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:12px;pointer-events:none;z-index:2}
+  #actions button{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);font-family:var(--font);font-size:14px;font-weight:600;
+        min-width:104px;height:40px;padding:0 14px;border-radius:12px;cursor:pointer;transition:opacity .15s}
+  #actions button:disabled{opacity:.3;cursor:default}
   #dbg{position:absolute;left:18px;top:calc(100px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
   #dbg[hidden]{display:none}
@@ -141,6 +145,10 @@
       <button id="setBtn" aria-label="Settings">⚙️</button>
       <button id="mute" aria-label="Toggle sound">🔊</button>
     </div>
+  </div>
+  <div id="actions">
+    <button id="undoBtn" type="button" aria-label="Undo last move" disabled>↩ Undo</button>
+    <button id="helpBtn" type="button" aria-label="Rescue: get a new set of pieces" disabled>🛟 Rescue</button>
   </div>
   <div id="dbg"></div>
 
