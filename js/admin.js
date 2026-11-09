@@ -20,6 +20,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['FX_LAND_BUMP','Landing thump'],
   ['FX_PICKUP_GROW','Pickup grow-in'],
   ['FX_LINE_PREVIEW','Coloured line preview'],
+  ['FX_NARROW_ESCAPE','Narrow-escape flourish'],
   ['FX_CELL_TAGS','Point tags on cleared cells'],
   ['FX_MAGNET','Magnet: piece hops into its slot (off = glide + ghost)'],
   ['FX_COMBO_SLAM','COMBO slam + fireworks (combo 3+)'],

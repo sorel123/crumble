@@ -173,12 +173,13 @@ function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
+  const roomBefore=paced()?roomOf(packGrid(grid)):1;   // (6.3) how cramped the board was before this drop, for the narrow escape
   const bump=CFG.FX_LAND_BUMP&&!reduce;
   if(!s.star) s.cells.forEach(([dr,dc])=>{ grid[r+dr][c+dc]={gi:t.gi,t:1,f:1,l:bump?1:0}; });   // f = a brief glint, l = the landing thump; a star leaves no gem
   if(bump){                                        // the thump: a ring spreads out from under the piece, dust kicks out sideways
     const px=bx+c*cell, py=by+r*cell, pw=s.cols*cell, ph=s.rows*cell;
     rings.push({x:px,y:py,w:pw,h:ph,t:0});
-    for(let k=Math.min(6,fxRoom())-1;k>=0;k--){
+    for(let k=Math.min(3,fxRoom())-1;k>=0;k--){
       const left=k%2===0, yy=py+ph-cell*0.15-Math.random()*ph*0.5;
       dust.push({x:left?px+cell*0.1:px+pw-cell*0.1,y:yy,vx:(left?-1:1)*(1.2+Math.random()*2),vy:-(0.4+Math.random()*1.2),r:cell*(0.05+Math.random()*0.05),life:1});
     }
@@ -209,6 +210,8 @@ function place(idx,r,c){
 
   if(total>0){
     ambientBurst=1;
+    const single=total===1&&!s.star;                  // (6.3) the everyday clear is crisp and quiet; 2+ lines, a star or a sweep are bigger
+    const wasTight=roomBefore<CFG.ROOM_EDGE;   // (6.3) for the narrow escape, judged on the board after this clear
     const loud=combo+1>=CFG.BIG_COMBO;                // combo is bumped just below; this clear's own number
     if(CFG.FX_PUNCH_ZOOM && !reduce && loud && total>=2) punchT=1;
     hitWait=reduce?0:s.star?starMs:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
@@ -243,7 +246,7 @@ function place(idx,r,c){
       const delay=s.star?starMs+d*(reduce?0:CFG.STAR_STAGGER):(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;   // a star's cross lights up from the star outward after its charge
       maxDelay=Math.max(maxDelay,delay);
       cellsGone.push([rr,cc,delay]);
-      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
+      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,big:!single,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
       if(CFG.FX_SCORE_ORBS && loud && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
         dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
@@ -262,7 +265,7 @@ function place(idx,r,c){
       if(!reduce) for(let k=0;k<gone.length+1;k++) spawnFirework(bx+B*(0.2+0.6*Math.random()),by+B*(0.15+0.4*Math.random()),null,maxDelay+10+k*5);
     }
     // the point value on every cleared cell, rippling out with the collapse
-    if(CFG.FX_CELL_TAGS && !reduce && cleared){
+    if(CFG.FX_CELL_TAGS && !reduce && cleared && !single){   // a single line gets just the one score label
       const per=Math.max(1,Math.round((gained-s.n-colorBonus)/cleared));
       cellsGone.forEach(([rr,cc,delay])=>tags.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,txt:String(per),t:-(delay+4)}));
     }
@@ -274,15 +277,15 @@ function place(idx,r,c){
       if(combo>=3) borderFlash={t:-(maxDelay+7),col:combo>=5?'255,123,213':'255,212,92'};
     } else if(!reduce && loud) spawnFirework(bx+cc0*cell,by+Math.min(cr,N-1.5)*cell,null,maxDelay+6);   // even a single clear gets a burst
 
-    waves.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.07});
-    glowT=1; glowH=GEMS[lastGi].h;
+    if(!single) waves.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.07});
+    glowT=single?0.5:1; glowH=GEMS[lastGi].h;
     if(!s.star){                                   // each cleared line flares in the colour it was cleared with
       const k=Math.min(1.7,0.8+0.3*total);
       const ft=-(reduce?0:CFG.CLEAR_BLINK)*0.075;
-      rows.forEach(r2=>lineFlashes.push({horiz:true,idx:r2,t:ft,hue:glowH,k}));
-      cols.forEach(c2=>lineFlashes.push({horiz:false,idx:c2,t:ft,hue:glowH,k}));
+      if(!single){ rows.forEach(r2=>lineFlashes.push({horiz:true,idx:r2,t:ft,hue:glowH,k}));
+      cols.forEach(c2=>lineFlashes.push({horiz:false,idx:c2,t:ft,hue:glowH,k})); }
     }
-    shake=Math.min(11,3.5+total*1.8)*CFG.SHAKE;
+    shake=single?0:Math.min(11,3.5+total*1.8)*CFG.SHAKE;
     if(s.star){ shake=Math.max(shake,12*CFG.SHAKE); if(!reduce) borderFlash={t:-starMs,col:'235,225,255'}; }
     const beat=(s.star?starMs:reduce?0:CFG.CLEAR_BLINK)/60+.02;                        // lands as the blink turns into the pop
     if(combo>1) Sfx.combo(combo,total,beat); else Sfx.clear(total,beat);
@@ -307,6 +310,11 @@ function place(idx,r,c){
       shake=16*CFG.SHAKE; glowT=1.6;
       Sfx.sweep();
       tension=0;
+    }
+    if(CFG.FX_NARROW_ESCAPE&&wasTight&&!swept&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE){   // (6.3) a narrow escape: out of the edge or a recovery. Its own short flourish: a gold rim, two soft rings, one word
+      stats.escapes=(stats.escapes|0)+1;
+      if(!reduce){ borderFlash={t:-(maxDelay+4),col:'143,247,255'}; for(let k=0;k<2;k++) waves.push({x:bx+B/2,y:by+B/2,t:-(maxDelay+4)/14-k*0.2}); }
+      pushBanner('PHEW!','that was close',"#8FF7FF",1.3);
     }
     if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);

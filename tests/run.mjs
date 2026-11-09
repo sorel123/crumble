@@ -323,12 +323,14 @@ const THREE_LINES = ['01111111', '01111111', '01111111', '00000000', '00000000',
 
 test('calm clears: an everyday clear is a squash, point tags and one praise word; combo 3+ brings the loud stuff', async ({ page }) => {
   await play(page);
-  const loud = () => page.evaluate(() => ({ tags: tags.length, praises: praises.length, slams: slams.length, orbs: orbs.length, bands: bands.length, punch: punchT, combo }));
+  const loud = () => page.evaluate(() => ({ flashes: lineFlashes.length, waves: waves.length, shake, pops: pops.length, tags: tags.length, praises: praises.length, slams: slams.length, orbs: orbs.length, bands: bands.length, punch: punchT, combo }));
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
   await dragPiece(page, 0, 0, 0);
   const calm = await loud();
   assert.equal(calm.combo, 1);
-  assert.ok(calm.tags > 0 && calm.praises === 1, 'point tags and one praise word');
+  assert.equal(calm.praises, 1, 'one praise word');
+  assert.deepEqual([calm.tags, calm.flashes, calm.waves, calm.shake], [0, 0, 0, 0], '6.3: a single line is crisp and quiet: no per-cell tags, line flash, ring or shake');
+  assert.equal(calm.pops, 1, 'one score label');
   assert.deepEqual([calm.slams, calm.orbs, calm.bands, calm.punch], [0, 0, 0, 0], 'no slam, orbs, band or punch zoom');
   await dealt(page);
   await page.evaluate(() => { combo = 1; });                  // this clear makes it combo 2: still calm
@@ -344,6 +346,34 @@ test('calm clears: an everyday clear is a squash, point tags and one praise word
   const big = await loud();
   assert.equal(big.combo, 3);
   assert.ok(big.slams === 1 && big.orbs > 0, 'slam and score orbs at combo 3');
+});
+
+test('6.3 animation hierarchy: two lines are bigger than one; a narrow escape and a sweep have their own moments', async ({ page }) => {
+  await play(page);
+  const fx = () => page.evaluate(() => ({ tags: tags.length, flashes: lineFlashes.length, waves: waves.length, shake, banners: banners.map(b => b.txt) }));
+  await setup(page, { rows: THREE_LINES, trayShapes: [4, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const multi = await fx();
+  assert.ok(multi.tags > 0 && multi.flashes > 0 && multi.waves > 0 && multi.shake > 0, 'a multi-line clear keeps tags, flashes, a ring and a shake');
+  await dealt(page);
+  const CRAMPED = ['01111111', '01111111', '01111111', '00111111', '01011111', '01101111', '01110011', '01111100'];
+  await setup(page, { rows: CRAMPED, trayShapes: [4, 0, 0] });
+  const rm = await page.evaluate(() => { paceSet('edge'); banners.length = 0; return roomOf(packGrid(grid)); });
+  assert.ok(rm < 0.3, 'the board starts cramped: ' + rm);
+  await dragPiece(page, 0, 0, 0);
+  const esc = await fx();
+  assert.ok(esc.banners.includes('PHEW!'), 'clearing out of the edge flourishes');
+  await dealt(page);
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { paceSet('edge'); banners.length = 0; });
+  await dragPiece(page, 0, 0, 0);
+  assert.ok(!(await fx()).banners.includes('PHEW!'), 'a clear from a roomy board (even in an edge tray) is no escape');
+  await dealt(page);
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 8)], trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { banners.length = 0; paceSet('edge'); });
+  await dragPiece(page, 0, 0, 0);
+  const sweep = await fx();
+  assert.ok(sweep.banners.includes('CLEAN SWEEP') && !sweep.banners.includes('PHEW!'), 'a sweep keeps its own banner, not the escape one');
 });
 
 test('the opening: 100 seeded new games each clear a line within the first three placements', async ({ page }) => {
