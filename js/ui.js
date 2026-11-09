@@ -195,6 +195,6 @@ el('setNote').onclick=e=>{
   hesTaps=[]; const h=hesSummary(), sec=ms=>(ms/1000).toFixed(1)+'s';
   el('setNote').textContent=h.n?`Last ${h.n} trays (${h.total} kept): first pickup ${sec(h.pick)}, pickup to drop ${sec(h.place)}, first drop clears ${h.clr}%`:'No hesitation samples yet';
 };
-el('startBtn').onclick=e=>{e.stopPropagation();ac();start();};
-el('againBtn').onclick=e=>{e.stopPropagation();start();};
+el('startBtn').onclick=e=>{e.stopPropagation();ac();mode='endless';lvl=null;saveMode();start();};
+el('againBtn').onclick=e=>{e.stopPropagation();el('overCard').hidden=true;start();};
 el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};

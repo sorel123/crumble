@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after transformations became achievements (plan PR 4.5d).
+Last updated 2026-11-09, after Adventure levels (plan PR 4.1a).
 
 ---
 
@@ -60,6 +60,7 @@ Last updated 2026-11-09, after transformations became achievements (plan PR 4.5d
     change so old saved tuning doesn't mask them.
   - `crumble.run` — the run in progress (`js/save.js`): `snapshot()` / `restore(o)`, written after every placement, when a deal finishes, after a rescue, on `visibilitychange` hidden and `pagehide`; removed at game over. The game reopens straight into it (no opening is dealt, no start card). `restore()` validates and returns false on bad data (then the normal start card shows). Golden hand, star, `starForced` and cooldowns are saved, and so are the Blast charge and a live Blast Round (it carries on with the time it had left); a live transformation is not (it ends on restore). Effects in flight are not saved. Undo (3.2) reuses `snapshot()`/`restore()` (both pure, no storage); `undo()` saves the run afterwards.
   - `crumble.hes` — the hesitation log (3.4): the last 60 trays' `{pick, place, clr}` (ms from the tray appearing to her first pickup, ms from the pickup that led to the first drop to that drop, whether it cleared). Recorded in the player build too; only shown with `?dev`.
+  - `crumble.mode`, `crumble.adv`, `crumble.run.adv` (4.1) — the mode she was in (`endless` / `adventure`), Adventure progress `{v:1, lv:{"7":{s:stars,p:fewest pieces,n:times cleared,f:failed tries}}}` (plain data on purpose: 4.2's goals and streaks extend it), and the Adventure level in progress. Each mode has its own run key (`runStore(mode)`), so switching modes never loses a game; `crumble.run` is still Endless.
   - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, blasts, bestBlast`; the last two are Blast rounds played and the most points in one, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
@@ -116,6 +117,7 @@ Last updated 2026-11-09, after transformations became achievements (plan PR 4.5d
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
 | `js/save.js` | `snapshot`/`restore`, run autosave, best + stats |
+| `js/modes.js` | Adventure levels, goals, map, mode menu, saved progress (4.1) |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
 | `js/main.js` | boot |
@@ -170,6 +172,7 @@ Top to bottom:
 | (3.4) | Dealer for obvious moves: `OBVIOUS`/`ALT` hand scoring, hesitation log in the `?dev` readout (`crumble.hes`), `tools/bot-sim.mjs` |
 | (4.5a) | Blast as a tap-to-start reward: combo-charged `⚡ Blast` button, own sting/look/3-2-1, results card, Best Blast; per-special flags `CFG.SPECIALS.{blast,star,golden,transform}` and `specialOk()`; a live round survives save/resume |
 | (4.5b) | Star gem rebuilt: dealt only when a cross is worth it (`starBest`, `STAR_MIN`), cooldown, beam in the tray + hint ring + drag count, charge-then-beams clear with star sparkles, per-gem points, own sounds, Blast button held while it is in the tray |
+| (4.1a) | Adventure: 30 goal levels on a map (no timer), mode menu, one saved run per mode, `rnd()`/`seeded()` seam for seeded dealing, `tools/adventure-sim.mjs` |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -727,3 +730,22 @@ The card is a queued banner (`pushBanner(txt,sub,col,k)`; `k>1` runs faster): fi
 **Save/resume/Undo:** a live transformation is not saved (resume ends it); the cooldown is. `snapshot()` carries `tf` and `restore(o,true)` (Undo only) brings the live look back, so undoing the earning move removes it and undoing inside one keeps it. Admin: buttons for the four plus "Reset unlocks", sliders for combo and star gems.
 
 Check on the iPhone: clear the board once (or hit a 5 combo): a card says NEW LOOK UNLOCKED, the sky flips, the gear has a dot, and the look is open in Settings afterwards.
+
+
+## Adventure (plan 4.1a)
+
+`js/modes.js`. Endless is still the default and untouched; the `Endless ▾` / `Level 7 ▾` chip under the HUD buttons (`#modeTag`) opens the mode menu (Endless, Adventure), and the start card has an Adventure button.
+
+**A level is a normal run with a goal.** `mode` is `'endless'|'adventure'`, `lvl` the level, `lv` the level run's counters `{lines, pieces, combo, swept}`. Goals (`LEVEL_DEFS`: `[type, n, fill]`): `lines` (clear n), `score` (reach n), `combo` (a combo of n), `sweep` (empty the board). `place()` ends by calling `goalStep(total, swept)`, which updates the counters and calls `levelWin()` when the goal is met (state `'won'`, a win card after the clear plays out). The HUD's right-hand box is Best in Endless and the goal progress in Adventure (`syncHud()`); Adventure never touches `best`, the NEW BEST moment or skin unlocks, but lifetime `stats` count every mode.
+
+**Boards.** Level 1-6 style `fill 0` levels open like Endless (`seedOpening`; that first clear is also a clean sweep, which is why every score level has a scatter instead). Otherwise `levelBoard(L)` scatters small pieces, seeded by the level id, so the board is identical on every phone, with no full line. A sweep level's board is a nearly-full line or two, retried until `planSweep` can empty it with three pieces, and `dealSteps` keeps dealing a planned sweep on those levels whenever one can be built.
+
+**Stars.** 1 for clearing, 2 within `par[1]` pieces, 3 within `par[0]`. `LEVEL_PAR` came from `node tools/adventure-sim.mjs [runs] [seed]` (a keen bot, no Undo or Rescue): 3 stars = its 85th percentile, 2 stars = 1.6x that. Levels 25 and 29 were retuned after the run, so their pars are estimates. Re-run the sim after any dealer change. The bot wins nearly every level; a child will be slower, so expect 1-2 stars at first.
+
+**Progress and unlocks.** `adv.lv[id] = {s,p,n,f}`. A level opens when the one before is cleared, or after three failed tries on it (`levelOpen`), so nobody is walled. A failed try (stuck, nothing left) shows the game-over card as "Level N · out of moves" with Try again / Map; a Rescue is always offered on a level (`rescueAllowed`).
+
+**Save/resume/Undo.** `snapshot()` carries `lv` in Adventure; `validSnapshot` refuses an Adventure snapshot without it; Undo rewinds the counters with the move. Boot reopens the mode she left (an Adventure run, else Endless). `playLevel(id)` resumes a saved run of that same level, else starts it.
+
+**Seeded dealing (for 4.1b, the Daily).** `rnd()` replaces `Math.random()` in `solver.js` and the golden chance in `place()`; `seeded(key, fn)` runs `fn` on a stream seeded from a string. `hashStr` and `mulberry` are in `shapes.js`.
+
+Check on the iPhone: open Adventure from the start card or the chip, play level 1 (clear 3 lines), see the stars, tap Next level; switch to Endless from the chip and find the old run waiting; force-quit mid-level and reopen into it.

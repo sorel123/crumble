@@ -440,7 +440,7 @@ function place(idx,r,c){
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
-  if(!bestBeaten && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
+  if(!bestBeaten && mode==='endless' && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
     bestBeaten=true;
     pushBanner('NEW BEST!','',"#8FF7FF");
     if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
@@ -448,11 +448,12 @@ function place(idx,r,c){
   }
   if(tray.every(v=>!v) && !dealing){                // (a Blast Round that just started is already dealing its own hand)
     goldenNext = special('golden') && goldenCool<=0 && !transform      // a live transformation already is the moment
-      && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || Math.random()<CFG.GOLDEN_CHANCE);
+      && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || rnd()<CFG.GOLDEN_CHANCE);
     trayHadSweep=false; trayCombo=0;
     dealLater();
   }
   stats.placed++; stats.lines+=total; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
+  goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
   if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
 const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
