@@ -679,7 +679,7 @@ function frame(now){
   for(let i=0;i<banners.length;i++){               // head banner runs; the one behind it starts once the head is fading
     const b=banners[i];
     if(i>0 && banners[i-1].t<0.97) break;
-    b.t+=dt*0.017;
+    b.t+=dt*0.017*(b.k||1);
     if(b.t>=1){ banners.splice(i,1); i--; continue; }
     const sc=0.6+0.4*easeOutBack(Math.min(1,b.t*2.4));
     const a=b.t>0.8?(1-b.t)/0.2:1;

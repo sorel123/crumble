@@ -28,7 +28,8 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
 const DEV_ACTIONS=[['Fill Blast',()=>{ if(!blast){ blastCharge=CFG.BLAST_CHARGE; syncBlastBtn(); } }],
   ['Blast Round',()=>{ if(!blast){ if(transform) endTransform(); startBlast(); } }],
-  ...Object.keys(TRANSFORMS).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }])];
+  ...Object.keys(ACHIEVE).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]),
+  ['Reset unlocks',()=>{ discoveredWorlds.clear(); newLook=false; saveSkinSave(); renderWorlds(); renderLooks(); syncLookDot(); }]];
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
   ['CLEAR_STYLE','Clear style',opt(['squash','Squash to a bar'],['burst','Blocks fly out']),()=>{}],
@@ -48,7 +49,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['TRANSFORM_PLACEMENTS','Transform length (placements)',1,15,1],
   ['TRANSFORM_MULT','Transform score multiplier',1,4,0.1],
   ['TRANSFORM_COOLDOWN','Transform cooldown (trays)',0,15,1],
-  ['MYSTERY_CHANCE','Mystery trigger chance (per tray)',0,0.3,0.01],
+  ['TRANSFORM_COMBO','Volcano: combo needed',3,9,1],
+  ['TRANSFORM_STAR_GEMS','Starfield: star gems needed',9,15,1],
   ['TENSION_UP','Tension up (no clear)',0,0.5,0.01],
   ['TENSION_DOWN','Tension down (clear)',0,0.5,0.01],
   ['TENSION_DRIFT','Tension drift (cramped)',0,0.3,0.01],

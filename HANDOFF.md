@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after the star gem was rebuilt (plan PR 4.5b).
+Last updated 2026-11-09, after transformations became achievements (plan PR 4.5d).
 
 ---
 
@@ -72,15 +72,13 @@ Last updated 2026-11-09, after the star gem was rebuilt (plan PR 4.5b).
 - **Obvious moves (3.4):** the dealer prefers hands where one or two pieces have an *obvious* clear (a line already 5-7/8 full whose gap is one plain run the piece drops into), and where the hand's smallest piece of 2+ cells has room (`OBVIOUS`, `OBVIOUS_MAX`, `ALT`; see Hand solver). Measured with `tools/bot-sim.mjs`.
 - **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). No special (golden hand, star, transformation, Blast Round) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
-- **Specials, one switch each (4.5):** `CFG.SPECIALS = {blast:true, star:true, golden:true, transform:false}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **Blast is back (4.5a)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; transformations are still off (their section below describes them as they were). Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
+- **Specials, one switch each (4.5):** `CFG.SPECIALS = {blast:true, star:true, golden:true, transform:true}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **Blast is back (4.5a)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; **transformations are back as achievements (4.5d)**. Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
 - Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
 - **Golden hand (4.5c)** — the rarest, biggest special: a gold tray whose target lines glow on the board; finding it pays ×3. See the 4.5c section at the end.
 - **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
-- **Transformations** — achievement-triggered temporary looks (Rainbow, Gold
-  Vault, Volcano, Starfield, Storm) that also multiply points; discovering one
-  adds its world to the home picker (`TRANSFORM_*`).
+- **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
 - **Blast Round (4.5a)** — a reward she starts herself. Combos charge the `⚡ Blast` button under the tray (it is the meter: its fill is the charge, then the round's clock); full, it glows and she taps it whenever she likes for 20 s of big pieces at ×2, with its own look, sting and a results card. Details below.
 - **Undo (3.2):** the `↩ Undo` button under the tray puts the run back to just before the last placement, exactly (`snapshot()` taken first thing in `place()` via `noteUndo()`, restored by `undo()` in `save.js`; lifetime stats are rewound too). One move back, once per placement: a new run, a rescue and game over clear it (so it can never refund a rescue), and a Blast Round in progress is not undoable.
 - **Stuck (3.2):** when no tray piece fits, the run waits instead of ending: pieces dim, "No moves" shows, and Undo, `🛟 Rescue` (needs a rescue left and `rescueAllowed()`, shared with the game-over card) and `End run` are offered. Only when neither Undo nor Rescue is available does it end on its own, 700 ms after the last drop (`checkStuck()` / `canExit()`). `syncActions()` keeps the buttons current.
@@ -711,3 +709,21 @@ The rarest and biggest special: about one per game. A tray of gold pieces; the l
 - **The payoff.** `goldenCelebrate()` (game.js): banner `GOLDEN HAND COMPLETE x3 +bonus`, a gold wash behind the board and gold edge glow (~1.5 s), sparkles on empty cells, a gold rain only in the margins above and below the board (`goldRain`, each particle's `lim` keeps it off the board), a long shake, rings, and a layered sting (`goldenWin` + `goldenGong`). It does not start Gold Vault any more (that is 4.5d). A near miss pays the x2 consolation with a small version; a total miss pays nothing extra. Ending it sets `specialEnd`, so the next tray carries no special. Everything is cosmetic: the next tray is dealt as usual and is playable within ~1.5 s. Switch `FX_GOLDEN_FANFARE`; reduced motion has the glow and banner only (no rain, sparkles or sequence).
 - **Compatibility.** The snapshot now copies `want`/`got` (Undo used to share the live objects, so Undoing mid-hand kept the new progress). Blast cannot be tapped while a hand is live (`specialLive()`); the golden tray records the normal hesitation sample.
 - Admin: toggle plus `GOLDEN_COMBO/CHANCE/COOLDOWN/MIN_LINES/MULT/PARTIAL`. Tests: the "golden hand" scenarios in `tests/run.mjs` (deal rules and verified plan, re-plan and dead state, x3 and miss, celebration timing and placement, input during arrival, save/resume and Undo).
+
+---
+
+## Transformations as achievements (plan 4.5d)
+
+`ACHIEVE` (`game.js`) names the four: `rainbow` (clean sweep), `volcano` (combo `TRANSFORM_COMBO`, 5), `starfield` (a star clear of `TRANSFORM_STAR_GEMS`, 10+ gems; STAR_MIN is 9), `goldvault` (a golden hand completed, called from `goldenCelebrate`). Storm and the random "mystery" roll are gone as triggers (Storm's world stays defined so an already-discovered one still shows in the world picker).
+
+`triggerTransform(id)` does two separate things:
+1. **Unlock, always** (when `CFG.SPECIALS.transform` is on): adds `id` to `discoveredWorlds` (the saved record, `crumble.skins.discovered`), sets `newLook` (a dot on the gear until Settings opens; saved), and the look appears in Settings.
+2. **Go live, only if free**: `canGoLive()`: not Gold Vault, no Blast, none live, `transformCool` 0, tray 6+, no golden hand live, no star in the tray, and the tray after another special has not just ended (`specialEnd`; Starfield is exempt, the star's own clear is its parent). Live = the world+skin flip for `TRANSFORM_PLACEMENTS` (9) placements at x`TRANSFORM_MULT` (1.5). Ending sets `transformCool` (8) and `specialEnd`, so the next tray carries no special. A blocked achievement still unlocks (that rule outranks the flip).
+
+The card is a queued banner (`pushBanner(txt,sub,col,k)`; `k>1` runs faster): first earn "NAME / NEW LOOK UNLOCKED" with `Sfx.achieve(i)` (a rising run in a different key per achievement, in all four sets); repeats "NAME / x1.5 · 9 MOVES" at 1.6x speed; blocked repeats and repeat Gold Vault show nothing. It never pauses or blocks play. Switch `FX_TRANSFORM_MOMENT`.
+
+**Looks:** `LOOKS` has four earned entries (Rainbow, Volcano, Starfield, Gold Vault), locked with the achievement as the label until `discoveredWorlds` has them; picking one saves world+skin as her look. `isUnlocked(id)` treats an event skin as owned when its world is discovered, so the saved style loads. The Settings looks grid is now 9 tiles at 300 px wide (a test checks it still fits 390x844).
+
+**Save/resume/Undo:** a live transformation is not saved (resume ends it); the cooldown is. `snapshot()` carries `tf` and `restore(o,true)` (Undo only) brings the live look back, so undoing the earning move removes it and undoing inside one keeps it. Admin: buttons for the four plus "Reset unlocks", sliders for combo and star gems.
+
+Check on the iPhone: clear the board once (or hit a 5 combo): a card says NEW LOOK UNLOCKED, the sky flips, the gear has a dot, and the look is open in Settings afterwards.

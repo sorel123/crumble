@@ -4,12 +4,16 @@
 const SKIN_STORE='crumble.skins';
 const PICKABLE_SKINS=SKINS.filter(s=>!s.event);       // transformation skins never appear here
 let unlocked=new Set(SKINS.filter(s=>s.unlock<=0 && !s.event).map(s=>s.id));
-function isUnlocked(id){ return CFG.UNLOCK_ALL || unlocked.has(id); }
+function isUnlocked(id){
+  const k=SKINS.find(s=>s.id===id);
+  if(k&&k.event) return CFG.UNLOCK_ALL_WORLDS||discoveredWorlds.has(id);       // an earned transformation look (plan 4.5d)
+  return CFG.UNLOCK_ALL || unlocked.has(id);
+}
 function isWorldUnlocked(id){ return !TRANSFORMS[id] || CFG.UNLOCK_ALL_WORLDS || discoveredWorlds.has(id); }
 function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
-    homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds],
+    homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
     theme:CFG.THEME, sndSet:CFG.SND_SET, muted, lookV:2
   })); }catch(e){}
 }
@@ -18,7 +22,8 @@ function loadSkinSave(){
     const o=JSON.parse(localStorage.getItem(SKIN_STORE)||'{}');
     if(Array.isArray(o.unlocked)) o.unlocked.forEach(id=>{ if(SKINS.some(s=>s.id===id)) unlocked.add(id); });
     if(Array.isArray(o.discovered)) o.discovered.forEach(id=>{ if(TRANSFORMS[id]) discoveredWorlds.add(id); });
-    if(typeof o.style==='string' && unlocked.has(o.style)) CFG.STYLE=o.style;
+    newLook=!!o.newLook; syncLookDot();
+    if(typeof o.style==='string' && isUnlocked(o.style)) CFG.STYLE=o.style;
     if(typeof o.motif==='string' && MOTIFS.some(m=>m.id===o.motif)) CFG.MOTIF=o.motif;
     if(typeof o.homeWorld==='string' && isWorldUnlocked(o.homeWorld)
       && (HOME_WORLDS.some(w=>w.id===o.homeWorld)||TRANSFORMS[o.homeWorld])) CFG.HOME_WORLD=o.homeWorld;
@@ -101,7 +106,10 @@ const LOOKS=[
   {id:'cotton',  name:'Cotton Candy', theme:'cotton',   world:'blossom', style:'clay',   motif:'heart'},
   {id:'mint',    name:'Mint Garden',  theme:'mint',     world:'forest',  style:'blocks', motif:'none'},
   {id:'neon',    name:'Neon',         theme:'night',    world:'neon',    style:'neon',   motif:'none',
-    need:()=>isUnlocked('neon')?'':SKINS.find(s=>s.id==='neon').unlock+' pts'}
+    need:()=>isUnlocked('neon')?'':SKINS.find(s=>s.id==='neon').unlock+' pts'},
+  // the earned transformation looks (4.5d): locked with the achievement that opens them
+  ...['rainbow','volcano','starfield','goldvault'].map(id=>({id,name:TRANSFORMS[id].name,theme:'night',world:id,style:id,motif:'none',
+    need:()=>isUnlocked(id)?'':ACHIEVE[id]}))
 ];
 const lookLocked=l=>l.need?l.need():'';
 function currentLook(){
@@ -169,6 +177,7 @@ function buildSettingsUI(){
   renderThemes(); renderSndSet(); el('sndOn').checked=!muted;
 }
 function openSettings(){
+  if(newLook){ newLook=false; syncLookDot(); saveSkinSave(); }
   if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); }           // the game waits while Settings is open
   renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted;
   el('setPanel').hidden=false;

@@ -4,7 +4,7 @@
    snapshot() returns the whole run as plain JSON data; restore(o) puts it back and returns true, or false (and
    changes nothing) if the data does not look right. Both are pure with respect to storage, so Undo (plan 3.2) can
    keep them in memory. saveRun()/loadRun() are the localStorage side. Not captured: effects in flight (they are
-   cosmetic) and a live transformation (it ends on restore). A live Blast Round is kept and carries on (plan 4.5a).
+   cosmetic) and a live transformation (it ends on resume; Undo keeps it). A live Blast Round is kept and carries on (plan 4.5a).
    restore() never deals an opening: the saved board and tray are exactly what she left. */
 const RUN_STORE='crumble.run', STATS_STORE='crumble.stats';
 function snapshot(){
@@ -17,6 +17,7 @@ function snapshot(){
     golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies: Undo keeps the snapshot while the live hand goes on mutating its own
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     blastCharge, specialEnd,
+    tf:transform?{id:transform.id,remaining:transform.remaining}:null,   // Undo keeps a live look; resume (loadRun) ends it
     blast:blast?{t:Math.max(0,Math.round(blast.t)),pts:blast.pts,lines:blast.lines,best:blast.best,swaps:blast.swaps}:null
   };
 }
@@ -29,7 +30,7 @@ function validSnapshot(o){
   if(!isInt(o.score,0,1e9)||!isInt(o.combo,0,1e4)||!isInt(o.trayNo,0,1e6)||!isInt(o.rescuesUsed,0,100)) return false;
   return isNum(o.tension)&&isNum(o.sweepCool);
 }
-function restore(o){
+function restore(o,keepLive){
   if(!validSnapshot(o)) return false;
   cancelDeal(); clearRunFx(); undoSnap=null; stuck=false; hesVoid();   // a restored tray (resume, Undo) gives no hesitation sample
   grid=o.grid.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0}));
@@ -41,7 +42,13 @@ function restore(o){
   goldenReplan(); goldenArrive=999;                  // the plan is not stored: it is worked out again from the board and the pieces left
   goldenNext=!!o.goldenNext; goldenCool=Math.max(0,o.goldenCool|0); trayHadSweep=!!o.trayHadSweep;
   trayCombo=o.trayCombo|0; starForced=!!o.starForced; starCool=isInt(o.starCool,0,1e3)?o.starCool:0; transformCool=Math.max(0,o.transformCool|0);
-  resetWorld(); renderPips();
+  resetWorld(); transformCool=Math.max(0,o.transformCool|0);   // (resetWorld clears the cooldown)
+  const tf=o.tf;
+  if(keepLive&&tf&&TRANSFORMS[tf.id]&&isInt(tf.remaining,1,99)){    // Undo: the look she had is still live
+    transform={id:tf.id,remaining:tf.remaining}; curWorld=tf.id; curSkin=TRANSFORMS[tf.id].skin; buildCache();
+    ambient=spawnAmbient(worldDef(tf.id).effect); bgFrom=tf.id;
+  }
+  renderPips();
   blastCharge=isInt(o.blastCharge,0,1e4)?Math.min(o.blastCharge,CFG.BLAST_CHARGE):0; blastShown=blastCharge;
   specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
   const b=o.blast;                                  // a live Blast Round carries on with the time it had left
@@ -66,7 +73,7 @@ function noteUndo(){ undoSnap=blast?null:{run:snapshot(),stats:{...stats}}; sync
 function undo(){
   if(!undoSnap||state!=='play'||paused) return false;
   const u=undoSnap; undoSnap=null;
-  if(!restore(u.run)){ syncActions(); return false; }
+  if(!restore(u.run,true)){ syncActions(); return false; }
   Object.assign(stats,u.stats);
   syncActions(); saveRun();
   return true;

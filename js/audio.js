@@ -213,6 +213,9 @@ const BELLS_SFX={
   rescue(){ play(0,t=>{
     [0,2,4].forEach((st,i)=>bell(t+i*.07,{f:note(st+5),dur:i===2?.9:.4,vol:.06,wet:.3}));
   }); },
+  achieve(i=0){ play(.05,t=>{                                                                  // an achievement card: a bright rising run, a different key for each of the four
+    [0,4,7,12].forEach((st,k)=>bell(t+k*.075,{f:note(st+[2,5,7,9][i%4]),dur:k===3?1.1:.5,vol:.05,wet:.4}));
+  }); },
   transformShift(){ play(0,t=>{
     noiseHit(t,{dur:.5,f0:600,f1:5000,q:1.2,vol:.03,wet:.45});                                // whoosh
     [0,4,7,10].forEach((st,i)=>bell(t+.08+i*.07,{f:note(st+2),dur:1,vol:.05,wet:.45}));
@@ -333,6 +336,10 @@ const ORIG_SFX={
     oNoise(t,{dur:.012,f0:4000*p,q:1,vol:.06});
     [523,659,784].forEach((f,i)=>oVoice(t+i*.07,{f0:f*p,f1:f*p*1.03,dur:i===2?.35:.2,vol:.12,bp0:f*p*2,bp1:f*p*5,q:4,type:'triangle'}));
   }); },
+  achieve(i=0){ play(.05,(t,p)=>{
+    [1,1.25,1.5,2].forEach((m,k)=>{ const f=440*p*m*Math.pow(2,[2,5,7,9][i%4]/12);
+      oVoice(t+k*.075,{f0:f,f1:f*1.01,dur:k===3?.7:.3,vol:.06,bp0:f*1.6,q:2,type:'triangle',det:[-4,4],atk:.008}); });
+  }); },
   transformShift(){ play(0,(t,p)=>{
     oNoise(t,{dur:.5,f0:800*p,f1:4000*p,q:2,vol:.03,type:'lowpass'});
     [1,1.33,1.6].forEach((m,i)=>{
@@ -385,6 +392,7 @@ function recordedSet(jingle,other){                          // jingle: 'pz' | '
     goldenIn(){ smp('confirm',{vol:.16,delay:.05}); },
     goldenWin(){ smp(other+'02',{vol:.32,delay:.15}); },
     rescue(){ smp('rescue',{vol:.18}); },
+    achieve(i=0){ [0,4,7,12].forEach((st,k)=>smp('glass',{vol:.1,rate:semis(st+[2,5,7,9][i%4]),delay:k*.075})); },
     transformShift(){ smp('swell',{vol:.16}); }
   };
 }
@@ -405,7 +413,7 @@ const Sfx={
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
   }
 };
-for(const fn of ['clear','combo','praise','sweep','deny','star','starIn','starPick','goldenIn','goldenWin','rescue','transformShift'])
+for(const fn of ['clear','combo','praise','sweep','deny','star','starIn','starPick','goldenIn','goldenWin','rescue','transformShift','achieve'])
   Sfx[fn]=(...a)=>{ ac(); const set=SOUND_SETS[CFG.SND_SET]||SOUND_SETS.original; set[fn]&&set[fn](...a); };
 function setMuted(on,save=true){
   muted=on; el('mute').textContent=muted?'🔈':'🔊';
