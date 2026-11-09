@@ -29,7 +29,8 @@ let grid,tray,score=0,best=0,combo=0,rescuesUsed=0;
 let tension=0, sweepCool=0, lastTier='—', trayNo=0;
 let starCool=0;        // trays until another star gem may be dealt
 let starForced=false;   // a big combo guaranteed the next normal tray a star gem
-let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts}
+let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0;   // golden = live hand: {want,got,pts,plan}; plan = goldenSolve of the pieces left
+let goldenArrive=999, goldenCele=null, goldRain=[];   // (4.5c) arrival fanfare clock (frames) and the completion celebration {t,full}; both cosmetic, never saved
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blasts=[];
 let praises=[],bursts=[],lineFlashes=[];
 let chunks=[],orbs=[],rings=[],dust=[];      // juice: block chunks, score orbs, landing rings, landing dust

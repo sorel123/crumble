@@ -395,20 +395,20 @@ test('Blast never starts by itself: a full button waits, and the old meter is go
   assert.equal(r.charge, await page.evaluate(() => CFG.BLAST_CHARGE), 'waiting drains nothing');
 });
 
-test('one switch per special: Blast and the star gem are on, golden hand and transformations stay off', async ({ page }) => {
+test('one switch per special: Blast, the star gem and the golden hand are on, transformations stay off', async ({ page }) => {
   await play(page);
-  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { blast: true, star: true, golden: false, transform: false });
+  assert.deepEqual(await page.evaluate(() => CFG.SPECIALS), { blast: true, star: true, golden: true, transform: false });
   const r = await page.evaluate(() => {
-    starForced = true; goldenNext = true; goldenCool = 0;
-    let stars = 0, golds = 0;
+    starForced = true;
+    let stars = 0;
     for (let i = 0; i < 40; i++) {
       genTray();
-      stars += tray.filter(t => t && t.s.star).length; golds += golden ? 1 : 0;
+      stars += tray.filter(t => t && t.s.star).length;
     }
     triggerTransform('rainbow');
-    return { stars, golds, transform: !!transform, blast: !!blast };
+    return { stars, transform: !!transform, blast: !!blast };
   });
-  assert.deepEqual(r, { stars: 0, golds: 0, transform: false, blast: false }, 'on an empty board no cross is worth a star, so none is dealt');
+  assert.deepEqual(r, { stars: 0, transform: false, blast: false }, 'on an empty board no cross is worth a star, so none is dealt');
   // ...and its own switch brings one back
   const on = await page.evaluate(() => { CFG.SPECIALS.transform = true; triggerTransform('rainbow'); const t = !!transform; CFG.SPECIALS.transform = false; return t; });
   assert.equal(on, true, 'switched on, a transformation starts');
@@ -1157,6 +1157,129 @@ test('Undo cannot give back spent charge or replay a round, and round trays give
   await dragPiece(page, m.i, m.r, m.c);
   assert.equal(await page.isDisabled('#undoBtn'), true, 'a move in a round cannot be undone');
   assert.equal(await page.evaluate(() => hes.log.length), n, 'no hesitation sample from a round tray');
+});
+
+// ---- golden hand (plan 4.5c) ----
+// A board where a golden hand is easy to deal: five rows each missing their first two cells.
+const goldBoard = `grid = empty(); for (let r = 0; r < 5; r++) for (let c = 2; c < 8; c++) grid[r][c] = { gi: 0, t: 1, f: 0, l: 0 };`;
+// Three bars lying in rows 0-2's gap, and a golden hand on them (what the real deal would build, set up by hand).
+const goldHand = `(() => {
+  grid = empty(); for (let r = 0; r < 3; r++) for (let c = 3; c < 8; c++) grid[r][c] = { gi: 0, t: 1, f: 0, l: 0 };
+  const bar = SHAPES.find(s => s.rows === 1 && s.cols === 3 && s.n === 3);
+  tray = [0, 1, 2].map(() => ({ s: bar, gi: GOLD }));
+  trayNo = 12; specialEnd = -99; combo = 0; score = 0;
+  golden = { want: { sweep: false, lines: 3 }, got: { lines: 0, sweep: false }, pts: 0 }; goldenReplan(); syncActions();
+})()`;
+
+test('golden hand: dealt only under the special rules, only when it offers a real prize, and its plan names exactly the lines a solution clears', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(async (goldBoard) => {
+    const deal = (setup) => { eval(goldBoard); trayNo = 9; goldenNext = true; goldenCool = 0; specialEnd = -99; golden = null; tray = [null, null, null]; setup && setup(); genTray(); return !!golden; };
+    const out = {};
+    out.early = deal(() => { trayNo = 3; });
+    out.gap = deal(() => { specialEnd = 9; });
+    out.blast = deal(() => { blast = { t: 5000, pts: 0, lines: 0, best: 0, swaps: 0, tick: 0 }; }); blast = null;
+    out.star = deal(() => { tray = [{ s: STAR, gi: STAR_GI }, null, null]; });
+    out.off = deal(() => { CFG.SPECIALS.golden = false; }); CFG.SPECIALS.golden = true;
+    let dealt = 0, bad = 0, checked = 0;
+    for (let i = 0; i < 25; i++) {
+      if (!deal()) continue;
+      dealt++;
+      const a0 = packGrid(grid), pl = golden.plan, ev = evalHand(a0, tray.map(t => t.s), 6000);
+      if (!(pl.sweep || pl.lines >= CFG.GOLDEN_MIN_LINES) || !pl.ids.length || pl.ids.length > pl.lines || pl.lines !== ev.lines || !tray.every(t => t.gi === GOLD)) bad++;
+      checked += pl.ids.length;
+      if (goldenCool !== CFG.GOLDEN_COOLDOWN || goldenState() !== 'alive') bad++;
+    }
+    out.dealt = dealt; out.bad = bad; out.checked = checked;
+    return out;
+  }, goldBoard);
+  assert.deepEqual([r.early, r.gap, r.blast, r.star, r.off], [false, false, false, false, false], 'never in trays 1-5, the tray after a special, in Blast, beside a star, or when switched off');
+  assert.ok(r.dealt >= 3, 'with the board and a forced trigger, golden hands do get dealt (' + r.dealt + ' of 25)');
+  assert.equal(r.bad, 0, 'every golden hand has a verified plan of enough lines, all-gold pieces and a cooldown');
+});
+
+test('golden hand: the glowing lines are re-planned after each placement; a dead plan switches the chip to the consolation', async ({ page }) => {
+  await play(page);
+  await page.evaluate(goldHand);
+  const r = await page.evaluate((goldHand) => {
+    const out = { ids0: golden.plan.ids.slice(), st0: goldenState(), chip0: (syncGoldChip(), el('goldChip').textContent) };
+    place(0, 0, 0);                                    // row 0 completes: one of the two needed
+    out.got1 = golden.got.lines; out.ids1 = golden.plan.ids.slice(); out.st1 = goldenState(); out.chip1 = (syncGoldChip(), el('goldChip').textContent);
+    place(1, 1, 0);                                    // the second: the full multiplier is earned
+    out.st2 = goldenState(); out.chip2 = (syncGoldChip(), el('goldChip').textContent);
+    eval(goldHand); golden.want.lines = 4;             // a harder hand: 3 lines needed
+    place(0, 5, 0);                                    // one bar dropped where nothing completes: only 2 lines are left in reach
+    out.st3 = goldenState(); out.chip3 = (syncGoldChip(), el('goldChip').textContent); out.ids3 = golden.plan.ids.slice();
+    return out;
+  }, goldHand);
+  assert.deepEqual(r.ids0.sort(), [0, 1, 2], 'the plan names rows 0, 1 and 2');
+  assert.equal(r.st0, 'alive'); assert.match(r.chip0, /2 more lines/);
+  assert.equal(r.got1, 1); assert.deepEqual(r.ids1.sort(), [1, 2], 'the cleared line is no longer asked for');
+  assert.equal(r.st1, 'alive'); assert.match(r.chip1, /1 more line/);
+  assert.equal(r.st2, 'locked'); assert.match(r.chip2, /×3 locked in/);
+  assert.equal(r.st3, 'dead', 'with a bar wasted, 3 lines cannot be reached'); assert.match(r.chip3, /×2 for any clear/);
+});
+
+test('golden hand: finding it pays ×3, a miss pays nothing extra, and the next tray carries no special', async ({ page }) => {
+  await play(page);
+  const run = (solve) => page.evaluate(async ([goldHand, solve]) => {
+    eval(goldHand);
+    const base = score;
+    if (solve) { place(0, 0, 0); place(1, 1, 0); place(2, 2, 0); }
+    else { place(0, 5, 0); place(1, 6, 0); place(2, 7, 0); }        // bars dropped where nothing completes
+    return { gained: score - base, end: specialEnd, trayNo, live: !!golden };
+  }, [goldHand, solve]);
+  const win = await run(true), cele = await page.evaluate(() => !!goldenCele && goldenCele.full);
+  assert.equal(cele, true, 'the full celebration starts');
+  await dealt(page);
+  const base = await page.evaluate(goldHand).then(() => page.evaluate(() => { golden = null; const b = score; place(0, 0, 0); place(1, 1, 0); place(2, 2, 0); return score - b; }));
+  assert.equal(win.gained, base * 3, 'the tray pays ×3 (' + win.gained + ' vs ' + base + ' plain)');
+  assert.equal(win.end, win.trayNo, 'the hand ends the special streak'); assert.equal(win.live, false);
+  await dealt(page);
+  const miss = await run(false);
+  assert.ok(miss.gained < 100, 'a miss pays no multiplier: ' + miss.gained);
+});
+
+test('golden hand: celebration never blocks play, rains only outside the board, and the next tray arrives within 1.5 s', async ({ page, errors }) => {
+  await play(page);
+  await page.evaluate(goldHand);
+  const t0 = await page.evaluate(() => { place(0, 0, 0); place(1, 1, 0); const t = performance.now(); place(2, 2, 0); return t; });
+  const rain = await page.evaluate(() => ({ n: goldRain.length, inside: goldRain.filter(p => p.lim > by - 6 && p.lim < by + B).length, spark: sparkles.every(s => { const c = Math.floor((s.x - bx) / cell), r = Math.floor((s.y - by) / cell); return r < 0 || c < 0 || r >= N || c >= N || !grid[r][c]; }) }));
+  assert.ok(rain.n > 0, 'a rain of gold falls'); assert.equal(rain.inside, 0, 'no rain particle is aimed across the board'); assert.equal(rain.spark, true, 'board sparkles sit on empty cells');
+  await dealt(page);
+  const ms = await page.evaluate(t => performance.now() - t, t0);
+  assert.ok(ms < 1500, 'the next tray was playable after ' + Math.round(ms) + ' ms');
+  const m = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; });
+  await dragPiece(page, m.i, m.r, m.c);                // she can play straight away, through the glow
+  await page.waitForTimeout(2600);
+  assert.equal(await page.evaluate(() => goldRain.length + (goldenCele ? 1 : 0)), 0, 'everything has finished');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
+test('golden hand: the arrival sequence does not block input and the plan draws under a drag without errors', async ({ page, errors }) => {
+  await play(page);
+  await page.evaluate(goldHand);
+  await page.evaluate(() => { goldenArrive = 0; });
+  await dragPiece(page, 0, 0, 0);                      // dragged the moment it lands, mid-sequence
+  assert.equal(await page.evaluate(() => golden.got.lines), 1, 'the first bar placed while the glow was still running');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
+test('golden hand: save/resume and Undo keep the hand and re-plan it', async ({ page }) => {
+  await play(page);
+  await page.evaluate(goldHand);
+  const r = await page.evaluate(() => {
+    place(0, 0, 0);
+    const out = { cleared: golden.got.lines };
+    undo(); out.undone = golden && golden.got.lines; out.undoneIds = golden.plan.ids.slice().sort(); out.undoneTray = tray.filter(Boolean).length;
+    place(0, 0, 0);
+    const j = JSON.parse(JSON.stringify(snapshot())); golden = null; tray = [null, null, null]; restore(j);
+    out.got = golden && golden.got.lines; out.ids = golden && golden.plan.ids.slice().sort(); out.left = tray.filter(Boolean).length; out.live = specialLive();
+    return out;
+  });
+  assert.equal(r.cleared, 1);
+  assert.equal(r.undone, 0); assert.deepEqual(r.undoneIds, [0, 1, 2]); assert.equal(r.undoneTray, 3);
+  assert.equal(r.got, 1); assert.deepEqual(r.ids, [1, 2]); assert.equal(r.left, 2); assert.equal(r.live, true);
 });
 
 const server = await serve();

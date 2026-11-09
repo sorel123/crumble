@@ -35,10 +35,11 @@ const CFG = {
   SWEEP_BONUS: 300, SWEEP_PER_GEM: 25,
 
   // golden hand: a bonus tray that multiplies the points it earns
-  GOLDEN_COMBO:    4,    // a combo this high (or higher) queues one for the next tray (so does a clean sweep)
-  GOLDEN_CHANCE:   0.04, // random roll after every tray
-  GOLDEN_COOLDOWN: 8,    // trays that must pass before another golden hand
+  GOLDEN_COMBO:    5,    // a combo this high (or higher) queues one for the next tray (so does a clean sweep)
+  GOLDEN_CHANCE:   0.03, // random roll after every tray
+  GOLDEN_COOLDOWN: 12,   // trays that must pass before another golden hand
   GOLDEN_MULT:     3,    // multiplier when she finds it: clears at least (planned lines - 1), min 1 (a planned sweep: 3+ lines)
+  GOLDEN_MIN_LINES:3,    // a jackpot-style golden hand must offer at least this many lines (a planned sweep always qualifies)
   GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
   MAX_RESCUES: 2,        // most rescues one run can use; both are free
@@ -84,8 +85,8 @@ const CFG = {
   STAR_STAGGER:  0.7,    // frames of delay per cell of distance for its cross to go white-hot
 
   // the specials, one switch each (plan 4.5). Each comes back on once it has been rebuilt to be a real highlight:
-  // Blast (4.5a) is back; star gem, golden hand and transformations are still paused. special(name) reads these.
-  SPECIALS: {blast:true, star:true, golden:false, transform:false},
+  // Blast (4.5a) is back; golden hand (4.5c) and the star gem are back, transformations are still paused. special(name) reads these.
+  SPECIALS: {blast:true, star:true, golden:true, transform:false},
   SPECIAL_FROM_TRAY: 6,  // no special before this tray number (plan 3.1: the opening is calm); see specialOk()
   BIG_COMBO: 3,          // the loud celebration (COMBO slam, score orbs, COLOR GONE band, fireworks, punch zoom) starts at this combo; every clear below it is calm: a squash, point tags and one praise word
 
@@ -103,6 +104,7 @@ const CFG = {
 
   // event screen effects — each independently toggleable; none may ever draw over live board gems
   FX_COMBO_GLOW:     true,   // screen-edge glow in the combo colour, intensifying with the streak
+  FX_GOLDEN_FANFARE: true,   // (4.5c) golden hand: planned-line glow, arrival sequence, completion celebration
   FX_GOLD_TINT:      true,   // faint full-screen gold wash while a golden hand is live
   FX_SWEEP_FX:       true,   // full-screen colour wash + confetti on a clean sweep
   FX_TENSION_BORDER: true,   // board border glow: calm (cool) -> warm as tension rises

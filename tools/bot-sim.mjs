@@ -73,12 +73,13 @@ const out = await page.evaluate(TRAYS => {
   const fillOf = () => grid.flat().filter(Boolean).length / (N * N);
   const finishDeal = () => { if (dealing) { const t0 = performance.now(); runSteps(dealing.it); dealing = null; costs.push(performance.now() - t0); } };
   const costs = [], trays = [];
-  let cur = null, games = 0;
+  let cur = null, games = 0, goldens = 0;
   const newTray = () => {
     const obvN = tray.filter(t => { if (!t) return false; for (let r = 0; r <= N - t.s.rows; r++) for (let c = 0; c <= N - t.s.cols; c++) if (canPlace(t.s, r, c, grid) && obviousAt(t.s, r, c, grid)) return true; return false; }).length, obv = obvN > 0;
     const possible = SHAPES.some(s => { for (let r = 0; r <= N - s.rows; r++) for (let c = 0; c <= N - s.cols; c++) if (canPlace(s, r, c, grid) && obviousAt(s, r, c, grid)) return true; return false; });
     cur = { fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null };
     trays.push(cur);
+    if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
   newTray();
   while (trays.length < TRAYS) {
@@ -87,7 +88,7 @@ const out = await page.evaluate(TRAYS => {
     const before = stats.lines;
     if (cur.firstObv === null) cur.firstObv = m[3];
     place(m[0], m[1], m[2]);
-    clearRunFx();
+    { const k = { goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool }; clearRunFx(); ({ goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool } = k); }   // drop the effects, keep the specials' bookkeeping
     if (stats.lines > before) { cur.cleared = true; cur.clears++; }
     if (dealing) { finishDeal(); newTray(); }
   }
@@ -100,7 +101,7 @@ const out = await page.evaluate(TRAYS => {
   });
   const sorted = costs.slice().sort((a, b) => a - b);
   return {
-    trays: trays.length, games, buckets,
+    trays: trays.length, games, goldens, goldensPerGame: +(goldens / (games + 1)).toFixed(2), traysPerGame: Math.round(trays.length / (games + 1)), buckets,
     obviousAtDealAll: pct(trays, t => t.obv), boardAllowsAll: pct(trays, t => t.possible), clearPerTrayAll: pct(trays, t => t.cleared), allThreeAll: pct(trays, t => t.obvN === 3), clearsPerTrayAll: mean(trays, t => t.clears),
     medianFill: Math.round(100 * median(trays.map(t => t.fill))),
     meanFill: Math.round(100 * trays.reduce((a, t) => a + t.fill, 0) / trays.length),

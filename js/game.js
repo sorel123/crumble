@@ -212,6 +212,37 @@ function renderPips(){
   for(let i=0;i<n;i++) kids[i].className='pip'+(i<transform.remaining?' on':'');
   kids[n].textContent='×'+CFG.TRANSFORM_MULT;
 }
+/* the golden hand's payoff (4.5c): the biggest celebration in the game. A gold wash behind the board and glow on the
+   screen edges, sparkles on the empty cells and a rain in the margins above and below the board (never across a gem),
+   a long shake, a layered sting. All cosmetic, so the next tray is dealt as usual (about 1.5 s). */
+function goldenCelebrate(full,mult,extra){
+  pushBanner(full?'GOLDEN HAND COMPLETE':'GOLDEN ×'+(+mult.toFixed(1)),(full?'×'+(+mult.toFixed(1))+'  ':'')+'+'+extra);
+  const fx=CFG.FX_GOLDEN_FANFARE;
+  if(full){
+    if(fx) goldenCele={t:0,full:true};
+    for(let k=0;k<5;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
+    shake=Math.max(shake,18*CFG.SHAKE); glowT=2.2;
+    Sfx.goldenWin(); Sfx.goldenGong();
+    if(fx&&!reduce){
+      goldenSparkle(18);
+      for(let k=Math.min(70,fxRoom());k>0;k--){
+        const top=k%2===0;
+        goldRain.push({x:W*(0.03+0.94*Math.random()),y:top?-6-Math.random()*by*0.4:by+B+6,lim:top?by-6:H+8,vy:2.2+Math.random()*3.2,r:cell*(0.1+Math.random()*0.16),t:-Math.random()*45,a:0.7+Math.random()*0.3});
+      }
+    }
+  } else {                                             // partial credit: a smaller version
+    if(fx) goldenCele={t:0,full:false};
+    for(let k=0;k<2;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
+    if(fx&&!reduce) goldenSparkle(6);
+    glowT=1.3; Sfx.goldenIn();
+  }
+  glowH=GEMS[GOLD].h;
+}
+function goldenSparkle(n){                             // twinkles only on empty cells, so nothing ever sits over a gem
+  const free=[]; for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(!grid[r][c]) free.push([r,c]);
+  for(let k=0;k<n&&free.length;k++){ const [r,c]=free.splice((Math.random()*free.length)|0,1)[0];
+    sparkles.push({x:bx+(c+.2+Math.random()*.6)*cell,y:by+(r+.2+Math.random()*.6)*cell,t:Math.random()*0.5}); }
+}
 function place(idx,r,c){
   noteUndo();                                      // the state just before this placement, for the one-move Undo (save.js)
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
@@ -364,6 +395,7 @@ function place(idx,r,c){
   tension=Math.min(1,tension+(1-mobility())*CFG.TENSION_DRIFT);
 
   if(golden){
+    const planned=golden.plan?golden.plan.ids:[], hitPlan=[...rows,...cols.map(c2=>8+c2)].some(id=>planned.includes(id));
     golden.got.lines+=total; if(swept) golden.got.sweep=true;
     golden.pts+=gained;
     if(tray.every(v=>!v)){
@@ -371,20 +403,17 @@ function place(idx,r,c){
       if(mult>1){                                      // any clear pays at least the partial multiplier
         const extra=Math.round(golden.pts*(mult-1));
         gained+=extra;
-        pushBanner('GOLDEN ×'+(+mult.toFixed(1)),'+'+extra);
-        if(full){                                      // found it: the big celebration
-          for(let k=0;k<5;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
-          for(let k=0;!reduce&&k<16;k++) sparkles.push({x:bx+Math.random()*B,y:by+Math.random()*B,t:Math.random()*0.5});
-          shake=14*CFG.SHAKE; glowT=2; Sfx.goldenWin();
-          triggerTransform('goldvault');
-        } else {                                       // partial credit: a smaller version
-          for(let k=0;k<2;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.14});
-          for(let k=0;!reduce&&k<6;k++) sparkles.push({x:bx+Math.random()*B,y:by+Math.random()*B,t:Math.random()*0.5});
-          glowT=1.3; Sfx.goldenIn();
-        }
-        glowH=GEMS[GOLD].h;
+        goldenCelebrate(full,mult,extra);
       }
-      golden=null;                                     // a miss costs nothing; the hand just ends
+      specialEnd=trayNo; golden=null;                  // a miss costs nothing; the hand just ends (and the next tray carries no special)
+    } else {
+      goldenReplan();                                  // the glow always names lines that can still be completed with the pieces left
+      if(total>0&&CFG.FX_GOLDEN_FANFARE){              // a step toward it: the cleared lines flare gold and a note rises
+        const ft=-(reduce?0:CFG.CLEAR_BLINK)*0.075;
+        rows.forEach(r2=>lineFlashes.push({horiz:true,idx:r2,t:ft,hue:47,k:1.4}));
+        cols.forEach(c2=>lineFlashes.push({horiz:false,idx:c2,t:ft,hue:47,k:1.4}));
+        if(hitPlan) Sfx.goldenStep(Math.min(golden.got.lines,6));
+      }
     }
   }
   if(transform) gained=Math.round(gained*CFG.TRANSFORM_MULT);

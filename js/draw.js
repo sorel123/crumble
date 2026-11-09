@@ -15,8 +15,8 @@ function gem(gi,x,y,sz,sx,alpha,flash,small,syArg,src){
   }
   ctx.globalAlpha=1;
 }
-function star(x,y,r,a){
-  ctx.globalAlpha=a; ctx.fillStyle='#fff';
+function star(x,y,r,a,col='#fff'){
+  ctx.globalAlpha=a; ctx.fillStyle=col;
   ctx.beginPath(); ctx.moveTo(x,y-r);
   ctx.quadraticCurveTo(x,y,x+r,y); ctx.quadraticCurveTo(x,y,x,y+r);
   ctx.quadraticCurveTo(x,y,x-r,y); ctx.quadraticCurveTo(x,y,x,y-r);
@@ -48,6 +48,24 @@ function goldShimmer(now,s,dr,dc){
 
 // screen-edge vignette: bands from each edge only, clamped to stay outside the
 // board panel so it can never draw over live gems, however narrow the layout.
+/* golden hand (4.5c): the lines the pieces left in the tray can still complete, painted UNDER the gems (a gold tint on
+   the empty cells, a gold outline in the gaps) plus a marker outside the board edge. They light up one after another
+   when the hand arrives. Nothing here ever draws over a gem. */
+function drawGoldPlan(now,held){
+  if(!golden||!CFG.FX_GOLDEN_FANFARE||!golden.plan||goldenState()==='dead') return;
+  const pulse=reduce?0.7:0.55+0.45*Math.sin(now*0.005), kHeld=held?0.5:1;
+  golden.plan.ids.forEach((id,k)=>{
+    const a=reduce?1:clamp((goldenArrive-k*7)/12,0,1); if(a<=0) return;
+    const row=id<8, i=row?id:id-8, x=row?bx:bx+i*cell, y=row?by+i*cell:by, w=row?B:cell, h=row?cell:B;
+    ctx.globalAlpha=a*kHeld*(0.2+0.14*pulse); ctx.fillStyle='#FFCE48'; ctx.fillRect(x,y,w,h);
+    ctx.globalAlpha=a*kHeld*(0.6+0.3*pulse); ctx.strokeStyle='#FFD45C'; ctx.lineWidth=2.5;
+    roundPath(ctx,x+1.5,y+1.5,w-3,h-3,cell*.18); ctx.stroke();
+    ctx.globalAlpha=a*(0.75+0.25*pulse); ctx.fillStyle='#FFD45C';
+    if(row) roundPath(ctx,bx-8,y+cell*.2,4,cell*.6,2); else roundPath(ctx,x+cell*.2,by-8,cell*.6,4,2);
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
 function edgeGlow(rgb,strength){
   if(strength<=0.01) return;
   const base=40+strength*70;
@@ -152,7 +170,7 @@ function stepConfetti(dt){
    slowest frame of the last two seconds, how many frames have run long (tap it to reset), the time the game's
    own code took in the last frame, and the particle budget. */
 const perf={gaps:new Float32Array(120),gi:0,over:0,work:0,fx:1,hud:null};
-const fxLive=()=>bursts.length+shards.length+sparkles.length+dust.length+chunks.length+confetti.length;
+const fxLive=()=>goldRain.length+bursts.length+shards.length+sparkles.length+dust.length+chunks.length+confetti.length;
 function fxRoom(){ return Math.round(CFG.PARTICLE_CAP*perf.fx)-fxLive(); }
 function perfFrame(gap){
   if(!(gap>0&&gap<250)) return;                     // the first frame, or back from the background: not a frame she saw
@@ -193,6 +211,7 @@ function frame(now){
   comboGlowV+=(comboTarget-comboGlowV)*Math.min(1,dt*0.15);
   const goldTarget=golden?1:0;
   goldTintV+=(goldTarget-goldTintV)*Math.min(1,dt*0.15);
+  if(goldenArrive<999) goldenArrive+=dt;
   sweepFxT=Math.max(0,sweepFxT-dt/48);
   if(bestBeaten && shownScore>best){ best=shownScore; const bv=el('bestVal'); bv.textContent=best; if(!bv.classList.contains('bump')){ bv.classList.add('bump'); setTimeout(()=>bv.classList.remove('bump'),140); } }
   if(shownScore!==score && now>=scoreHold){         // quick count-up (held until the first score orb lands): ~30% of the gap a frame, at least 1
@@ -223,6 +242,12 @@ function frame(now){
 
     const pulse=reduce?0.7:0.6+0.4*Math.sin(now*0.004);
     ctx.globalAlpha=goldTintV*0.09*pulse; ctx.fillStyle='#FFCE48'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
+  }
+  if(goldenCele){                                  // the golden hand's payoff: a gold wash behind the board
+    goldenCele.t+=dt/60;
+    const f=1-goldenCele.t/(goldenCele.full?1.5:0.8);
+    if(f<=0) goldenCele=null;
+    else { goldenCele.f=f; ctx.globalAlpha=f*(goldenCele.full?0.4:0.16)*(reduce?0.7:0.8+0.2*Math.sin(now*0.02)); ctx.fillStyle='#FFCE48'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
   }
   if(CFG.FX_SWEEP_FX && sweepFxT>0){
     ctx.globalAlpha=sweepFxT*0.4; ctx.fillStyle=`hsl(${glowH} 85% 70%)`; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
@@ -256,6 +281,8 @@ function frame(now){
     ctx.strokeStyle=`hsla(${hue} 85% 62% / ${a*0.28})`; ctx.lineWidth=5+6*tension;  ctx.stroke();
     ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;      ctx.lineWidth=2+2*tension;  ctx.stroke();
   }
+
+  drawGoldPlan(now,!!(drag&&tray[drag.i]));           // (4.5c) before the held piece's preview, so the preview wins where they overlap
 
   if(drag&&tray[drag.i]){ drag.g=Math.min(1,drag.g+dt*0.2); updateSlot(); }   // the pickup lift moves the piece without a pointer event
   const gh=drag&&tray[drag.i]&&drag.slot?{r:drag.slot.r,c:drag.slot.c,s:tray[drag.i].s}:null;   // the one landing answer (see updateSlot)
@@ -670,6 +697,15 @@ function frame(now){
 
   // foreground overlay — screen edges and an already-empty board only, never a live piece
   if(CFG.FX_COMBO_GLOW && comboGlowV>0.02) edgeGlow(combo>4?'255,123,213':'255,212,92',comboGlowV);
+  if(goldenCele&&goldenCele.f) edgeGlow('255,206,72',Math.min(1,goldenCele.f*1.3));
+  if(goldRain.length){                               // the golden rain: only in the margins above and below the board
+    for(let i=goldRain.length-1;i>=0;i--){
+      const p=goldRain[i]; p.t+=dt; if(p.t<0) continue;
+      p.y+=p.vy*dt;
+      if(p.y>p.lim){ goldRain.splice(i,1); continue; }
+      star(p.x,p.y,p.r*(1+0.3*Math.sin(p.t*0.3)),p.a,i%3?'#FFD45C':'#FFF3B0');
+    }
+  }
   if(CFG.FX_SWEEP_FX) stepConfetti(dt);
   stepOrbs(now,dt);
   stepBlastFx(now,dt);
