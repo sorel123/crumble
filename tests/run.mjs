@@ -36,6 +36,14 @@ test('front menu (8.3): gem logo, crumb, travelling sky, no board or HUD behind 
     fits: el('menuClose').getBoundingClientRect().bottom <= innerHeight })))));
   assert.deepEqual(m, { tiles: 7, stats: '👑 Best 4,321', back: 'Back', fits: true });
 });
+test('front menu (8.3): Play crumbles the logo over the opening board, then the shards and the crumb are gone', async ({ page }) => {
+  await page.waitForTimeout(1800);                          // the logo has dropped in
+  await play(page);
+  const during = await page.evaluate(() => ({ shards: document.querySelectorAll('.crumbleFx canvas').length, crumb: !!document.querySelector('.crumbleFx #heroCrumb'), falling: hero.falling }));
+  assert.deepEqual(during, { shards: 28, crumb: true, falling: true });
+  await page.waitForFunction(() => !document.querySelector('.crumbleFx'), null, { timeout: 4000 });
+  assert.deepEqual(await page.evaluate(() => ({ home: hero.crumb.parentNode === hero.el, falling: hero.falling })), { home: true, falling: false });
+});
 test('front menu (8.3): Settings opened over the mode menu keeps the game paused when it closes', async ({ page }) => {
   await play(page); await dealt(page);
   await page.click('#modeTag'); await page.click('#menuSettings'); await page.click('#setDone');

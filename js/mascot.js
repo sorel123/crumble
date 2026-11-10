@@ -81,7 +81,7 @@ function mascotTight(){
 }
 function mascotStep(now){                             // draw.js frame(): writes only when something it shows changes
   const m=masc; if(!m.el) return;
-  const on=CFG.FX_MASCOT&&state!=='idle'&&!hero.card;   // (8.3) the menu has its own crumb
+  const on=CFG.FX_MASCOT&&state!=='idle'&&!hero.card&&!hero.falling;   // (8.3) the menu has its own crumb (and it is still tumbling off the logo)
   if(!on){ if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
   if(state==='won'&&m.lastState!=='won') mascotAct('sweep');   // a level won: the big one
   m.lastState=state;
