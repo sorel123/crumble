@@ -13,7 +13,8 @@ const SCORE_SCALE = 10;
 const CFG = {
   GRID: 8,
   DEV_MODE: new URLSearchParams(location.search).has('dev'), // Admin panel only when the URL has ?dev (also ignores saved panel overrides otherwise)
-  APP_STORE_ID: '',      // the app's Apple ID (App Store Connect, App Information, digits only); once set, the web build's start card links to the App Store
+  APP_STORE_ID: '',      // the app's Apple ID, 6833015504 (App Store Connect, App Information). Set it here ON LAUNCH DAY: the web start card then
+                         // links to the App Store (before release that link would show Apple's "not available" page). Safari's banner is index.html's apple-itunes-app tag.
   THEME: 'classic',      // a THEMES id — Classic (steel sky, navy board) by default; Night and the light modes in Settings → Look
   STYLE: 'blocks',       // a SKINS id — Blocks (edge-to-edge, bevelled) by default; picked in Settings; some are unlockable
   MOTIF: 'none',         // a MOTIFS id — face motif stamped on every tile, independent of skin
