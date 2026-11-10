@@ -62,7 +62,7 @@ const musicBufs={};                                              // track index 
 const musicLevel=()=>CFG.MUSIC_VOL*.5;
 const musicPickIdx=()=>MUSIC_TRACKS.findIndex(t=>t.id===CFG.MUSIC_PICK);   // -1 while shuffling
 function musicLoad(idx){
-  if(!musicBufs[idx]) musicBufs[idx]=fetch(MUSIC_TRACKS[idx].file).then(r=>{ if(!r.ok) throw new Error('music '+r.status); return r.arrayBuffer(); })
+  if(!musicBufs[idx]) musicBufs[idx]=fetch(MUSIC_TRACKS[idx].file).then(r=>{ if(!r.ok&&r.status!==0) throw new Error('music '+r.status); return r.arrayBuffer(); })   // the iPhone app's capacitor:// files answer with status 0
     .then(ab=>new Promise((ok,no)=>{ const p=actx.decodeAudioData(ab,ok,no); if(p&&p.catch) p.catch(no); }))   // the callback form works on older Safari
     .catch(()=>{ delete musicBufs[idx]; return null; });          // offline and never played before: quiet, and tried again next run
   return musicBufs[idx];
