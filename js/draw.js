@@ -685,15 +685,15 @@ function drawWipe(dt,aboost){                          // the new sky comes down
 
 /* (7.5c) Anticipation. While she holds a piece, every line it could complete somewhere on the board is "live"; as the
    floating piece comes within CFG.ANTIC_REACH cells of a landing that completes it, that line's gems shiver (at most
-   CFG.ANTIC_SHIVER px) and a glint runs along it through gem()'s own flash, and the hum (audio.js, humSet) rises. Nothing is
+   CFG.ANTIC_SHIVER px) and a glint runs along it through gem()'s own flash. Nothing is
    drawn over the board as a layer of its own (6.3: a pre-placement cue sits below a single clear). Once the piece is seated
-   in a completing slot the coloured line preview takes over: those lines stop shivering and the hum holds at its top.
+   in a completing slot the coloured line preview takes over: those lines stop shivering.
    Only while a piece is held, never at rest, so it is not a hint before she picks one up. The completing landings are
    listed once per pickup (antList); each frame is one distance per landing plus a sin or two per gem in a live line.
    Reduced motion: no shiver and no travelling glint, a steady soft brightening. */
 const antV=new Float32Array(2*N), antT=new Float32Array(2*N);   // per line (rows 0..N-1, then columns): eased value, this frame's target
 const antR=new Int8Array(N*N), antC=new Int8Array(N*N), antM=new Int32Array(N*N);   // completing landings: top-left and a bitmask of the lines
-let antN=0, antKey=null, antAny=false, antHum=0;
+let antN=0, antKey=null, antAny=false;
 function antList(s){                                   // every legal landing of `s` that completes a line, with the lines it completes
   antN=0;
   if(s.star) return;                                   // the star has its own cross preview
@@ -710,9 +710,9 @@ function antList(s){                                   // every legal landing of
   }
 }
 function stepAnticipation(dt){
-  antT.fill(0); let humT=0;
+  antT.fill(0);
   const t=drag&&tray[drag.i];
-  if(t&&state==='play'&&!paused&&CFG.FX_ANTICIPATION){       // Settings > Look > "Glints while dragging" turns the whole cue off, hum included
+  if(t&&state==='play'&&!paused&&CFG.FX_ANTICIPATION){       // Settings > Look > "Glints while dragging" turns the whole cue off
     if(antKey!==t){ antKey=t; antList(t.s); }           // a new pickup (the tray entry object is new per piece)
     if(antN){
       const s=t.s, f=floatPos(), fc=(f.x-s.cols*cell/2-bx)/cell, fr=(f.y-s.rows*cell/2-by)/cell, R=Math.max(.5,CFG.ANTIC_REACH);
@@ -721,7 +721,7 @@ function stepAnticipation(dt){
         const seated=sl&&sl.r===antR[i]&&sl.c===antC[i];
         let k=seated?1:Math.max(0,1-Math.hypot(antR[i]-fr,antC[i]-fc)/R);
         if(k<=0) continue;
-        k=k*k*(3-2*k); if(k>humT) humT=k;
+        k=k*k*(3-2*k);
         if(seated&&CFG.FX_LINE_PREVIEW) continue;          // the line preview owns these lines now
         for(let l=0,m=antM[i];m;l++,m>>>=1) if((m&1)&&k>antT[l]) antT[l]=k;
       }
@@ -734,8 +734,6 @@ function stepAnticipation(dt){
     antV[l]=Math.abs(tg-v)<.004?tg:v+(tg-v)*Math.min(1,dt*(tg>v?.3:.2));
     if(antV[l]>.01) antAny=true;
   }
-  antHum=t?antHum+(humT-antHum)*Math.min(1,dt*.35):0;   // eases in while held; the moment it lands or goes back it stops
-  if(actx) humSet(antHum<.01&&humT===0?0:antHum);
 }
 let _ax=0,_ay=0,_af=0;                                 // one gem's shiver offset and glint, written by antCell (no allocation per gem)
 function antCell(r,c,now){
