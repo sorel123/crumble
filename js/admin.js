@@ -106,12 +106,12 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['STAR_MIN','Star gem: gems the best cross must clear',1,15,1],
   ['STAR_CHANCE','Star gem chance (per eligible tray)',0,1,0.01],
   ['STAR_COOL','Star gem cooldown (trays)',0,20,1],
-  ['STAR_PER_GEM','Star gem points per gem',0,40,1],
+  ['STAR_PER_GEM','Star gem points per gem',0,40*SCORE_SCALE,SCORE_SCALE],
   ['STAR_COMBO','Star gem guaranteed at combo',2,10,1],
   ['SWEEP_COOLDOWN','Sweep cooldown (trays)',0,10,1],
   ['LIFT','Piece lift above finger (cells)',0,3,0.05],
   ['CLEAR_BLINK','Clear: blink frames',0,14,1],
-  ['COLOR_GONE_BONUS','Colour-gone bonus (per colour)',0,200,10],
+  ['COLOR_GONE_BONUS','Colour-gone bonus (per colour)',0,200*SCORE_SCALE,10*SCORE_SCALE],
   ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1],
   ['CRUMBLE_STAGGER','Crumble: crack wave (frames/cell)',0,3,0.05],
   ['BONUS_METER','Bonus: meter to fill',3,30,1],
@@ -132,11 +132,12 @@ const cfgSet=(k,v)=>{ const [a,b]=k.split('.'); if(b) CFG[a][b]=v; else CFG[a]=v
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)]));   // the values written in the file
 const DEV_STORE='crumble.dev.6';   // bumped when the drag went to glide + ghost (after plan 2.1), so older saved tuning doesn't override the new defaults
 function devSave(){
-  try{ localStorage.setItem(DEV_STORE,JSON.stringify({...Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)])),clearV:1})); }catch(e){}
+  try{ localStorage.setItem(DEV_STORE,JSON.stringify({...Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)])),clearV:1,scaleV:SCORE_SCALE})); }catch(e){}
 }
 function devLoad(){
   try{
     const o=JSON.parse(localStorage.getItem(DEV_STORE)||'{}');
+    if(o.scaleV!==SCORE_SCALE){ delete o.STAR_PER_GEM; delete o.COLOR_GONE_BONUS; }   // (8.0) tuning saved before the points boost holds old-size point values
     if(!o.clearV) delete o.CLEAR_STYLE;                  // (7.5) tuning saved before crumble was the default keeps its other values but not the old 'squash'
     for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);
     for(const [k,,options] of DEV_CHOICES) if(!options.some(x=>x.value===CFG[k])) CFG[k]=DEV_DEFAULTS[k];

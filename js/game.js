@@ -194,7 +194,7 @@ function place(idx,r,c){
     cols=grid.some(row=>row[c])?[c]:[];
   } else ({rows,cols}=linesFor(grid));
   const total=rows.length+cols.length;
-  let gained=s.n, swept=false;
+  let gained=s.n*SCORE_SCALE, swept=false;
   hesPlace(total>0);                               // the hesitation log (save.js): the tray's first drop, timed
 
   if(s.star){
@@ -222,7 +222,7 @@ function place(idx,r,c){
     if(combo>=CFG.TRANSFORM_COMBO) triggerTransform('volcano');
     if(s.star && starGems>=CFG.TRANSFORM_STAR_GEMS) triggerTransform('starfield');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
-    if(s.star) gained=s.n+Math.max(gained-s.n,Math.round(CFG.STAR_PER_GEM*starGems*(1+(combo-1)*CFG.COMBO_STEP)));   // a star pays per gem
+    if(s.star) gained=s.n*SCORE_SCALE+Math.max(gained-s.n*SCORE_SCALE,Math.round(CFG.STAR_PER_GEM*starGems*(1+(combo-1)*CFG.COMBO_STEP)));   // a star pays per gem
     if(s.star&&starGems>0) pushBanner('STAR BLAST',starGems+(starGems===1?' gem':' gems'),'#E6D8FF');
     if(!s.star){                                   // a star gets its own cross-shaped blast instead
       const st=-(reduce?0:CFG.CLEAR_BLINK)*0.16;        // sweeps start with the pop, not the blink
@@ -269,7 +269,7 @@ function place(idx,r,c){
     }
     // the point value on every cleared cell, rippling out with the collapse
     if(CFG.FX_CELL_TAGS && !reduce && cleared && !single){   // a single line gets just the one score label
-      const per=Math.max(1,Math.round((gained-s.n-colorBonus)/cleared));
+      const per=Math.max(1,Math.round((gained-s.n*SCORE_SCALE-colorBonus)/cleared));
       cellsGone.forEach(([rr,cc,delay])=>tags.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,txt:String(per),t:-(delay+4)}));
     }
     // the headline: COMBO n slams in under the board centre, with fireworks; bigger streak = bigger word
@@ -295,7 +295,7 @@ function place(idx,r,c){
     // the points number sits high on the board's right side, clear of the COMBO slam and the COLOR GONE band
     const slammed=CFG.FX_COMBO_SLAM&&loud;
     const popY=slammed?by+cell*1.2:by+cr*cell, popX=slammed?bx+B-cell*1.6:bx+cc0*cell;
-    pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n),
+    pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n*SCORE_SCALE),
                sub:slammed?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
     // clean sweep — board completely emptied

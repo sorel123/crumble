@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { serve, openGame, play, snap, setup, dragPiece, geometry, fingerFor, fingers, frames, watchPlace, placed, dragView, dealt, watchFrames, frameLog } from './harness.mjs';
 import { expectedAssets } from '../tools/stamp-sw.mjs';
 
+const SCORE_SCALE = 10;                      // the game's SCORE_SCALE (js/config.js); a test that sets a score thinks in boosted points
 const EMPTY = Array(8).fill('00000000');
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -961,17 +962,53 @@ test('corrupt or missing saved data just opens the start card, no errors', async
 
 test('best score and lifetime stats persist, and unlock skins before the first frame', async ({ page }) => {
   await play(page);
-  await page.evaluate(() => { score = 950; });
+  await page.evaluate(() => { score = 9500; });
   await page.evaluate(() => gameOver());
   await page.waitForFunction(() => state === 'over');
   const st = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.stats')));
-  assert.equal(st.best, 950); assert.equal(st.games, 1); assert.equal(st.totalScore, 950);
+  assert.equal(st.best, 9500); assert.equal(st.games, 1); assert.equal(st.totalScore, 9500);
   assert.equal(await page.evaluate(() => localStorage.getItem('crumble.run')), null, 'a finished run is not kept');
   await page.evaluate(() => localStorage.removeItem('crumble.skins'));                    // pretend the unlock list was lost: best alone must restore it
   await reload(page);
   const r = await page.evaluate(() => ({ state, best, shown: el('bestVal').textContent, glass: unlocked.has('glass'), candy: unlocked.has('candy'), neon: unlocked.has('neon') }));
-  assert.equal(r.state, 'idle'); assert.equal(r.best, 950); assert.equal(r.shown, '950');
-  assert.ok(r.glass && r.candy && !r.neon, 'skins up to 900 points are open');
+  assert.equal(r.state, 'idle'); assert.equal(r.best, 9500); assert.equal(r.shown, '9500');
+  assert.ok(r.glass && r.candy && !r.neon, 'skins up to 9000 points are open');
+});
+
+test('points boost (8.0): one clear pays SCORE_SCALE times the old points, and thresholds are scaled', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => ({ s: SCORE_SCALE, line: CFG.LINE_POINTS, sweep: CFG.SWEEP_BONUS, floor: CFG.RESCUE_FLOOR, at: CFG.JOURNEY_AT, candy: SKINS.find(k => k.id === 'candy').unlock,
+    goal: LEVELS[2].goal, nScore: LEVELS.filter(l => l.goal.type === 'score').map(l => l.goal.n) }));
+  assert.equal(r.s, 10); assert.equal(r.line, 100); assert.equal(r.sweep, 3000); assert.equal(r.floor, 3000);
+  assert.deepEqual(r.at, [0, 5000, 15000, 30000, 60000, 100000]); assert.equal(r.candy, 4000);
+  assert.deepEqual(r.goal, { type: 'score', n: 1500 }, 'Adventure level 3 asks for 150 old points');
+  assert.ok(r.nScore.every(n => n >= 1500), 'every score goal is boosted');
+  await dealt(page);
+  await setup(page, { rows: ['11111110', '10000000', ...EMPTY.slice(2)], trayShapes: [0, 0, 0] });   // a gem elsewhere: no clean sweep
+  const g = await page.evaluate(() => { combo = 0; const s0 = score; place(0, 0, 7); cancelDeal(); return score - s0; });
+  assert.equal(g, 1 * SCORE_SCALE + 10 * SCORE_SCALE, 'a 1-cell piece completing one line: placement + one line, boosted');
+});
+
+test('points boost (8.0): old saves are multiplied once, never twice, and a fresh install is untouched', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => {
+    localStorage.removeItem('crumble.scale');
+    localStorage.setItem('crumble.stats', JSON.stringify({ v: 1, best: 950, totalScore: 4000, games: 7, lines: 30 }));
+    localStorage.setItem('crumble.daily', JSON.stringify({ v: 1, d: { '2026-11-09': { s: 640, l: 7, n: 2 } } }));
+    localStorage.setItem('crumble.run', JSON.stringify({ v: 1, score: 321, cb: 300, golden: { pts: 50 }, bonus: { left: 2, extra: 40 } }));
+    migrateScale();
+  });
+  const read = () => page.evaluate(() => ({ st: JSON.parse(localStorage.getItem('crumble.stats')), d: JSON.parse(localStorage.getItem('crumble.daily')).d['2026-11-09'],
+    run: JSON.parse(localStorage.getItem('crumble.run')), key: localStorage.getItem('crumble.scale') }));
+  let o = await read();
+  assert.deepEqual([o.st.best, o.st.totalScore, o.st.games, o.st.lines], [9500, 40000, 7, 30], 'best and total are boosted; counts are not');
+  assert.deepEqual(o.d, { s: 6400, l: 7, n: 2 });
+  assert.deepEqual([o.run.score, o.run.cb, o.run.golden.pts, o.run.bonus.extra, o.run.bonus.left], [3210, 3000, 500, 400, 2]);
+  assert.equal(o.key, '10');
+  await page.evaluate(() => migrateScale());
+  assert.deepEqual(await read(), o, 'a second run changes nothing');
+  await page.evaluate(() => { localStorage.clear(); migrateScale(); });
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.scale')), '10', 'a fresh install only records the scale');
 });
 
 test('lifetime stats count placements, lines, best combo and sweeps', async ({ page }) => {
@@ -1343,7 +1380,7 @@ test('golden hand: finding it pays ×3, a miss pays nothing extra, and the next 
   assert.equal(win.end, win.trayNo, 'the hand ends the special streak'); assert.equal(win.live, false);
   await dealt(page);
   const miss = await run(false);
-  assert.ok(miss.gained < 100, 'a miss pays no multiplier: ' + miss.gained);
+  assert.ok(miss.gained < 100 * SCORE_SCALE, 'a miss pays no multiplier: ' + miss.gained);
 });
 
 test('golden hand: celebration never blocks play, rains only outside the board, and the next tray arrives within 1.5 s', async ({ page, errors }) => {
@@ -2364,7 +2401,7 @@ test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, save
   const st = () => page.evaluate(() => ({ w: curWorld, stage: jStage, shown: jShown, wipe: !!jw, sweep: !!(jw && jw.sweep), jumps: jJumps }));
   const done = () => page.waitForFunction(() => !jw && !jPend, null, { timeout: 5000 });
   assert.equal((await st()).w, 'j0', 'a run starts at dawn');
-  await page.evaluate(() => { score = 600; journeyDealt(); });                           // past 500: day, after the next deal
+  await page.evaluate(() => { score = 6000; journeyDealt(); });                           // past 5000: day, after the next deal
   assert.equal((await st()).w, 'j0', 'nothing changes on the clear itself');
   await page.waitForFunction(() => !!jw, null, { timeout: 3000 });
   assert.deepEqual(await st(), { w: 'j1', stage: 1, shown: 1, wipe: true, sweep: false, jumps: 0 }, 'a calm wipe to day');
@@ -2374,7 +2411,7 @@ test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, save
   assert.deepEqual(await st(), { w: 'j2', stage: 2, shown: 2, wipe: true, sweep: true, jumps: 1 }, 'a sweep wipe to golden hour');
   await done();
   const r = await page.evaluate(() => {
-    score = 3000; jStage = journeyTarget();                                              // night by score, plus the sweep: aurora
+    score = 30000; jStage = journeyTarget();                                              // night by score, plus the sweep: aurora
     const snap = JSON.parse(JSON.stringify(snapshot())), out = { jy: snap.jy };
     jJumps = 0; restore(snap); out.resumed = [curWorld, !!jw];
     delete snap.jy; restore(snap); out.old = curWorld;
@@ -2407,7 +2444,7 @@ test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back wi
   await page.waitForTimeout(400);
   const base = await px();
   await watchFrames(page); await frameLog(page);
-  await page.evaluate(() => { score = 600; journeyDealt(); jPend.t = 1; });
+  await page.evaluate(() => { score = 6000; journeyDealt(); jPend.t = 1; });
   await page.waitForFunction(() => jw && jw.t > jw.dur * 0.5, null, { timeout: 3000 });
   const mid = await px();
   assert.ok(moved(mid.gem, base.gem) <= 5, 'a gem pixel is untouched mid-wipe: ' + base.gem + ' vs ' + mid.gem);
@@ -2418,7 +2455,7 @@ test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back wi
   console.log(`     (wipe: ${work.length} frames, p90 ${p90.toFixed(1)} ms, max ${work[work.length - 1].toFixed(1)} ms)`);
   assert.ok(p90 < 12, 'wipe frames stay cheap: p90 ' + p90.toFixed(1) + ' ms');
   const b = await page.evaluate(async () => {
-    startBonus(); score = 2000; journeyDealt(); jPend.t = 1;
+    startBonus(); score = 20000; journeyDealt(); jPend.t = 1;
     await new Promise(res => setTimeout(res, 300));
     const during = [curWorld, jStage, jShown];
     endBonus(); const after = [curWorld, !!jw, jShown];
@@ -2714,24 +2751,24 @@ const chaseRead = page => page.evaluate(() => { const b = el('chase'); return { 
 test('7.5e chase your best: a bar under the score fills toward her best, "N to beat" near it, a glow at the end, gone once passed', async ({ page }) => {
   await play(page);
   assert.ok((await chaseRead(page)).hidden, 'her very first run has no best to chase');
-  await page.evaluate(() => { best = 1000; start(); });
+  await page.evaluate(() => { best = 10000; start(); });
   await dealt(page);
   let c = await chaseRead(page);
-  assert.ok(!c.hidden && c.target === 1000 && /scaleX\(0\)/.test(c.fill) && c.to === '', 'a new run shows an empty bar to 1000 ' + JSON.stringify(c));
-  await page.evaluate(() => { score = 500; }); await counted(page);
+  assert.ok(!c.hidden && c.target === 10000 && /scaleX\(0\)/.test(c.fill) && c.to === '', 'a new run shows an empty bar to 10000 ' + JSON.stringify(c));
+  await page.evaluate(() => { score = 5000; }); await counted(page);
   c = await chaseRead(page);
   assert.ok(/scaleX\(0\.5\)/.test(c.fill) && c.to === '' && !/near|hot/.test(c.cls), 'half way: half full, no text yet ' + JSON.stringify(c));
-  await page.evaluate(() => { score = 800; }); await counted(page);
+  await page.evaluate(() => { score = 8000; }); await counted(page);
   c = await chaseRead(page);
-  assert.ok(c.to === '201 to beat' && /near/.test(c.cls) && !/hot/.test(c.cls), 'from 75%: how many to beat it ' + JSON.stringify(c));
-  await page.evaluate(() => { score = 950; }); await counted(page);
+  assert.ok(c.to === '2001 to beat' && /near/.test(c.cls) && !/hot/.test(c.cls), 'from 75%: how many to beat it ' + JSON.stringify(c));
+  await page.evaluate(() => { score = 9500; }); await counted(page);
   assert.ok(/hot/.test((await chaseRead(page)).cls), 'from 90% the bar glows');
   // passing it for real: NEW BEST, the bar pops, the sky jumps a stage with the bright wipe
-  await page.evaluate(() => { window.__sfx = []; const f = Sfx.fanfare; Sfx.fanfare = (...a) => { __sfx.push('fanfare'); f(...a); }; score = 995; shownScore = 995; jPend = null; jw = null; });
+  await page.evaluate(() => { window.__sfx = []; const f = Sfx.fanfare; Sfx.fanfare = (...a) => { __sfx.push('fanfare'); f(...a); }; score = 9995; shownScore = 9995; jPend = null; jw = null; });
   const j0 = await page.evaluate(() => jJumps);
   await setup(page, { rows: ['01111111', '00000000', '10000000', ...EMPTY.slice(3)], trayShapes: [0, 0, 0] });
   await dragPiece(page, 0, 0, 0);
-  await page.waitForFunction(() => shownScore > 1000, null, { timeout: 3000 });
+  await page.waitForFunction(() => shownScore > 10000, null, { timeout: 3000 });
   await frames(page, 2);
   c = await chaseRead(page);
   assert.ok(!c.hidden && /won/.test(c.cls) && /scaleX\(1\)/.test(c.fill), 'passing it flashes the full bar (no clean sweep: one jump is the chase) ' + JSON.stringify(c));
@@ -2747,24 +2784,24 @@ test('7.5e chase your best: a bar under the score fills toward her best, "N to b
 
 test('7.5e chase your best: the target survives a resume, a small best skips the sky jump, Daily/Adventure and the switch (saved) hide it', async ({ page }) => {
   await play(page);
-  await page.evaluate(() => { best = 300; start(); });
+  await page.evaluate(() => { best = 3000; start(); });
   await dealt(page);
   const r = await page.evaluate(() => {
-    score = 200; saveRun();                                       // saveStats has now written best = max(best, score)
+    score = 2000; saveRun();                                       // saveStats has now written best = max(best, score)
     const snap = JSON.parse(JSON.stringify(snapshot())), out = { cb: snap.cb };
-    best = 5000; restore(snap); out.resumed = chaseBest;           // the stored best has moved on: the run still chases 300
-    delete snap.cb; best = 300; restore(snap); out.old = chaseBest;
+    best = 50000; restore(snap); out.resumed = chaseBest;           // the stored best has moved on: the run still chases 300
+    delete snap.cb; best = 3000; restore(snap); out.old = chaseBest;
     return out;
   });
-  assert.deepEqual(r, { cb: 300, resumed: 300, old: 300 }, 'the target is saved with the run; an older save chases the stored best');
-  await page.evaluate(() => { score = 295; shownScore = 295; jPend = null; });
+  assert.deepEqual(r, { cb: 3000, resumed: 3000, old: 3000 }, 'the target is saved with the run; an older save chases the stored best');
+  await page.evaluate(() => { score = 2995; shownScore = 2995; jPend = null; });
   const j0 = await page.evaluate(() => jJumps);
   await setup(page, { rows: ['01111111', '00000000', '10000000', ...EMPTY.slice(3)], trayShapes: [0, 0, 0] });
   await dragPiece(page, 0, 0, 0);
   await frames(page, 4);
   assert.ok(await page.evaluate(() => bestBeaten), 'beaten');
-  assert.equal(await page.evaluate(() => jJumps), j0, 'a best under 500 beats with the banner only: the sky keeps its place');
-  await page.evaluate(() => { best = 1000; start(); });
+  assert.equal(await page.evaluate(() => jJumps), j0, 'a best under 5000 beats with the banner only: the sky keeps its place');
+  await page.evaluate(() => { best = 10000; start(); });
   assert.ok(!(await chaseRead(page)).hidden);
   await page.evaluate(() => { mode = 'daily'; syncHud(); });
   assert.ok((await chaseRead(page)).hidden, 'not in Daily');
