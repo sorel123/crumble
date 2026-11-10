@@ -67,12 +67,27 @@ function ac(){
     speakerDefault();
     actx=new (window.AudioContext||window.webkitAudioContext)();
     ({master,revIn,nbuf,setSpeaker,smp:smpBus,orig:origBus,mus:musBus}=buildChain(actx));
-    // iOS can interrupt the context (a call, Siri, the app switcher): ask for it back when it's not running
-    actx.addEventListener('statechange',()=>{ if(actx.state!=='running') actx.resume().catch(()=>{}); });
     loadBank(); musicSync();
   }
   if(actx.state!=='running') actx.resume().catch(()=>{});
   return actx;
+}
+/* iOS can interrupt the context (a call, Siri, another app's video) and sometimes never lets resume() bring it
+   back. audioRevive() asks once; if it is still not running ~300 ms later the context and chain are rebuilt.
+   The decoded samples and music buffers are kept (an AudioBuffer is not tied to its context), and musicSync
+   starts the music again on the new one. Called on every gesture and when the app comes back to the front. */
+let reviveT=0;
+function audioRevive(){
+  if(!actx||actx.state==='running'||reviveT) return;
+  actx.resume().catch(()=>{});
+  reviveT=setTimeout(()=>{
+    reviveT=0;
+    if(!actx||actx.state==='running') return;
+    const old=actx; actx=null;
+    if(musicE){ musicE=null; clearInterval(musicTimer); }
+    try{ old.close(); }catch(e){}
+    try{ ac(); }catch(e){}
+  },300);
 }
 /* Phase 7.0: first touch unlocks sound, in Safari too. iOS only accepts a resume() made inside a touch or
    click; a pointerdown in the middle of a drag (a resumed run skips the start card) is not one of those. So
@@ -89,7 +104,10 @@ function silentUrl(){                                  // a 0.25 s silent mono W
   return URL.createObjectURL(new Blob([b.buffer],{type:'audio/wav'}));
 }
 function unlockAudio(){
+  const had=!!actx;
   try{ ac(); }catch(e){}
+  if(had) audioRevive();
+  if(Native.on()) return;                              // the iPhone app sets its audio session natively (AppAudio.swift): no silent loop
   try{
     if(!silentEl){ silentEl=new Audio(silentUrl()); silentEl.loop=true; silentEl.preload='auto'; }
     if(silentEl.paused) silentEl.play().catch(()=>{});
@@ -100,6 +118,10 @@ for(const ev of ['touchend','pointerup','click','keydown'])
 document.addEventListener('visibilitychange',()=>{      // back from the background: iOS may have paused both
   if(document.visibilityState==='visible'&&actx) unlockAudio();
 });
+if(Native.on()){                                          // the app: game-style audio (mixes with other apps, follows the silent switch)
+  try{ if(navigator.audioSession) navigator.audioSession.type='ambient'; }catch(e){}
+  try{ Native.plugin('AppAudio')?.addListener('resume',()=>{ if(actx) audioRevive(); }); }catch(e){}   // interruption over, or back to the front
+}
 const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger — physical sounds only, never musical ones
 const hz=f=>clamp(f,20,12000);
 function send(node,wet){                             // dry to master, plus `wet` of it into the reverb
