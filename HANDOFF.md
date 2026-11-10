@@ -1014,6 +1014,16 @@ fetched the game is quiet (no fallback). Ducking, the intensity hook (`musicTarg
   | `music/bounce.m4a` | Bounce | playful, funky (~92 bpm) | `abstraction-36d4672d475a362f4c61d313` ("Sketchbook 2024-05-22", Funk) | 50 s |
   | `music/daydream.m4a` | Daydream | dreamy, calm | `abstraction-6b13391bc1b3862dbf2cd5c9` ("Sketchbook 2024-06-12", Ambient) | 48 s |
   | `music/momentum.m4a` | Momentum | a little more driving (~129 bpm) | `abstraction-417fa91b83fab8b8be52a4e5` ("Sketchbook 2024-10-30", Electronic) | 54 s |
+  | `music/cafe.m4a` | Café (8.5) | easy jazz (~86 bpm) | `abstraction-555d119bfb231cfe250b76e3` ("Sketchbook 2024-04-10", Jazz) | 101 s |
+  | `music/sidewalk.m4a` | Sidewalk (8.5) | bright jazz | `abstraction-9ccab202734d1e91a94d3042` ("Sketchbook 2024-11-30", Jazz) | 67 s |
+  | `music/cocoa.m4a` | Cocoa (8.5) | mellow jazz | `abstraction-d20307161d504210a0dd287e` ("Sketchbook 2024-12-04", Jazz) | 59 s |
+  | `music/drift.m4a` | Drift (8.5) | soft ambient | `abstraction-18d847ce7af1d0230a733358` ("Ludum Dare 32 02", Ambient) | 78 s |
+  | `music/snowfall.m4a` | Snowfall (8.5) | quiet ambient | `abstraction-4818ca6a5b5c7b602fbf9eb7` ("Sketchbook 2024-10-16", Ambient) | 75 s |
+  | `music/glow.m4a` | Glow (8.5) | calm electronic | `abstraction-01bff13f05e762766741d30c` ("Sketchbook 2024-12-18", Electronic) | 57 s |
+  | `music/pebbles.m4a` | Pebbles (8.5) | playful | `abstraction-b4910ff43f4c78548ab131f1` ("Sketchbook 2024-04-24_02", Silly) | 60 s |
+  | `music/pixel.m4a` | Pixel (8.5) | cheerful chiptune | `abstraction-a0192b0f37ebd32ccf86ba4b` ("Sketchbook 2024-12-26", Chiptune) | 64 s |
+  | `music/long-road.m4a` | Long Road (8.5) | relaxed | `abstraction-ac40d882e78bf9f2c7055d31` ("Ludum Dare 28 04", untagged) | 128 s |
+  | `music/strut.m4a` | Strut (8.5) | slow funk | `abstraction-261059f19b4352047ea7bcb3` ("Patreon Challenge 02", Funk) | 64 s |
 
   Transcoded from the creator's Ogg loops with `ffmpeg -map 0:a:0 -map_metadata -1 -c:a aac -b:a 96k -ar 44100 -movflags +faststart` (80k for Sunny Lo-fi), which also drops the
   embedded album art. Each is under 1 MB. The AAC edit list keeps the exact length, so decodeAudioData's buffer is the same number of samples as the original loop (checked in Chromium).
@@ -1023,6 +1033,12 @@ fetched the game is quiet (no fallback). Ducking, the intensity hook (`musicTarg
   the Chiptune, Silly and Jazz styles. Safari's loop seam is unchecked: if it clicks there, loop with `loopStart/loopEnd` or crossfade the ends.
 - **Picker.** Settings -> Sound: the Music control is a dropdown next to Sound effects (`#musicPick`: Shuffle / Sunny / Bounce / Daydream / Momentum / Off; `CFG.MUSIC_PICK`, saved as `musicPick` in `crumble.skins`; Shuffle by default).
   Off is the old music switch (`CFG.MUSIC`, so a saved `music:false` still means Off). It is a dropdown rather than chips because a chip row made Settings scroll (the "Settings fits one screen" test). Shuffle moves to another loop at each new run (crossfade ~1.4 s); a chosen track stays across runs.
+- **More loops and Shuffle that moves on (plan 8.5).** Jay found four loops repetitive (a 10 minute game heard one 50 s loop a dozen times), so ten more from the same
+  CC0 bundle were added (rows marked 8.5 above; all five Abstraction bundle licences in that release are the same CC0 text, so the App Store credit is unchanged). Same 80k AAC transcode; picked by key
+  (major), tempo, loudness and seam, Jay approved them all. `gain` follows `10^((-15.4 - rms dB)/20)`, the rule the first four fit, capped at 1.4 for the quiet ambient ones. Total music ~10.7 MB.
+  Shuffle is now a shuffle bag (`musicNextShuffle`: every loop once, never the one playing, seeded by its own LCG, not Math.random), used at each new game and
+  after `CFG.MUSIC_ROTATE` (180 s) on one loop: `musicTick` waits until the current pass is within 8 s of its end, loads the next and sets `playAt` so the 1.4 s crossfade
+  ends on the old loop's seam. A chosen track loops forever. The picker lists all 14.
 - **Pressure.** `musicTarget()` (from `scr.p`, 6.6) feeds `setI`: the low-pass opens from 6.5 kHz (calm) to 18 kHz (tight) and the level lifts by up to 30% (`musicLpHz`, `musicLift`). No extra layer.
 - **Loading.** Lazy: `musicLoad(idx)` fetches and decodes a loop the first time it is wanted; only the playing loop stays decoded (a 90 s stereo loop is ~30 MB of float samples).
   `sw.js` serves `/music/` from its own cache, `crumble-music`, filled on first play and kept across game updates (not precached, so installing the game stays small).

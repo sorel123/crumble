@@ -2308,20 +2308,23 @@ const renderMusic = (page, opts) => page.evaluate(async ({ secs, i, track, duckA
   return { peak: 20 * Math.log10(pk), rms: db(4, secs), before: db(duckAt === null ? 0 : duckAt - 1, duckAt === null ? 1 : duckAt), under: db(duckAt === null ? 0 : duckAt, duckAt === null ? 1 : duckAt + 1) };
 }, { secs: 16, i: 0, track: 0, duckAt: null, ...opts });
 
-test('music (7.4): four recorded loops, each small, that decode and loop without a click, and nothing is synthesised', async ({ page, srv }) => {
-  assert.equal(await page.evaluate(() => MUSIC_TRACKS.length), 4, 'four moods');
+test('music (7.4, 8.5): fourteen recorded loops, each small, that decode and loop without a click, and nothing is synthesised', async ({ page, srv }) => {
+  assert.equal(await page.evaluate(() => MUSIC_TRACKS.length), 14, 'fourteen loops');
+  let total = 0;
   for (const t of await page.evaluate(() => MUSIC_TRACKS)) {
-    assert.ok(fs.statSync(new URL('../' + t.file, import.meta.url)).size < 1e6, `${t.file} is under 1 MB`);
+    const size = fs.statSync(new URL('../' + t.file, import.meta.url)).size; total += size;
+    assert.ok(size < 1.4e6, `${t.file} is under 1.4 MB`);
     const r = await page.evaluate(async f => {
       const c = new OfflineAudioContext(2, 44100, 44100), buf = await c.decodeAudioData(await (await fetch(f)).arrayBuffer());
       const a = buf.getChannelData(0), step = 400; let mx = 0, rms = 0;
       for (let k = 1; k < a.length; k++) { mx = Math.max(mx, Math.abs(a[k] - a[k - 1])); rms += a[k] * a[k]; }
       return { dur: buf.duration, rms: Math.sqrt(rms / a.length), seam: Math.abs(a[0] - a[a.length - 1]), maxStep: mx, head: Math.abs(a[0]) };
     }, '/' + t.file);
-    assert.ok(r.dur > 25 && r.dur < 120, `${t.id}: ${r.dur.toFixed(1)} s of music`);
+    assert.ok(r.dur > 25 && r.dur < 140, `${t.id}: ${r.dur.toFixed(1)} s of music`);
     assert.ok(r.rms > .05 && r.rms < .35, `${t.id}: sensible level (${r.rms.toFixed(3)})`);
     assert.ok(r.seam < .2, `${t.id}: the end meets the start (${r.seam.toFixed(3)})`);
   }
+  assert.ok(total < 12e6, `all the music is under 12 MB (${(total / 1e6).toFixed(1)} MB): it ships inside the app`);
   const src = fs.readFileSync(new URL('../js/music.js', import.meta.url), 'utf8');
   assert.ok(!/createOscillator/.test(src), 'no synthesis in the music');
 });
@@ -2332,7 +2335,7 @@ test('music (7.4): quiet by design, a tight board is brighter and louder, and a 
   assert.ok(tight.rms - calm.rms > 1, `pressure opens the filter and lifts the level (${calm.rms.toFixed(1)} -> ${tight.rms.toFixed(1)} dB)`);
   assert.ok(tight.peak < -4, 'and it is still never loud');
   assert.ok(ducked.before - ducked.under > 6, `ducking dips it by more than 6 dB (${ducked.before.toFixed(1)} -> ${ducked.under.toFixed(1)})`);
-  for (const track of [1, 2, 3]) { const t = await renderMusic(page, { track }); assert.ok(t.rms > -45 && t.peak < -4, 'the other loops sit at a similar level'); }
+  for (const track of await page.evaluate(() => MUSIC_TRACKS.map((t, i) => i).slice(1))) { const t = await renderMusic(page, { track }); assert.ok(t.rms > -45 && t.peak < -4, 'the other loops sit at a similar level'); }
 });
 
 test('music (7.4): on by default at a low volume, Shuffle by default, a picker where Off is the switch, all saved', async ({ page }) => {
@@ -2342,7 +2345,7 @@ test('music (7.4): on by default at a low volume, Shuffle by default, a picker w
   await play(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
   await openSet(page);
-  assert.deepEqual(await page.$$eval('#musicPick option', os => os.map(o => o.textContent)), ['Shuffle', 'Sunny', 'Bounce', 'Daydream', 'Momentum', 'Off']);
+  assert.deepEqual(await page.$$eval('#musicPick option', os => os.map(o => o.textContent)), ['Shuffle', 'Sunny', 'Bounce', 'Daydream', 'Momentum', 'Café', 'Sidewalk', 'Cocoa', 'Drift', 'Snowfall', 'Glow', 'Pebbles', 'Pixel', 'Long Road', 'Strut', 'Off']);
   assert.equal(await page.inputValue('#musicPick'), 'shuffle');
   await page.selectOption('#musicPick', 'bounce');
   assert.equal(await page.evaluate(() => musicTrackNo), 1, 'picking a track plays it');
@@ -2410,6 +2413,24 @@ test('music (7.4): the sound arbiter ducks it under the winning event, deeper fo
   const before = await page.evaluate(() => musicTrackNo);
   await page.evaluate(() => { start(); });
   assert.notEqual(await page.evaluate(() => musicTrackNo), before, 'a new run moves to another loop');
+});
+
+test('music (8.5): Shuffle plays every loop before a repeat, and after a few minutes crossfades to another at the loop end', async ({ page }) => {
+  const bag = await page.evaluate(() => { musicBag = []; musicTrackNo = 0; const seen = []; for (let k = 0; k < MUSIC_TRACKS.length - 1; k++) { musicTrackNo = musicNextShuffle(); seen.push(musicTrackNo); } return seen; });
+  assert.equal(new Set(bag).size, bag.length, 'no repeats within a round');
+  assert.ok(!bag.includes(0), 'and not the one that was playing');
+  assert.ok(await page.evaluate(() => CFG.MUSIC_ROTATE >= 120 && CFG.MUSIC_ROTATE <= 300), 'a few minutes per loop');
+  await play(page);
+  await page.waitForFunction(() => musicE !== null && musicE.idx >= 0 && musicE.cur && !musicE.loading, null, { timeout: 8000 });
+  const r0 = await page.evaluate(() => { const c = musicE.cur, now = actx.currentTime; c.t0 = now - (c.dur * Math.ceil(CFG.MUSIC_ROTATE / c.dur + 1) - 3); return { idx: musicE.idx, end: now + 3 }; });   // pretend it has played for minutes, 3 s before a seam
+  await page.waitForFunction(i => musicE.idx !== i, r0.idx, { timeout: 8000 });
+  const t0 = await page.evaluate(() => musicE.cur.t0);
+  assert.ok(Math.abs(t0 - (r0.end - 1.4)) < .4, `the crossfade lands on the old loop's seam (${(t0 - r0.end).toFixed(2)} s)`);
+  await page.evaluate(() => { musicSetPick('cocoa'); });
+  await page.waitForFunction(() => musicE.idx === MUSIC_TRACKS.findIndex(t => t.id === 'cocoa'), null, { timeout: 8000 });
+  const c = await page.evaluate(() => { const c = musicE.cur; c.t0 = actx.currentTime - c.dur * 20 + 3; return musicE.idx; });
+  await page.waitForTimeout(800);
+  assert.equal(await page.evaluate(() => musicTrackNo), c, 'a chosen track keeps looping');
 });
 
 test('music (7.4): the service worker keeps the loops in their own cache, which a game update does not clear', async ({ page }) => {
