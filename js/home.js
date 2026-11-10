@@ -190,3 +190,5 @@ function homeCrumble(){
   });
 }
 homeInit();
+/* crumble.win: in a browser (never inside the app) the start card links to the iPhone app once CFG.APP_STORE_ID is set. */
+(()=>{ const a=el('storeLink'); if(!a||!CFG.APP_STORE_ID||Native.on()) return; a.href='https://apps.apple.com/app/id'+CFG.APP_STORE_ID; a.hidden=false; })();

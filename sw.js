@@ -3,7 +3,7 @@
 //
 // ASSET_HASH must change whenever a precached file changes, or phones keep the old game.
 // `npm run stamp` rewrites it; `npm test` fails if it is stale.
-const ASSET_HASH='2046a67a25';
+const ASSET_HASH='09fdcd66c3';
 const CACHE='crumble-'+ASSET_HASH;
 const MUSIC_CACHE='crumble-music';          // recorded loops (7.4): fetched when first played, kept across game updates (rename a file if its audio changes)
 const ASSETS=["./","index.html","manifest.json","icon-120.png","icon-152.png","icon-180.png","icon-192.png","icon-512.png","js/config.js","js/native.js","js/worlds.js","js/shapes.js","js/solver.js","js/render.js","js/samples.js","js/audio.js","js/music.js","js/game.js","js/draw.js","js/flow.js","js/save.js","js/timelapse.js","js/modes.js","js/mascot.js","js/home.js","js/goals.js","js/share.js","js/ui.js","js/admin.js","js/main.js","js/update.js"];
@@ -32,6 +32,7 @@ self.addEventListener('fetch',e=>{
   }
   e.respondWith(caches.open(CACHE).then(async c=>
     (await c.match(req,{ignoreSearch:true}))                         // ?dev still hits the cached index.html
-    || (req.mode==='navigate' && await c.match('index.html'))
-    || fetch(req)));
+    || (req.mode==='navigate'                                         // other pages (crumble.win/privacy/, /support/) load from the
+        ? fetch(req).catch(()=>c.match('index.html'))                 // network; the game is the fallback only when offline
+        : fetch(req))));
 });

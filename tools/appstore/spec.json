@@ -1,0 +1,8 @@
+[
+ {"slug":"crumble","img":"shots/run/f00667.jpg","title":"Drag. Drop. <em>Crumble.</em>","sub":"Fill a row or column to clear it"},
+ {"slug":"combos","img":"shots/run/f00901.jpg","title":"Chain <em>combos</em>","sub":"Keep clearing and the board catches fire","glow":"#7a3a2a"},
+ {"slug":"sweep","img":"shots/run/f00992.jpg","title":"Clean sweeps <em>pay big</em>","sub":"Empty the whole board for a huge bonus","glow":"#6a2a9a"},
+ {"slug":"chase","img":"shots/run/f00719.jpg","title":"Chase <em>your best</em>","sub":"Your best score is always in sight"},
+ {"slug":"daily","img":"shots/daily.jpg","title":"Play the <em>Daily</em>","sub":"A fresh board every day","glow":"#2a3f7a"},
+ {"slug":"family","img":"shots/run/f00044.jpg","title":"Made for <em>families</em>","sub":"Calm, colorful, and plays offline"}
+]
