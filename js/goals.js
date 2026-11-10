@@ -15,7 +15,8 @@ const GOAL_FAMILIES=[
   {id:'sweeps', rungs:[1,3,10,25],                text:n=>n===1?'Clear the whole board':'Clear the whole board '+n+' times', val:()=>stats.sweeps},
   {id:'stars',  rungs:[10,30,60,90],              text:n=>'Earn '+n+' Adventure stars',   val:()=>advStars()},
   {id:'days',   rungs:[3,7,14,30,60],             text:n=>'Play on '+n+' different days', val:()=>goals.days},
-  {id:'bonus',  rungs:[1,5,15],                   text:n=>n===1?'Earn a x2 bonus':'Earn '+n+' x2 bonuses', val:()=>stats.bonuses}
+  {id:'bonus',  rungs:[1,5,15],                   text:n=>n===1?'Earn a x2 bonus':'Earn '+n+' x2 bonuses', val:()=>stats.bonuses},
+  {id:'chal',   rungs:[1,5,15],                   text:n=>n===1?'Win a challenge medal':'Win medals on '+n+' challenges', val:()=>chalRec.won}   // (E1)
 ];
 const rungId=(f,n)=>f.id+':'+n;
 const addDays=(key,n)=>{ const d=new Date(+key.slice(0,4),+key.slice(5,7)-1,+key.slice(8,10)+n); return dailyKey(d); };

@@ -8,8 +8,10 @@ async function gameOver(){
   const prevBest=best;
   stats.totalScore+=score;
   el('overEye').textContent='Endless'; el('overTitle').textContent='Out of moves'; el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Home';
+  el('overMedals').hidden=true; el('chalNewBtn').hidden=true;
   if(mode==='adventure'&&lvl) levelFailed();
   else if(mode==='daily') dailyOver();
+  else if(mode==='challenge'&&chal) chalOver();   // (E1) the round's medal card
   else {
     best=Math.max(best,score); syncHud(); saveStats(); gcSync();
     const newSkins=checkUnlocks();
@@ -28,7 +30,7 @@ async function gameOver(){
 }
 // The one rescue of a run (plan 7.1): offered on the game-over card while she has it and the run is worth saving.
 // Every check for it goes through here, so an ad can gate it later in one place. A level always offers its rescue.
-const rescueAllowed=(bestRef)=>rescuesUsed<CFG.MAX_RESCUES && (mode==='adventure' || ((score>=CFG.RESCUE_FLOOR || score>=bestRef*CFG.RESCUE_BEST_FRAC) && score>0));
+const rescueAllowed=(bestRef)=>rescuesUsed<CFG.MAX_RESCUES && mode!=='challenge' && (mode==='adventure' || ((score>=CFG.RESCUE_FLOOR || score>=bestRef*CFG.RESCUE_BEST_FRAC) && score>0));
 async function rescue(){
   if(!rescueAllowed(best)) return;
   rescuesUsed++; stuck=false;
@@ -53,7 +55,7 @@ function clearRunFx(){
 function start(){
   layout();
   grid=empty(); score=0; combo=0; rescuesUsed=0; pace={ph:'calm',n:0,hold:0,len:0}; roomNow=1; resetPressure(false); tension=0; sweepCool=0; trayNo=0; carry=[]; bonusMeter=0; specialEnd=-99; resetWave();
-  clearRunFx(); stats.games++; musicNewRun();
+  clearRunFx(); stats.games++; musicNewRun(); chal=null; chDone=false;
   jJumps=0; resetWorld();                           // (7.5b) the journey starts at dawn
   chaseBest=mode==='endless'?best:0;                // (7.5e) the best this run chases
   shownScore=0; el('scoreVal').textContent='0';

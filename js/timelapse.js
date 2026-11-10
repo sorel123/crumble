@@ -70,7 +70,7 @@ function tlStep(now){
   if(el('overCard').hidden||!tlPlay.f) return;
   const last=tlPlay.f.length-1;
   if(!tlPlay.done){
-    const u=Math.min(1,(now-tlPlay.t0)/tlPlay.dur), e=1-Math.pow(1-u,2.2);   // eases out: the end of the run lingers
+    const u=clamp((now-tlPlay.t0)/tlPlay.dur,0,1), e=1-Math.pow(1-u,2.2);   // eases out: the end of the run lingers (a frame stamped before t0 is 0, not a negative picture)
     tlDraw(e*last);
     if(u>=1){ tlPlay.done=true; tlPlay.t0=now; }
   } else {
