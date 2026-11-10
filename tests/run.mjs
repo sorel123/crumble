@@ -2355,20 +2355,20 @@ test('music (7.4): on by default at a low volume, Shuffle by default, a picker w
 test('sound buttons: a note for Music and a speaker for Sound effects, each its own, mirrored in Settings, remembered', async ({ page }) => {
   await play(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
-  const st = () => page.evaluate(() => ({ sfxOff: sfxOff(), music: !!musicE, set: CFG.MUSIC, noteOff: el('musicBtn').classList.contains('off'), spk: el('mute').textContent }));
-  assert.deepEqual(await st(), { sfxOff: false, music: true, set: true, noteOff: false, spk: '🔊' });
+  const st = () => page.evaluate(() => ({ sfxOff: sfxOff(), music: !!musicE, set: CFG.MUSIC, noteOff: el('musicBtn').classList.contains('off'), spk: el('mute').classList.contains('off') ? 'off' : 'on' }));
+  assert.deepEqual(await st(), { sfxOff: false, music: true, set: true, noteOff: false, spk: 'on' });
   await page.click('#musicBtn');
-  assert.deepEqual(await st(), { sfxOff: false, music: false, set: false, noteOff: true, spk: '🔊' }, 'the note stops only the music');
+  assert.deepEqual(await st(), { sfxOff: false, music: false, set: false, noteOff: true, spk: 'on' }, 'the note stops only the music');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.skins')).music), false, 'and it is remembered');
   await page.click('#mute');
-  assert.deepEqual(await st(), { sfxOff: true, music: false, set: false, noteOff: true, spk: '🔇' }, 'the speaker stops the effects');
+  assert.deepEqual(await st(), { sfxOff: true, music: false, set: false, noteOff: true, spk: 'off' }, 'the speaker stops the effects');
   await page.click('#musicBtn');
-  assert.deepEqual(await st(), { sfxOff: true, music: true, set: true, noteOff: false, spk: '🔇' }, 'music back, effects still off');
+  assert.deepEqual(await st(), { sfxOff: true, music: true, set: true, noteOff: false, spk: 'off' }, 'music back, effects still off');
   await openSet(page);
   assert.equal(await page.isChecked('#sndOn'), false, 'Settings mirrors the speaker');
   assert.equal(await page.inputValue('#musicPick'), 'shuffle', 'and the note');
   await page.check('#sndOn'); await page.selectOption('#musicPick', 'off'); await closeSet(page);
-  assert.deepEqual(await st(), { sfxOff: false, music: false, set: false, noteOff: true, spk: '🔊' }, 'and the buttons mirror Settings');
+  assert.deepEqual(await st(), { sfxOff: false, music: false, set: false, noteOff: true, spk: 'on' }, 'and the buttons mirror Settings');
   // the hud still fits with the extra button
   assert.ok(await page.evaluate(() => Math.max(...[...document.querySelectorAll('.hud .right > *')].map(e => e.getBoundingClientRect().right)) <= innerWidth), 'the buttons stay on screen');
 });

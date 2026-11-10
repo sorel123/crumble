@@ -109,9 +109,11 @@
   @keyframes mFlick{0%{opacity:1;transform:none}100%{opacity:0;transform:translate(6px,-5px)}}
   @keyframes mRoll{0%{transform:none}30%{transform:translate(0,-1.8px)}55%{transform:translate(1.3px,-1.5px)}75%{transform:translate(-1.3px,-1.5px)}100%{transform:none}}
   .right{text-align:right;display:flex;gap:8px;align-items:flex-start}
-  #musicBtn{position:relative}
-  #mute.off,#musicBtn.off{opacity:.55}
-  #musicBtn.off::after{content:'';position:absolute;left:9px;right:9px;top:50%;height:2.5px;border-radius:2px;background:var(--fg);transform:rotate(-45deg)}
+  #musicBtn,#mute{position:relative}
+  :is(#mute,#musicBtn,#pauseBtn){display:grid;place-items:center;padding:0}
+  :is(#mute,#musicBtn,#pauseBtn) svg{filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.45))}   /* bright line icons, readable on every sky */
+  #mute.off,#musicBtn.off{opacity:.6}
+  :is(#musicBtn,#mute).off::after{content:'';position:absolute;left:9px;right:9px;top:50%;height:2.5px;border-radius:2px;background:var(--fg);transform:rotate(-45deg)}
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--best)}
   #mute,#musicBtn,#pauseBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
         width:40px;height:40px;border-radius:12px;font-size:17px;cursor:pointer}
@@ -310,7 +312,6 @@
 
   /* modes (plan 4.1) */
   /* (8.4) pause: the one way out of a game. Modes are picked on the front menu, never mid-game */
-  #pauseBtn{font-size:15px;font-weight:800;letter-spacing:-1px}
   #pauseCard>button{min-width:220px}
   #pauseNew.confirm{color:#FF9B8A;border-color:#FF9B8A}
   .streak{display:flex;align-items:baseline;gap:8px}
@@ -368,9 +369,9 @@
     </div>
     <div class="right">
       <div><div class="lbl" id="bestLbl">Best</div><div class="best" id="bestVal">0</div></div>
-      <button id="pauseBtn" type="button" aria-label="Pause">❚❚</button>
-      <button id="musicBtn" aria-label="Music">🎵</button>
-      <button id="mute" aria-label="Sound effects">🔊</button>
+      <button id="pauseBtn" type="button" aria-label="Pause"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/></svg></button>
+      <button id="musicBtn" aria-label="Music"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5.5l10-2V16"/><circle cx="6.5" cy="18" r="2.6" fill="currentColor"/><circle cx="16.5" cy="16" r="2.6" fill="currentColor"/></svg></button>
+      <button id="mute" aria-label="Sound effects"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.7 7.7 0 0 1 0 11"/></svg></button>
     </div>
   </div>
   <div id="actions">
