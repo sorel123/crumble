@@ -55,11 +55,21 @@ function token() {
   const sig = crypto.sign('sha256', Buffer.from(head + '.' + body), { key, dsaEncoding: 'ieee-p1363' }).toString('base64url');
   return head + '.' + body + '.' + sig;
 }
-async function api(method, url, data) {
-  const res = await fetch(url.startsWith('http') ? url : API + url, {
-    method, headers: { Authorization: 'Bearer ' + token(), 'Content-Type': 'application/json' },
-    body: data ? JSON.stringify({ data }) : undefined
-  });
+// Apple's API sometimes stalls or answers 500. Reads are retried; a write that fails is not (it may have
+// landed), so the run stops and a re-run picks up where it left off: existing ids are skipped and any
+// missing en-US localization is filled in.
+async function api(method, url, data, tries = method === 'GET' ? 4 : 1) {
+  let res;
+  try {
+    res = await fetch(url.startsWith('http') ? url : API + url, {
+      method, headers: { Authorization: 'Bearer ' + token(), 'Content-Type': 'application/json' },
+      body: data ? JSON.stringify({ data }) : undefined, signal: AbortSignal.timeout(60000)
+    });
+  } catch (e) {
+    if (tries > 1) { await new Promise(r => setTimeout(r, 3000)); return api(method, url, data, tries - 1); }
+    throw new Error(`${method} ${url} -> no answer (${e.cause?.code || e.name}). Run the script again; it skips what is already made.`);
+  }
+  if (res.status >= 500 && tries > 1) { await new Promise(r => setTimeout(r, 3000)); return api(method, url, data, tries - 1); }
   const text = await res.text(), json = text ? JSON.parse(text) : {};
   if (!res.ok) throw new Error(`${method} ${url} -> ${res.status}: ${(json.errors || []).map(e => e.detail || e.title).join('; ') || text}`);
   return json;
@@ -81,25 +91,39 @@ if (!detail) {
   console.log('Game Center switched on for the app');
 }
 
-const haveLb = new Set((await all(`/gameCenterDetails/${detail.id}/gameCenterLeaderboards?limit=200`)).map(d => d.attributes.vendorIdentifier));
+const hasLocale = async url => (await all(url)).some(d => d.attributes.locale === 'en-US');
+const haveLb = new Map((await all(`/gameCenterDetails/${detail.id}/gameCenterLeaderboards?limit=200`)).map(d => [d.attributes.vendorIdentifier, d.id]));
+const lbLocale = (id, name) => api('POST', '/gameCenterLeaderboardLocalizations', { type: 'gameCenterLeaderboardLocalizations', attributes: { locale: 'en-US', name }, relationships: { gameCenterLeaderboard: rel('gameCenterLeaderboards', id) } });
 for (const l of LEADERBOARDS) {
-  if (haveLb.has(l.id)) { console.log('leaderboard ' + l.id + ' already there'); continue; }
+  if (haveLb.has(l.id)) {
+    const id = haveLb.get(l.id);
+    if (await hasLocale(`/gameCenterLeaderboards/${id}/localizations`)) console.log('leaderboard ' + l.id + ' already there');
+    else { await lbLocale(id, l.name); console.log('leaderboard ' + l.id + ' already there, name added'); }
+    continue;
+  }
   const attributes = { referenceName: l.name, vendorIdentifier: l.id, defaultFormatter: 'INTEGER', submissionType: 'BEST_SCORE', scoreSortType: 'DESC' };
-  if (l.recurring) Object.assign(attributes, { recurrenceStartDate: new Date(new Date().toDateString()).toISOString(), recurrenceDuration: 'P1D', recurrenceRule: 'FREQ=DAILY' });
+  // starts at the next local midnight (Apple refuses a start in the past), so it resets at midnight on this Mac's clock
+  if (l.recurring) Object.assign(attributes, { recurrenceStartDate: new Date(new Date(new Date().toDateString()).getTime() + 864e5).toISOString(), recurrenceDuration: 'PT24H', recurrenceRule: 'FREQ=DAILY' });
   const lb = (await api('POST', '/gameCenterLeaderboards', { type: 'gameCenterLeaderboards', attributes, relationships: { gameCenterDetail: rel('gameCenterDetails', detail.id) } })).data;
-  await api('POST', '/gameCenterLeaderboardLocalizations', { type: 'gameCenterLeaderboardLocalizations', attributes: { locale: 'en-US', name: l.name }, relationships: { gameCenterLeaderboard: rel('gameCenterLeaderboards', lb.id) } });
+  await lbLocale(lb.id, l.name);
   console.log('leaderboard ' + l.id + ' made');
 }
 
-const haveAch = new Set((await all(`/gameCenterDetails/${detail.id}/gameCenterAchievements?limit=200`)).map(d => d.attributes.vendorIdentifier));
+const haveAch = new Map((await all(`/gameCenterDetails/${detail.id}/gameCenterAchievements?limit=200`)).map(d => [d.attributes.vendorIdentifier, d.id]));
+const achLocale = (id, a) => api('POST', '/gameCenterAchievementLocalizations', { type: 'gameCenterAchievementLocalizations',
+  attributes: { locale: 'en-US', name: a.name, beforeEarnedDescription: a.desc, afterEarnedDescription: a.desc },
+  relationships: { gameCenterAchievement: rel('gameCenterAchievements', id) } });
 for (const a of ACHIEVEMENTS) {
-  if (haveAch.has(a.id)) { console.log('achievement ' + a.id + ' already there'); continue; }
+  if (haveAch.has(a.id)) {
+    const id = haveAch.get(a.id);
+    if (await hasLocale(`/gameCenterAchievements/${id}/localizations`)) console.log('achievement ' + a.id + ' already there');
+    else { await achLocale(id, a); console.log('achievement ' + a.id + ' already there, name added'); }
+    continue;
+  }
   const ach = (await api('POST', '/gameCenterAchievements', { type: 'gameCenterAchievements',
     attributes: { referenceName: a.name, vendorIdentifier: a.id, points: a.points, showBeforeEarned: true, repeatable: false },
     relationships: { gameCenterDetail: rel('gameCenterDetails', detail.id) } })).data;
-  await api('POST', '/gameCenterAchievementLocalizations', { type: 'gameCenterAchievementLocalizations',
-    attributes: { locale: 'en-US', name: a.name, beforeEarnedDescription: a.desc, afterEarnedDescription: a.desc },
-    relationships: { gameCenterAchievement: rel('gameCenterAchievements', ach.id) } });
+  await achLocale(ach.id, a);
   console.log('achievement ' + a.id + ' made');
 }
 console.log('Done.');
