@@ -9,4 +9,5 @@ if(mode==='adventure'){ const o=peekRun('adventure'); if(o&&o.lv) lvl=LEVELS[o.l
 let resumed=loadRun();
 if(!resumed){ if(mode!=='endless'){ mode='endless'; lvl=null; } resumed=loadRun(); if(!resumed){ genTray(); updateDbg(); } }   // a saved run reopens exactly as it was (no opening is dealt)
 if(resumed) openMenu();                          // ...behind the front menu: a launch always opens on the menu, with Continue and Back to the game
+{ const link=chReadLink(); if(link) openFriend(link); }   // (E2) a friend's Challenge link: its card, with "Beat N"
 syncHud(); requestAnimationFrame(frame);

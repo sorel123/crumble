@@ -20,7 +20,7 @@ function snapshot(){
     wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0,jn:jack.n,ja:jack.at},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'||mode==='challenge'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
-    ch:mode==='challenge'&&chal?{seed:chal.seed,deal:chal.deal,won:chal.won}:null,   // (E1) the round's seed and its whole frozen deal
+    ch:mode==='challenge'&&chal?{seed:chal.seed,deal:chal.deal,won:chal.won,beat:chal.beat||0,bt:chal.beaten?1:0}:null,   // (E1) the round's seed and its whole frozen deal
     bonus:bonus?{left:bonus.left,extra:bonus.extra}:null,
     jy:jJumps,                                        // (7.5b) sweeps this run: the journey sky's extra stages
     cb:chaseBest,                                     // (7.5e) the best this run chases (the live `best` is rewritten mid-run by saveStats)
@@ -78,7 +78,7 @@ function restore(o){
   syncBonusChip();
   if(mode==='adventure'){ lvl=LEVELS[o.lv.id-1]; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:o.lv.combo,swept:!!o.lv.swept}; }
   if(mode==='daily'){ dk=o.dk; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:0,swept:false}; rndSrc=mulberry(hashStr(dailySeed(trayNo+'-resume'))); }
-  chal=mode==='challenge'?{seed:o.ch.seed,deal:o.ch.deal,won:o.ch.won}:null; chDone=false;
+  chal=mode==='challenge'?{seed:o.ch.seed,deal:o.ch.deal,won:o.ch.won,beat:isInt(o.ch.beat,0,1e9)?o.ch.beat:0,beaten:!!o.ch.bt}:null; chDone=false;
   if(chal){ chSeed=chal.seed; lv={lines:o.lv.lines,pieces:o.lv.pieces,combo:0,swept:false}; }
   shownScore=score; el('scoreVal').textContent=score; syncHud();
   el('startCard').hidden=true; el('overCard').hidden=true; state='play';

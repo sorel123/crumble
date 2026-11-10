@@ -80,6 +80,10 @@ function shareSetup(){
 
 // the words that go with the picture: plain text and a plain URL, no markdown
 function shareText(){
+  if(mode==='challenge'&&chal){                        // (E2) a link that opens the same challenge, with her score to beat
+    const m=chMedalOf(score,chal.deal.med);
+    return 'I scored '+score+(m?' '+MEDALS[m-1].icon:'')+' on a Crumble Challenge. Same 12 trays for you. Can you beat it? '+chLinkFor(chal.seed,score,chal.deal);
+  }
   return mode==='daily'?"Today's Daily: "+score+'. Same board for everyone: '+SHARE_URL
                        :'My Crumble score: '+score+'. Can you beat it? '+SHARE_URL;
 }

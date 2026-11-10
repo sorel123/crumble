@@ -201,6 +201,7 @@ Top to bottom:
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
 | (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
 | (8.3) | Front menu showpiece: the start card and the mode menu share one look (gem logo in her skin, the crumb, the journey sky travelling behind, a 2x2 of mode tiles). See the 8.3 section |
+| (1.1 E2) | Challenge links: Share on a Challenge sends crumble.win/?c=seed&s=score&d=deal; opening it offers "Beat N" on the Challenge card and plays that exact deal. See the Challenge section |
 | (1.1 E1) | Challenge mode: 12 trays from a frozen, seeded deal (the real dealer dealt to the casual bot), bronze/silver/gold targets from bot runs, Today's and New challenge, its own run, results and goal rung. Settings left the tile grid for a slim button. See the Challenge section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
@@ -1333,7 +1334,22 @@ A short round with a finish: 12 trays (36 pieces), no timer, the fourth mode til
   medal) and `gold`, each counted once per seed. Goals: one family, "Win a challenge medal" / 5 / 15.
 - **Rules.** No rescue (`rescueAllowed`), no chase bar, no golden hand, no transformation. Bonus trays and the star
   work as anywhere. The pause card's New game reads Restart (same seed). Share makes the picture with the round's name
-  and medal (E2 adds the link).
+  and medal; E2 adds the link (below).
 - Also in this PR: `#chase[hidden]` now really hides (the empty chase track showed under the score in Daily, Adventure
   and a first run), and the timelapse clamps a frame stamped before its start (it could read picture -1 and throw).
 - Tests: the nine "Challenge:" scenarios. `chKeep`/`chPut` save and put back every dealer global around `chMake`, so a prefetch never disturbs a paused run.
+
+### Friend links (1.1 task E2)
+
+- **Share text** on a Challenge's end card: "I scored N 🥈 on a Crumble Challenge. Same 12 trays for you. Can you beat
+  it? https://crumble.win/?c=<seed>&s=<score>&d=<deal>" (`shareText`, `chLinkFor`).
+- **The deal rides in the link** (`chPack`/`chUnpack`, about 110 characters, version letter `A`): board, 36 pieces,
+  the closer/sweep marks and the three medal targets. A seed alone is dealt by the dealer's code, so a friend on another
+  version (or after task A's dealer change) would get other pieces; with the deal in the link both play the same round
+  with the same medals. A link whose `d` does not read falls back to `chDeal(seed)`.
+- **Opening a link** (`chReadLink` in main.js boot): the query is removed from the address bar, the Challenge card
+  opens with a "Beat N" button on top (`#chalFriend`, `openFriend`). Playing it starts the round from the top with
+  `chal.beat`; the HUD shows "🎯 Beat N" while that is the next target below the next medal, passing it raises
+  "YOU BEAT IT!", and the end card leads with "You beat their N!" or "N more to beat their N". Retry and Restart keep
+  the target; the run saves it (`ch.beat`, `ch.bt`). In the app the link opens the web game.
+- Tests: the three "Challenge link (E2)" scenarios.
