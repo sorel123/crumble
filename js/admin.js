@@ -35,7 +35,7 @@ const DEV_ACTIONS=[['Fill bonus meter',()=>{ if(!bonus){ bonusMeter=CFG.BONUS_ME
   ['Reset unlocks',()=>{ discoveredWorlds.clear(); newLook=false; saveSkinSave(); renderWorlds(); renderLooks(); syncLookDot(); }]];
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
-  ['CLEAR_STYLE','Clear style',opt(['squash','Squash to a bar'],['burst','Blocks fly out']),()=>{}],
+  ['CLEAR_STYLE','Clear style',opt(['crumble','Crumble to rubble'],['squash','Squash to a bar'],['burst','Blocks fly out']),()=>{}],
   ['SND_PICKUP','Pickup sound',opt(['slide','Slide'],['soft','Soft'],['swish','Swish'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.pickup(),60); }],
   ['SND_PLACE','Place sound',opt(['drop','Drop'],['wood','Wood'],['soft','Soft'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.place(1),60); }]
 ];
@@ -121,11 +121,12 @@ const cfgSet=(k,v)=>{ const [a,b]=k.split('.'); if(b) CFG[a][b]=v; else CFG[a]=v
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)]));   // the values written in the file
 const DEV_STORE='crumble.dev.6';   // bumped when the drag went to glide + ghost (after plan 2.1), so older saved tuning doesn't override the new defaults
 function devSave(){
-  try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)])))); }catch(e){}
+  try{ localStorage.setItem(DEV_STORE,JSON.stringify({...Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)])),clearV:1})); }catch(e){}
 }
 function devLoad(){
   try{
     const o=JSON.parse(localStorage.getItem(DEV_STORE)||'{}');
+    if(!o.clearV) delete o.CLEAR_STYLE;                  // (7.5) tuning saved before crumble was the default keeps its other values but not the old 'squash'
     for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);
     for(const [k,,options] of DEV_CHOICES) if(!options.some(x=>x.value===CFG[k])) CFG[k]=DEV_DEFAULTS[k];
   }catch(e){}

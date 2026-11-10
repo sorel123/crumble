@@ -245,7 +245,7 @@ function place(idx,r,c){
       const delay=s.star?starMs+d*(reduce?0:CFG.STAR_STAGGER):(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;   // a star's cross lights up from the star outward after its charge
       maxDelay=Math.max(maxDelay,delay);
       cellsGone.push([rr,cc,delay]);
-      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,big:!single,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
+      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,big:!single,tier:single?1:loud?3:2,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
       if(CFG.FX_SCORE_ORBS && loud && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
         dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
@@ -303,6 +303,7 @@ function place(idx,r,c){
       swept=true; trayHadSweep=true;
       ambientBurst=1.8;
       if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
+      for(const sh of shatters) if(sh.t<=0) sh.tier=4;   // (7.5) the sweep's gems all crumble at the biggest size
       pushBanner('CLEAN SWEEP','+'+bonus);         // the achievement first, then the world it earns
       triggerTransform('rainbow');
       for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
