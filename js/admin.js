@@ -22,6 +22,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['FX_LAND_BUMP','Landing thump'],
   ['FX_PICKUP_GROW','Pickup grow-in'],
   ['FX_LINE_PREVIEW','Coloured line preview'],
+  ['FX_ANTICIPATION','Anticipation: lines shiver and glint (7.5c)'],
   ['FX_NARROW_ESCAPE','Narrow-escape flourish'],
   ['FX_CELL_TAGS','Point tags on cleared cells'],
   ['FX_MAGNET','Magnet: piece hops into its slot (off = glide + ghost)'],
@@ -45,12 +46,14 @@ const DEV_PREVIEWS=[['Clear',()=>Sfx.clear(1,0,1)],['Combo ×4',()=>Sfx.combo(4,
   ['Big praise',()=>Sfx.praise(4)],['Sweep',()=>Sfx.sweep(0)],['Golden',()=>Sfx.goldenWin()],
   ['Bonus start',()=>Sfx.bonusStart()],['Bonus ready',()=>Sfx.bonusReady()],['Bonus over',()=>Sfx.bonusEnd()],['Star dealt',()=>Sfx.starIn()],['Star blast',()=>Sfx.star(9)]];
 const DEV_SOUND_TOGGLES=[       // shown in the Sound section
-  ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
+  ['PHONE_SPEAKER','Phone speaker mode (cut bass)'],
+  ['ANTICIPATION_HUM','Anticipation hum (7.5c)']
 ];
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['MUSIC_VOL','Music volume',0,1,0.05],
   ['SND_PICKUP_VOL','Pickup volume',0,1.5,0.05],
   ['SND_PLACE_VOL','Place volume',0,1.5,0.05],
+  ['HUM_VOL','Anticipation hum volume',0,2,0.05],
   ['TRANSFORM_PLACEMENTS','Transform length (placements)',1,15,1],
   ['TRANSFORM_MULT','Transform score multiplier',1,4,0.1],
   ['TRANSFORM_COOLDOWN','Transform cooldown (trays)',0,15,1],
@@ -114,7 +117,9 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['GUIDE','Guided hands (obvious drops)',0,3,0.1],
   ['MAGNET_REACH','Magnet reach (cells)',0.3,1.5,0.05],
   ['MAGNET_HOLD','Magnet hold (cells)',0,0.5,0.05],
-  ['GHOST_ALPHA','Landing ghost strength',0.2,1,0.05]
+  ['GHOST_ALPHA','Landing ghost strength',0.2,1,0.05],
+  ['ANTIC_REACH','Anticipation reach (cells)',1,5,0.25],
+  ['ANTIC_SHIVER','Anticipation shiver (px)',0,3,0.1]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const cfgGet=k=>{ const [a,b]=k.split('.'); return b?CFG[a][b]:CFG[a]; };
