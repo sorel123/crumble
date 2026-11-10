@@ -84,11 +84,11 @@ function edgeGlow(rgb,strength){
   if(dR>2){ ctx.fillStyle=mk(W,0,W-dR,0); ctx.fillRect(W-dR,0,dR,H); }
 }
 // the sky gradient and the board glow are rebuilt only when their colours change — not per frame
-let _sky=null;
+const _sky=new Map();                                  // a few colour pairs (a journey wipe draws two skies a frame)
 function skyFill(top,bot){
-  if(_sky&&_sky.top===top&&_sky.bot===bot&&_sky.H===H) return _sky.g;
-  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,top); g.addColorStop(1,bot);
-  _sky={top,bot,H,g}; return g;
+  const k=top+bot+H; let g=_sky.get(k); if(g) return g;
+  g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,top); g.addColorStop(1,bot);
+  if(_sky.size>12) _sky.clear(); _sky.set(k,g); return g;
 }
 const GLOWS=new Map();
 function glowSprite(hue){
@@ -401,6 +401,118 @@ function perfHud(now){
   perf.hud.style.color=mx>CFG.FRAME_BUDGET_MS?'#FFB3B3':'#fff';
 }
 
+
+/* (7.5b) The journey sky, Endless and Daily (CFG.JOURNEY_SKY; Settings -> Look -> Advanced). The sky travels as the score
+   climbs, dawn -> day -> golden hour -> night -> aurora -> space (CFG.JOURNEY_AT), and every clean sweep jumps one stage on
+   top (jJumps, saved with the run). A stage is a JOURNEY world (worlds.js) plus a cached decor sprite. It is drawn in the sky
+   layer only, so pressure (6.6) and the mode looks (6.7) sit on top as before and no gem, board or tray pixel changes.
+   A stage change is a top-down wipe of the whole sky: calm after a score threshold (it waits for the next deal plus
+   JOURNEY_WAIT frames, ~1.4 s, a faint edge), quicker with a bright leading edge after a sweep (once its confetti settles).
+   Bonus trays and transformations take the sky over as before; a stage passed meanwhile wipes in when they hand back.
+   Reduced motion: no wipe, the stage simply changes. */
+let jStage=0, jJumps=0, jShown=0, jw=null, jPend=null, jSweep=false;   // target stage, sweeps this run, stage on screen, the wipe, a pending change
+const journeyOn=()=>!!CFG.JOURNEY_SKY&&paced();
+function journeyTarget(){
+  const at=CFG.JOURNEY_AT; let k=0;
+  for(let i=1;i<at.length;i++) if(score>=at[i]) k=i;
+  return Math.min(JOURNEY.length-1,k+jJumps);
+}
+const homeSky=()=>journeyOn()?JOURNEY[jStage].id:CFG.HOME_WORLD;   // where the sky goes back to when nothing else owns it
+function journeySweep(){ jJumps++; if(journeyOn()){ jSweep=true; jPend={t:CFG.JOURNEY_WAIT+30}; } }   // place(): a clean sweep
+function journeyDealt(){ if(journeyOn()&&!jPend&&journeyTarget()>jStage) jPend={t:CFG.JOURNEY_WAIT}; } // stepDeal(): a tray was dealt
+function stepJourney(dt){
+  if(!jPend) return;
+  if((jPend.t-=dt)>0) return;
+  jPend=null; journeyAdvance();
+}
+function journeyAdvance(){
+  if(!journeyOn()) return;
+  jStage=Math.max(jStage,journeyTarget());
+  if(jStage===jShown||!isJourney(curWorld)) return;    // a bonus or transformation owns the sky: it wipes in at the hand-back
+  const to=JOURNEY[jStage].id;
+  if(reduce){ syncHomeSky(); return; }
+  bgFrom=curWorld; ambientOld=ambient; curWorld=to; ambient=spawnAmbient(worldDef(to).effect);
+  beginWipe();
+}
+function beginWipe(){                                  // bgFrom/ambientOld = the old sky, curWorld/ambient = the new one
+  jw={from:bgFrom,t:0,dur:jSweep?50:84,sweep:jSweep}; jSweep=false; jShown=jStage; bgT=1;
+}
+function journeyHandBack(){                            // right after endBonus/endTransform sent the sky home
+  if(!journeyOn()||!isJourney(curWorld)) return;
+  if(jStage!==jShown&&!reduce&&bgFrom!==curWorld) beginWipe(); else { jShown=jStage; jSweep=false; }
+}
+function syncHomeSky(){                                // snap to her home sky (a Settings change, reduced motion): no animation
+  jStage=Math.max(jStage,journeyTarget());
+  if(transform||bonus) return;
+  const id=homeSky(); jw=null; jShown=jStage; jSweep=false;
+  curWorld=id; ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1;
+}
+// the decor: one cached sprite per stage (and pale or not), at half the screen's pixels, drawn with one drawImage
+const _decor={};
+function decorSprite(id){
+  const pale=paleTheme(), k=id+(pale?'p':''); let d=_decor[k];
+  if(d&&d.W===W&&d.H===H) return d.cv;
+  const sc=Math.max(0.5,dpr*0.5), cv=document.createElement('canvas');
+  cv.width=Math.max(1,Math.round(W*sc)); cv.height=Math.max(1,Math.round(H*sc));
+  const x=cv.getContext('2d'); x.scale(sc,sc);
+  let seed=7; const r=()=>((seed=(seed*16807)%2147483647)/2147483647);   // the same stars every time
+  const glow=(cx,cy,rad,col,a)=>{ const g=x.createRadialGradient(cx,cy,0,cx,cy,rad); g.addColorStop(0,`rgba(${col},${a})`); g.addColorStop(1,`rgba(${col},0)`); x.fillStyle=g; x.fillRect(cx-rad,cy-rad,rad*2,rad*2); };
+  const disc=(cx,cy,rad,fill)=>{ x.fillStyle=fill; x.beginPath(); x.arc(cx,cy,rad,0,6.283); x.fill(); };
+  const stars=(n,y1,amax)=>{ for(let i=0;i<n;i++){ x.globalAlpha=(0.25+r()*0.75)*amax; disc(r()*W,r()*H*y1,0.5+r()*1.1,'#fff'); } x.globalAlpha=1; };
+  const haze=(col,a,hgt)=>{ const g=x.createLinearGradient(0,H-hgt,0,H); g.addColorStop(0,`rgba(${col},0)`); g.addColorStop(1,`rgba(${col},${a})`); x.fillStyle=g; x.fillRect(0,H-hgt,W,hgt); };
+  const S=Math.min(W,H*0.6);
+  switch(worldDef(id).decor){
+    case 'dawn':                                       // the last stars fading, a sun just over the horizon
+      stars(26,0.35,0.6); haze('255,170,120',0.55,H*0.35);
+      glow(W*0.78,H*0.97,S*0.55,'255,190,140',0.55); disc(W*0.78,H*0.97,S*0.1,'rgba(255,226,170,.95)'); break;
+    case 'day':                                        // a small bright sun high up, a light haze low down
+      glow(W*0.3,H*0.145,S*0.32,'255,250,220',0.6); disc(W*0.3,H*0.145,S*0.055,'rgba(255,252,235,.95)'); haze('235,245,255',0.35,H*0.3); break;
+    case 'golden':                                     // a big low sun and a warm horizon
+      haze('255,170,60',0.5,H*0.4); glow(W*0.2,H*0.98,S*0.7,'255,190,90',0.6); disc(W*0.2,H*0.98,S*0.15,'rgba(255,214,130,.9)'); break;
+    case 'night':                                      // a crescent moon
+      stars(30,0.9,0.5); glow(W*0.62,H*0.145,S*0.3,'190,210,255',0.25);
+      { const mr=S*0.06, m=document.createElement('canvas'); m.width=m.height=Math.ceil(mr*2*sc)+2; const mx=m.getContext('2d'); mx.scale(sc,sc);   // the crescent on its own little canvas
+        mx.fillStyle='rgba(236,240,255,.95)'; mx.beginPath(); mx.arc(mr,mr,mr,0,6.283); mx.fill();
+        mx.globalCompositeOperation='destination-out'; mx.beginPath(); mx.arc(mr*1.45,mr*0.75,mr*0.92,0,6.283); mx.fill();
+        x.drawImage(m,W*0.62-mr,H*0.145-mr,m.width/sc,m.height/sc); } break;
+    case 'aurora':                                     // stars and a green glow over a dark horizon
+      stars(45,0.8,0.6); glow(W*0.5,H*0.05,S*0.9,'60,255,170',0.16); glow(W*0.15,H*0.2,S*0.5,'120,140,255',0.12); haze('0,8,12',0.6,H*0.18); break;
+    case 'space':                                      // nebula clouds, dense stars, a ringed planet
+      glow(W*0.25,H*0.3,S*0.8,'150,60,220',0.22); glow(W*0.8,H*0.62,S*0.7,'30,170,200',0.16); stars(90,1,0.8);
+      glow(W*0.66,H*0.145,S*0.18,'255,190,140',0.25); disc(W*0.66,H*0.145,S*0.06,'rgba(232,150,110,1)');
+      x.strokeStyle='rgba(255,220,180,.7)'; x.lineWidth=2; x.beginPath(); x.ellipse(W*0.66,H*0.145,S*0.115,S*0.028,-0.3,0,6.283); x.stroke(); break;
+  }
+  _decor[k]={W,H,cv}; return cv;
+}
+function drawDecor(id,a){
+  if(!isJourney(id)||a<=0.01) return;
+  ctx.globalAlpha=a*(paleTheme()?0.55:1); ctx.drawImage(decorSprite(id),0,0,W,H); ctx.globalAlpha=1;
+}
+let _jband=null;
+function wipeBand(){                                   // a soft horizontal band of light: the wipe's leading edge
+  if(_jband) return _jband;
+  const cv=document.createElement('canvas'); cv.width=4; cv.height=64; const x=cv.getContext('2d'), g=x.createLinearGradient(0,0,0,64);
+  g.addColorStop(0,'rgba(255,250,235,0)'); g.addColorStop(.5,'rgba(255,250,235,1)'); g.addColorStop(1,'rgba(255,250,235,0)'); x.fillStyle=g; x.fillRect(0,0,4,64);
+  return _jband=cv;
+}
+function paintSky(id,list,respawn,dt,aboost){          // one whole sky: gradient, decor, ambient
+  const c=bgOf(id); ctx.fillStyle=skyFill(c.top,c.bottom); ctx.fillRect(0,0,W,H);
+  drawDecor(id,1);
+  stepAmbient(list,worldDef(id).effect,dt,aboost,1,respawn);
+}
+function drawWipe(dt,aboost){                          // the new sky comes down from the top over the old one
+  jw.t+=dt;
+  const u=Math.min(1,jw.t/jw.dur), e=u<0.5?2*u*u:1-2*(1-u)*(1-u), fe=H*0.16, y=e*(H+fe)-fe;   // y: where the solid new sky ends
+  paintSky(jw.from,ambientOld,false,dt,aboost);
+  if(y>0){ ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,y); ctx.clip(); paintSky(curWorld,ambient,true,dt,aboost); ctx.restore(); }
+  else stepAmbient(ambient,worldDef(curWorld).effect,dt,aboost,0,true);
+  const c=bgOf(curWorld), mid=lerpCol(c.top,c.bottom,clamp(y/H,0,1));   // the feathered edge: the new sky's colour fading out below the line
+  const g=ctx.createLinearGradient(0,y,0,y+fe); g.addColorStop(0,mid); g.addColorStop(1,mid.replace('rgb','rgba').replace(')',',0)'));
+  ctx.fillStyle=g; ctx.fillRect(0,y,W,fe);
+  ctx.globalAlpha=(jw.sweep?0.55:0.14)*Math.sin(Math.PI*u); ctx.drawImage(wipeBand(),0,y-fe*0.2,W,fe*(jw.sweep?1.1:0.8)); ctx.globalAlpha=1;
+  if(u>=1){ jw=null; ambientOld=[]; bgFrom=curWorld; bgT=1; }
+}
+
 let last=0;
 function frame(now){
   requestAnimationFrame(frame);
@@ -423,16 +535,19 @@ function frame(now){
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
-  stepFlip(dt);
-  const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
-    : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
-       lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
-  ctx.fillStyle=skyFill(bgTop,bgBot); ctx.fillRect(0,0,W,H);     // gradient object cached per colour pair (a new one each frame is slow on iOS)
-
+  stepFlip(dt); stepJourney(dt);
   ambientBurst*=Math.pow(.88,dt);
   const aboost=1+ambientBurst*1.8+(bonus&&!reduce?0.6:0);   // a bonus keeps the sky's particles livelier
-  if(bgT<1) stepAmbient(ambientOld,worldDef(bgFrom).effect,dt,aboost,1-easeOutCubic(bgT),false);
-  stepAmbient(ambient,worldDef(curWorld).effect,dt,aboost,bgT<1?easeOutCubic(bgT):1,true);
+  if(jw) drawWipe(dt,aboost);                         // (7.5b) a journey stage coming in
+  else {
+    const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
+      : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
+         lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
+    ctx.fillStyle=skyFill(bgTop,bgBot); ctx.fillRect(0,0,W,H);     // gradient object cached per colour pair (a new one each frame is slow on iOS)
+    if(bgT<1){ drawDecor(bgFrom,1-easeOutCubic(bgT)); drawDecor(curWorld,easeOutCubic(bgT)); } else drawDecor(curWorld,1);
+    if(bgT<1) stepAmbient(ambientOld,worldDef(bgFrom).effect,dt,aboost,1-easeOutCubic(bgT),false);
+    stepAmbient(ambient,worldDef(curWorld).effect,dt,aboost,bgT<1?easeOutCubic(bgT):1,true);
+  }
 
   if(worldDef(curWorld).flash && !reduce && Math.random()<0.006*dt) lightningT=1;
   lightningT=Math.max(0,lightningT-dt/10);

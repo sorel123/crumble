@@ -151,6 +151,9 @@ const CFG = {
   SND_SET:        'strings',  // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)
   SND_PICKUP:     'soft',     // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
   SND_PLACE:      'drop',     // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
+  JOURNEY_SKY:    true,       // (7.5b) Endless/Daily: the sky travels dawn -> day -> golden hour -> night -> aurora -> space (Settings -> Look, Advanced)
+  JOURNEY_AT:     [0,500,1500,3000,6000,10000],   // score where each journey stage starts; every clean sweep also jumps one stage
+  JOURNEY_WAIT:   30,         // frames after a deal (or a sweep's confetti) before a stage change starts, so it never lands on a clear
   MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects
   MUSIC_VOL:      .5,         // 0..1; the music is quiet at .5 on purpose
   SND_PICKUP_VOL: 1,

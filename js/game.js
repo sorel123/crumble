@@ -55,7 +55,7 @@ function triggerTransform(id){
 function endTransform(){
   transform=null;
   transformCool=CFG.TRANSFORM_COOLDOWN; specialEnd=Math.max(specialEnd,trayNo);   // the next tray carries no special
-  startFlip(CFG.HOME_WORLD,CFG.STYLE);
+  startFlip(homeSky(),CFG.STYLE); journeyHandBack();
   renderPips();
 }
 /* ═══════ the specials (plan 4.5) ═══════
@@ -108,7 +108,7 @@ function startBonus(){
 }
 function endBonus(){                                // place(): the last bonus tray was just emptied
   const b=bonus; bonus=null; specialEnd=trayNo;
-  startSky(CFG.HOME_WORLD);
+  startSky(homeSky()); journeyHandBack();
   Sfx.bonusEnd();
   if(b.extra>0){
     bonusTag={txt:'+'+b.extra.toLocaleString()+' bonus'};
@@ -305,6 +305,7 @@ function place(idx,r,c){
       if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
       for(const sh of shatters) if(sh.t<=0) sh.tier=4;   // (7.5) the sweep's gems all crumble at the biggest size
       pushBanner('CLEAN SWEEP','+'+bonus);         // the achievement first, then the world it earns
+      journeySweep();                              // (7.5b) the sky jumps a stage (before a Rainbow may take it over)
       triggerTransform('rainbow');
       for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
       shake=16*CFG.SHAKE; glowT=1.6;
@@ -395,7 +396,7 @@ function stepDeal(){
   const end=performance.now()+CFG.DEAL_SLICE_MS;
   let r;
   do r=dealing.it.next(); while(!r.done && performance.now()<end);
-  if(r.done){ dealing=null; checkStuck(); syncActions(); saveRun(); }
+  if(r.done){ dealing=null; checkStuck(); syncActions(); saveRun(); journeyDealt(); }
 }
 function cancelDeal(){ if(dealing){ dealing.it.return(); dealing=null; } }   // a new run or a rescue deals its own tray
 

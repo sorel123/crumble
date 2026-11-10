@@ -52,7 +52,7 @@ function start(){
   layout();
   grid=empty(); score=0; combo=0; rescuesUsed=0; pace={ph:'calm',n:0,hold:0,len:0}; roomNow=1; resetPressure(false); tension=0; sweepCool=0; trayNo=0; carry=[]; bonusMeter=0; specialEnd=-99; resetWave();
   clearRunFx(); stats.games++; musicNewRun();
-  resetWorld();
+  jJumps=0; resetWorld();                           // (7.5b) the journey starts at dawn
   shownScore=0; el('scoreVal').textContent='0';
   stuck=false; cancelDeal(); openBoard(); syncHud(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   syncActions(); saveRun();
