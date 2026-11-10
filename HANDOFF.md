@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky and anticipation (7.5).
+Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, anticipation and combo fire (7.5).
 
 ---
 
@@ -82,6 +82,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky and
 - **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
 - **Journey sky (7.5b, Endless and Daily)** — the sky travels with the score (dawn → space) and every clean sweep jumps a stage with a whole-sky wipe. On by default; Settings → Look → Advanced has the switch (off = her chosen world). See the 7.5b section at the end.
 - **Anticipation (7.5c)** — while she holds a piece, a line it could complete shivers and glints as she brings it near the landing, and a soft hum rises. See the 7.5c section at the end.
+- **Combo fire (7.5d)** — from combo 3 the board rim burns (hotter each step), the held piece sheds embers and the tray glows; a drop that does not clear snuffs it in a puff of smoke. Settings → Look → Advanced "Combo fire". See the 7.5d section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
@@ -187,6 +188,7 @@ Top to bottom:
 | (7.3) | Payoff waves, setups and closers (Endless/Daily): a payoff tray every 4-6 trays, the exact piece for a hole she squared off, earned closers (planned sweep, tray shimmer), no three-small-piece trays. See the 7.3 section |
 | (7.5b) | Journey sky (Endless/Daily): the sky travels dawn, day, golden hour, night, aurora, space as the score climbs; a clean sweep jumps a stage; stage changes wipe down the whole sky. See the 7.5b section |
 | (7.5c) | Anticipation: a line the held piece can complete shivers and glints as the piece nears that landing, and a soft hum rises. See the 7.5c section |
+| (7.5d) | Combo fire: from combo 3 the rim burns hotter each step, the held piece sheds embers, the tray glows; a miss snuffs it in a puff. See the 7.5d section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1090,3 +1092,16 @@ A line one piece from clearing comes alive as she brings the right piece to it. 
 - **Cost.** One pass over the board on pickup; per frame one distance per completing landing and a couple of `sin` per gem in a live line, no allocations. Measured in the test with five live rows: our JS per frame p90 0.4 ms.
 - **Check on the phone:** pick up a piece that finishes a nearly-full line and move it slowly toward the gap; the line should start to tremble about two cells out and the hum should rise. If the hum is too loud or too faint, `HUM_VOL`; if the shiver starts too early, lower `ANTIC_REACH`.
 - Tests: the two "7.5c anticipation" scenarios.
+
+## Combo fire (plan 7.5, fourth zazz idea)
+
+A streak catches fire. Code is the "Combo fire (plan 7.5d)" block in `js/draw.js` (`fire`, `fireCombo`, `fireSnuff`, `stepFire`, `drawFireRim`, `drawFireParticles`), the tray glow in `drawTrayBand`, the two calls in `place()` (`js/game.js`) and `Sfx.snuff` in `js/audio.js`. All modes.
+
+- **When.** From combo `BIG_COMBO` (3), the same line where the loud celebration starts (6.3), so nothing below combo 3 changes. Heat `fire.k` eases to .4 at combo 3, .6 at 4, .8 at 5, 1 from 6; each new step adds a short flare and a burst of sparks off the top. Colour by tier: orange at 3, gold at 4, white-hot from 5.
+- **Look.** Tongues of fire stand outward from the board frame (tall on top, short underneath where the tray is; the sides burn only when the screen leaves room beside the board) over a hot frame line; a dragged piece sheds embers by distance moved (and smoulders when still); the tray band glows warm, breathing. All of it is drawn in the board layer under the gems: embers and smoke pass behind pieces, never over one. A bonus's violet rim owns the frame, so the fire waits during bonus trays.
+- **Snuff.** A drop that does not clear with the fire lit: the flames drop over about a third of a second, sixteen smoke puffs rise off the rim, and a soft falling "pff" (`snuff`, an arbiter event at priority 1, the same in every sound set). A new run or a restored one starts cold and silent; a rescue resets the combo without a puff.
+- **Reduced motion.** A steady rim and tray glow (one still flicker phase), no embers, no smoke; the snuff is a fade.
+- **Switch.** `CFG.FX_COMBO_FIRE`, Settings → Look → Advanced "Combo fire: the board burns on a streak" (saved as `fire`), also in Admin. Off mid-streak, the flames fade out.
+- **Cost.** One cached flame sprite per tier at full resolution, drawn only smaller and with image smoothing off (filtered blits were most of the cost in the 4x-throttled raster check); one stroke; embers capped at 36 (scaled by `perf.fx`). At 4x CPU throttle with raster included, combo 6 while dragging: p50 about +3 ms over the same build with the fire off (drag p90 ~47 vs ~45 ms).
+- **Check on the phone:** make three clears in a row; the rim should catch, then grow and whiten at 4 and 5, with sparks off the piece as you drag. Then drop a piece that clears nothing: the flames should go out in a puff with a soft breath. If it is too much, lower the heat curve in `fireTarget`, or turn it off in Settings.
+- Tests: the three "7.5d combo fire" scenarios.
