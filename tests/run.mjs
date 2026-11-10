@@ -3285,6 +3285,45 @@ test('haptics: silent no-op on the web, buzzes in the app (fake Capacitor), stro
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
 });
 
+test('1.1 F Leaderboards: hidden on the web, shown in the app only while signed in to Game Center, opens the dashboard', async ({ page, errors }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { score = 420; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isHidden('#gcOverBtn'), true, 'web: no Leaderboards button on the game-over card');
+  await page.click('#againBtn'); await dealt(page);
+  await openSet(page);
+  assert.equal(await page.isHidden('#gcSetBtn'), true, 'web: none in Settings either');
+  await closeSet(page);
+  await page.evaluate(() => {                                       // the app, not signed in yet
+    window.__gc = [];
+    let fire = null;
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { GameCenter: {
+      signIn: () => Promise.resolve({ signedIn: false }), status: () => Promise.resolve({ signedIn: false }),
+      submitScore: () => Promise.resolve({ sent: true }), unlock: () => Promise.resolve({ sent: true }),
+      show: () => { __gc.push('show'); return Promise.resolve({ shown: true }); },
+      addListener: (n, f) => { fire = f; } } } };
+    window.__gcFire = r => fire(r);
+    gcStart();
+  });
+  await page.waitForTimeout(50);
+  await openSet(page);
+  assert.equal(await page.isHidden('#gcSetBtn'), true, 'app, signed out: hidden');
+  await page.evaluate(() => __gcFire({ signedIn: true }));          // signs in from iPhone Settings while running
+  assert.equal(await page.isVisible('#gcSetBtn'), true, 'signed in: Settings shows it');
+  await page.click('#gcSetBtn');
+  await closeSet(page);
+  await page.evaluate(() => { state = 'play'; score = 500; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isVisible('#gcOverBtn'), true, 'Endless game over: shown');
+  await page.click('#gcOverBtn');
+  assert.deepEqual(await page.evaluate(() => __gc), ['show', 'show'], 'each button opens Game Center');
+  await page.evaluate(() => { state = 'play'; mode = 'adventure'; lvl = LEVELS[0]; lv = { lines: 0, pieces: 0, combo: 0, swept: false }; gameOver(); });
+  assert.equal(await page.isHidden('#gcOverBtn'), true, 'an Adventure level: no leaderboard to show');
+  await page.evaluate(() => { mode = 'endless'; __gcFire({ signedIn: false }); });
+  assert.equal(await page.evaluate(() => el('gcSetBtn').hidden && el('gcOverBtn').hidden), true, 'signed out again: both hidden');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
 test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle, 5 under the pause card', async ({ page }) => {
   await play(page); await dealt(page);
   const rate = ms => page.evaluate(ms => new Promise(res => { const l0 = last; let n = 0, p = last;

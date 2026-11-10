@@ -254,6 +254,8 @@
   .secondChance{display:flex;flex-direction:column;align-items:center;gap:8px}
   .secondChance[hidden]{display:none}
   .secondChance .sub{font-size:13px;opacity:.7}
+  .overRow{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .overRow:not(:has(button:not([hidden]))){display:none}
   .eyebrow{font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;opacity:.6}
   .big{font-size:clamp(56px,19vw,92px);font-weight:700;line-height:1;color:var(--gold);
        text-shadow:0 0 34px rgba(255,212,92,.4)}
@@ -450,6 +452,7 @@
     <p class="setnote" id="setNote">Saved as your default for every game.</p>
     <div class="devbtns">
       <button class="ghost" id="adminBtn" hidden>Admin</button>
+      <button class="ghost" id="gcSetBtn" type="button" hidden>🏆 Leaderboards</button>
       <button class="cta" id="setDone">Done</button>
     </div>
   </div>
@@ -519,7 +522,8 @@
       <button class="cta" id="reviveBtn">Second chance</button>
       <p class="sub" id="reviveNote">Clears space so you can keep this run. Once per game.</p>
     </div>
-    <button class="ghost" id="shareBtn" type="button" hidden>Share</button>
+    <div class="overRow"><button class="ghost" id="shareBtn" type="button" hidden>Share</button>
+    <button class="ghost" id="gcOverBtn" type="button" hidden>🏆 Leaderboards</button></div>
     <button class="ghost" id="againBtn">Play again</button>
     <button class="ghost" id="overMenuBtn">Home</button>
   </div>

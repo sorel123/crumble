@@ -232,4 +232,5 @@ el('setNote').onclick=e=>{
 };
 el('startBtn').onclick=e=>{e.stopPropagation();ac();homeCrumble();mode='endless';lvl=null;saveMode();start();};   // (8.3) the logo crumbles as the game starts
 el('againBtn').onclick=e=>{e.stopPropagation();el('overCard').hidden=true;start();};
+el('gcOverBtn').onclick=el('gcSetBtn').onclick=e=>{e.stopPropagation();gcShow();};   // (1.1 F) Game Center's dashboard
 el('reviveBtn').onclick=e=>{e.stopPropagation();rescue();};
