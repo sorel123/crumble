@@ -58,6 +58,8 @@ test('front menu (8.3): Settings opened over the mode menu keeps the game paused
 test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and New game (tap twice)', async ({ page }) => {
   await play(page); await dealt(page);
   assert.equal(await page.evaluate(() => !!document.getElementById('modeTag')), false, 'the Endless pill is gone');
+  assert.ok(await page.evaluate(() => { el('scoreVal').textContent = '1234560'; el('bestVal').textContent = '2345670';
+    return Math.max(...[...document.querySelectorAll('.hud .right > *')].map(e => e.getBoundingClientRect().right)) <= innerWidth; }), 'a seven-digit score leaves the buttons on screen');
   await page.evaluate(() => { score = 1240; saveRun(); });
   await page.click('#pauseBtn');
   assert.deepEqual(await page.evaluate(() => ({ paused, eye: el('pauseEye').textContent, sc: el('pauseScore').textContent })),
