@@ -1267,7 +1267,7 @@ The start card (launch with no saved run) and the mode menu (Home after a game, 
   Connect Privacy Policy URL and Support URL. They are not in the service worker's precache list, so they are not in the
   app build. The service worker now sends page loads it has not cached to the network and falls back to the game only
   when offline, so a visitor who has played can still open /privacy/.
-- **App Store link:** set `CFG.APP_STORE_ID` (digits, App Store Connect, App Information, Apple ID) and the start card in a
+- **App Store link:** Apple ID 6833015504. Safari's Smart App Banner (`apple-itunes-app` in index.html) is on and shows itself once the app is live. On launch day set `CFG.APP_STORE_ID` (digits, App Store Connect, App Information, Apple ID) and the start card in a
   browser shows "Get Crumble for iPhone". It never shows inside the app.
 - **Custom domain:** GitHub Pages, Settings, Pages, Custom domain `crumble.win` (that commits a `CNAME` file). Set the DNS
   first, or the github.io address redirects to a domain that does not resolve yet.
