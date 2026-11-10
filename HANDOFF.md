@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-10, after payoff waves, setups and closers (plan PR 7.3).
+Last updated 2026-11-10, after blocks that crumble (plan PR 7.5, first zazz idea).
 
 ---
 
@@ -74,7 +74,7 @@ Last updated 2026-11-10, after payoff waves, setups and closers (plan PR 7.3).
 - **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). Plan 6.0: 2-4 gems are scattered outside the seeded lines, so that first clear leaves blocks; about 1 in 8 openings (`CFG.OPENING_SWEEP_CHANCE`) keep the board bare and can sweep. No special (golden hand, star, transformation, bonus) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
 - **Specials, one switch each (4.5):** `CFG.SPECIALS = {bonus:true, star:true, golden:true, transform:true}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **the Blast Round was replaced by automatic bonus trays (6.2)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; **transformations are back as achievements (4.5d)**. Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
-- Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
+- Clears: `'crumble'` (default since 7.5), `'squash'` or `'burst'`; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
 - **Golden hand (4.5c)** — the rarest, biggest special: a gold tray whose target lines glow on the board; finding it pays ×3. See the 4.5c section at the end.
@@ -297,7 +297,7 @@ the numbers are what matter):
 
 What changed to match:
 
-- `CLEAR_STYLE: 'squash'` (default) — each cleared gem thins to a white-hot
+- `CLEAR_STYLE: 'squash'` (the default until 7.5's crumble) — each cleared gem thins to a white-hot
   sliver along its line (`horiz` on the shatter decides the axis) over 6
   frames; `CLEAR_BLINK` default 0; `CLEAR_STAGGER` 0.35. `'burst'` keeps the
   flying blocks from the first juice pass.
@@ -1014,3 +1014,14 @@ holds 12-24 gems spread over many lines and only a few percent are sweepable in 
 mean keeping the board much emptier, i.e. an easier game. Levers if Jay wants more: `CLOSER_GEMS` up, `CLOSER_COOL` down, or a lower
 `ROOM_OK`/`ROOM_EDGE` so the board runs emptier.
 
+
+## Blocks that crumble (plan 7.5, first zazz idea)
+
+The name of the game, on screen: a cleared gem cracks and falls off the board as rubble. `CFG.CLEAR_STYLE` `'crumble'` is the default; `'squash'` and `'burst'` stay in Admin (Clear style). Code is the "(7.5) blocks that crumble" block in `js/draw.js` (`crack`, `spawnRubble`, `drawRubble`, `RUBBLE_PER`, `RUBBLE_G`).
+
+- **Beat unchanged.** The clear still takes the same ~6 frames (100 ms): a white zigzag crack draws across each gem (across the line's direction) while it whitens and shudders, then it breaks into chunky 3-4 sided shards in the gem's colour. They fall under gravity, bounce once on `floorY` (set in `layout()`: just above the bottom safe area), then rest and fade (~20 frames). A single line's rubble is gone in about a second and a half.
+- **Behind, never over.** `drawRubble` runs in the board layer before the live gems and the tray pieces, so rubble is seen through empty cells and below the board, and never covers a live gem (a test checks the draw order).
+- **6.3 tiers.** `shatters[].tier` (set in `place()`): 1 single line = one small shard per gem and no specks (crisp); 2 multi-line or star = 2 shards plus the usual specks; 3 combo `BIG_COMBO`+ = 3 with more sideways kick away from the piece; 4 clean sweep = 4, with a dust puff where they land. A star keeps its own cross blast.
+- **Budget.** Rubble counts in `fxLive()`, so it shares `PARTICLE_CAP` x `perf.fx`; a slow frame sheds rubble first. Drawing is two small path fills per shard, no per-shard save/restore.
+- **Reduced motion** falls back to the squash. **Admin store:** `devSave` now writes `clearV:1`; a saved tuning without it drops its `CLEAR_STYLE` once (it held the old `'squash'` default), keeping the rest.
+- Tests: the two "7.5 crumble" scenarios in `tests/run.mjs`.

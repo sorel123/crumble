@@ -375,6 +375,69 @@ test('6.3 animation hierarchy: two lines are bigger than one; a narrow escape an
   assert.ok(sweep.banners.includes('CLEAN SWEEP') && !sweep.banners.includes('PHEW!'), 'a sweep keeps its own banner, not the escape one');
 });
 
+test('7.5 crumble: cleared gems crack into rubble that falls behind the board, bounces once at the bottom and is gone; bigger clears drop more', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'crumble', 'crumble is the default clear');
+  // follow the rubble from outside: most pieces alive at once, whether any bounced, how long until it is all gone
+  const watch = () => page.evaluate(() => new Promise(res => {
+    let most = 0, bounced = false, k = 0, low = 0; const t0 = performance.now();
+    const step = () => {
+      most = Math.max(most, rubble.length); bounced = bounced || rubble.some(b => b.bn);
+      low = Math.max(low, ...rubble.map(b => b.y), 0);
+      if ((++k > 10 && !rubble.length && !shatters.length) || k > 400) return res({ most, bounced, low, ms: performance.now() - t0, frames: k, floorY, H, left: rubble.length });
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }));
+  await page.evaluate(() => { perf.fx = 1; });
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const one = await watch();
+  assert.equal(one.left, 0, 'a single line\'s rubble is all gone');
+  assert.ok(one.most >= 6 && one.most <= 8, `a single line drops one small piece per gem (${one.most})`);
+  assert.ok(one.bounced && one.low <= one.floorY + 0.01 && one.floorY < one.H, 'it bounces on the floor, just above the bottom of the screen');
+  assert.ok(one.frames < 130, `and is gone in about two seconds of frames (${one.frames})`);
+  await dealt(page);
+  await page.evaluate(() => { perf.fx = 1; });
+  await setup(page, { rows: THREE_LINES, trayShapes: [4, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const multi = await watch();
+  assert.ok(multi.most > one.most * 2, `three lines drop more rubble (${multi.most} vs ${one.most})`);
+  assert.equal(multi.left, 0, 'and it is gone too');
+  // the 6.3 rule: rubble is drawn before the live gems, so it never covers one
+  const order = await page.evaluate(() => new Promise(res => {
+    const log = []; const dr = drawRubble, gm = gem;
+    window.drawRubble = dt => { log.push('rubble'); dr(dt); };
+    window.gem = (...a) => { if (log[log.length - 1] !== 'gem') log.push('gem'); gm(...a); };
+    rubble.push({ x: W / 2, y: by, vx: 0, vy: 0, rot: 0, vr: 0, pts: [0, 0, 5, 0, 0, 5], col: '#f00', hi: '#fff', bn: 0, fade: 1 });
+    requestAnimationFrame(() => { window.drawRubble = dr; window.gem = gm; rubble.length = 0; res(log); });
+  }));
+  assert.ok(order.indexOf('rubble') >= 0 && order.indexOf('rubble') < order.indexOf('gem'), 'rubble is drawn before the board\'s gems: ' + order.slice(0, 4).join(','));
+  // it shares the particle budget
+  const capped = await page.evaluate(() => {
+    perf.fx = 0.3;
+    const g = GEMS[0];
+    for (let k = 0; k < 200; k++) spawnRubble({ tier: 4, ox: 0, oy: 0 }, W / 2, by, g);
+    return { live: fxLive(), cap: Math.round(CFG.PARTICLE_CAP * perf.fx) };
+  });
+  assert.ok(capped.live <= capped.cap, `rubble is held to the particle budget (${capped.live} <= ${capped.cap})`);
+  await page.evaluate(() => { rubble.length = 0; perf.fx = 1; });
+});
+
+test('7.5 crumble: squash and burst stay in Admin; an old saved Admin tuning does not bring squash back', async ({ page, server }) => {
+  await page.evaluate(() => localStorage.setItem('crumble.dev.6', JSON.stringify({ CLEAR_STYLE: 'squash', SHAKE: 0.5 })));
+  await page.goto(server.url + '?dev');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  const r = await page.evaluate(() => ({ style: CFG.CLEAR_STYLE, shake: CFG.SHAKE, opts: DEV_CHOICES.find(c => c[0] === 'CLEAR_STYLE')[2].map(o => o.value) }));
+  assert.equal(r.style, 'crumble', 'the old squash default is dropped once');
+  assert.deepEqual(r.opts, ['crumble', 'squash', 'burst']);
+  await page.evaluate(() => { CFG.CLEAR_STYLE = 'squash'; devSave(); });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'squash', 'a choice made after this sticks');
+  await page.evaluate(() => localStorage.removeItem('crumble.dev.6'));
+});
+
 test('the opening: 100 seeded new games each clear a line within the first three placements', async ({ page }) => {
   const r = await page.evaluate(async () => {
     const out = [];
