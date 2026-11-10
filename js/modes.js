@@ -83,7 +83,7 @@ function dailyOver(){                                // the game-over card, for 
   el('overEye').textContent='Daily · '+new Date(dk+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
   el('overScore').textContent=score;
   el('overMsg').textContent=score>=r.s&&score>0?'Your best today!':'Best today: '+r.s+'. Same board, try again.';
-  el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Calendar';
+  el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Home';
   syncHud();
 }
 
@@ -203,10 +203,10 @@ function showWin(stars,first){
 function levelFailed(){
   const rec=advRec(lvl.id); rec.f++; saveAdv();
   const g=lvl.goal, p=Math.min(goalProgress(),g.n);
-  el('overEye').textContent='Level '+lvl.id+' · out of moves';
+  el('overEye').textContent='Level '+lvl.id;
   el('overScore').textContent=p+'/'+g.n;
   el('overMsg').textContent=p>=g.n*0.7?'So close! One more try.':'You can do it. Try again!';
-  el('againBtn').textContent='Try again'; el('overMenuBtn').textContent='Map';
+  el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Home';
 }
 
 /* ── switching modes ── */
@@ -271,7 +271,7 @@ el('mapBack').onclick=e=>{ e.stopPropagation(); openMenu(); };
 el('winNext').onclick=e=>{ e.stopPropagation(); playLevel(Math.min(lvl.id+1,LEVELS.length)); };
 el('winMap').onclick=e=>{ e.stopPropagation(); openMap(); };
 el('winAgain').onclick=e=>{ e.stopPropagation(); el('winCard').hidden=true; start(); };
-el('overMenuBtn').onclick=e=>{ e.stopPropagation(); el('overCard').hidden=true; if(mode==='adventure') openMap(); else if(mode==='daily') openDaily(); else openMenu(); };
+el('overMenuBtn').onclick=e=>{ e.stopPropagation(); el('overCard').hidden=true; openMenu(); };   // (8.1) Home is the front menu, whatever the mode
 el('startAdv').onclick=e=>{ e.stopPropagation(); ac(); openMap(); };
 
 /* ── the Daily card: today's board and a results calendar ── */

@@ -179,6 +179,10 @@
          text-shadow:0 0 40px rgba(255,212,92,.3)}
   .title em{font-style:normal;color:var(--accent)}
   .sub{font-size:15px;font-weight:500;opacity:.82;max-width:26ch;line-height:1.5}
+  .overTitle{font-size:clamp(26px,8vw,34px);font-weight:700;line-height:1;letter-spacing:-.02em;margin-top:-8px}
+  .secondChance{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .secondChance[hidden]{display:none}
+  .secondChance .sub{font-size:13px;opacity:.7}
   .eyebrow{font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;opacity:.6}
   .big{font-size:clamp(56px,19vw,92px);font-weight:700;line-height:1;color:var(--gold);
        text-shadow:0 0 34px rgba(255,212,92,.4)}
@@ -417,14 +421,18 @@
   </div>
 
   <div class="overlay" id="overCard" hidden>
-    <p class="eyebrow" id="overEye">No room left</p>
+    <p class="eyebrow" id="overEye">Endless</p>
+    <h2 class="overTitle" id="overTitle">Out of moves</h2>
     <p class="big" id="overScore">0</p>
     <p class="sub" id="overMsg"></p>
     <canvas id="tlBoard" hidden role="img" aria-label="Your run as a timelapse. Tap to skip, tap again to replay."></canvas>
-    <button class="cta" id="reviveBtn">Keep going</button>
+    <div class="secondChance" id="reviveBox">
+      <button class="cta" id="reviveBtn">Second chance</button>
+      <p class="sub" id="reviveNote">Clears space so you can keep this run. Once per game.</p>
+    </div>
     <button class="ghost" id="shareBtn" type="button" hidden>Share</button>
-    <button class="ghost" id="againBtn">Start over</button>
-    <button class="ghost" id="overMenuBtn">Modes</button>
+    <button class="ghost" id="againBtn">Play again</button>
+    <button class="ghost" id="overMenuBtn">Home</button>
   </div>
 
   <div class="overlay" id="devPanel" hidden>
