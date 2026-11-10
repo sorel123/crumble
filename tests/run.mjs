@@ -2313,35 +2313,25 @@ test('music (7.4): on by default at a low volume, Shuffle by default, a picker w
   assert.equal(await page.inputValue('#musicPick'), 'bounce');
 });
 
-test('mute button: hushes music and sound effects together, Settings keeps them separate, all remembered', async ({ page }) => {
+test('sound buttons: a note for Music and a speaker for Sound effects, each its own, mirrored in Settings, remembered', async ({ page }) => {
   await play(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
-  assert.equal(await page.textContent('#mute'), '🔊');
+  const st = () => page.evaluate(() => ({ sfxOff: sfxOff(), music: !!musicE, set: CFG.MUSIC, noteOff: el('musicBtn').classList.contains('off'), spk: el('mute').textContent }));
+  assert.deepEqual(await st(), { sfxOff: false, music: true, set: true, noteOff: false, spk: '🔊' });
+  await page.click('#musicBtn');
+  assert.deepEqual(await st(), { sfxOff: false, music: false, set: false, noteOff: true, spk: '🔊' }, 'the note stops only the music');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.skins')).music), false, 'and it is remembered');
   await page.click('#mute');
-  assert.deepEqual(await page.evaluate(() => ({ quiet, sfx: sfxOff(), music: musicE, set: CFG.MUSIC, muted })), { quiet: true, sfx: true, music: null, set: true, muted: false },
-    'the speaker button silences music and effects without touching the Settings switches');
-  assert.equal(await page.textContent('#mute'), '🔈');
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.skins')).quiet), true, 'and it is remembered');
-  await page.evaluate(() => { start(); });
-  assert.equal(await page.evaluate(() => musicE), null, 'a new game stays quiet');
-  await page.click('#mute');
-  assert.notEqual(await page.evaluate(() => musicE), null, 'tapping again brings the music back');
-  assert.equal(await page.evaluate(() => sfxOff()), false, 'and the effects');
-  // Settings: effects off, music on; the button then hushes only what is playing and gives back the same
-  await page.click('#setBtn'); await page.uncheck('#sndOn');
-  assert.deepEqual(await page.evaluate(() => ({ sfx: sfxOff(), music: !!musicE })), { sfx: true, music: true }, 'Sound effects off leaves the music');
-  await page.click('#setDone');
-  await page.click('#mute'); assert.equal(await page.evaluate(() => musicE), null);
-  await page.click('#mute');
-  assert.deepEqual(await page.evaluate(() => ({ sfx: sfxOff(), music: !!musicE })), { sfx: true, music: true }, 'unmuting restores what Settings had');
-  // both off in Settings: the button shows muted and turns both on
-  await page.click('#setBtn'); await page.selectOption('#musicPick', 'off'); await page.click('#setDone');
-  assert.equal(await page.textContent('#mute'), '🔈');
-  await page.click('#mute');
-  assert.deepEqual(await page.evaluate(() => ({ sfx: sfxOff(), music: !!musicE, set: CFG.MUSIC })), { sfx: false, music: true, set: true });
-  // hushed, then a sound switched on in Settings lifts the hush
-  await page.click('#mute'); await page.click('#setBtn'); await page.uncheck('#sndOn'); await page.check('#sndOn');
-  assert.deepEqual(await page.evaluate(() => ({ quiet, music: !!musicE })), { quiet: false, music: true });
+  assert.deepEqual(await st(), { sfxOff: true, music: false, set: false, noteOff: true, spk: '🔇' }, 'the speaker stops the effects');
+  await page.click('#musicBtn');
+  assert.deepEqual(await st(), { sfxOff: true, music: true, set: true, noteOff: false, spk: '🔇' }, 'music back, effects still off');
+  await page.click('#setBtn');
+  assert.equal(await page.isChecked('#sndOn'), false, 'Settings mirrors the speaker');
+  assert.equal(await page.inputValue('#musicPick'), 'shuffle', 'and the note');
+  await page.check('#sndOn'); await page.selectOption('#musicPick', 'off'); await page.click('#setDone');
+  assert.deepEqual(await st(), { sfxOff: false, music: false, set: false, noteOff: true, spk: '🔊' }, 'and the buttons mirror Settings');
+  // the hud still fits with the extra button
+  assert.ok(await page.evaluate(() => Math.max(...[...document.querySelectorAll('.hud .right > *')].map(e => e.getBoundingClientRect().right)) <= innerWidth), 'the buttons stay on screen');
 });
 
 test('music (7.4): a loop starts playing on its own after the first touch, and only the playing loop stays decoded', async ({ page }) => {

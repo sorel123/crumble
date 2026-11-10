@@ -6,7 +6,7 @@
    noise buffer is built when the context is created (first user gesture,
    which browsers require) and reused by every noise hit.
    ═══════════════════════════════════════════════════════════════ */
-let actx=null,sfxGain=1,muted=false,quiet=false,master=null,nbuf=null,revIn=null,setSpeaker=()=>{},origBus=null,smpBus=null,musBus=null;
+let actx=null,sfxGain=1,muted=false,master=null,nbuf=null,revIn=null,setSpeaker=()=>{},origBus=null,smpBus=null,musBus=null;
 /* The whole chain, built on whatever context it's handed (the live one, or an
    offline one for rendering/tests): sounds -> master -> soft high-shelf ->
    safety limiter -> out, plus a small reverb send any sound can feed via
@@ -210,8 +210,7 @@ function testTone(kind){
   g.gain.setValueAtTime(.2,t+.7); g.gain.linearRampToValueAtTime(0,t+.75);
   o.connect(g); g.connect(kind==='clean'?c.destination:master); o.start(t); o.stop(t+.8);
 }
-/* sound effects are off when Settings > Sound effects is off (`muted`) or the speaker button hushed everything (`quiet`) */
-const sfxOff=()=>muted||quiet;
+const sfxOff=()=>muted;                               // Settings > Sound effects, or the speaker button
 /* run a sound: skip when muted, start the clock at `delay`, never throw */
 function play(delay,fn){
   if(sfxOff()) return;
@@ -495,34 +494,27 @@ const Sfx={
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
   }
 };
-/* Two switches in Settings > Sound (Sound effects = !muted, Music = CFG.MUSIC) and one speaker button on the game screen
-   that hushes everything (`quiet`) without touching them: tap again and whatever Settings had comes back. Before this the
-   button only flipped `muted`, so the music (6.8) kept playing under a "muted" game. */
-const anyAudible=()=>!quiet&&(!muted||CFG.MUSIC);
-function syncMuteBtn(){
-  const b=el('mute'); if(!b) return;
-  const on=anyAudible(); b.textContent=on?'🔊':'🔈'; b.setAttribute('aria-pressed',on?'false':'true');
-  b.setAttribute('aria-label',on?'Mute music and sound':'Turn sound back on');
+/* Two buttons on the game screen, each its own sound (Jay, 2026-11-10): the speaker is Sound effects (`muted`), the note is
+   Music (`CFG.MUSIC`). Settings > Sound has the same two switches; they mirror each other. Before this there was only the
+   speaker, and the music (6.8) ignored it, so a "muted" game kept playing music. */
+function syncSoundBtns(){
+  const m=el('mute'), n=el('musicBtn');
+  if(m){ m.textContent=muted?'🔇':'🔊'; m.classList.toggle('off',muted); m.setAttribute('aria-pressed',muted?'false':'true'); }
+  if(n){ n.classList.toggle('off',!CFG.MUSIC); n.setAttribute('aria-pressed',CFG.MUSIC?'true':'false'); }
 }
-function setMuted(on,save=true){                     // Settings > Sound effects
-  muted=on; if(!on) quiet=false;                     // switching a sound on in Settings lifts the hush
+function setMuted(on,save=true){                     // the speaker button and Settings > Sound effects
+  muted=on;
   const box=el('sndOn'); if(box) box.checked=!muted;
-  syncMuteBtn(); if(typeof musicSync==='function') musicSync();
+  syncSoundBtns();
   if(save) saveSkinSave();
 }
-function setQuiet(on,save=true){                     // the speaker button: everything off, or back to what Settings says
-  quiet=on; syncMuteBtn(); if(typeof musicSync==='function') musicSync();
-  if(save) saveSkinSave();
-}
-function toggleQuiet(){
-  if(quiet) return setQuiet(false);
-  if(anyAudible()) return setQuiet(true);
-  muted=false; CFG.MUSIC=true;                       // both were off in Settings: the button turns them both on
-  const box=el('sndOn'); if(box) box.checked=true;
+el('mute').onclick=e=>{ e.stopPropagation(); setMuted(!muted); };
+el('musicBtn').onclick=e=>{ e.stopPropagation();     // the note button: Music on (to the picked track or Shuffle) or off
+  if(!CFG.MUSIC) ac();
+  musicSetPick(CFG.MUSIC?'off':CFG.MUSIC_PICK);
   if(typeof renderMusicPick==='function') renderMusicPick();
-  ac(); setQuiet(false);
-}
-el('mute').onclick=e=>{ e.stopPropagation(); toggleQuiet(); };
+  saveSkinSave();
+};
 /* The bonus trays' own sounds (plan 6.2; they were the Blast Round's). Synthesized and the same in every sound set, so no
    other moment in the game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise
    (meter full), and a bell cadence over a soft hit (bonus over). */
