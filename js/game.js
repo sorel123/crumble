@@ -31,7 +31,7 @@ function mobility(){
 // than the sky flip. The card is only drawn over the play (a banner), it never pauses or blocks anything.
 const ACHIEVE={rainbow:'Clean sweep', volcano:'Combo ×'+CFG.TRANSFORM_COMBO, starfield:'Star blast', goldvault:'Golden hand'};
 let newLook=false;                                // a look was just unlocked and Settings has not been opened since (the gear's dot)
-function syncLookDot(){ el('setBtn').classList.toggle('dot',newLook); }
+function syncLookDot(){ el('setBtn').classList.toggle('dot',newLook); el('pauseBtn').classList.toggle('dot',newLook); }   // (8.4) Settings lives on the pause card, so the dot shows on pause too
 function canGoLive(id){
   return id!=='goldvault' && !bonus && !transform && transformCool<=0 && trayNo>=CFG.SPECIAL_FROM_TRAY
     && !golden && !tray.some(t=>t&&t.s.star) && (id==='starfield'||trayNo>specialEnd+1);   // a star's own clear is its parent: it may follow it

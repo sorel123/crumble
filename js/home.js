@@ -65,6 +65,7 @@ function homeFill(card){                               // the words on the card:
     el('startHow').hidden=!!(best||stats);           // the how-to is for her first game; after that the stats take its place
   } else {
     el('menuClose').textContent=state==='play'?'Back to the game':'Back';
+    el('menuClose').hidden=state==='play'&&mode==='endless';   // (8.4) the big Endless button says Continue instead
   }
 }
 function homeEnter(card){

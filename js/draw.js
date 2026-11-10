@@ -764,7 +764,7 @@ function frame(now){
   if(bestBeaten && shownScore>best){ best=shownScore; const bv=el('bestVal'); bv.textContent=best; if(!bv.classList.contains('bump')){ bv.classList.add('bump'); setTimeout(()=>bv.classList.remove('bump'),140); } }
   if(shownScore!==score && now>=scoreHold){         // quick count-up (held until the first score orb lands): ~30% of the gap a frame, at least 1
     shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*0.09*dt))):score;
-    el('scoreVal').textContent=shownScore; chaseSync();
+    el('scoreVal').textContent=shownScore; hudFit(); chaseSync();
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
