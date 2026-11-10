@@ -1288,7 +1288,7 @@ set) opens on three hand-built boards instead of `seedOpening()`, then ordinary 
   second, which clears both; a dot), 3 "Empty the board!" (three rows, each with a gap for one piece; 1x4, square, 1x3:
   every drop clears something, any order, the last sweeps; the tray shimmers like a closer). Lessons 1 and 2 keep a few
   loose gems so their clears are not sweeps. Each line is a banner (`pushBanner`, slower). Between lessons
-  `dealLater()` waits `CFG.GUIDE_WAIT` frames, the last board's leftovers crumble away (no points) and the next pops in.
+  `dealLater()` waits `CFG.GUIDE_WAIT` (20) frames, the last board's leftovers crumble away (no points) and the next pops in.
   After lesson 3: "You've got it!" and `seedOpening('light')` as tray 1, score kept.
 - **Off-script:** `dealSteps()` asks `guideDeal()` first. A lesson tray that ended without its lesson (no line, fewer
   than two lines, no sweep) ends the guide quietly: no line, the ordinary dealer deals from her board as tray 1.

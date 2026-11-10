@@ -61,18 +61,18 @@ function guideLay(n){
   const L=GUIDE_LESSONS[n-1], first=n===1;
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
     const g=grid[r][c]; if(!g||first) continue;
-    const d=reduce?0:(r+c)*0.6;
+    const d=reduce?0:(r+c)*0.3;
     shatters.push({r,c,gi:g.gi,horiz:true,star:false,big:false,tier:1,t:-d,t0:-d,ox:bx+B/2,oy:by+B/2});
   }
   grid=empty();
   L.board.forEach((row,r)=>[...row].forEach((v,c)=>{
-    if(v==='X') grid[r][c]={gi:(rnd()*NCOLOR)|0,t:first||reduce?1:-0.6-(r+c)*0.07,f:0,l:0};   // t<0: the gem waits, then grows in
+    if(v==='X') grid[r][c]={gi:(rnd()*NCOLOR)|0,t:first||reduce?1:-0.2-(r+c)*0.04,f:0,l:0};   // t<0: the gem waits, then grows in
   }));
   trayNo=n; guide={n,ln:0,sw:false,dn:0}; guideIdleT=performance.now();
   commitTray(L.tray.map(i=>SHAPES[i]),'GUIDE');
   hesVoid();                                         // a lesson is no hesitation sample
   closerTray=n===GUIDE_LESSONS.length;               // the sweep lesson's tray shimmers like a closer
-  pushBanner(L.line,'',undefined,0.6);
+  pushBanner(L.line,'',undefined,0.85);
 }
 // place() after every drop
 function guideDrop(total,swept){
@@ -91,9 +91,9 @@ function guideDeal(){
   if(!GUIDE_LESSONS[n-1].won(guide)){ guideEnd(); return false; }   // off-script: quietly, the ordinary dealer deals from this board
   if(n<GUIDE_LESSONS.length){ guideLay(n+1); return true; }
   guideEnd();
-  pushBanner("You've got it!",'','#8FF7FF',0.8);
+  pushBanner("You've got it!",'','#8FF7FF',1);
   seedOpening('light');                              // an ordinary light opening, tray 1 (her score stays)
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]&&!reduce) grid[r][c].t=-0.6-(r+c)*0.07;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]&&!reduce) grid[r][c].t=-0.2-(r+c)*0.04;
   return true;
 }
 // the guide is over (done, off-script): never again, and nothing it queued leaks into ordinary dealing
