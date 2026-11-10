@@ -243,6 +243,25 @@
   button.tile b{font-size:16px;font-weight:700}
   button.tile span{font-size:11.5px;font-weight:600;opacity:.75;line-height:1.25}
   .home button.ghost{background:rgba(20,10,40,.4)}
+  button.homeSet{font-family:var(--font);font-size:14px;font-weight:600;color:#fff;background:rgba(20,10,40,.45);border:1.5px solid rgba(255,255,255,.2);
+        border-radius:999px;padding:7px 18px;min-height:38px;cursor:pointer}
+  /* (E1) Challenge: the tray count under the score, the medals on the end card, the Challenge card */
+  #chase[hidden]{display:none}
+  #chalInfo{margin-top:5px;font-size:11px;font-weight:700;letter-spacing:.06em;white-space:nowrap}
+  #chalInfo[hidden]{display:none}
+  #chalInfo .to{opacity:.85}
+  #chalInfo .track{display:block;position:relative;width:76px;height:4px;margin-top:5px;border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--fg) 18%,transparent)}
+  #chalInfo .fill{position:absolute;inset:0;border-radius:2px;background:var(--mc,#F0A86A);transform-origin:0 50%;transform:scaleX(0);transition:transform .15s linear}
+  .medals{display:flex;gap:10px;justify-content:center}
+  .medals[hidden]{display:none}
+  .medals span{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:74px;padding:7px 8px 6px;border-radius:14px;
+        background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.14);filter:grayscale(1);opacity:.55}
+  .medals span b{font-size:26px;line-height:1.1}
+  .medals span i{font-style:normal;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums}
+  .medals span.won{filter:none;opacity:1;background:rgba(255,212,92,.16);border-color:rgba(255,212,92,.6)}
+  #chalCard button.cta,#chalCard button.ghost{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:min(260px,100%)}
+  #chalCard button span{font-size:12.5px;font-weight:600;opacity:.75}
+  #chalCard button[hidden]{display:none}
   @media (prefers-reduced-motion: reduce){ .lt,.lf::after,.home button.cta::after{animation:none} }
   #tlBoard{width:148px;height:148px;cursor:pointer;touch-action:manipulation;flex:none}   /* (7.5g) the run's timelapse on the game-over card */
   #tlBoard[hidden]{display:none}
@@ -377,6 +396,7 @@
 
   <div class="hud">
     <div><div class="lbl">Score</div><div class="score" id="scoreVal">0</div>
+      <div id="chalInfo" hidden><span class="to"></span><span class="track"><span class="fill"></span></span></div>
       <div id="chase" hidden aria-hidden="true"><span class="track"><span class="fill"></span></span><span class="to"></span></div>
       <div class="pips" id="transformPips" hidden></div>
     </div>
@@ -403,9 +423,10 @@
     <div class="homeGrid">
       <button class="tile" id="startAdv" type="button"><i>🗺️</i><b>Adventure</b><span id="startAdvSub"></span></button>
       <button class="tile" id="startDaily" type="button"><i>📅</i><b>Daily</b><span id="startDailySub"></span></button>
+      <button class="tile" id="startChal" type="button"><i>🏅</i><b>Challenge</b><span id="startChalSub"></span></button>
       <button class="tile" id="startGoals" type="button"><i>🏆</i><b>Goals</b><span id="startGoalsSub"></span></button>
-      <button class="tile" id="startSettings" type="button"><i>🎨</i><b>Settings</b><span>Looks and sound</span></button>
     </div>
+    <button class="homeSet" id="startSettings" type="button">🎨 Settings</button>
     <a class="storeLink" id="storeLink" target="_blank" rel="noopener" hidden>📱 Get Crumble for iPhone</a>
   </div>
 
@@ -464,9 +485,10 @@
     <div class="homeGrid">
       <button class="tile" id="menuAdv" type="button"><i>🗺️</i><b>Adventure</b><span id="menuAdvSub"></span></button>
       <button class="tile" id="menuDaily" type="button"><i>📅</i><b>Daily</b><span id="menuDailySub"></span></button>
+      <button class="tile" id="menuChal" type="button"><i>🏅</i><b>Challenge</b><span id="menuChalSub"></span></button>
       <button class="tile" id="menuGoals" type="button"><i>🏆</i><b>Goals</b><span id="menuGoalsSub"></span></button>
-      <button class="tile" id="menuSettings" type="button"><i>🎨</i><b>Settings</b><span>Looks and sound</span></button>
     </div>
+    <button class="homeSet" id="menuSettings" type="button">🎨 Settings</button>
     <button class="ghost" id="menuClose" type="button">Back to the game</button>
   </div>
 
@@ -502,6 +524,17 @@
     <button class="ghost" id="dailyBack" type="button">Back</button>
   </div>
 
+  <div class="overlay" id="chalCard" hidden>
+    <p class="eyebrow">Challenge</p>
+    <h2 class="dailydate">12 trays. Win a medal.</h2>
+    <p class="sub">The same pieces for everyone who plays it. Retry as often as you like; your best counts.</p>
+    <button class="cta" id="chalCont" type="button" hidden></button>
+    <button class="cta" id="chalToday" type="button"><b>Today's challenge</b><span id="chalTodaySub"></span></button>
+    <button class="ghost" id="chalNew" type="button"><b>New challenge</b><span>A fresh deal</span></button>
+    <p class="setnote" id="chalTotals"></p>
+    <button class="ghost" id="chalBack" type="button">Back</button>
+  </div>
+
   <div class="overlay" id="winCard" hidden>
     <p class="eyebrow" id="winEye"></p>
     <h2 class="title" id="winTitle">Cleared!</h2>
@@ -516,6 +549,7 @@
     <p class="eyebrow" id="overEye">Endless</p>
     <h2 class="overTitle" id="overTitle">Out of moves</h2>
     <p class="big" id="overScore">0</p>
+    <div class="medals" id="overMedals" hidden><span><b>🥉</b><i></i></span><span><b>🥈</b><i></i></span><span><b>🥇</b><i></i></span></div>
     <p class="sub" id="overMsg"></p>
     <canvas id="tlBoard" hidden role="img" aria-label="Your run as a timelapse. Tap to skip, tap again to replay."></canvas>
     <div class="secondChance" id="reviveBox">
@@ -525,6 +559,7 @@
     <div class="overRow"><button class="ghost" id="shareBtn" type="button" hidden>Share</button>
     <button class="ghost" id="gcOverBtn" type="button" hidden>🏆 Leaderboards</button></div>
     <button class="ghost" id="againBtn">Play again</button>
+    <button class="ghost" id="chalNewBtn" type="button" hidden>New challenge</button>
     <button class="ghost" id="overMenuBtn">Home</button>
   </div>
 
@@ -555,6 +590,7 @@
 <script src="js/save.js"></script>
 <script src="js/timelapse.js"></script>
 <script src="js/modes.js"></script>
+<script src="js/challenge.js"></script>
 <script src="js/mascot.js"></script>
 <script src="js/home.js"></script>
 <script src="js/goals.js"></script>
