@@ -9,6 +9,9 @@ const SCORE_SCALE = 10;                      // the game's SCORE_SCALE (js/confi
 const EMPTY = Array(8).fill('00000000');
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
+// (8.4) in a game, Settings is on the pause card; Done goes back to it, and Resume back to the game
+const openSet = async page => { await page.click('#pauseBtn'); await page.click('#setBtn'); };
+const closeSet = async page => { await page.click('#setDone'); if (await page.isVisible('#pauseCard')) await page.click('#pauseResume'); };
 
 test('loads with no errors and shows the start card', async ({ page, errors }) => {
   const s = await snap(page);
@@ -46,10 +49,36 @@ test('front menu (8.3): Play crumbles the logo over the opening board, then the 
 });
 test('front menu (8.3): Settings opened over the mode menu keeps the game paused when it closes', async ({ page }) => {
   await play(page); await dealt(page);
-  await page.click('#modeTag'); await page.click('#menuSettings'); await page.click('#setDone');
+  await page.click('#pauseBtn'); await page.click('#pauseHome'); await page.click('#menuSettings'); await page.click('#setDone');
   assert.deepEqual(await page.evaluate(() => ({ paused, menu: !el('menuCard').hidden })), { paused: true, menu: true });
-  await page.click('#menuClose');
+  await page.click('#menuEndless');
   assert.equal(await page.evaluate(() => paused), false);
+});
+
+test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and New game (tap twice)', async ({ page }) => {
+  await play(page); await dealt(page);
+  assert.equal(await page.evaluate(() => !!document.getElementById('modeTag')), false, 'the Endless pill is gone');
+  await page.evaluate(() => { score = 1240; saveRun(); });
+  await page.click('#pauseBtn');
+  assert.deepEqual(await page.evaluate(() => ({ paused, eye: el('pauseEye').textContent, sc: el('pauseScore').textContent })),
+    { paused: true, eye: 'Paused · Endless', sc: '1,240' });
+  await page.click('#pauseResume');
+  assert.deepEqual(await page.evaluate(() => ({ paused, card: el('pauseCard').hidden })), { paused: false, card: true });
+  await page.click('#pauseBtn'); await page.click('#pauseNew');
+  assert.deepEqual(await page.evaluate(() => ({ state, score, txt: el('pauseNew').textContent })), { state: 'play', score: 1240, txt: 'Tap again to start over' }, 'one tap does not throw the run away');
+  await page.click('#pauseResume');
+  await page.click('#pauseBtn');
+  assert.equal(await page.textContent('#pauseNew'), 'New game', 'the confirm resets when the card opens again');
+  await page.click('#pauseHome'); await page.waitForSelector('#menuCard:not([hidden])');
+  assert.deepEqual(await page.evaluate(() => ({ sub: el('menuBest').textContent, back: el('menuClose').hidden, saved: JSON.parse(localStorage.getItem(runStore('endless'))).score })),
+    { sub: 'Continue · 1.2k', back: true, saved: 1240 });
+  await page.click('#menuEndless');
+  await page.waitForFunction(() => state === 'play' && !paused);
+  assert.equal(await page.evaluate(() => score), 1240, 'Continue picks the run back up');
+  await openSet(page); await page.click('#setDone');
+  assert.deepEqual(await page.evaluate(() => ({ paused, card: !el('pauseCard').hidden })), { paused: true, card: true }, 'Settings from pause returns to the pause card');
+  await page.click('#pauseNew'); await page.click('#pauseNew');
+  assert.deepEqual(await page.evaluate(() => ({ state, score, paused, card: el('pauseCard').hidden })), { state: 'play', score: 0, paused: false, card: true }, 'two taps start over');
 });
 
 test('Play starts a run: the seeded opening board, three playable pieces', async ({ page }) => {
@@ -829,10 +858,10 @@ test('the hesitation log times the first drop of each tray, skips restored trays
   m = await mv(); if (m) await dragPiece(page, m.i, m.r, m.c);
   assert.equal(await page.evaluate(() => hes.log.length), 2, 'opening Settings voids the sample');
   // on her phone there is no URL bar: five quick taps on the Settings note show the same numbers
-  await page.click('#setBtn');
+  await openSet(page);
   for (let k = 0; k < 5; k++) await page.click('#setNote');
   assert.match(await page.textContent('#setNote'), /^Last 2 trays \(2 kept\): first pickup [\d.]+s, pickup to drop [\d.]+s, first drop clears \d+%$/);
-  await page.click('#setDone');
+  await closeSet(page);
   await page.goto(server.url + '?dev');
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
   await page.waitForFunction(() => el('perfHud') && /hes pick [\d.]+s  place [\d.]+s  clr \d+%  n 2\/2/.test(el('perfHud').textContent), null, { timeout: 3000 });
@@ -1554,7 +1583,7 @@ test('achievements: ending one sets the no-special-next-tray rule and the cooldo
   await ach(page);
   const r = await page.evaluate(() => {
     const out = {}; trayNo = 12; discoveredWorlds.clear(); newLook = false; syncLookDot();
-    triggerTransform('rainbow'); out.first = banners.map(b => [b.txt, b.sub, b.k]); out.dot = el('setBtn').classList.contains('dot');
+    triggerTransform('rainbow'); out.first = banners.map(b => [b.txt, b.sub, b.k]); out.dot = el('setBtn').classList.contains('dot') && el('pauseBtn').classList.contains('dot');
     banners.length = 0; transform.remaining = 1; tray = [{ s: SHAPES[0], gi: 1 }, null, null]; place(0, 5, 5);
     out.ended = { live: !!transform, cool: transformCool, end: specialEnd, tn: trayNo };
     banners.length = 0; transformCool = 0; specialEnd = -99; triggerTransform('rainbow'); out.repeat = banners.map(b => [b.txt, b.sub, b.k]);
@@ -1563,8 +1592,8 @@ test('achievements: ending one sets the no-special-next-tray rule and the cooldo
   assert.deepEqual(r.first, [['RAINBOW', 'NEW LOOK UNLOCKED', 1]]); assert.equal(r.dot, true);
   assert.equal(r.ended.live, false); assert.equal(r.ended.cool, 8); assert.equal(r.ended.end, r.ended.tn, 'the next tray carries no special');
   assert.equal(r.repeat.length, 1); assert.match(r.repeat[0][1], /×1\.5 · 9 MOVES/); assert.ok(r.repeat[0][2] > 1, 'repeats are shorter');
-  await page.click('#setBtn');
-  assert.equal(await page.evaluate(() => el('setBtn').classList.contains('dot')), false, 'opening Settings clears the dot');
+  await openSet(page);
+  assert.deepEqual(await page.evaluate(() => [el('setBtn').classList.contains('dot'), el('pauseBtn').classList.contains('dot')]), [false, false], 'opening Settings clears the dot');
 });
 
 test('achievements: unlocked looks open in Settings, persist across a reload, and a locked one refuses', async ({ page }) => {
@@ -1634,7 +1663,7 @@ test('Adventure: the map opens only level 1, a level shows its goal, winning sav
   await page.waitForFunction(() => state === 'play' && mode === 'adventure');
   assert.equal(await page.textContent('#bestLbl'), 'Lines');
   assert.equal(await page.textContent('#bestVal'), '0/3');
-  assert.equal(await page.textContent('#modeTag'), 'Level 1 ▾');
+  await page.click('#pauseBtn'); assert.equal(await page.textContent('#pauseEye'), 'Paused · Level 1'); await page.click('#pauseResume');
   assert.ok((await snap(page)).filled > 0, 'a level with no scatter opens like Endless, with its first move on the board');
   const best0 = await page.evaluate(() => best);
   await dealt(page);
@@ -1653,7 +1682,7 @@ test('Adventure: the map opens only level 1, a level shows its goal, winning sav
   await page.click('#winNext');
   await page.waitForFunction(() => state === 'play' && lvl.id === 2);
   assert.equal(await page.isVisible('#winCard'), false);
-  await page.click('#modeTag'); await page.click('#menuAdv');
+  await page.click('#pauseBtn'); await page.click('#pauseHome'); await page.click('#menuAdv');
   assert.equal(await page.locator('#mapList .node:not([disabled])').count(), 2, 'level 2 is open now');
   assert.equal(await page.locator('#mapList .node.next').getAttribute('data-id'), '2');
 });
@@ -1673,7 +1702,7 @@ test('Adventure: goals count lines, score, combo and a clean sweep', async ({ pa
 test('Adventure: a level run survives a reload, Endless keeps its own run', async ({ page }) => {
   await play(page); await dealt(page);
   await page.evaluate(() => { score = 77; saveRun(); });
-  await page.click('#modeTag'); await page.click('#menuAdv'); await page.click('#mapList .node >> nth=0');
+  await page.click('#pauseBtn'); await page.click('#pauseHome'); await page.click('#menuAdv'); await page.click('#mapList .node >> nth=0');
   await page.waitForFunction(() => state === 'play' && mode === 'adventure'); await dealt(page);
   await page.evaluate(() => { CFG.SPECIALS.golden = false; });
   await clearOne(page); await dealt(page);
@@ -1681,7 +1710,7 @@ test('Adventure: a level run survives a reload, Endless keeps its own run', asyn
   await reloadGame(page);
   assert.deepEqual(await page.evaluate(() => [state, mode, lvl.id, lv.lines, lv.pieces]), ['play', 'adventure', 1, 1, 1], 'reopens into the level, counters intact');
   assert.equal(await page.textContent('#bestVal'), '1/3');
-  await page.click('#modeTag'); await page.click('#menuEndless');
+  await page.click('#pauseBtn'); await page.click('#pauseHome'); await page.click('#menuEndless');
   await page.waitForFunction(() => mode === 'endless' && state === 'play');
   assert.equal(await page.evaluate(() => score), 77, 'the Endless run was waiting, exactly as it was left');
   assert.equal(await page.textContent('#bestLbl'), 'Best');
@@ -1739,7 +1768,7 @@ test('Daily: from the menu; the run is its own, resumes, and a new day drops yes
   assert.equal(await page.textContent('#dailyPlay'), "Play today's");
   await page.click('#dailyPlay');
   await page.waitForFunction(() => state === 'play' && mode === 'daily'); await dealt(page);
-  assert.equal(await page.textContent('#modeTag'), 'Daily ▾'); assert.equal(await page.textContent('#bestLbl'), 'Today');
+  await page.click('#pauseBtn'); assert.equal(await page.textContent('#pauseEye'), 'Paused · Daily'); await page.click('#pauseResume'); assert.equal(await page.textContent('#bestLbl'), 'Today');
   const best0 = await page.evaluate(() => best);
   await page.evaluate(() => { score = 640; lv.lines = 7; saveRun(); });
   await reloadGame(page);
@@ -2301,7 +2330,7 @@ test('music (7.4): on by default at a low volume, Shuffle by default, a picker w
   assert.ok(await page.evaluate(() => CFG.MUSIC_VOL * .5 <= .3), 'low by default');
   await play(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
-  await page.click('#setBtn');
+  await openSet(page);
   assert.deepEqual(await page.$$eval('#musicPick option', os => os.map(o => o.textContent)), ['Shuffle', 'Sunny', 'Bounce', 'Daydream', 'Momentum', 'Off']);
   assert.equal(await page.inputValue('#musicPick'), 'shuffle');
   await page.selectOption('#musicPick', 'bounce');
@@ -2333,10 +2362,10 @@ test('sound buttons: a note for Music and a speaker for Sound effects, each its 
   assert.deepEqual(await st(), { sfxOff: true, music: false, set: false, noteOff: true, spk: '🔇' }, 'the speaker stops the effects');
   await page.click('#musicBtn');
   assert.deepEqual(await st(), { sfxOff: true, music: true, set: true, noteOff: false, spk: '🔇' }, 'music back, effects still off');
-  await page.click('#setBtn');
+  await openSet(page);
   assert.equal(await page.isChecked('#sndOn'), false, 'Settings mirrors the speaker');
   assert.equal(await page.inputValue('#musicPick'), 'shuffle', 'and the note');
-  await page.check('#sndOn'); await page.selectOption('#musicPick', 'off'); await page.click('#setDone');
+  await page.check('#sndOn'); await page.selectOption('#musicPick', 'off'); await closeSet(page);
   assert.deepEqual(await st(), { sfxOff: false, music: false, set: false, noteOff: true, spk: '🔊' }, 'and the buttons mirror Settings');
   // the hud still fits with the extra button
   assert.ok(await page.evaluate(() => Math.max(...[...document.querySelectorAll('.hud .right > *')].map(e => e.getBoundingClientRect().right)) <= innerWidth), 'the buttons stay on screen');
@@ -2598,7 +2627,7 @@ test('frame budget: a drag toward a completing line, with anticipation on where 
 
 test('Settings > Look: Clear effect (Crumble / Classic) and Glints while dragging save, and change mid-run', async ({ page }) => {
   await play(page);
-  await page.click('#setBtn');
+  await openSet(page);
   await page.click('#advLook summary');
   assert.equal(await page.inputValue('#clearPick'), 'crumble', 'Crumble is the default');
   await page.selectOption('#clearPick', 'squash');
@@ -2608,7 +2637,7 @@ test('Settings > Look: Clear effect (Crumble / Classic) and Glints while draggin
   if (glint) { await page.uncheck('#glintOn'); assert.equal(await page.evaluate(() => CFG.FX_ANTICIPATION), false); }
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(SKIN_STORE)));
   assert.equal(saved.clear, 'squash', 'saved with her other settings');
-  await page.click('#setDone');
+  await closeSet(page);
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
   await page.evaluate(() => { window.__rub = 0; const of = frame; frame = function (now) { of(now); __rub = Math.max(__rub, rubble.length); }; });
   await dragPiece(page, 0, 0, 0);
@@ -2780,12 +2809,12 @@ test('7.5d combo fire: never over a gem, off with its switch (saved), steady und
   const diff = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
   assert.ok(diff(cold[0], hot[0]) <= 3 && diff(cold[1], hot[1]) <= 3, `gems look the same with the fire on, embers pass behind them: ${JSON.stringify(cold)} vs ${JSON.stringify(hot)}`);
   // the switch: Settings > Look > Advanced
-  await page.click('#setBtn');
+  await openSet(page);
   await page.click('#advLook summary');
   assert.equal(await page.isChecked('#fireOn'), true, 'on by default');
   await page.uncheck('#fireOn');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(SKIN_STORE)).fire), false, 'saved with her settings');
-  await page.click('#setDone');
+  await closeSet(page);
   await frames(page, 90);
   assert.equal(await page.evaluate(() => fire.k), 0, 'off: the flames fade out mid-streak');
   await page.evaluate(() => { fireCombo(); });
@@ -2903,7 +2932,7 @@ test('7.5e chase your best: the target survives a resume, a small best skips the
   assert.ok((await chaseRead(page)).hidden, 'not in Adventure');
   await page.evaluate(() => { mode = 'endless'; syncHud(); });
   assert.ok(!(await chaseRead(page)).hidden, 'back in Endless');
-  await page.click('#setBtn');
+  await openSet(page);
   await page.click('#advLook summary');
   assert.equal(await page.isChecked('#chaseOn'), true, 'on by default');
   await page.click('#chaseOn');
@@ -2935,7 +2964,7 @@ test('7.5f mascot: it sits on the board corner, clear of the gems and the HUD, a
   await mascotMood(page, /^idle\b/);
   const g = await page.evaluate(() => {
     const r = el('mascot').getBoundingClientRect(), hit = id => { const o = el(id).getBoundingClientRect(); return o.width > 0 && !(o.right <= r.left || o.left >= r.right || o.bottom <= r.top || o.top >= r.bottom); };
-    return { bottom: r.bottom, rim: by - 9, left: r.left, bx, w: r.width, hits: ['scoreVal', 'chase', 'modeTag', 'bestVal'].filter(hit) };
+    return { bottom: r.bottom, rim: by - 9, left: r.left, bx, w: r.width, hits: ['scoreVal', 'chase', 'pauseBtn', 'bestVal'].filter(hit) };
   });
   assert.ok(Math.abs(g.bottom - g.w * 4.5 / 48 - g.rim) < 3 && g.left >= g.bx && g.w >= 28 && g.w <= 46, 'feet on the frame top, inside the board width ' + JSON.stringify(g));
   assert.deepEqual(g.hits, [], 'it covers nothing in the HUD');
@@ -2989,11 +3018,11 @@ test('7.5f mascot: it sweats when the board is tight, faints when it is stuck, a
   await page.click('#reviveBtn');
   await mascotMood(page, /^(idle|tight)\b/);                   // the rescue tray is a recovery: it may still sweat
   assert.equal(await page.evaluate(() => el('mascot').getAnimations().filter(a => a.playState !== 'finished' && a.effect.getComputedTiming().fill === 'forwards').length), 0, 'stood back up');
-  await page.click('#setBtn');
+  await openSet(page);
   await page.click('#advLook summary');
   assert.equal(await page.isChecked('#mascotOn'), true, 'on by default');
   await page.click('#mascotOn');
-  await page.click('#setDone');
+  await closeSet(page);
   await frames(page, 2);
   assert.ok(await page.evaluate(() => !CFG.FX_MASCOT && el('mascot').hidden && JSON.parse(localStorage.getItem('crumble.skins')).mascot === false), 'off: hidden, and saved');
   await page.reload();
@@ -3152,11 +3181,11 @@ test('7.5g timelapse: a short run shows no replay; the share picture gets a four
   assert.equal(strip[0], '.'.repeat(64), 'from the opening ...');
   assert.equal(strip[3].replace(/\./g, '').length, 4, '... to the board she ended on');
   assert.ok(await page.evaluate(() => drawShareCard(shareData()).width === SHARE_W), 'the card draws');
-  await page.click('#setBtn');
+  await openSet(page);
   await page.click('#advLook summary');
   assert.equal(await page.isChecked('#tlOn'), true, 'on by default');
   await page.click('#tlOn');
-  await page.click('#setDone');
+  await closeSet(page);
   assert.ok(await page.evaluate(() => !CFG.FX_TIMELAPSE && JSON.parse(localStorage.getItem('crumble.skins')).tl === false), 'off, and saved');
   await page.evaluate(() => tlReset());
   await tlPlace(page, 5, 5);
@@ -3176,9 +3205,9 @@ test('haptics: silent no-op on the web, buzzes in the app (fake Capacitor), stro
   await setup(page, { rows: EMPTY });
   await dragPiece(page, 0, 3, 3);                                   // web: places fine, nothing to buzz
   await dealt(page);
-  await page.click('#setBtn');
+  await openSet(page);
   assert.equal(await page.isHidden('#hapTog'), true, 'no Haptics switch on the web');
-  await page.click('#setDone');
+  await closeSet(page);
   await page.evaluate(() => {                                       // pretend to be the app: the bridge looks Capacitor up at call time
     window.__hap = [];
     window.Capacitor = { isNativePlatform: () => true, Plugins: { Haptics: {
@@ -3195,10 +3224,10 @@ test('haptics: silent no-op on the web, buzzes in the app (fake Capacitor), stro
   assert.deepEqual(await flush(), ['impact:HEAVY'], 'place + clear + combo in one moment: one buzz, the biggest');
   await page.evaluate(() => Sfx.deny());
   assert.deepEqual(await flush(), ['notify:WARNING']);
-  await page.click('#setBtn');
+  await openSet(page);
   assert.equal(await page.isVisible('#hapTog'), true, 'the switch shows in the app');
   await page.click('#hapOn');
-  await page.click('#setDone');
+  await closeSet(page);
   assert.ok(await page.evaluate(() => !CFG.HAPTICS && JSON.parse(localStorage.getItem('crumble.skins')).haptics === false), 'off, and saved');
   await page.evaluate(() => { Sfx.clear(1, 0, 1); Sfx.pickup(); });
   assert.deepEqual(await flush(), [], 'off: silent');

@@ -170,7 +170,6 @@ function syncHud(){
   }
   el('bestLbl').textContent=lbl; el('bestVal').textContent=val;
   chaseSync();
-  el('modeTag').textContent=adventure?'Level '+lvl.id+' ▾':mode==='daily'?'Daily ▾':'Endless ▾';
 }
 // place() calls this after every placement
 function goalStep(total,swept){
@@ -210,7 +209,7 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['setPanel','menuCard','mapCard','dailyCard','goalsCard'].some(id=>!el(id).hidden); }
+function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard'].some(id=>!el(id).hidden); }
 function pauseForMenu(){ if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); } }
 function hideMenus(){ el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
 function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
@@ -220,7 +219,8 @@ function openMenu(){
   el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'New board today';
   el('menuAdvSub').textContent=advStars()?'Level '+nextLevel().id+' · ★ '+advStars():'Goal levels, no timer';
   el('menuGoalsSub').textContent=streakNow()?'🔥 '+streakNow()+(streakNow()===1?' day':' days')+' in a row':'Streak and unlocks';
-  el('menuBest').textContent='Play as long as you can';
+  const liveE=mode==='endless'&&state==='play'?{score}:peekRun('endless');   // (8.4) a saved endless run waits here
+  el('menuBest').textContent=liveE&&liveE.score?'Continue · '+fmtScore(liveE.score):liveE?'Continue':'Play as long as you can';
   el('menuCard').hidden=false;
 }
 function closeMenu(){                              // back to wherever she came from: the game, or the card that was up (a won level, game over)
@@ -263,7 +263,27 @@ function openMap(){
   el('mapCard').hidden=false;
   const n=list.querySelector('.next'); if(n) n.scrollIntoView({block:'center'});
 }
-el('modeTag').onclick=e=>{ e.stopPropagation(); openMenu(); };
+/* ── (8.4) pause: Resume, Home (the run is saved), or New game (tap twice) ── */
+let pauseNewT=0;
+function pauseNewReset(){ clearTimeout(pauseNewT); const b=el('pauseNew'); b.textContent='New game'; b.classList.remove('confirm'); }
+function openPause(){
+  if(state!=='play'||overlayOpen()) return;
+  pauseForMenu(); pauseNewReset();
+  const adventure=mode==='adventure'&&lvl;
+  el('pauseEye').textContent='Paused · '+(adventure?'Level '+lvl.id:mode==='daily'?'Daily':'Endless');
+  el('pauseScore').textContent=score.toLocaleString('en-US');
+  el('pauseMsg').textContent=adventure?goalText(lvl.goal)+'. Your game is saved.':'Your game is saved.';
+  el('pauseCard').hidden=false;
+}
+function closePause(){ pauseNewReset(); el('pauseCard').hidden=true; if(!overlayOpen()) paused=false; }
+el('pauseBtn').onclick=e=>{ e.stopPropagation(); openPause(); };
+el('pauseResume').onclick=e=>{ e.stopPropagation(); closePause(); };
+el('pauseHome').onclick=e=>{ e.stopPropagation(); pauseNewReset(); el('pauseCard').hidden=true; saveRun(); openMenu(); };
+el('pauseNew').onclick=e=>{
+  e.stopPropagation(); const b=el('pauseNew');
+  if(!b.classList.contains('confirm')){ b.textContent='Tap again to start over'; b.classList.add('confirm'); pauseNewT=setTimeout(pauseNewReset,3000); return; }
+  closePause(); start();
+};
 el('menuEndless').onclick=e=>{ e.stopPropagation(); homeCrumble(); playEndless(); };
 el('menuAdv').onclick=e=>{ e.stopPropagation(); openMap(); };
 el('menuClose').onclick=e=>{ e.stopPropagation(); closeMenu(); };
