@@ -1134,6 +1134,47 @@ test('the one rescue: offered on the game-over card of a run worth saving, spent
   assert.equal(await page.isVisible('#reviveBtn'), false, 'a second game over has no rescue: the run is over');
 });
 
+
+// ── The game-over card (plan 8.1): Out of moves, one marked Second chance, then only Play again and Home ──
+const cardState = page => page.evaluate(() => ({
+  title: el('overTitle').textContent, second: !el('reviveBox').hidden, btn: el('reviveBtn').textContent, note: el('reviveNote').textContent,
+  again: el('againBtn').textContent, againCta: el('againBtn').classList.contains('cta'), home: el('overMenuBtn').textContent }));
+test('game-over card (8.1): the Second chance offer is marked one-time, then only Play again and Home', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { score = 500; rescuesUsed = 0; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.deepEqual(await cardState(page), { title: 'Out of moves', second: true, btn: 'Second chance', note: 'Clears space so you can keep this run. Once per game.', again: 'Play again', againCta: false, home: 'Home' });
+  await page.click('#reviveBtn');
+  assert.equal(await page.evaluate(() => state), 'play');
+  await dealt(page);
+  await page.evaluate(() => { gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  const spent = await cardState(page);
+  assert.deepEqual(spent, { title: 'Out of moves', second: false, btn: 'Second chance', note: spent.note, again: 'Play again', againCta: true, home: 'Home' });
+  assert.equal(await page.isVisible('#reviveBtn'), false);
+  await page.click('#overMenuBtn'); await page.waitForSelector('#menuCard:not([hidden])');
+});
+test('game-over card (8.1): a run not worth saving shows only Play again and Home; Home opens the front menu', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { score = 0; rescuesUsed = 0; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal((await cardState(page)).second, false);
+  assert.equal(await page.isVisible('#reviveNote'), false);
+  await page.click('#overMenuBtn');
+  await page.waitForSelector('#menuCard:not([hidden])');
+  assert.equal(await page.evaluate(() => el('overCard').hidden), true);
+});
+test('game-over card (8.1): Daily and Adventure use the same card', async ({ page }) => {
+  await page.evaluate(() => { mode = 'daily'; start(); }); await dealt(page);
+  await page.evaluate(() => { score = 400; rescuesUsed = 0; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.deepEqual(await cardState(page), { title: 'Out of moves', second: true, btn: 'Second chance', note: 'Clears space so you can keep this run. Once per game.', again: 'Play again', againCta: false, home: 'Home' });
+  await page.click('#reviveBtn'); await dealt(page);
+  await page.evaluate(() => { gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal((await cardState(page)).second, false, 'Daily: spent, so only Play again and Home');
+});
+
 /* ═══════ Bonus trays (plan 6.2, replaced the Blast Round) ═══════ */
 // a row that one single-cell drop at (r,0) clears; combo is set so that drop's clear is combo k
 const clearAt = (r, k) => `grid[${r}] = grid[${r}].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null)); tray[0] = { s: SHAPES[0], gi: 1 }; combo = (${k}) - 1; place(0, ${r}, 0);`;
@@ -1616,14 +1657,14 @@ test('Adventure: running out of moves ends the try, three failed tries open the 
     await page.evaluate(() => { score = 0; rescuesUsed = 0; gameOver(); });
     await page.waitForSelector('#overCard:not([hidden])');
     assert.match(await page.textContent('#overEye'), /Level 1/);
-    assert.equal(await page.textContent('#againBtn'), 'Try again');
+    assert.equal(await page.textContent('#againBtn'), 'Play again'); assert.equal(await page.textContent('#overMenuBtn'), 'Home');
     assert.equal(await page.isVisible('#reviveBtn'), true, 'a level offers its Rescue even at score 0');
     assert.equal(await page.evaluate(() => advRec(1).f), k + 1);
     if (k < 2) { await page.click('#againBtn'); await page.waitForFunction(() => state === 'play' && lv.pieces === 0); await dealt(page); }
   }
   assert.equal(await page.evaluate(() => levelOpen(2)), true, 'after three misses the next level opens');
   assert.equal(await page.evaluate(() => levelDone(1)), false);
-  await page.click('#overMenuBtn'); await page.waitForSelector('#mapCard:not([hidden])');
+  await page.click('#overMenuBtn'); await page.waitForSelector('#menuCard:not([hidden])'); await page.click('#menuAdv'); await page.waitForSelector('#mapCard:not([hidden])');
   assert.equal(await page.locator('#mapList .node:not([disabled])').count(), 2);
 });
 
@@ -1680,10 +1721,10 @@ test('Daily: game over records the day once, shows Today\'s best, and the calend
   await page.evaluate(() => { score = 300; lv.lines = 4; gameOver(); });
   await page.waitForSelector('#overCard:not([hidden])');
   assert.match(await page.textContent('#overEye'), /Daily/); assert.equal(await page.textContent('#againBtn'), 'Play again');
-  assert.equal(await page.textContent('#overMenuBtn'), 'Calendar');
+  assert.equal(await page.textContent('#overMenuBtn'), 'Home');
   await page.evaluate(() => { state = 'play'; score = 500; gameOver(); });         // a Rescue and a second game over: one play
   assert.deepEqual(await page.evaluate(() => daily.d['2026-11-09']), { s: 500, l: 4, n: 1 });
-  await page.click('#overMenuBtn'); await page.waitForSelector('#dailyCard:not([hidden])');
+  await page.click('#overMenuBtn'); await page.waitForSelector('#menuCard:not([hidden])'); await page.click('#menuDaily'); await page.waitForSelector('#dailyCard:not([hidden])');
   assert.equal(await page.locator('#calGrid .day.on').count(), 1);
   assert.match(await page.textContent('#calGrid .day.on'), /500/);
   assert.equal(await page.textContent('#dailyStatus'), 'Best today: 500 · played 1 time');

@@ -7,7 +7,7 @@ async function gameOver(){
   state='over'; clearRun(); stuck=false; syncActions();
   const prevBest=best;
   stats.totalScore+=score;
-  el('overEye').textContent='No room left'; el('againBtn').textContent='Start over'; el('overMenuBtn').textContent='Modes';
+  el('overEye').textContent='Endless'; el('overTitle').textContent='Out of moves'; el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Home';
   if(mode==='adventure'&&lvl) levelFailed();
   else if(mode==='daily') dailyOver();
   else {
@@ -19,9 +19,9 @@ async function gameOver(){
       :score>=600*SCORE_SCALE?'Good chains. Save the big shapes for open space.'
       :'Clear rows early — do not let the board fill up.');
   }
-  const btn=el('reviveBtn');
-  btn.hidden=!rescueAllowed(prevBest);
-  btn.textContent='Keep going';
+  const offer=rescueAllowed(prevBest);              // (8.1) one marked one-time offer; otherwise only Play again and Home
+  el('reviveBox').hidden=!offer;
+  el('againBtn').className=offer?'ghost':'cta';
   shareSetup();                                      // (4.4) Share shows for Endless and Daily runs only
   el('overCard').hidden=false;
   tlShow();                                          // (7.5g) the run replays on the card; the buttons above are already live
