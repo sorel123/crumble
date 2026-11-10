@@ -99,7 +99,7 @@ function musicNewRun(){                                         // shuffling, a 
 function musicSetPick(id){                                      // the Settings picker: 'shuffle', a track id, or 'off' (the switch)
   if(id==='off'){ CFG.MUSIC=false; }
   else{ CFG.MUSIC_PICK=id; CFG.MUSIC=true; if(musicPickIdx()>=0) musicTrackNo=musicPickIdx(); }
-  musicSync();
+  musicSync(); syncSoundBtns();
 }
 function musicDuck(p,secs){ if(musicE&&p>0) musicE.duck(musicDuckLevel(p),Math.min(2,secs)); }
 document.addEventListener('visibilitychange',musicSync);

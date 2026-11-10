@@ -42,6 +42,7 @@ function loadSkinSave(){
     if(typeof o.mascot==='boolean') CFG.FX_MASCOT=o.mascot;           // the mascot crumb (7.5f)
     if(typeof o.tl==='boolean') CFG.FX_TIMELAPSE=o.tl;                // the game-over timelapse (7.5g)
     if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
+    syncSoundBtns();
   }catch(e){}
 }
 // call whenever `best` changes; returns the names of any skins newly earned

@@ -105,9 +105,12 @@
   @keyframes mDrip{0%{opacity:0;transform:none}20%{opacity:1}80%{opacity:1;transform:translateY(7px)}100%{opacity:0;transform:translateY(8px)}}
   @keyframes mFlick{0%{opacity:1;transform:none}100%{opacity:0;transform:translate(6px,-5px)}}
   @keyframes mRoll{0%{transform:none}30%{transform:translate(0,-1.8px)}55%{transform:translate(1.3px,-1.5px)}75%{transform:translate(-1.3px,-1.5px)}100%{transform:none}}
-  .right{text-align:right;display:flex;gap:14px;align-items:flex-start}
+  .right{text-align:right;display:flex;gap:10px;align-items:flex-start}
+  #musicBtn{position:relative}
+  #mute.off,#musicBtn.off{opacity:.55}
+  #musicBtn.off::after{content:'';position:absolute;left:9px;right:9px;top:50%;height:2.5px;border-radius:2px;background:var(--fg);transform:rotate(-45deg)}
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--best)}
-  #mute,#setBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
+  #mute,#musicBtn,#setBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
         width:40px;height:40px;border-radius:12px;font-size:17px;cursor:pointer}
   #actions{position:absolute;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:12px;pointer-events:none;z-index:2}
   #actions button{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);font-family:var(--font);font-size:14px;font-weight:600;
@@ -359,7 +362,8 @@
     <div class="right">
       <div><div class="lbl" id="bestLbl">Best</div><div class="best" id="bestVal">0</div></div>
       <button id="setBtn" aria-label="Settings">⚙️</button>
-      <button id="mute" aria-label="Toggle sound">🔊</button>
+      <button id="musicBtn" aria-label="Music">🎵</button>
+      <button id="mute" aria-label="Sound effects">🔊</button>
     </div>
   </div>
   <button id="modeTag" type="button" aria-label="Choose how to play">Endless ▾</button>

@@ -210,9 +210,10 @@ function testTone(kind){
   g.gain.setValueAtTime(.2,t+.7); g.gain.linearRampToValueAtTime(0,t+.75);
   o.connect(g); g.connect(kind==='clean'?c.destination:master); o.start(t); o.stop(t+.8);
 }
+const sfxOff=()=>muted;                               // Settings > Sound effects, or the speaker button
 /* run a sound: skip when muted, start the clock at `delay`, never throw */
 function play(delay,fn){
-  if(muted) return;
+  if(sfxOff()) return;
   try{ const c=ac(); fn(c.currentTime+delay,jit()); }catch(e){}
 }
 
@@ -438,7 +439,7 @@ function loadBank(){
 }
 // play one recorded sound: `rate` shifts pitch (and speed) the way a real sample does
 function smp(name,{vol=1,rate=1,delay=0}={}){
-  const b=bank[name]; if(!b||muted) return;
+  const b=bank[name]; if(!b||sfxOff()) return;
   try{
     const t=actx.currentTime+delay, src=actx.createBufferSource(), g=actx.createGain();
     src.buffer=b.buf; src.playbackRate.value=rate; g.gain.value=vol*sfxGain;
@@ -493,12 +494,27 @@ const Sfx={
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
   }
 };
-function setMuted(on,save=true){
-  muted=on; el('mute').textContent=muted?'🔈':'🔊';
+/* Two buttons on the game screen, each its own sound (Jay, 2026-11-10): the speaker is Sound effects (`muted`), the note is
+   Music (`CFG.MUSIC`). Settings > Sound has the same two switches; they mirror each other. Before this there was only the
+   speaker, and the music (6.8) ignored it, so a "muted" game kept playing music. */
+function syncSoundBtns(){
+  const m=el('mute'), n=el('musicBtn');
+  if(m){ m.textContent=muted?'🔇':'🔊'; m.classList.toggle('off',muted); m.setAttribute('aria-pressed',muted?'false':'true'); }
+  if(n){ n.classList.toggle('off',!CFG.MUSIC); n.setAttribute('aria-pressed',CFG.MUSIC?'true':'false'); }
+}
+function setMuted(on,save=true){                     // the speaker button and Settings > Sound effects
+  muted=on;
   const box=el('sndOn'); if(box) box.checked=!muted;
+  syncSoundBtns();
   if(save) saveSkinSave();
 }
 el('mute').onclick=e=>{ e.stopPropagation(); setMuted(!muted); };
+el('musicBtn').onclick=e=>{ e.stopPropagation();     // the note button: Music on (to the picked track or Shuffle) or off
+  if(!CFG.MUSIC) ac();
+  musicSetPick(CFG.MUSIC?'off':CFG.MUSIC_PICK);
+  if(typeof renderMusicPick==='function') renderMusicPick();
+  saveSkinSave();
+};
 /* The bonus trays' own sounds (plan 6.2; they were the Blast Round's). Synthesized and the same in every sound set, so no
    other moment in the game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise
    (meter full), and a bell cadence over a soft hit (bonus over). */
@@ -574,7 +590,7 @@ function arbFlush(){
     if(how==='duck') arbPlay(e,DUCK);
     else if(how==='defer'){ if(e.late) arbPlay(e,DUCK); else later.push(e); }
   }
-  if(hold>0){ arbLead={p:top,until:Math.max(arbLead.until,now+hold)}; if(!muted) musicDuck(win,hold); }   // 6.8: the music dips under whatever won
+  if(hold>0){ arbLead={p:top,until:Math.max(arbLead.until,now+hold)}; if(!sfxOff()) musicDuck(win,hold); }   // 6.8: the music dips under whatever won
   for(const e of later) setTimeout(()=>sfxEvent(e.fn,e.a,true),Math.max(0,(arbLead.until-now)*1000)+40);
 }
 function sfxEvent(fn,a,late=false){
