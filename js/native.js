@@ -63,7 +63,17 @@ function gcCall(method,arg){
 }
 function gcStart(){                                  // once at launch, from main.js
   if(!Native.on()) return;
-  gcCall('signIn').then(r=>{ GC.on=!!(r&&r.signedIn); if(GC.on) gcSync(); });
+  gcCall('signIn').then(r=>gcSet(r));
+  try{ Native.plugin('GameCenter')?.addListener('change',gcSet); }catch(e){}   // signed in or out in Settings while running
+  document.addEventListener('visibilitychange',()=>{                          // back from the background: ask again
+    if(document.visibilityState==='visible') gcCall('status').then(gcSet);
+  });
+}
+function gcSet(r){
+  if(!r) return;
+  const on=!!r.signedIn;
+  if(on && !GC.on){ GC.sent.clear(); GC.on=true; gcSync(); }   // newly signed in (maybe another player): send it all again
+  else GC.on=on;
 }
 function gcSync(){                                   // the Endless best and every goal reached so far; cheap, idempotent
   if(!GC.on) return;

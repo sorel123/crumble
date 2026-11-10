@@ -18,6 +18,7 @@ public class GameCenterPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "GameCenter"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "signIn", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "submitScore", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unlock", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "show", returnType: CAPPluginReturnPromise)
@@ -26,15 +27,23 @@ public class GameCenterPlugin: CAPPlugin, CAPBridgedPlugin {
     private var started = false
 
     // Resolves {signedIn}. Safe to call more than once; the handler is installed once and Game Center
-    // calls it again by itself whenever the player signs in or out in Settings.
+    // calls it again by itself whenever the player signs in or out in Settings: each later call is sent
+    // to JS as a "change" event {signedIn}.
     @objc func signIn(_ call: CAPPluginCall) {
         if started { call.resolve(["signedIn": GKLocalPlayer.local.isAuthenticated]); return }
         started = true
         var answered = false
-        GKLocalPlayer.local.authenticateHandler = { _, _ in
+        GKLocalPlayer.local.authenticateHandler = { [weak self] _, _ in
             // A sign-in view controller, if offered, is ignored: no sheet at launch.
-            if !answered { answered = true; call.resolve(["signedIn": GKLocalPlayer.local.isAuthenticated]) }
+            let on = GKLocalPlayer.local.isAuthenticated
+            if !answered { answered = true; call.resolve(["signedIn": on]) }
+            else { self?.notifyListeners("change", data: ["signedIn": on]) }
         }
+    }
+
+    // {signedIn} right now, for a check when the app comes back to the front.
+    @objc func status(_ call: CAPPluginCall) {
+        call.resolve(["signedIn": GKLocalPlayer.local.isAuthenticated])
     }
 
     // {id, score}: one score to one leaderboard. Game Center keeps the best per period itself.
