@@ -155,11 +155,7 @@
             color:#4a2c00;background:linear-gradient(#FFE58A,#FFC83D);box-shadow:0 0 14px rgba(255,206,72,.55);pointer-events:none}
   #goldChip.bump{animation:chipBump .35s ease-out}
   @keyframes chipBump{0%{transform:translateX(-50%) scale(1.25)}100%{transform:translateX(-50%) scale(1)}}
-  /* (1.1 A) the sweep cue: a closer tray (a hand that can empty the board) says so in one small pill, same spot as the gold chip (never both) */
-  #sweepChip{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(56px + env(safe-area-inset-bottom,0px));padding:5px 14px;border-radius:999px;font-size:15px;font-weight:700;white-space:nowrap;
-            color:#0b3a46;background:linear-gradient(#E6FDFF,#9FEAFF);box-shadow:0 0 14px rgba(160,236,255,.6);pointer-events:none;animation:chipBump .35s ease-out}
-  @media (prefers-reduced-motion:reduce){ #sweepChip{animation:none} }
-  #sweepChip[hidden],#goldChip[hidden],#starNote[hidden],#noMoves[hidden],#actions button[hidden],#bonusChip[hidden]{display:none}
+  #goldChip[hidden],#starNote[hidden],#noMoves[hidden],#actions button[hidden],#bonusChip[hidden]{display:none}
   #dbg{position:absolute;left:18px;top:calc(100px + env(safe-area-inset-top,0px));font-size:11px;font-weight:600;letter-spacing:.06em;
        opacity:.6;pointer-events:none}
   #dbg[hidden]{display:none}
@@ -396,7 +392,6 @@
   </div>
   <div id="noMoves" hidden>No moves</div>
   <div id="goldChip" hidden></div>
-  <div id="sweepChip" role="status" hidden>✨ Sweep is on</div>
   <div id="starNote" hidden>The star clears its row and column</div>
   <div id="dbg"></div>
 

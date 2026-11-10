@@ -98,25 +98,11 @@ function syncGoldChip(){                          // (4.5c) what the golden hand
   if(txt&&txt!==goldChipTxt){ c.textContent=txt; c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
   goldChipTxt=txt;
 }
-/* (1.1 A) the sweep cue: while a closer tray (a hand that can empty the board) is in play, a small "Sweep is on" pill. After
-   each drop it checks that the pieces left can still sweep; once they cannot (a drop went elsewhere), the pill and the tray's
-   shimmer fade. Never says how. A fresh closer tray is trusted as dealt (the dealer verified it). */
-let sweepKey='';
-function syncSweepChip(){
-  const c=el('sweepChip');
-  const left=tray.filter(t=>t).length, live=state==='play'&&!dealing&&!stuck&&closerTray&&left>0;
-  if(live&&left<3){
-    const a=packGrid(grid), key=packBits(a).join(',')+tray.map(t=>t?SHAPES.indexOf(t.s):'-').join(',');
-    if(key!==sweepKey){ sweepKey=key; if(!goldenSolve(a,tray.map(t=>t?t.s:null)).sweep) closerTray=false; }
-  }
-  c.hidden=!(live&&closerTray&&CFG.FX_CLOSER_GLOW);
-}
 function syncActions(){
   const live=state==='play'&&!dealing;
   el('noMoves').hidden=!(stuck&&live);
   el('starNote').hidden=!(live&&!stats.starSeen&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until she has used one
   syncGoldChip();
-  syncSweepChip();
   syncBonusChip();
 }
 let lastRunJson=null;

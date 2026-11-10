@@ -881,7 +881,7 @@ function commitTray(shapes,label,plan){
     Sfx.goldenIn();
   }
   lastTier=label;
-  closerTray=label==='CLOSER'||(label==='SWEEP'&&paced()); sweepKey='';   // (7.3) the shimmer behind the tray: this hand can empty the board
+  closerTray=label==='CLOSER'||(label==='SWEEP'&&paced());   // (7.3) the shimmer behind the tray: this hand can empty the board
   carry=shapes.filter(x=>!stackable(x));
   if(shapes.includes(STAR)) Sfx.starIn();
   if(shapes.includes(STAR)) hesVoid(); else hesDealt();   // a star tray is no normal hesitation sample

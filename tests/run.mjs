@@ -2621,25 +2621,6 @@ test('1.1 A two-tray chase: a closer on a small board with no sweep gets a set-u
   assert.ok(!r.after, 'one try only');
 });
 
-test('1.1 A sweep cue: "Sweep is on" shows only with a sweep hand in the tray, and goes (with the shimmer) once the pieces left cannot sweep', async ({ page }) => {
-  await play(page); await dealt(page);
-  const r = await page.evaluate('(() => {' + B73 + `
-    const o = {}, vis = () => !el('sweepChip').hidden;
-    W73(); sweepCool = 0; B73(['00000000','00000000','00000000','00000000','00000000','00000000','00111111','11111000']); wave.at = 9; jack.at = 99; genTray(); syncActions();
-    o.tier = lastTier; o.on = vis();
-    // a drop that cannot be part of the sweep: the first piece far from the gap, somewhere it fits
-    const i = tray.findIndex(t => t); const s = tray[i].s;
-    let spot = null; for (let rr = 0; rr <= N - s.rows && !spot; rr++) for (let cc = 0; cc <= N - s.cols && !spot; cc++) if (canPlace(s, rr, cc, grid)) spot = [rr, cc];
-    place(i, spot[0], spot[1]); syncActions();
-    o.after = vis(); o.glow = closerTray;
-    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11100000']); closerCool = 9; genTray(); syncActions();
-    o.plain = vis(); o.plainTier = lastTier;
-    return o; })()`);
-  assert.equal(r.tier, 'CLOSER'); assert.ok(r.on, 'the pill shows with a sweep hand');
-  assert.ok(!r.after && !r.glow, 'a drop that spoils the sweep takes the pill and the shimmer away');
-  assert.ok(!r.plain, 'no pill on an ordinary tray (' + r.plainTier + ')');
-});
-
 test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, saved with the run; Adventure and the switch keep her world', async ({ page }) => {
   await play(page);
   await dealt(page);

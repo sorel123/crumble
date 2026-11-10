@@ -200,7 +200,7 @@ Top to bottom:
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
 | (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
 | (8.3) | Front menu showpiece: the start card and the mode menu share one look (gem logo in her skin, the crumb, the journey sky travelling behind, a 2x2 of mode tiles). See the 8.3 section |
-| (1.1 A) | Sweep chase: a sweep hunt for closers and small calm boards, a "Sweep is on" pill with the shimmer, a two-tray chase and an aim term (both off). See the 1.1 A section |
+| (1.1 A) | Sweep chase: a sweep hunt for closers and small calm boards (the usual closer shimmer, no new cue), a two-tray chase and an aim term (both off). See the 1.1 A section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1195,9 +1195,8 @@ Endless and Daily only (Adventure untouched):
   sweepable board 0-15 times, no measurable rise in sweeps, deal p95 about +2 ms. Admin slider to try it.
 - **Aim** (`SWEEP_AIM`, `AIM_GEMS`, `AIM_TRIES`): ordinary hands lean toward boards close to a sweep. **Off**: it is help on honest
   trays, so it waits for the Endless pacing decision. At 1 (with the chase): sweep hands 1 per 120-210 trays, games longer.
-- **Cue**: `#sweepChip` "✨ Sweep is on" under the tray while a closer tray is in play (`syncSweepChip`, save.js), with the existing
-  shimmer. After each drop the pieces left are re-solved (`goldenSolve`); once they cannot sweep, pill and shimmer go. Never says how.
-  Respects `FX_CLOSER_GLOW` and reduced motion.
+- **No new cue.** A "Sweep is on" pill was built and taken out: Jay wants the sweep to be something she spots herself
+  (2026-11-10). Sweep hands keep the 7.3 closer shimmer, unchanged.
 
 Measured (`tools/bot-sim.mjs`, casual bot, 12000 trays, seeds 1 and 2, main and branch run side by side; new columns `sweepHands`,
 `sweepHandsConverted`, `sweepsAll`, `traysPerSweep`, `chases`, `chaseHits`, and sweep hands / swept per fill bucket):
