@@ -71,6 +71,7 @@ function shareStrip(){
 function shareSetup(){
   const can=(mode==='endless'||mode==='daily')&&score>0;
   el('shareBtn').hidden=!can;
+  gcButtons();                                       // (1.1 F) 🏆 Leaderboards beside it, in the app while signed in
 }
 
 // the words that go with the picture: plain text and a plain URL, no markdown
