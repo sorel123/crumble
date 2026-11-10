@@ -506,50 +506,48 @@ app sends the Endless best (after every Endless game and at launch), today's Dai
 and every goal rung reached (as achievements). People see them in Apple's Games app. If not signed in, nothing
 is sent and the game is unchanged.
 
-One-time setup in App Store Connect (needs Jay's account; ids must match `GC` in `js/native.js` exactly):
+Sign-in is checked at launch, again whenever the app comes back to the front, and whenever Game Center
+reports a change (signed in or out in Settings). A new sign-in sends everything again, in case it is another
+player.
 
-1. Xcode: Signing & Capabilities, pick the team, add the **Game Center** capability (the entitlement file
-   `ios/App/App/App.entitlements` is already there).
-2. App Store Connect: create the app record for `win.crumble.app`, then Features, Game Center:
-   - Leaderboard **Classic**, id `crumble.endless.best`, "Best score", integer, high to low, keep best.
-   - Leaderboard **Recurring**, id `crumble.daily`, "Daily", starts today, duration 1 day, integer, high to
-     low, keep best.
-   - One achievement per goal rung (100 points total across them is fine; the ids are what matter):
+One-time setup (needs Jay's account; ids must match `GC` in `js/native.js` exactly):
 
-- `crumble.goal.lines.25`
-- `crumble.goal.lines.100`
-- `crumble.goal.lines.250`
-- `crumble.goal.lines.500`
-- `crumble.goal.lines.1000`
-- `crumble.goal.lines.2500`
-- `crumble.goal.games.3`
-- `crumble.goal.games.10`
-- `crumble.goal.games.25`
-- `crumble.goal.games.50`
-- `crumble.goal.games.100`
-- `crumble.goal.combo.3`
-- `crumble.goal.combo.4`
-- `crumble.goal.combo.5`
-- `crumble.goal.combo.6`
-- `crumble.goal.combo.8`
-- `crumble.goal.sweeps.1`
-- `crumble.goal.sweeps.3`
-- `crumble.goal.sweeps.10`
-- `crumble.goal.sweeps.25`
-- `crumble.goal.stars.10`
-- `crumble.goal.stars.30`
-- `crumble.goal.stars.60`
-- `crumble.goal.stars.90`
-- `crumble.goal.days.3`
-- `crumble.goal.days.7`
-- `crumble.goal.days.14`
-- `crumble.goal.days.30`
-- `crumble.goal.days.60`
-- `crumble.goal.bonus.1`
-- `crumble.goal.bonus.5`
-- `crumble.goal.bonus.15`
+1. App Store Connect: create the app record for `win.crumble.app` (Apps, +, New App).
+2. Make the 2 leaderboards and the 32 achievements (one per goal rung, 910 points) with the script:
+
+   ```
+   node tools/gc-setup.mjs --dry-run      # lists every id, name and point value
+   ASC_KEY_ID=... ASC_ISSUER_ID=... ASC_KEY_FILE=~/AuthKey_XXXX.p8 node tools/gc-setup.mjs
+   ```
+
+   The key comes from App Store Connect, Users and Access, Integrations, App Store Connect API (role App
+   Manager); keep the .p8 out of the repo. The script reads the goal names from `js/goals.js` and skips ids
+   that already exist, so it can be re-run after goals change. Achievement images are not uploaded; Apple only
+   needs them for App Store review, not for TestFlight.
+   By hand instead: Features, Game Center: a Classic leaderboard `crumble.endless.best`, a Recurring one
+   `crumble.daily` (1 day), both integer, high to low, best score; then the achievement ids the dry run lists.
 
 Until those exist, the calls fail quietly (they are caught) and nothing shows.
+
+#### Icon, splash, signing and TestFlight (plan 5.4)
+
+The app icon is `tools/make-icon.html` at 1024 px (alpha removed, as Apple requires); the launch screen is the
+game's background `#150B26` with the same three gems, and `capacitor.config.json` uses that colour too, so
+there is no black flash between the launch screen and the game. Change the art in `make-icon.html`, then
+replace `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` and the three `Splash.imageset`
+files.
+
+First TestFlight build (Jay at the Mac, once):
+
+1. `npm ci && npm run build:www && npx cap sync ios && npx cap open ios`
+2. Xcode, target App, Signing & Capabilities: tick "Automatically manage signing", pick Jay's team. Check that
+   the Game Center capability shows (it comes from `App.entitlements`).
+3. Each upload needs a higher build number: General, Identity, Build (1, 2, 3...). Version stays 1.0.
+4. Device menu: Any iOS Device (arm64). Product, Archive. In the Organizer: Distribute App, App Store
+   Connect, Upload.
+5. App Store Connect, the app, TestFlight: once the build finishes processing (export compliance is
+   already answered by `ITSAppUsesNonExemptEncryption` in Info.plist), add an Internal Testing group with the family's
+   Apple IDs (they must be users on the team), and they install through the TestFlight app.
 
 **If this is ever aimed at kids officially:** COPPA and Apple's Kids Category rules apply: no behavioural
 ad targeting, limited analytics.
