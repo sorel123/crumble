@@ -306,63 +306,72 @@ function stepConfetti(dt){
   ctx.globalAlpha=1;
 }
 
-/* (7.5) blocks that crumble. A cleared gem cracks (crack(), drawn over the gem in the clear's ~6 frames), then
-   breaks into angular fragments (spawnRubble) that fall under gravity, bounce once on floorY (just above the bottom
-   safe area) and fade. Rubble is drawn in the board layer before the live gems and tray pieces (drawRubble), so it
-   falls behind them and never covers a live gem. How much rubble follows the 6.3 hierarchy, by the shatter's tier:
-   1 single line (one small piece per gem: crisp), 2 multi-line or star, 3 combo BIG_COMBO+, 4 clean sweep. Every
-   piece counts against the particle budget (fxLive), so a slow frame sheds rubble first. */
-const RUBBLE_PER=[0,1,2,3,4], RUBBLE_G=0.36;
-function crack(s,x,y,k){                             // a zigzag across the gem, drawn in as k goes 0 -> 1
-  if(!s.ck){                                         // across the line's direction, so a row's gems split side to side
-    const pts=[], n=4;
-    for(let j=0;j<=n;j++){ const a=j/n, w=(j===0||j===n)?0:(Math.random()-.5)*.36; pts.push(s.horiz?[.5+w,a]:[a,.5+w]); }
-    s.ck=pts;
+/* (7.5) blocks that crumble, second pass. The block itself breaks: a crack runs through the gem along and across its
+   line (crack(), in the clear's ~4 frames), then the gem splits into four quarters cut from its own cached tile
+   (spawnRubble: drawImage of a sub-rectangle, so every skin keeps its shading). At the moment of the split the
+   quarters sit exactly where the gem was, then pop a few px apart and fall with spin and gravity off the bottom of
+   the screen, fading near the end. The line breaks as a wave: each gem's crack starts CRUMBLE_STAGGER frames per
+   cell along the line from the piece she just placed (game.js). Rubble is drawn over the board and the gems left on
+   it, and under the tray and everything after it (drawRubble). How big it gets follows the 6.3 hierarchy, by the
+   shatter's tier: 1 single line (four quarters, a little pop, short life, no dust or specks: crisp), 2 multi-line or
+   star (more pop, a pale dust puff and a few specks per gem), 3 combo BIG_COMBO+ (more kick away from the piece),
+   4 clean sweep (the most). Every quarter counts against the particle budget (fxLive): when it is short a gem breaks
+   in two halves, or falls whole, or (budget spent) just goes. */
+const CRUMBLE_CRACK=4, RUBBLE_G=0.6, RUBBLE_POP=[0,.7,1.3,1.7,2.1], RUBBLE_KICK=[0,.3,.9,1.6,2], RUBBLE_LIFE=[0,34,56,60,66], RUBBLE_FADE=[0,12,10,10,10];
+const RUBBLE_CUTS={4:[[0,0,.5,.5],[.5,0,.5,.5],[0,.5,.5,.5],[.5,.5,.5,.5]],2:null,1:[[0,0,1,1]]};
+function crack(s,x,y,k){                             // two zigzags through the gem, drawn in as k goes 0 -> 1: the lines it breaks along
+  if(!s.ck){
+    const zig=(along)=>{ const pts=[]; for(let j=0;j<=4;j++){ const a=j/4, w=(j===0||j===4)?0:(Math.random()-.5)*.2; pts.push(along?[a,.5+w]:[.5+w,a]); } return pts; };
+    s.ck=[zig(!s.horiz),zig(s.horiz)];               // first across the line (it splits side to side), then along it
   }
-  const pts=s.ck, m=Math.max(1,Math.ceil(k*(pts.length-1)));
-  ctx.beginPath(); ctx.moveTo(x+pts[0][0]*cell,y+pts[0][1]*cell);
-  for(let j=1;j<=m;j++) ctx.lineTo(x+pts[j][0]*cell,y+pts[j][1]*cell);
-  ctx.globalAlpha=0.55*k; ctx.strokeStyle='rgba(20,10,40,1)'; ctx.lineWidth=Math.max(1.5,cell*.07); ctx.stroke();
-  ctx.globalAlpha=0.9*k;  ctx.strokeStyle='#fff';             ctx.lineWidth=Math.max(1,cell*.03);  ctx.stroke();
-  ctx.globalAlpha=1;
+  ctx.lineCap='round';
+  for(let z=0;z<2;z++){
+    const kk=z?clamp(k*1.6-.5,0,1):Math.min(1,k*1.6); if(kk<=0) continue;
+    const pts=s.ck[z], m=Math.max(1,Math.ceil(kk*(pts.length-1)));
+    ctx.beginPath(); ctx.moveTo(x+pts[0][0]*cell,y+pts[0][1]*cell);
+    for(let j=1;j<=m;j++) ctx.lineTo(x+pts[j][0]*cell,y+pts[j][1]*cell);
+    ctx.globalAlpha=0.5*kk; ctx.strokeStyle='rgba(20,10,40,1)'; ctx.lineWidth=Math.max(1.5,cell*.07); ctx.stroke();
+    ctx.globalAlpha=0.9*kk; ctx.strokeStyle='#fff';             ctx.lineWidth=Math.max(1,cell*.03);  ctx.stroke();
+  }
+  ctx.globalAlpha=1; ctx.lineCap='butt';
 }
 function spawnRubble(s,cx,cy,g){
-  const n=Math.min(RUBBLE_PER[s.tier||2]||2,Math.max(0,fxRoom()));
-  const away=Math.atan2(cy-s.oy,cx-s.ox), kick=s.tier>=3?1.6:s.tier===2?1:0.5;   // bigger clears push rubble a little away from the piece
-  for(let k=0;k<n;k++){
-    const sz=cell*(s.tier===1?.34:.28+Math.random()*.16), pts=[], sides=Math.random()<.3?3:4;
-    for(let j=0;j<sides;j++){                        // an irregular shard: corners at uneven angles and radii
-      const a=(j+Math.random()*.6)/sides*6.283, rr=sz*(.7+Math.random()*.3);   // chunky, not slivers: these are bits of block
-      pts.push(Math.cos(a)*rr,Math.sin(a)*rr);
+  const room=fxRoom(), tier=s.tier||2; if(room<=0) return;
+  const cuts=room>=4?RUBBLE_CUTS[4]:room>=2?(s.horiz?[[0,0,.5,1],[.5,0,.5,1]]:[[0,0,1,.5],[0,.5,1,.5]]):RUBBLE_CUTS[1];
+  const away=Math.atan2(cy-s.oy,cx-s.ox), pop=RUBBLE_POP[tier]||1.3, kick=RUBBLE_KICK[tier]||.9, life=RUBBLE_LIFE[tier]||34;
+  const tiles=gemBig;                               // the tile set right now: a transformation may swap gemBig mid-fall
+  for(const [fx,fy,fw,fh] of cuts){
+    const dx=fx+fw/2-.5, dy=fy+fh/2-.5;              // this piece's offset from the gem's centre, in cells (+-0.25 for a quarter)
+    rubble.push({x:cx+dx*cell,y:cy+dy*cell,
+      vx:dx*4*pop+Math.cos(away)*kick*(.5+Math.random()*.5)+(Math.random()-.5)*.6,
+      vy:dy*4*pop+Math.sin(away)*kick*.4-1.1-Math.random()*(.6+kick*.6),
+      rot:0,vr:(dx||.25)*(dy>0?-1:1)*(.12+Math.random()*.1)*(tier>1?1.4:1),
+      tiles,gi:s.gi,fx,fy,fw,fh,age:0,life,fade:RUBBLE_FADE[tier]||10});
+  }
+  if(tier>=2){                                       // a small pale puff where the gem broke
+    for(let k=Math.min(tier>=3?3:2,fxRoom());k>0;k--){
+      const a=Math.random()*6.283;
+      dust.push({x:cx+Math.cos(a)*cell*.15,y:cy+Math.sin(a)*cell*.15,vx:Math.cos(a)*(.6+Math.random()*.6),vy:Math.sin(a)*.6-.5,r:cell*(.12+Math.random()*.06),life:.8});
     }
-    const ox=(n>1?(k/(n-1)-.5):0)*cell*.5+(Math.random()-.5)*cell*.2, oy=(Math.random()-.5)*cell*.3;
-    rubble.push({x:cx+ox,y:cy+oy,vx:Math.cos(away)*kick*Math.random()+(Math.random()-.5)*1.6+ox*.04,
-      vy:-1.2-Math.random()*(1.2+kick),rot:Math.random()*6.283,vr:(Math.random()-.5)*.28,pts,
-      col:`hsl(${g.h} ${g.s}% 58%)`,hi:`hsl(${g.h} ${g.s}% 82%)`,bn:0,fade:1,dust:s.tier===4});
   }
 }
 function drawRubble(dt){
+  if(!rubble.length) return;
+  const T=ctx.getTransform(), a=T.a,b=T.b,c=T.c,d=T.d,e=T.e,f=T.f;   // compose each piece's turn with the frame's own transform (shake): no save/restore per piece
   for(let i=rubble.length-1;i>=0;i--){
-    const b=rubble[i];
-    b.vy+=RUBBLE_G*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt;
-    if(b.y>floorY){                                    // the bottom of the screen: one bounce, then it rests and fades
-      b.y=floorY;
-      if(!b.bn){ b.bn=1; b.vy*=-0.35; b.vx*=0.6; b.vr*=0.5;
-        if(b.dust&&fxRoom()>0) dust.push({x:b.x,y:floorY,vx:(Math.random()-.5)*2,vy:-.6-Math.random(),r:cell*.08,life:1}); }
-      else { b.vy=0; b.vx*=Math.pow(.8,dt); b.vr*=Math.pow(.8,dt); }
-    }
-    if(b.bn) b.fade-=dt*0.05;                          // ~20 frames after the bounce
-    if(b.fade<=0||b.x<-40||b.x>W+40){ rubble.splice(i,1); continue; }
-    const c=Math.cos(b.rot), sn=Math.sin(b.rot), P=b.pts;
-    ctx.globalAlpha=Math.min(1,b.fade*1.5);
-    ctx.beginPath();
-    for(let j=0;j<P.length;j+=2){ const px=b.x+P[j]*c-P[j+1]*sn, py=b.y+P[j]*sn+P[j+1]*c; j?ctx.lineTo(px,py):ctx.moveTo(px,py); }
-    ctx.closePath(); ctx.fillStyle=b.col; ctx.fill();
-    ctx.beginPath();                                   // a lit facet: the shard's first edge to its centre
-    ctx.moveTo(b.x+P[0]*c-P[1]*sn,b.y+P[0]*sn+P[1]*c); ctx.lineTo(b.x+P[2]*c-P[3]*sn,b.y+P[2]*sn+P[3]*c); ctx.lineTo(b.x,b.y);
-    ctx.closePath(); ctx.fillStyle=b.hi; ctx.globalAlpha*=0.8; ctx.fill();
+    const p=rubble[i];
+    p.age+=dt; p.vy+=RUBBLE_G*dt; p.vx*=Math.pow(.985,dt); p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.vr*dt;
+    const left=p.life-p.age;                          // the last few frames fade out (a single line's pieces go sooner; bigger clears fall off the screen first)
+    if(left<=0||p.y>H+cell||p.x<-cell||p.x>W+cell){ rubble.splice(i,1); continue; }
+    const tile=p.tiles[p.gi]; if(!tile) continue;
+    const pw=p.fw*cell, ph=p.fh*cell, sc=1-0.18*Math.min(1,p.age/p.life);
+    const cs=Math.cos(p.rot)*sc, sn=Math.sin(p.rot)*sc;
+    ctx.setTransform(a*cs+c*sn,b*cs+d*sn,c*cs-a*sn,d*cs-b*sn,a*p.x+c*p.y+e,b*p.x+d*p.y+f);
+    ctx.globalAlpha=Math.min(1,left/p.fade);
+    const tw=tile.width, th=tile.height;
+    ctx.drawImage(tile,p.fx*tw,p.fy*th,p.fw*tw,p.fh*th,-pw/2,-ph/2,pw,ph);
   }
-  ctx.globalAlpha=1;
+  ctx.setTransform(T); ctx.globalAlpha=1;
 }
 
 /* frame budget (plan 2.2). Every frame measures the gap since the one before. Effect particles share one
@@ -650,7 +659,6 @@ function frame(now){
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 
-  drawRubble(dt);                                    // (7.5) behind the live gems and the tray: it falls through empty cells and off the board
   const claySquash=curSkin==='clay';
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
     const g=grid[r][c]; if(!g) continue;
@@ -767,7 +775,7 @@ function frame(now){
      squash — each gem collapses to a white-hot sliver along its line and is gone in ~6 frames (Block Blast's beat), or
      burst  — each gem pops and becomes a whole block flung away from where the piece landed */
   const crumble=CFG.CLEAR_STYLE==='crumble'&&!reduce;     // (7.5) reduced motion: crumble falls back to the squash
-  const squash=CFG.CLEAR_STYLE==='squash'||(CFG.CLEAR_STYLE==='crumble'&&reduce), POP=squash||crumble?6:7;
+  const squash=CFG.CLEAR_STYLE==='squash'||(CFG.CLEAR_STYLE==='crumble'&&reduce), POP=crumble?CRUMBLE_CRACK:squash?6:7;
   for(let i=shatters.length-1;i>=0;i--){
     const s=shatters[i]; s.t+=dt;
     if(s.t<0){                                       // blink phase, timed from the clear itself so the line flashes in unison
@@ -787,16 +795,16 @@ function frame(now){
           vr:(Math.random()-.5)*.5,sz:cell*.86,life:1,gi:s.gi,
           col:`hsl(${g.h} ${g.s}% 60%)`,hi:`hsl(${g.h} ${g.s}% 84%)`});
       }
-      for(let k=0;room&&k<(reduce?1:crumble&&s.tier===1?0:s.star?4:s.big?3:1);k++){   // (7.5) a crumbled single line drops rubble only               // a few bright specks per gem
+      for(let k=0;fxRoom()>0&&k<(reduce?1:crumble?(s.tier===1?0:s.star?4:s.tier>=3?3:2):s.star?4:s.big?3:1);k++){   // a few bright specks per gem ((7.5) a crumbled single line drops its pieces only)
         const a=Math.random()*6.283,sp=2+Math.random()*4;
         shards.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,r:cell*(.05+Math.random()*.08),life:1});
       }
       shatters.splice(i,1); continue;
     }
     const p=s.t/POP, e=easeOutCubic(p);
-    if(crumble&&!s.star){                                // (7.5) a crack runs across the gem and it shudders, whiter, about to break
-      const jx=p>.5?(Math.random()-.5)*cell*.05:0;
-      gem(s.gi,bx+s.c*cell+jx,by+s.r*cell,cell,1-0.06*e,1,0.15+0.45*e);
+    if(crumble&&!s.star){                                // (7.5) cracks run through the gem and it shudders, a little brighter, about to break
+      const jx=p>.4?(Math.random()-.5)*cell*.05:0;
+      gem(s.gi,bx+s.c*cell+jx,by+s.r*cell,cell,1,1,0.25*e);
       crack(s,bx+s.c*cell+jx,by+s.r*cell,Math.min(1,p*1.6));
     } else if(squash&&!s.star){                                 // thins to a bright sliver along the line, stretching slightly into it
       const thin=Math.max(0.04,1-e*0.97), wide=1+0.12*e;
@@ -860,6 +868,7 @@ function frame(now){
     }
     ctx.globalAlpha=1;
   }
+  drawRubble(dt);                                    // (7.5) the broken pieces: over the board and its gems, under the tray and the held piece
   for(let i=0;i<3;i++){
     const t=tray[i]; if(!t) continue;
     if(drag&&drag.i===i) continue;
