@@ -4,6 +4,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { serve, openGame, play, snap, setup, dragPiece, geometry, fingerFor, fingers, frames, watchPlace, placed, dragView, dealt, watchFrames, frameLog } from './harness.mjs';
 import { expectedAssets } from '../tools/stamp-sw.mjs';
+// A launch with a saved run opens on the front menu (Continue / Back to the game); tests that reload go straight back to the game.
+const toGame = async page => {
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && typeof closeMenu === 'function');
+  await page.evaluate(() => { if (!el('menuCard').hidden) closeMenu(); });
+};
 
 const SCORE_SCALE = 10;                      // the game's SCORE_SCALE (js/config.js); a test that sets a score thinks in boosted points
 const EMPTY = Array(8).fill('00000000');
@@ -509,7 +514,7 @@ test('7.5 crumble: squash and burst stay in Admin; an old saved Admin tuning doe
   assert.equal(r.style, 'crumble', 'the old squash default is dropped once');
   assert.deepEqual(r.opts, ['crumble', 'squash', 'burst']);
   await page.evaluate(() => { CFG.CLEAR_STYLE = 'squash'; devSave(); });
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
   assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'squash', 'a choice made after this sticks');
   await page.evaluate(() => localStorage.removeItem('crumble.dev.6'));
@@ -849,7 +854,7 @@ test('the hesitation log times the first drop of each tray, skips restored trays
   assert.equal(await page.evaluate(() => hes.log.length), 2, 'a tray put back by restore() gives no sample');
   // a resumed run (force-quit) gives no bogus deal-to-pickup time for the tray it reopens on
   await page.evaluate(() => saveRun());
-  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
+  await page.reload(); await toGame(page); await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
   assert.equal(await page.evaluate(() => hes.log.length), 2, 'the log survives a reload');
   m = await mv(); await dragPiece(page, m.i, m.r, m.c);
   assert.equal(await page.evaluate(() => hes.log.length), 2, 'a restored tray gives no sample');
@@ -888,7 +893,7 @@ test('Settings fits one screen; a look sets theme, world, skin and motif togethe
   await page.click('#skinGrid [data-id=blocks]');
   assert.equal(await page.locator('#lookGrid [aria-pressed=true]').count(), 0);
   await page.click('#lookGrid [data-id=mint]');
-  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  await page.reload(); await toGame(page); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
   assert.deepEqual(await look(), { t: 'mint', w: 'forest', s: 'blocks', m: 'none', cs: 'blocks', home: true });
   await page.click('#startSettings');
   assert.equal(await page.getAttribute('#lookGrid [data-id=mint]', 'aria-pressed'), 'true', 'the saved look is lit after a reload');
@@ -955,7 +960,7 @@ test('caches: text sprites evict one at a time, tile textures survive a look fli
 const controlled = page => page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 10000 });
 
 // Save and resume (plan 3.3). The page is reloaded in place, so localStorage survives like a force-quit.
-const reload = async page => { await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle')); };
+const reload = async page => { await page.reload(); await toGame(page); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle')); };
 const runState = page => page.evaluate(() => ({ state, grid: grid.map(r => r.map(g => (g ? g.gi : -1))), tray: tray.map(t => (t ? [SHAPES.indexOf(t.s), t.gi] : null)),
   score, combo, trayNo, tension, rescuesUsed, lastTier, carry: carry.map(s => SHAPES.indexOf(s)), startHidden: el('startCard').hidden, shown: el('scoreVal').textContent }));
 
@@ -972,9 +977,13 @@ test('a force-quit mid-run reopens to the same board, tray, score and combo (the
   await page.evaluate(() => { combo = 2; tension = 0.37; saveRun(); });      // a mid-combo state, saved as the game would
   const before = await runState(page);
   assert.ok(before.score > 0 && before.trayNo >= 1);
-  await reload(page);
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  const menu = await page.evaluate(() => ({ shown: !el('menuCard').hidden, paused, cta: el('menuBest').textContent }));
+  assert.ok(menu.shown && menu.paused, 'a launch opens on the front menu, the run paused behind it');
+  assert.match(menu.cta, /^Continue/, 'the big button continues the saved run');
+  await page.click('#menuEndless'); await page.waitForFunction(() => el('menuCard').hidden && !paused);
   const after = await runState(page);
-  assert.equal(after.state, 'play', 'it reopens straight into the run');
+  assert.equal(after.state, 'play', 'Continue reopens the run');
   assert.equal(after.startHidden, true);
   assert.deepEqual({ ...after, startHidden: 0, shown: 0 }, { ...before, startHidden: 0, shown: 0 });
   assert.equal(after.shown, String(before.score), 'the HUD shows the saved score');
@@ -1115,7 +1124,7 @@ test('precache list matches the scripts index.html loads', async () => {
 test('launches offline and still plays', async ({ page }) => {
   await controlled(page);
   await page.context().setOffline(true);
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   await play(page);
   assert.equal((await snap(page)).tray.filter(Boolean).length, 3);
@@ -1610,7 +1619,7 @@ test('achievements: unlocked looks open in Settings, persist across a reload, an
   assert.equal(await page.locator('#lookGrid [data-id=volcano]').isDisabled(), false, 'earned: open');
   await page.click('#lookGrid [data-id=volcano]');
   assert.deepEqual(await page.evaluate(() => [CFG.STYLE, CFG.HOME_WORLD]), ['volcano', 'volcano']);
-  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  await page.reload(); await toGame(page); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
   assert.deepEqual(await page.evaluate(() => [CFG.STYLE, CFG.HOME_WORLD, discoveredWorlds.has('volcano')]), ['volcano', 'volcano', true], 'the earned look survives a reload');
 });
 
@@ -1632,7 +1641,7 @@ test('achievements: a clean sweep starts its look, resume ends a live look, the 
 });
 
 // ── Adventure (plan 4.1) ──
-const reloadGame = page => page.reload().then(() => page.waitForFunction(() => typeof state !== 'undefined' && !!cell));
+const reloadGame = page => page.reload().then(() => toGame(page));
 const openAdventure = async page => { await page.click('#startAdv'); await page.waitForSelector('#mapCard:not([hidden])'); };
 const clearOne = page => page.evaluate(() => {          // one placement that clears one line: row 0 is seven gems and a single dot lands in the gap
   CFG.SPECIALS.golden = false;
@@ -1830,7 +1839,7 @@ test('goals: a reached rung gets one banner and is saved; old progress is marked
   assert.ok(saved.done.includes('lines:100'));
   // a phone with old stats and no goals save: nothing announced, rungs already passed are done
   await page.evaluate(() => { localStorage.removeItem('crumble.goals'); localStorage.setItem('crumble.stats', JSON.stringify({ v: 1, best: 10, lines: 300, games: 12 })); });
-  await page.reload(); await page.waitForFunction(() => typeof goals !== 'undefined');
+  await page.reload(); await toGame(page); await page.waitForFunction(() => typeof goals !== 'undefined');
   assert.deepEqual(await page.evaluate(() => [...goals.done].sort()), ['games:10', 'games:3', 'lines:100', 'lines:25', 'lines:250']);
 });
 
@@ -2652,7 +2661,7 @@ test('Settings > Look: Clear effect (Crumble / Classic) and Glints while draggin
   await frames(page, 30);
   assert.ok(await page.evaluate(() => __rub) > 0, 'and Crumble drops rubble (so the check above means something)');
   await page.evaluate(() => { CFG.CLEAR_STYLE = 'squash'; saveSkinSave(); });
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof CFG !== 'undefined' && typeof cell !== 'undefined' && !!cell);
   assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'squash', 'and it is still Classic after a reload');
 });
@@ -2713,7 +2722,7 @@ test('7.5c anticipation: a line one piece from clearing shivers and glints as th
 
 test('7.5c anticipation: reduced motion keeps a steady glow and no shiver; holding near several lines fits the frame budget', async ({ page, errors }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
   if (await page.evaluate(() => state) !== 'play') await play(page);   // a saved run reopens straight into play
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
@@ -2722,7 +2731,7 @@ test('7.5c anticipation: reduced motion keeps a steady glow and no shiver; holdi
   assert.ok(a.row0 > 0.2 && a.ax === 0 && a.ay === 0 && a.af > 0, 'reduced motion: the row brightens but does not move ' + JSON.stringify(a));
   await page.mouse.up();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
   if (await page.evaluate(() => state) !== 'play') await play(page);   // a saved run reopens straight into play
   // a 5-bar near five half-columns-short rows: many landings, five live lines at once
@@ -2821,7 +2830,7 @@ test('7.5d combo fire: never over a gem, off with its switch (saved), steady und
   assert.equal(await page.evaluate(() => fire.k), 0, 'off: the flames fade out mid-streak');
   await page.evaluate(() => { fireCombo(); });
   assert.equal(await page.evaluate(() => fire.flare), 0, 'and a new step does not light it');
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell);
   assert.equal(await page.evaluate(() => CFG.FX_COMBO_FIRE), false, 'still off after a reload');
   await page.evaluate(() => { CFG.FX_COMBO_FIRE = true; saveSkinSave(); });
@@ -2836,7 +2845,7 @@ test('7.5d combo fire: never over a gem, off with its switch (saved), steady und
   await page.evaluate(() => { bonus = null; combo = 0; });
   // reduced motion: steady rim and tray glow, no embers, the snuff is a fade with no smoke
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
   if (await page.evaluate(() => state) !== 'play') await play(page);
   await streak(page, 4); await frames(page, 30);
@@ -3027,13 +3036,13 @@ test('7.5f mascot: it sweats when the board is tight, faints when it is stuck, a
   await closeSet(page);
   await frames(page, 2);
   assert.ok(await page.evaluate(() => !CFG.FX_MASCOT && el('mascot').hidden && JSON.parse(localStorage.getItem('crumble.skins')).mascot === false), 'off: hidden, and saved');
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell);
   assert.equal(await page.evaluate(() => CFG.FX_MASCOT), false, 'still off after a reload');
   // reduced motion: the face changes, nothing moves
   await page.evaluate(() => { CFG.FX_MASCOT = true; saveSkinSave(); });
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
   if (await page.evaluate(() => state) !== 'play') await play(page);
   await dealt(page);
@@ -3121,7 +3130,7 @@ test('7.5g timelapse: every drop is recorded with the run, survives a reload, an
   assert.equal(t.f.length, 4, 'the opening plus a picture per drop');
   assert.equal(t.f[3][4 * 8 + 4], '2', 'the last picture has the gem just dropped');
   assert.deepEqual(t.saved.f, t.f, 'the pictures are in the run save');
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell && state === 'play');
   assert.deepEqual(await page.evaluate(() => tl.f), t.f, 'resume brings the timelapse back');
   // a long run: the cap halves the pictures and doubles the stride, opening kept
@@ -3196,7 +3205,7 @@ test('7.5g timelapse: a short run shows no replay; the share picture gets a four
   await page.evaluate(() => { gameOver(); });
   await page.waitForSelector('#overCard:not([hidden])');
   assert.equal(await page.isVisible('#tlBoard'), false, 'off: no replay');
-  await page.reload();
+  await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell);
   assert.equal(await page.evaluate(() => CFG.FX_TIMELAPSE), false, 'still off after a reload');
 });
