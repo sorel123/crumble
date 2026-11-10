@@ -372,8 +372,8 @@ function place(idx,r,c){
   }
   if(tray.every(v=>!v) && !dealing){
     if(bonus){ bonus.left--; if(bonus.left<=0) endBonus(); else syncBonusChip(); }   // one bonus tray played
-    goldenNext = special('golden') && goldenCool<=0 && !transform && !bonus      // a live transformation already is the moment
-      && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || rnd()<CFG.GOLDEN_CHANCE);
+    goldenNext = goldenNext || special('golden') && goldenCool<=0 && !transform && !bonus      // a live transformation already is the moment
+      && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || rnd()<CFG.GOLDEN_CHANCE);   // (8.2) a queued one waits for the special gate, it is not rerolled away
     trayHadSweep=false; trayCombo=0;
     dealLater();
   }

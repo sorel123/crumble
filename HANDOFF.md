@@ -191,6 +191,7 @@ Top to bottom:
 | (6.1) | Pressure and recovery: `roomOf()` measures room on the board; phases calm/building/edge/recovery/relief pick the tray (`paceTier`); honest trays return, edge trays only promise each piece a spot, recovery is a sequence she must see; the second rescue is earned; strong bot added to `tools/bot-sim.mjs`. See the 6.1 section |
 | (6.6) | Pressure on screen: one eased `scr` layer (sky wash, vignette, board rim, tray band, relief flash) driven by the room metric and phase in Endless/Daily. See the 6.6 section |
 | (7.3) | Payoff waves, setups and closers (Endless/Daily): a payoff tray every 4-6 trays, the exact piece for a hole she squared off, earned closers (planned sweep, tray shimmer), no three-small-piece trays. See the 7.3 section |
+| (8.2) | More clearing hands (Endless/Daily): payoff every 3-5 trays, a behind-the-scenes jackpot hand (3+ lines) every 8-12, the tray before a payoff builds toward it, a queued golden hand waits out a bonus instead of being lost. See the 8.2 section |
 | (7.5b) | Journey sky (Endless/Daily): the sky travels dawn, day, golden hour, night, aurora, space as the score climbs; a clean sweep jumps a stage; stage changes wipe down the whole sky. See the 7.5b section |
 | (7.5c) | Anticipation: a line the held piece can complete shivers and glints as the piece nears that landing. See the 7.5c section |
 | (7.5d) | Combo fire: from combo 3 the rim burns hotter each step, the held piece sheds embers, the tray glows; a miss snuffs it in a puff. See the 7.5d section |
@@ -575,6 +576,7 @@ ad targeting, limited analytics.
 | `MAGNET_REACH` / `MAGNET_HOLD` / `LIFT` | drag feel (see plan 2.1) |
 | `CLEAR_STYLE` / `CLEAR_BLINK` / `CLEAR_STAGGER` | how a line clear looks |
 | `BONUS_*` | Bonus meter size (`BONUS_METER`), combo share (`BONUS_COMBO_MAX`), trays it lasts and multiplier |
+| `WAVE_MIN/MAX` / `JACKPOT_MIN/MAX` / `DRY_TRAYS` | (7.3, 8.2) how often a payoff (one big 2-line drop) and a jackpot hand (3+ lines over the tray) come: the main "enough clears" knobs |
 | `GOLDEN_*` / `STAR_*` / `TRANSFORM_*` | special-event frequency and payout |
 | `SHAKE` / `SPARKLE_RATE` / `FX_*` | visual intensity, each effect switchable |
 | `GEMS` hues | recolor everything |
@@ -1114,6 +1116,46 @@ holds 12-24 gems spread over many lines and only a few percent are sweepable in 
 mean keeping the board much emptier, i.e. an easier game. Levers if Jay wants more: `CLOSER_GEMS` up, `CLOSER_COOL` down, or a lower
 `ROOM_OK`/`ROOM_EDGE` so the board runs emptier.
 
+
+## More clearing hands (plan 8.2)
+
+Jay after the first TestFlight build: "still not giving enough clearing blocks, like behind the scenes jackpot rounds", the second time he
+asked. The plan owner relaxed the difficulty guard: the median game may grow to about 2x. Endless and Daily only; Adventure untouched.
+
+- **Payoff clock** `WAVE_MIN`..`WAVE_MAX` 3-5 (was 4-6), `DRY_TRAYS` 4 (was 6). When no big block has a 2-line drop, the payoff key may be any piece
+  that has one (a corner piece or a dot where a row and a column cross).
+- **Build-up** (`BUILD_UP` 4, `BUILD_TRIES` 6). The honest tray before a due payoff (and while a due payoff waits for the board) looks at
+  6 hands, not 2, and favours the one whose tidiest play (`evalHand` now keeps that board in `flo`/`fhi`) leaves a gap some big block
+  clears 2+ lines in (`payoffRoom`). Tried and dropped: dealing a guided or 1-line tray whenever the payoff could not pay. Guided trays
+  clear single lines and keep the board too empty for multi-line drops (6% of them had one vs 100% of payoffs), and games got shorter.
+- **Jackpot hand** (`jack` clock, `jackpotSteps`, label `JACKPOT`). Every `JACKPOT_MIN`..`JACKPOT_MAX` (8-12) trays, and a tray with no
+  clear runs the clock `JACKPOT_DRY` (1) extra. Never on edge or recovery trays; a closer wins over it. `JACKPOT_TRIES` (48) hands, most
+  seeded with a piece that has a 2-line drop now; accepted only if the three clear `JACKPOT_LINES` (3)+ lines in some order (or sweep),
+  scored to pay drop by drop (2-line single drops, `JACKPOT_EACH` per piece that clears right now, obvious drops, tidiness). Nothing on
+  screen marks it: no banner, no multiplier. None on this board: it stays due and the tray falls back to the payoff. A jackpot, a golden
+  hand, a closer or a relief sweep restarts both clocks (`jackDone`). Saved with the run (`wave.jn`, `wave.ja`).
+- **Golden hand fix.** The tray-end roll used to overwrite `goldenNext`, so a golden hand queued while a bonus, star or transform kept the
+  special gate shut was thrown away. It now waits for the gate. The x10 points (8.0) touched nothing in the dealer.
+
+Measured with `tools/bot-sim.mjs` (casual bot, 4 seeds x 4000 trays, both runs with the same bot; new columns `traysPer3Lines`,
+`jackpotsPerGame`, `traysPerBigHand`, `traysPerOffer2` and `byTier`, trays and multi-line rate by tray label).
+
+| | before (main) | after |
+|---|---|---|
+| median trays per game (4 seeds) | 96, 106, 107, 161 | 155, 213, 204, 229 |
+| 10th percentile game | 23, 16, 31, 29 | 33, 17, 7, 18 |
+| games ended in 16000 trays | 104 | 54 |
+| trays per multi-line clear | 5.9-6.5 | 4.8-5.0 |
+| trays per tray clearing 3+ lines | 8.3-8.5 | 6.8-7.3 |
+| trays per big hand (jackpot, golden, closer, sweep) | 20 | 9 |
+| payoffs per game | 9-17 | 25-39 |
+| full resets per game | 0.04-0.27 | 0.33-0.53 |
+| trays with a clear | 88% | 88% |
+| deal cost median / p95 (ms, 8 sims sharing the CPU, sliced in game) | 0.7 / 15 | 1.8 / 22 |
+
+Missed target: a multi-line clear every 4 trays (got about 1 in 5). A single drop that clears two lines needs two nearly full lines
+with their gaps lined up, and the casual bot's flush play rarely leaves that: payoffs are limited by the board, not the clock (a 2-3
+tray clock dealt no more of them). Levers if Jay still wants more: `BUILD_UP` higher, or setups (`SETUP_CHANCE` 1) which also lengthen games.
 
 ## Blocks that crumble (plan 7.5, first zazz idea)
 

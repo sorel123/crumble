@@ -29,6 +29,8 @@
 // sweeps), closersPerGame / payoffsPerGame, traysBetweenPayoffs, setupsPaid (setups whose piece came within three trays, not counting
 // holes she filled before the next tray), setupsPerTray, smallOnlyTrays / longestSmallRun (trays of pieces of 3 cells or fewer),
 // big4Per5 (fewest 4+ pieces in any five trays), and the difficulty guards gamesEnded, p10 (10th percentile game length), edgeHoldsPerGame.
+// Plan 8.2 (more clearing hands) adds traysPer3Lines (trays per tray in which the bot cleared 3+ lines in all), jackpotsPerGame
+// (behind-the-scenes jackpot trays) and traysPerBigHand (trays per jackpot, golden, closer or planned-sweep tray).
 import { serve, openGame, play } from '../tests/harness.mjs';
 
 const args = process.argv.slice(2), kv = args.filter(a => a.includes('=')), pos = args.filter(a => !a.includes('='));
@@ -125,7 +127,8 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   const newTray = () => {
     const obvN = tray.filter(t => { if (!t) return false; for (let r = 0; r <= N - t.s.rows; r++) for (let c = 0; c <= N - t.s.cols; c++) if (canPlace(t.s, r, c, grid) && obviousAt(t.s, r, c, grid)) return true; return false; }).length, obv = obvN > 0;
     const possible = SHAPES.some(s => { for (let r = 0; r <= N - s.rows; r++) for (let c = 0; c <= N - s.cols; c++) if (canPlace(s, r, c, grid) && obviousAt(s, r, c, grid)) return true; return false; });
-    cur = { small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
+    const offers2 = (() => { const [lo, hi] = packBits(packGrid(grid)); return tray.some(t => t && !t.s.star && placeMasks(t.s).some(m => !(lo & m.lo) && !(hi & m.hi) && applyBits(lo, hi, t.s, m) >= 2)); })();
+    cur = { offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
     trays.push(cur);
     if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
@@ -138,7 +141,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     if (cur.firstObv === null) cur.firstObv = m[3];
     place(m[0], m[1], m[2]);
     { const k = { goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool }; clearRunFx(); ({ goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool } = k); }   // drop the effects, keep the specials' bookkeeping
-    if (stats.lines > before) { cur.cleared = true; cur.clears++; if (stats.lines - before >= 2) cur.multi++; }
+    if (stats.lines > before) { cur.lines += stats.lines - before; cur.cleared = true; cur.clears++; if (stats.lines - before >= 2) cur.multi++; }
     if (stats.sweeps > sw0) cur.sweeps++;
     if (dealing) { finishDeal(); newTray(); }
   }
@@ -169,6 +172,11 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     resetsPerGame: mean(perGame, a => a.reduce((x, t) => x + t.sweeps, 0)),
     traysPerMulti: +(trays.length / Math.max(1, trays.reduce((x, t) => x + (t.multi ? 1 : 0), 0))).toFixed(1),
     smallOnlyTrays: pct(trays, t => t.small), longestSmallRun: (() => { let b = 0, r = 0; for (const t of trays) { r = t.small ? r + 1 : 0; b = Math.max(b, r); } return b; })(),
+    traysPerOffer2: +(trays.length / Math.max(1, trays.filter(t => t.offers2).length)).toFixed(1),
+    traysPer3Lines: +(trays.length / Math.max(1, trays.filter(t => t.lines >= 3).length)).toFixed(1),
+    byTier: (() => { const o = {}; for (const t of trays) { const k = t.tier.split('+')[0]; o[k] = o[k] || [0, 0]; o[k][0]++; if (t.multi) o[k][1]++; if (t.offers2) o[k][2] = (o[k][2] || 0) + 1; } for (const k in o) o[k] = o[k][0] + ' trays, ' + Math.round(100 * o[k][1] / o[k][0]) + '% multi, ' + Math.round(100 * (o[k][2] || 0) / o[k][0]) + '% offer one'; return o; })(),
+    jackpotsPerGame: mean(perGame, a => a.filter(t => t.tier === 'JACKPOT').length),
+    traysPerBigHand: +(trays.length / Math.max(1, trays.filter(t => /JACKPOT|GOLDEN|CLOSER|SWEEP/.test(t.tier)).length)).toFixed(1),
     closersPerGame: mean(perGame, a => a.filter(t => t.tier === 'CLOSER').length), payoffsPerGame: mean(perGame, a => a.filter(t => t.tier === 'PAYOFF').length),
     traysBetweenPayoffs: (() => { const g = []; perGame.forEach(a => { let last = -1; a.forEach((t, i) => { if (/PAYOFF|CLOSER|SWEEP|GOLDEN/.test(t.tier) || (t.ph === 'relief' && t.phN === 1)) { if (last >= 0) g.push(i - last); last = i; } }); }); return median(g); })(),
     closerTries: waveStats.closerTries,

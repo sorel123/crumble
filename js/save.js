@@ -17,7 +17,7 @@ function snapshot(){
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     bonusMeter, specialEnd,
     pace:{...pace},
-    wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
+    wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0,jn:jack.n,ja:jack.at},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     bonus:bonus?{left:bonus.left,extra:bonus.extra}:null,
@@ -61,6 +61,7 @@ function restore(o){
   resetWave(); const w=o.wave;                       // (7.3) older saves have none: a fresh wave
   if(w&&isInt(w.n,0,1e6)&&isInt(w.at,1,99)&&Array.isArray(w.setups)&&isInt(w.closerCool,0,99)&&isInt(w.dryN,0,1e6)&&Array.isArray(w.bigHist)){
     wave={n:w.n,at:w.at,due:!!w.due}; closerNext=!!w.closerNext; closerCool=w.closerCool; dryN=w.dryN; closerTray=!!w.closerTray; trayClear=!!w.trayClear;
+    if(isInt(w.jn,0,1e6)&&isInt(w.ja,1,99)) jack={n:w.jn,at:w.ja};   // (8.2) the jackpot clock; older saves start a fresh one
     bigHist=w.bigHist.filter(v=>isInt(v,0,3)).slice(-4);
     setups=w.setups.filter(u=>u&&isInt(u.k,0,SETUP_RECTS.length-1)&&isInt(u.r,0,N-1)&&isInt(u.c,0,N-1)&&isInt(u.age,0,99)).slice(0,3)
       .filter(u=>u.r+SETUP_RECTS[u.k].rows<=N&&u.c+SETUP_RECTS[u.k].cols<=N).map(u=>({k:u.k,r:u.r,c:u.c,age:u.age,dealt:!!u.dealt}));
