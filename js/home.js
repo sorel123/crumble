@@ -69,6 +69,7 @@ function homeFill(card){                               // the words on the card:
 }
 function homeEnter(card){
   hero.card=card; card.querySelector('.heroSlot').append(hero.el);
+  if(hero.crumb.parentNode!==hero.el){ hero.crumb.style.cssText=''; hero.el.append(hero.crumb); }   // back from crumbling with the logo
   homeFill(card);
   if(hero.gems!==gemBig) homeTiles();                  // after it is in the page, so the tiles have a size
   el('stage').classList.add('homeUp');
@@ -145,5 +146,47 @@ function homeFrame(now,dt){
     ctx.drawImage(skyPlate(to),0,0,W,H); stepAmbient(hero.amb,worldDef(to).effect,dt,1,1,true);
   }
   return true;
+}
+/* Play: the logo crumbles. Each tile (gem and letter) is cut into four shards that burst out and fall over the opening
+   board, the crumb tumbles down with them, and the game starts underneath at once (nothing waits on the effect).
+   One-off DOM in a layer over the stage, removed when it has fallen. Reduced motion: the menu simply closes. */
+function homeCrumble(){
+  if(reduce||!hero.card) return;
+  const st=el('stage'), sr=st.getBoundingClientRect(), fx=document.createElement('div'); fx.className='crumbleFx';
+  const dp=Math.min(devicePixelRatio||1,2), anims=[];
+  hero.tiles.forEach((t,i)=>{
+    const r=t.getBoundingClientRect(), w=r.width, src=t.querySelector('canvas'), b=t.querySelector('b'), cs=getComputedStyle(b);
+    const face=document.createElement('canvas'); face.width=face.height=Math.round(w*dp);   // the tile as she sees it: gem, then letter
+    const x=face.getContext('2d'); x.scale(dp,dp); x.drawImage(src,0,0,w,w);
+    x.font=cs.fontWeight+' '+cs.fontSize+' '+cs.fontFamily; x.textAlign='center'; x.textBaseline='middle';
+    const gold=t.classList.contains('gold');
+    x.fillStyle=gold?'rgba(255,250,220,.7)':'rgba(40,14,60,.55)'; x.fillText(b.textContent,w/2,w/2+(gold?0:1)+1);
+    x.fillStyle=cs.color; x.fillText(b.textContent,w/2,w/2);
+    const h=w/2;
+    for(let q=0;q<4;q++){
+      const qx=q%2, qy=q>>1, c=document.createElement('canvas'); c.width=c.height=Math.round(h*dp);
+      c.getContext('2d').drawImage(face,qx*h*dp,qy*h*dp,h*dp,h*dp,0,0,c.width,c.height);
+      c.style.cssText='left:'+(r.left-sr.left+qx*h)+'px;top:'+(r.top-sr.top+qy*h)+'px;width:'+h+'px;height:'+h+'px';
+      fx.append(c);
+      const dx=(qx?1:-1)*(14+mascotRnd()*46)+(i-3)*6, up=30+mascotRnd()*50, fall=sr.height-r.top+60+mascotRnd()*80, rot=(qx?1:-1)*(90+mascotRnd()*260);
+      anims.push(c.animate([{transform:'none',opacity:1},
+        {transform:'translate('+dx*.45+'px,'+(-up)+'px) rotate('+rot*.3+'deg)',opacity:1,offset:.25},
+        {transform:'translate('+dx+'px,'+fall+'px) rotate('+rot+'deg)',opacity:.85}],
+        {duration:820+mascotRnd()*260,delay:i*45+q*12,easing:'cubic-bezier(.35,0,.75,.6)',fill:'both'}));
+    }
+  });
+  const cr=hero.crumb.getBoundingClientRect();             // the crumb rides the fall
+  hero.crumb.style.cssText='position:absolute;left:'+(cr.left-sr.left)+'px;top:'+(cr.top-sr.top)+'px;right:auto';
+  hero.crumb.className='hop'; fx.append(hero.crumb);
+  anims.push(hero.crumb.animate([{transform:'none'},{transform:'translate(-10px,-46px) rotate(-90deg)',offset:.3},
+    {transform:'translate(-40px,'+(sr.height-cr.top+40)+'px) rotate(-540deg)'}],
+    {duration:1100,delay:200,easing:'cubic-bezier(.35,0,.75,.6)',fill:'both'}));
+  st.append(fx);
+  hero.falling=true;
+  Promise.all(anims.map(a=>a.finished))   // only ours: the crumb's breathing loops forever
+    .catch(()=>{}).then(()=>{
+    fx.remove(); hero.falling=false;
+    if(hero.crumb.parentNode!==hero.el){ hero.crumb.getAnimations().forEach(a=>a.cancel()); hero.crumb.style.cssText=''; hero.el.append(hero.crumb); }
+  });
 }
 homeInit();

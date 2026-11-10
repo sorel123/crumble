@@ -1255,6 +1255,7 @@ The start card (launch with no saved run) and the mode menu (Home after a game, 
 - **The crumb.** `#heroCrumb` reuses `MASCOT_SVG` and the mascot CSS (selectors are `:is(#mascot,#heroCrumb)`), stands on the M, blinks, looks toward touches, smirks when tapped. The in-game `#mascot` hides while a menu is up.
 - **The sky.** `homeFrame()` runs at the top of `frame()`: while a home card is up it paints the journey stages in turn (`SKY_HOLD` ms each, a top-down wipe between) and `frame()` returns early, so the board, tray and effects are not drawn. `#stage.homeUp` hides the HUD. The overlay has no backdrop blur, so the menu is cheaper to draw than the old card.
 - **Words.** `homeFill()` writes her best and streak chips and each tile's progress; the how-to line shows only before her first game.
+- **Play crumbles the logo.** `homeCrumble()` (called by Play and the menu's Endless before the run starts) cuts each tile into four canvas shards in a `.crumbleFx` layer over the stage; they burst and fall over the opening board while the game starts underneath, and the crumb tumbles with them (`hero.falling` keeps the in-game crumb hidden until it has). The layer is removed when its own animations finish.
 - Settings opened from the menu sits above it (`#setPanel` z-index 4), and Done keeps the game paused while the menu is still up.
 - Reduced motion: no drops, ripples, flips or sky travel.
-- Tests: the two "front menu (8.3)" scenarios.
+- Tests: the three "front menu (8.3)" scenarios.
