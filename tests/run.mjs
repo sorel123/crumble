@@ -1885,12 +1885,31 @@ test('share card: Share hands the picture to the share sheet when the browser ca
   await page.evaluate(() => {
     window.__shared = null;
     navigator.canShare = () => true;
-    navigator.share = async d => { window.__shared = { name: d.files[0].name, type: d.files[0].type, size: d.files[0].size }; };
+    navigator.share = async d => { window.__shared = { name: d.files[0].name, type: d.files[0].type, size: d.files[0].size, text: d.text }; };
   });
   await page.click('#shareBtn');
   await page.waitForFunction(() => window.__shared);
   const s = await page.evaluate(() => window.__shared);
   assert.equal(s.name, 'crumble-score.png'); assert.equal(s.type, 'image/png'); assert.ok(s.size > 5000);
+  assert.equal(s.text, 'My Crumble score: 300. Can you beat it? https://crumble.win');
+});
+
+test('share card: footer invites with the site, and a Daily share text says the board is the same for everyone', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate(() => { mode = 'daily'; score = 250; const d = shareText(); mode = 'endless'; return [SHARE_FOOTER, d]; });
+  assert.equal(r[0], 'Can you beat it?  \u00B7  crumble.win');
+  assert.equal(r[1], "Today's Daily: 250. Same board for everyone: https://crumble.win");
+});
+
+test('link preview: Open Graph tags and a 1200x630 image are in the page', async ({ page }) => {
+  await play(page);
+  const m = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('meta[property^="og:"],meta[name="twitter:card"]')].map(e => [e.getAttribute('property') || e.name, e.content])));
+  assert.equal(m['og:title'], 'Crumble'); assert.equal(m['og:url'], 'https://crumble.win/');
+  assert.equal(m['og:description'], 'Drag shapes, clear lines, chase clean sweeps.');
+  assert.equal(m['twitter:card'], 'summary_large_image');
+  assert.equal(m['og:image'], 'https://crumble.win/og-image.png');
+  const png = fs.readFileSync(new URL('../og-image.png', import.meta.url));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1200, 630]);
 });
 
 test('share card: where the share sheet cannot take files, the picture is saved instead', async ({ page }) => {
@@ -3332,6 +3351,45 @@ test('haptics: silent no-op on the web, buzzes in the app (fake Capacitor), stro
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
 });
 
+test('1.1 F Leaderboards: hidden on the web, shown in the app only while signed in to Game Center, opens the dashboard', async ({ page, errors }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { score = 420; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isHidden('#gcOverBtn'), true, 'web: no Leaderboards button on the game-over card');
+  await page.click('#againBtn'); await dealt(page);
+  await openSet(page);
+  assert.equal(await page.isHidden('#gcSetBtn'), true, 'web: none in Settings either');
+  await closeSet(page);
+  await page.evaluate(() => {                                       // the app, not signed in yet
+    window.__gc = [];
+    let fire = null;
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { GameCenter: {
+      signIn: () => Promise.resolve({ signedIn: false }), status: () => Promise.resolve({ signedIn: false }),
+      submitScore: () => Promise.resolve({ sent: true }), unlock: () => Promise.resolve({ sent: true }),
+      show: () => { __gc.push('show'); return Promise.resolve({ shown: true }); },
+      addListener: (n, f) => { fire = f; } } } };
+    window.__gcFire = r => fire(r);
+    gcStart();
+  });
+  await page.waitForTimeout(50);
+  await openSet(page);
+  assert.equal(await page.isHidden('#gcSetBtn'), true, 'app, signed out: hidden');
+  await page.evaluate(() => __gcFire({ signedIn: true }));          // signs in from iPhone Settings while running
+  assert.equal(await page.isVisible('#gcSetBtn'), true, 'signed in: Settings shows it');
+  await page.click('#gcSetBtn');
+  await closeSet(page);
+  await page.evaluate(() => { state = 'play'; score = 500; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isVisible('#gcOverBtn'), true, 'Endless game over: shown');
+  await page.click('#gcOverBtn');
+  assert.deepEqual(await page.evaluate(() => __gc), ['show', 'show'], 'each button opens Game Center');
+  await page.evaluate(() => { state = 'play'; mode = 'adventure'; lvl = LEVELS[0]; lv = { lines: 0, pieces: 0, combo: 0, swept: false }; gameOver(); });
+  assert.equal(await page.isHidden('#gcOverBtn'), true, 'an Adventure level: no leaderboard to show');
+  await page.evaluate(() => { mode = 'endless'; __gcFire({ signedIn: false }); });
+  assert.equal(await page.evaluate(() => el('gcSetBtn').hidden && el('gcOverBtn').hidden), true, 'signed out again: both hidden');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
 test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle, 5 under the pause card', async ({ page }) => {
   await play(page); await dealt(page);
   const rate = ms => page.evaluate(ms => new Promise(res => { const l0 = last; let n = 0, p = last;
@@ -3363,6 +3421,72 @@ test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle
   assert.ok(off > 45, `the switch off: every frame (${off}/s)`);
 });
 
+// ── Plan 1.1 C: drag feel on desktop and in the app ──
+
+test('C2 mouse lift: a mouse drag floats 0.15 cells above the cursor, a finger still 1 cell', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { CFG.MOUSE_LIFT = 0.15; });                 // the harness equals it to LIFT for its old scripts
+  await setup(page, { rows: EMPTY, trayShapes: [0, 3, 10] });
+  const g = await geometry(page), f = await fingers(page);
+  const x = g.trayCenters[0].x, y = g.by + g.cell * 12;
+  const gap = async () => { await frames(page, 14); const v = await dragView(page); return (y - (v.cy + v.rows * g.cell / 2)) / g.cell; };
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+  await page.mouse.move(x, y, { steps: 4 });
+  assert.ok(Math.abs(await gap() - 0.15) < 0.05, 'mouse lift'); await page.mouse.up(); await frames(page, 30);
+  await f.down(1, g.trayCenters[1].x, g.trayCenters[1].y); await f.move(1, x, y, 4);
+  assert.ok(Math.abs(await gap() - 1) < 0.05, 'touch lift'); await f.up(1);
+});
+
+test('C4 desktop keys: Escape and P open and close the pause card, only in a game', async ({ page }) => {
+  await page.keyboard.press('Escape');
+  assert.equal(await page.isHidden('#pauseCard'), true, 'nothing to pause on the start screen');
+  await play(page); await dealt(page);
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await page.evaluate(() => ({ paused, card: !el('pauseCard').hidden })), { paused: true, card: true });
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await page.evaluate(() => ({ paused, card: !el('pauseCard').hidden })), { paused: false, card: false });
+  await page.keyboard.press('p');
+  assert.equal(await page.evaluate(() => paused), true);
+  await page.keyboard.press('P');
+  assert.equal(await page.evaluate(() => paused), false);
+});
+
+test('C1 slot tick: selection haptics in the app, one per new landing cell, none on pickup or when the slot goes, 40 ms apart, off with the switch', async ({ page }) => {
+  await play(page); await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 3, 10] });
+  await page.evaluate(() => {
+    window.__sel = [];
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { Haptics: {
+      impact: () => Promise.resolve(), notification: () => Promise.resolve(),
+      selectionStart: () => { __sel.push('start'); return Promise.resolve(); },
+      selectionChanged: () => { __sel.push('tick'); return Promise.resolve(); },
+      selectionEnd: () => { __sel.push('end'); return Promise.resolve(); } } } };
+  });
+  const take = () => page.evaluate(() => __sel.splice(0));
+  const g = await geometry(page), s = { rows: 1, cols: 1 };
+  const at = (r, c) => fingerFor({ ...g, lift: 0.15 }, s, r, c);
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+  assert.deepEqual(await take(), ['start'], 'pickup: the selection session opens, no tick');
+  let p = at(3, 3); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), ['tick'], 'first landing cell: one tick');
+  await page.evaluate(() => new Promise(r => setTimeout(r, 60)));
+  p = at(3, 3.2); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), [], 'same cell: no tick');
+  p = at(3, 4); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), ['tick'], 'a different cell: a tick');
+  p = at(3, 5); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), [], 'inside 40 ms: no second tick');
+  p = at(40, 3); await page.mouse.move(p.x, p.y); await page.evaluate(() => new Promise(r => setTimeout(r, 60)));
+  assert.deepEqual(await take(), [], 'slot gone: no tick');
+  await page.mouse.up();
+  assert.deepEqual(await take(), ['end'], 'release closes the session');
+  await page.evaluate(() => { CFG.HAPTICS = false; });
+  await dealt(page);
+  await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
+  p = at(2, 2); await page.mouse.move(p.x, p.y, { steps: 3 }); await page.mouse.up();
+  assert.deepEqual(await take(), [], 'Haptics off: silent');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
@@ -3381,3 +3505,4 @@ for (const { name, fn } of tests) {
 await server.close();
 console.log(failed ? `\n${failed} of ${tests.length} failed` : `\nall ${tests.length} passed`);
 process.exit(failed ? 1 : 0);
+

@@ -235,7 +235,7 @@ function initDev(){
   const sync=()=>refresh.forEach(f=>f());
   el('adminBtn').onclick=e=>{
     e.stopPropagation();
-    paused=true; drag=null; shake=0; hesVoid();          // freeze the game while the panel is up
+    paused=true; hapSelect('end'); drag=null; shake=0; hesVoid();          // freeze the game while the panel is up
     el('setPanel').hidden=true; sync(); el('devPanel').hidden=false;
   };
   el('devClose').onclick=e=>{ e.stopPropagation(); el('devPanel').hidden=true; paused=false; };
