@@ -2247,6 +2247,166 @@ test('pressure on screen (6.6): follows phase and room, lets go with a relief fl
   assert.deepEqual(fresh, { p: 0, relief: 0 }, 'a new run starts with no pressure on screen');
 });
 
+/* ── Challenge (1.1 E1) ── */
+// plays the round in the page: each drop is the medal bots' casual pick on the live board (or `pick`), dealing at once
+const chPlayRound = (page, pick = 'casual', maxDrops = 99) => page.evaluate(async ([pick, maxDrops]) => {
+  const fin = () => { if (dealing) { runSteps(dealing.it); dealing = null; checkStuck(); } };
+  const S = chState(chal.deal.open), sigs = [];
+  for (let d = 0; d < maxDrops && state === 'play' && !chDone; d++) {
+    fin(); if (chDone || state !== 'play') break;
+    const left = [0, 1, 2].filter(i => tray[i]).map(i => ({ s: tray[i].s, gi: tray[i].gi, i }));
+    if (left.length === 3) sigs.push(JSON.stringify(tray.map(t => [t.s.star ? -1 : SHAPES.indexOf(t.s), t.gi])));
+    const a = new Int8Array(64); for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) a[r * 8 + c] = grid[r][c] ? grid[r][c].gi : -1;
+    let mv = null;
+    if (pick === 'casual') mv = chCasual({ ...S, a }, left, null, 0);
+    else { const [lo, hi] = chBits(a); for (const k of left.slice().reverse()) { const m = placeMasks(k.s).slice().reverse().find(m => !(lo & m.lo) && !(hi & m.hi)); if (m) { mv = [k, m]; break; } } }
+    if (!mv) break;
+    place(mv[0].i, mv[1].r, mv[1].c);
+  }
+  fin();
+  return { sigs, score, trayNo, done: chDone, state };
+}, [pick, maxDrops]);
+const chalStart = async (page, seed) => {
+  await page.evaluate(seed => { mode = 'challenge'; saveMode(); chSeed = seed; start(); }, seed);
+  await dealt(page);
+};
+
+test('Challenge: the fourth mode tile opens its card; Today\'s challenge starts a 12-tray round with the next medal and the tray in the HUD', async ({ page }) => {
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('#startCard .homeGrid .tile b')].map(b => b.textContent).join(',')), 'Adventure,Daily,Challenge,Goals');
+  assert.ok(await page.evaluate(() => el('startSettings').getBoundingClientRect().bottom <= innerHeight), 'Settings still fits under the tiles');
+  await page.click('#startChal'); await page.waitForSelector('#chalCard:not([hidden])');
+  assert.deepEqual(await page.evaluate(() => ({ cont: el('chalCont').hidden, today: el('chalToday').className })), { cont: true, today: 'cta' });
+  await page.click('#chalToday');
+  await page.waitForFunction(() => state === 'play' && mode === 'challenge'); await dealt(page);
+  const h = await page.evaluate(() => ({ seed: chal.seed, today: chToday(), lbl: el('bestLbl').textContent, val: el('bestVal').textContent, info: el('chalInfo').textContent,
+    med: chal.deal.med, chase: el('chase').hidden, chaseShown: getComputedStyle(el('chase')).display, rescue: rescueAllowed(0) }));
+  assert.equal(h.seed, h.today);
+  assert.ok(h.med[0] < h.med[1] && h.med[1] < h.med[2], 'bronze < silver < gold: ' + h.med);
+  assert.deepEqual([h.lbl, h.val, h.info], ['🥉 Bronze', h.med[0].toLocaleString('en-US'), 'Tray 1 of 12']);
+  assert.deepEqual([h.chase, h.chaseShown, h.rescue], [true, 'none', false], 'no chase bar and no rescue in a Challenge');
+  await page.click('#pauseBtn');
+  assert.deepEqual(await page.evaluate(() => [el('pauseEye').textContent, el('pauseNew').textContent]), ["Paused · Today's challenge", 'Restart']);
+});
+
+test('Challenge: the deal is frozen: the same seed deals the same board and the same twelve trays however she plays', async ({ page }) => {
+  await chalStart(page, 'test01');
+  const open = await page.evaluate(() => JSON.stringify(chal.deal.open)), deal = await page.evaluate(() => JSON.stringify(chal.deal));
+  const a = await chPlayRound(page, 'casual');
+  await chalStart(page, 'test01');
+  assert.equal(await page.evaluate(() => JSON.stringify(grid.map(r => r.map(g => g ? g.gi : -1)))), open, 'a retry opens on the same board');
+  const b = await chPlayRound(page, 'other');
+  const n = Math.min(a.sigs.length, b.sigs.length);
+  assert.ok(n >= 3, 'both lines got a few trays in (' + a.sigs.length + ', ' + b.sigs.length + ')');
+  assert.deepEqual(b.sigs.slice(0, n), a.sigs.slice(0, n), 'every tray is the same, whatever the board');
+  const fresh = await page.evaluate(() => { chCache.clear(); return JSON.stringify(chMake('test01')); });
+  assert.equal(fresh, deal, 'worked out again from the seed, the deal and its medals are the same');
+  assert.notEqual(await page.evaluate(() => JSON.stringify(chMake('test02').trays)), JSON.parse(deal).trays && JSON.stringify(JSON.parse(deal).trays), 'another seed is another deal');
+  assert.equal(await page.evaluate(() => chal.deal.trays.some(t => /GOLDEN/.test(t.l))), false, 'no golden hand in a frozen deal');
+});
+
+test('Challenge: the deal does not depend on how the browser sorts (iPhone and Chrome deal the same), and Endless still sorts as before', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const ref = JSON.stringify(chMake('fair01'));
+    const native = Array.prototype.sort;
+    Array.prototype.sort = function (cmp) {                // another engine's sort: insertion sort, asks the comparator other questions
+      cmp = cmp || ((x, y) => String(x) < String(y) ? -1 : String(x) > String(y) ? 1 : 0);
+      for (let i = 1; i < this.length; i++) { const v = this[i]; let j = i - 1; while (j >= 0 && cmp(this[j], v) > 0) { this[j + 1] = this[j]; j--; } this[j + 1] = v; }
+      return this;
+    };
+    let other;
+    try { other = JSON.stringify(chMake('fair01')); } finally { Array.prototype.sort = native; }
+    let calls = 0; const rs = rnd; fairDeal = false;
+    const a = [1, 2, 3, 4, 5]; rndSrc = () => { calls++; return 0.3; }; rshuffle(a); rndSrc = null;
+    return { same: ref === other, sortCalls: calls > 0 };
+  });
+  assert.deepEqual(r, { same: true, sortCalls: true }, 'the same deal under another sort; outside a Challenge rshuffle is the old random sort');
+});
+
+test('Challenge: the scoring the medals are worked out with is the game\'s own: a round played in the game scores what the bots\' sim says', async ({ page }) => {
+  for (const seed of ['par01', 'par02']) {
+    await chalStart(page, seed);
+    const want = await page.evaluate(() => chRun(chal.deal, chCasual, null, 0));
+    const r = await chPlayRound(page, 'casual');
+    assert.equal(r.score, want, seed + ': the casual line scores the same in the game and in the sim');
+  }
+});
+
+test('Challenge: twelve trays end the round on the medal card (Retry, New challenge, Share; no Second chance), and the result is saved', async ({ page }) => {
+  await chalStart(page, 'end01');
+  const r = await chPlayRound(page, 'casual');
+  assert.deepEqual([r.trayNo, r.done], [12, true], 'all twelve trays were played');
+  await page.waitForSelector('#overCard:not([hidden])', { timeout: 4000 });
+  const c = await page.evaluate(() => ({ eye: el('overEye').textContent, title: el('overTitle').textContent, medals: !el('overMedals').hidden,
+    won: [...el('overMedals').children].map(s => s.className), msg: el('overMsg').textContent, again: el('againBtn').textContent,
+    neu: !el('chalNewBtn').hidden, share: !el('shareBtn').hidden, revive: el('reviveBox').hidden, med: chal.deal.med, score,
+    rec: chalRec.s.end01, run: localStorage.getItem('crumble.run.chal') }));
+  const m = c.score >= c.med[2] ? 3 : c.score >= c.med[1] ? 2 : c.score >= c.med[0] ? 1 : 0;
+  assert.equal(c.eye, 'Challenge #END01');
+  assert.equal(c.title, ['Round done', 'Bronze medal', 'Silver medal', 'Gold medal!'][m]);
+  assert.deepEqual(c.won, ['won', 'won', 'won'].map((w, i) => i < m ? w : ''));
+  if (m < 3) assert.match(c.msg, new RegExp('^' + (c.med[m] - c.score).toLocaleString('en-US') + ' more for ' + ['bronze', 'silver', 'gold'][m]));
+  assert.deepEqual([c.again, c.neu, c.share, c.revive], ['Retry', true, true, true]);
+  assert.deepEqual(c.rec && [c.rec.b, c.rec.m, c.rec.n], [c.score, m, 1]);
+  assert.equal(c.run, null, 'the finished round is not kept as a run');
+  // Retry: the same seed, from the top; a lower score keeps the best
+  await page.click('#againBtn'); await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [chal.seed, trayNo, score]), ['end01', 1, 0]);
+  await page.evaluate(() => { score = 10; gameOver(); });
+  assert.deepEqual(await page.evaluate(() => [chalRec.s.end01.b, chalRec.s.end01.n, el('overTitle').textContent]), [c.score, 2, 'Out of moves']);
+  assert.match(await page.textContent('#overMsg'), /Your best here/);
+  // New challenge: another seed
+  await page.click('#chalNewBtn'); await page.waitForFunction(() => state === 'play' && chal && chal.seed !== 'end01');
+  assert.match(await page.evaluate(() => chal.seed), /^[a-z0-9]{6}$/);
+});
+
+test('Challenge: reaching a medal mid-round raises its banner and moves the HUD to the next one; the goal rung counts medals once per challenge', async ({ page }) => {
+  await chalStart(page, 'med01');
+  await page.evaluate(() => { CFG.SPECIALS.golden = false; });
+  const r = await page.evaluate(() => {
+    banners.length = 0; score = chal.deal.med[0];
+    const g = empty(); for (let c = 0; c < 7; c++) g[0][c] = { gi: 0, t: 1, f: 0, l: 0 }; g[5][5] = { gi: 2, t: 1, f: 0, l: 0 }; grid = g;
+    const dot = SHAPES.find(s => s.n === 1); tray = [{ s: dot, gi: 1 }, { s: dot, gi: 2 }, { s: dot, gi: 3 }]; place(0, 0, 7);
+    return { won: chal.won, banner: banners.map(b => b.txt), lbl: el('bestLbl').textContent, val: el('bestVal').textContent };
+  });
+  assert.equal(r.won, 1); assert.ok(r.banner.includes('BRONZE!'), r.banner.join());
+  assert.deepEqual([r.lbl], ['🥈 Silver']);
+  await page.evaluate(() => { gameOver(); });
+  assert.deepEqual(await page.evaluate(() => [chalRec.won, goals.done.has('chal:1')]), [1, true]);
+  await page.evaluate(() => { el('overCard').hidden = true; mode = 'challenge'; chSeed = 'med01'; start(); score = chal.deal.med[2]; gameOver(); });
+  assert.deepEqual(await page.evaluate(() => [chalRec.won, chalRec.gold, chalRec.s.med01.m]), [1, 1, 3], 'the same challenge is not counted twice');
+});
+
+test('Challenge: a round in progress resumes with its own deal (even if the dealer changed since) and shows Continue', async ({ page }) => {
+  await chalStart(page, 'res01');
+  await chPlayRound(page, 'casual', 4);
+  const before = await page.evaluate(() => { saveRun(); return { tray: JSON.stringify(tray.map(t => t && [SHAPES.indexOf(t.s), t.gi])), trayNo, score, deal: JSON.stringify(chal.deal) }; });
+  await reloadGame(page);
+  const after = await page.evaluate(() => ({ mode, state, tray: JSON.stringify(tray.map(t => t && [SHAPES.indexOf(t.s), t.gi])), trayNo, score, deal: JSON.stringify(chal.deal), info: el('chalInfo').textContent, made: chCache.size }));
+  assert.deepEqual(after, { ...before, mode: 'challenge', state: 'play', info: 'Tray ' + before.trayNo + ' of 12', made: 0 }, 'the saved deal is played, not worked out again');
+  await page.evaluate(() => { saveRun(); el('pauseHome').click(); });
+  await page.click('#menuChal'); await page.waitForSelector('#chalCard:not([hidden])');
+  assert.deepEqual(await page.evaluate(() => [el('chalCont').hidden, el('chalCont').textContent]), [false, 'ContinueChallenge #RES01 · tray ' + before.trayNo + ' of 12']);
+  await page.click('#chalCont'); await page.waitForFunction(() => state === 'play' && !paused);
+  assert.equal(await page.evaluate(() => [chal.seed, trayNo].join()), 'res01,' + before.trayNo);
+});
+
+test('Challenge: working out a deal (the card prefetches one) leaves a paused Endless run exactly as it was', async ({ page }) => {
+  await play(page); await dealt(page);
+  const sig = () => page.evaluate(() => JSON.stringify([snapshot(), mode, lastTier, waveStats]));
+  const before = await sig();
+  await page.evaluate(() => { chMake('pre01'); chMake('pre02'); });
+  assert.equal(await sig(), before);
+});
+
+test('Challenge: out of moves ends the round early and the score stands (no rescue); Endless and Daily are untouched', async ({ page }) => {
+  await chalStart(page, 'stuck1');
+  await page.evaluate(() => { score = 1230; grid = grid.map(r => r.map(() => ({ gi: 1, t: 1, f: 0, l: 0 }))); grid[0][0] = null; tray = [{ s: SHAPES[1], gi: 0 }, null, null]; checkStuck(); });
+  await page.waitForSelector('#overCard:not([hidden])', { timeout: 3000 });
+  assert.deepEqual(await page.evaluate(() => [el('overTitle').textContent, el('overScore').textContent, el('reviveBox').hidden, chalRec.s.stuck1.b]), ['Out of moves', '1230', true, 1230]);
+  await page.click('#overMenuBtn'); await page.click('#menuEndless'); await page.waitForFunction(() => state === 'play' && mode === 'endless'); await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [el('chalInfo').hidden, el('bestLbl').textContent, special('golden'), special('transform')]), [true, 'Best', true, true]);
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tint the screen around the board, never a gem, and fade out', async ({ page }) => {

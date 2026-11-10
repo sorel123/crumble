@@ -52,6 +52,10 @@ function drawShareCard(d){
 // what the card says, from the run that just ended
 function shareData(){
   const daily=mode==='daily';
+  if(mode==='challenge'&&chal){                        // (E1) the round and the medal it earned
+    const m=chMedalOf(score,chal.deal.med);
+    return {score,label:chLabel(chal.seed),sub:m?MEDALS[m-1].icon+' '+MEDALS[m-1].name+' medal':CH_TRAYS+' trays',strip:shareStrip()};
+  }
   return {
     score:score,
     label:daily?"Today's Daily board":'Endless run',
@@ -67,7 +71,7 @@ function shareStrip(){
   return [0,1,2,3].map(i=>f[Math.round(i*(f.length-1)/3)]);
 }
 function shareSetup(){
-  const can=(mode==='endless'||mode==='daily')&&score>0;
+  const can=(mode==='endless'||mode==='daily'||mode==='challenge')&&score>0;
   el('shareBtn').hidden=!can;
 }
 

@@ -7,7 +7,8 @@
                   smirks when poked
      the sky      the journey sky (7.5b) travelling dawn -> day -> golden hour -> night -> aurora -> space and round again,
                   a stage every SKY_HOLD ms, drawn instead of the blurred board (frame() skips the board, tray and effects)
-     the buttons  a big Play, then Adventure / Daily / Goals / Settings as a 2x2 of tiles with her progress on each
+     the buttons  a big Play, then Adventure / Daily / Challenge / Goals as a 2x2 of tiles with her progress on each, and a
+                  slim Settings button under them (E1: Challenge took Settings' tile)
    Cost: the sky is the same cached plate blit as in a game (two during a wipe); the logo and crumb are DOM, animated with
    CSS / Web Animations on transform and opacity only. The overlay drops its backdrop blur, so the menu is cheaper to draw
    than the old blurred card. Reduced motion: no drops, ripples, flips or sky travel; the sky stays on one stage. */
@@ -61,7 +62,7 @@ function homeFill(card){                               // the words on the card:
   const stats=homeStats(), sEl=card.querySelector('.homeStats');
   sEl.innerHTML=stats; sEl.hidden=!stats;
   if(card.id==='startCard'){
-    el('startAdvSub').textContent=advS; el('startDailySub').textContent=dayS; el('startGoalsSub').textContent=golS;
+    el('startAdvSub').textContent=advS; el('startDailySub').textContent=dayS; el('startGoalsSub').textContent=golS; el('startChalSub').textContent=chTileSub();
     el('startHow').hidden=!!(best||stats);           // the how-to is for her first game; after that the stats take its place
   } else {
     el('menuClose').textContent=state==='play'?'Back to the game':'Back';

@@ -61,7 +61,7 @@ function endTransform(){
 /* ═══════ the specials (plan 4.5) ═══════
    One switch each in CFG.SPECIALS. Rules shared by all of them: never in trays 1-5, at most one live at a time,
    and never two in a row (the tray right after one ends carries none). specialOk() is that gate. */
-const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name]);
+const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name])&&!(mode==='challenge'&&(name==='golden'||name==='transform'));   // (E1) a Challenge's deal is frozen: no golden hands or transformations
 const specialLive=()=>!!(bonus||transform||golden||tray.some(t=>t&&t.s.star));
 const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>specialEnd+1;
 
@@ -387,6 +387,7 @@ const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
 // Stuck (plan 7.1): no tray piece fits. The pieces dim and "No moves" shows while the last drop lands; after 700 ms
 // the run ends (the timer re-checks, so a piece that fits by then keeps it going). The game-over card has the one rescue.
 function checkStuck(){
+  if(chDone) return;                                 // (E1) a finished Challenge round is not stuck: its end card is on the way
   stuck=!anyFits();
   syncActions();
   if(stuck) setTimeout(()=>{ if(!dealing&&!anyFits()) gameOver(); },700);

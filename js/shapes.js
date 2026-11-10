@@ -59,4 +59,14 @@ function mulberry(a){ return ()=>{ a=(a+0x6D2B79F5)>>>0; let t=a; t=Math.imul(t^
 // The dealer's randomness goes through rnd(): Math.random, unless a seeded stream is switched on (a level board, the Daily).
 let rndSrc=null;
 const rnd=()=>rndSrc?rndSrc():Math.random();
+/* (E1) a fair deal: a Challenge's deal is generated on the phone from its seed and must come out the same on every
+   phone and browser. sort() with a random comparator does not (each engine sorts differently and asks for a different
+   number of rolls), so while fairDeal is on the dealer shuffles with Fisher-Yates instead. Off (Endless, Daily,
+   Adventure) it is the same sort it always was, so their dealing does not change. */
+let fairDeal=false;
+function rshuffle(a){
+  if(!fairDeal) return a.sort(()=>rnd()-0.5);
+  for(let i=a.length-1;i>0;i--){ const j=(rnd()*(i+1))|0; const t=a[i]; a[i]=a[j]; a[j]=t; }
+  return a;
+}
 const seeded=(seed,fn)=>{ const old=rndSrc; rndSrc=mulberry(hashStr(seed)); try{ return fn(); } finally{ rndSrc=old; } };
