@@ -60,7 +60,7 @@ function restore(o){
   pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
   resetWave(); const w=o.wave;                       // (7.3) older saves have none: a fresh wave
   if(w&&isInt(w.n,0,1e6)&&isInt(w.at,1,99)&&Array.isArray(w.setups)&&isInt(w.closerCool,0,99)&&isInt(w.dryN,0,1e6)&&Array.isArray(w.bigHist)){
-    wave={n:w.n,at:w.at,due:!!w.due}; closerNext=!!w.closerNext; chaseNext=!!w.chaseNext; chaseCool=w.chaseCool|0; closerCool=w.closerCool; dryN=w.dryN; closerTray=!!w.closerTray; trayClear=!!w.trayClear;
+    wave={n:w.n,at:w.at,due:!!w.due}; closerNext=!!w.closerNext; chaseNext=!!w.chaseNext; chaseCool=Math.min(Math.max(w.chaseCool|0,0),99); closerCool=w.closerCool; dryN=w.dryN; closerTray=!!w.closerTray; trayClear=!!w.trayClear;
     if(isInt(w.jn,0,1e6)&&isInt(w.ja,1,99)) jack={n:w.jn,at:w.ja};   // (8.2) the jackpot clock; older saves start a fresh one
     bigHist=w.bigHist.filter(v=>isInt(v,0,3)).slice(-4);
     setups=w.setups.filter(u=>u&&isInt(u.k,0,SETUP_RECTS.length-1)&&isInt(u.r,0,N-1)&&isInt(u.c,0,N-1)&&isInt(u.age,0,99)).slice(0,3)

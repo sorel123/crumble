@@ -263,7 +263,8 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
   }
   covers.sort((x,y)=>x.empty-y.empty||x.ids.length-y.ids.length);
   if(covers.length>CFG.SWEEP_HUNT_COVERS) covers.length=CFG.SWEEP_HUNT_COVERS;   // the tightest few: a loose cover rarely sweeps and each costs a move list
-  const pool=HUNT_POOL.slice().sort(()=>rnd()-0.5);
+  const pool=HUNT_POOL.slice();                     // Fisher-Yates: a fixed count of rnd() calls on every engine (a random sort comparator is not, which would split the Daily)
+  for(let k=pool.length-1;k>0;k--){ const j=(rnd()*(k+1))|0; [pool[k],pool[j]]=[pool[j],pool[k]]; }
   let nodes=budget, best=null, bestSc=-Infinity;
   const path=[];
   for(const cv of covers){
@@ -713,10 +714,11 @@ function* dealSteps(){
     const h=yield* planSweepSteps(a0);
     if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; return; }
   }
+  let hunted=false;
   if(tier==='sweep'){
     const h=paced()?yield* closerSteps(a0):yield* planSweepSteps(a0);
     if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; if(!paced()) tension=0.5; waveDealt(h); return; }
-    tier='jackpot';
+    tier='jackpot'; hunted=true;                         // (1.1 A) this board was just hunted: the between-closers path skips it
   }
   if(wt==='closer'){                                    // (7.3) an earned closer: a planned sweep, the tray shimmers
     waveStats.closerTries++;
@@ -733,7 +735,7 @@ function* dealSteps(){
   // (1.1 A) between closers: whenever the board is small enough, off cooldown and free of specials, a board that can be swept
   // gets its sweep hand (closer rules: shimmer, cooldown). Only the hunt, which costs next to nothing on a board with no cover;
   // the dearer set-up chase stays with the earned closers above.
-  if(paced()&&!wt&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&closerCool<=0&&sweepCool<=0&&!chaseNow&&countFlat(a0)<=CFG.SWEEP_MAX){
+  if(paced()&&!wt&&!hunted&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&closerCool<=0&&sweepCool<=0&&!chaseNow&&countFlat(a0)<=CFG.SWEEP_MAX){
     const [lo,hi]=packBits(a0);
     if(sweepGap(lo,hi)<=CFG.SWEEP_HUNT_CELLS){ const h=yield* sweepHuntSteps(lo,hi); if(h){ dealCloser(h); return; } }
   }
@@ -879,7 +881,7 @@ function commitTray(shapes,label,plan){
     Sfx.goldenIn();
   }
   lastTier=label;
-  closerTray=label==='CLOSER'||(label==='SWEEP'&&paced());   // (7.3) the shimmer behind the tray: this hand can empty the board
+  closerTray=label==='CLOSER'||(label==='SWEEP'&&paced()); sweepKey='';   // (7.3) the shimmer behind the tray: this hand can empty the board
   carry=shapes.filter(x=>!stackable(x));
   if(shapes.includes(STAR)) Sfx.starIn();
   if(shapes.includes(STAR)) hesVoid(); else hesDealt();   // a star tray is no normal hesitation sample
