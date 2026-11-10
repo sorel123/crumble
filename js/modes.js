@@ -214,7 +214,7 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard'].some(id=>!el(id).hidden); }
+function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard','devPanel'].some(id=>!el(id).hidden); }
 function pauseForMenu(){ if(state==='play'){ paused=true; hapSelect('end'); drag=null; shake=0; hesVoid(); } }
 function hideMenus(){ el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
 function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
