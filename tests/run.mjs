@@ -1885,12 +1885,31 @@ test('share card: Share hands the picture to the share sheet when the browser ca
   await page.evaluate(() => {
     window.__shared = null;
     navigator.canShare = () => true;
-    navigator.share = async d => { window.__shared = { name: d.files[0].name, type: d.files[0].type, size: d.files[0].size }; };
+    navigator.share = async d => { window.__shared = { name: d.files[0].name, type: d.files[0].type, size: d.files[0].size, text: d.text }; };
   });
   await page.click('#shareBtn');
   await page.waitForFunction(() => window.__shared);
   const s = await page.evaluate(() => window.__shared);
   assert.equal(s.name, 'crumble-score.png'); assert.equal(s.type, 'image/png'); assert.ok(s.size > 5000);
+  assert.equal(s.text, 'My Crumble score: 300. Can you beat it? https://crumble.win');
+});
+
+test('share card: footer invites with the site, and a Daily share text says the board is the same for everyone', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate(() => { mode = 'daily'; score = 250; const d = shareText(); mode = 'endless'; return [SHARE_FOOTER, d]; });
+  assert.equal(r[0], 'Can you beat it?  \u00B7  crumble.win');
+  assert.equal(r[1], "Today's Daily: 250. Same board for everyone: https://crumble.win");
+});
+
+test('link preview: Open Graph tags and a 1200x630 image are in the page', async ({ page }) => {
+  await play(page);
+  const m = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('meta[property^="og:"],meta[name="twitter:card"]')].map(e => [e.getAttribute('property') || e.name, e.content])));
+  assert.equal(m['og:title'], 'Crumble'); assert.equal(m['og:url'], 'https://crumble.win/');
+  assert.equal(m['og:description'], 'Drag shapes, clear lines, chase clean sweeps.');
+  assert.equal(m['twitter:card'], 'summary_large_image');
+  assert.equal(m['og:image'], 'https://crumble.win/og-image.png');
+  const png = fs.readFileSync(new URL('../og-image.png', import.meta.url));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1200, 630]);
 });
 
 test('share card: where the share sheet cannot take files, the picture is saved instead', async ({ page }) => {
