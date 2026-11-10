@@ -1011,6 +1011,16 @@ game length, edge holds per game.
 
 Missed target: 1-3 full resets per game. A 3-piece sweep needs the gems in a few lines; in casual play the board at a closer's deal
 holds 12-24 gems spread over many lines and only a few percent are sweepable in three drops, by either planner. Making resets common would
-mean keeping the board much emptier, i.e. an easier game. Levers if Jay wants more: `CLOSER_GEMS` up, `CLOSER_COOL` down, or a lower
+mean keeping the board much emptier, i.e. an easier game.
+
+**Tried and not shipped: closer runs (7.3b, 2026-11-10).** Idea: when a closer is earned but no sweep exists, keep the shimmer on
+for up to 3 trays of close-in hands (the playable hand that leaves the fewest gems after its best ordering, big blocks preferred,
+later also weighted to obvious clears), checking for a sweep at each tray; end on the sweep, after 3 trays, or if the board grows
+past its starting gem count. Same bot and seeds: full resets per game 0.17, 0.13, 0.20, 0.00 (7.3 alone: 0.18), while 10-18 trays
+per game shimmered (30+ without a "board of 18 gems or fewer" gate on starting a run). Difficulty guards held (games ended 102 vs
+100, edge holds 5.6 vs 5.4). Why it fails: three placed pieces add ~10 cells and a cleared line removes 8, so the board hovers at
+10-20 gems (run logs: 17 18 8, 14 18, 18 22 22), and close-in hands only help if she finds their best ordering. A shimmer
+that promises a reset and pays about once in 70 run trays would teach her to ignore it. If Jay's playtest says resets are too
+rare, the next idea is an earned reward that clears gems directly, not another dealer change. Levers if Jay wants more: `CLOSER_GEMS` up, `CLOSER_COOL` down, or a lower
 `ROOM_OK`/`ROOM_EDGE` so the board runs emptier.
 
