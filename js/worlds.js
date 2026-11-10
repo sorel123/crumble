@@ -38,8 +38,22 @@ const TRANSFORMS={
 };
 const TRANSFORM_IDS=Object.keys(TRANSFORMS);
 const BONUS_WORLD={top:'#3A1170',bottom:'#12062B',effect:'sparks'};   // the bonus trays' sky: deep violet, rising sparks (the board and tiles keep her look)
-function worldDef(id){    // resolves a HOME_WORLDS id, a TRANSFORMS id, or 'bonus' to {top,bottom,effect,flash?}
+/* (7.5b) the journey sky, Endless and Daily: the sky travels as the score climbs and every clean sweep jumps a stage
+   (draw.js, "journey sky"). Each stage is a world like the others (gradient + ambient effect) plus a cached decor sprite
+   (sun, clouds, moon, planet...). Colours stay mid-to-dark so white HUD text reads on them; a light theme with dark ink
+   gets a pale version (bgOf). Stage thresholds are CFG.JOURNEY_AT. */
+const JOURNEY=[
+  {id:'j0', name:'Dawn',        top:'#2E3466', bottom:'#B86A78', effect:'none',   decor:'dawn'},
+  {id:'j1', name:'Day',         top:'#3F7FBF', bottom:'#7FAED6', effect:'clouds', decor:'day'},
+  {id:'j2', name:'Golden hour', top:'#8A4A6A', bottom:'#D9883A', effect:'embers', decor:'golden'},
+  {id:'j3', name:'Night',       top:'#0B1433', bottom:'#1C2A57', effect:'stars',  decor:'night'},
+  {id:'j4', name:'Aurora',      top:'#05161F', bottom:'#0A3436', effect:'ribbons',decor:'aurora'},
+  {id:'j5', name:'Space',       top:'#04020C', bottom:'#170A30', effect:'stars',  decor:'space'}
+];
+const isJourney=id=>typeof id==='string'&&id.length===2&&id[0]==='j';
+function worldDef(id){    // resolves a HOME_WORLDS id, a TRANSFORMS id, a JOURNEY id, or 'bonus' to {top,bottom,effect,flash?}
   if(id==='bonus') return BONUS_WORLD;
+  if(isJourney(id)) return JOURNEY[+id[1]]||JOURNEY[0];
   const t=TRANSFORMS[id]; if(t) return t.world;
   return HOME_WORLDS.find(w=>w.id===id) || HOME_WORLDS[0];
 }
@@ -59,8 +73,15 @@ const THEMES=[
 ];
 const theme=()=>THEMES.find(t=>t.id===CFG.THEME)||THEMES[0];
 const rgba=(hex,a)=>{ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; };
-function bgOf(id){                      // the sky: a light theme's own gradient, except during a transformation
-  const t=theme(); return t.light&&!TRANSFORMS[id]&&id!=='bonus'?{top:t.top,bottom:t.bot}:worldDef(id);
+const _pale={};
+const paleTheme=()=>{ const t=theme(); return t.light&&!t.whiteInk; };   // dark ink on a light sky: the journey goes pale so the text stays readable
+function bgOf(id){                      // the sky: a light theme's own gradient, except during a transformation or the journey
+  const t=theme();
+  if(isJourney(id)){
+    const j=worldDef(id); if(!paleTheme()) return j;
+    const k=t.id+id; return _pale[k]||(_pale[k]={top:mixHex(j.top,t.top,0.7),bottom:mixHex(j.bottom,t.bot,0.7)});
+  }
+  return t.light&&!TRANSFORMS[id]&&id!=='bonus'?{top:t.top,bottom:t.bot}:worldDef(id);
 }
 function applyTheme(){
   const t=theme(), st=document.documentElement.style;
@@ -78,12 +99,16 @@ function applyTheme(){
   const mc=document.querySelector('meta[name=theme-color]'); if(mc) mc.content=t.light?t.bot:'#150B26';
   if(boardBg) buildBoardBg();
 }
+function mixHex(a,b,t){                // like lerpCol, but a #rrggbb string (so it can be mixed again)
+  const A=hex2rgb(a),B2=hex2rgb(b), h=i=>Math.round(A[i]+(B2[i]-A[i])*t).toString(16).padStart(2,'0');
+  return '#'+h(0)+h(1)+h(2);
+}
 function lerpCol(a,b,t){
   const A=hex2rgb(a),B2=hex2rgb(b);
   return `rgb(${Math.round(A[0]+(B2[0]-A[0])*t)},${Math.round(A[1]+(B2[1]-A[1])*t)},${Math.round(A[2]+(B2[2]-A[2])*t)})`;
 }
 
-const AMBIENT_N={none:0,bubbles:22,embers:20,ribbons:5,stars:55,fireflies:16,snowfall:26,petals:16,
+const AMBIENT_N={none:0,clouds:5,bubbles:22,embers:20,ribbons:5,stars:55,fireflies:16,snowfall:26,petals:16,
   rays:4,shootingstars:4,grid:14,confetti:24,sparks:18,storm:40};
 function ambientParticle(effect,initial){
   switch(effect){
@@ -112,6 +137,8 @@ function ambientParticle(effect,initial){
       w:4+Math.random()*3,h:6+Math.random()*4,hue:Math.random()*360,a:0.5+Math.random()*0.3};
     case 'sparks': return {x:Math.random()*W,y:initial?Math.random()*H:H+10,r:1+Math.random()*1.6,
       vy:-(0.15+Math.random()*0.2),ph:Math.random()*6.283,ps:0.02+Math.random()*0.02,a:0.3+Math.random()*0.3};
+    case 'clouds': { const s=0.7+Math.random()*0.7; return {x:initial?Math.random()*W:-W*0.3*s,y:Math.random()<0.5?H*(0.09+Math.random()*0.05):H*(0.66+Math.random()*0.18),s,   // in the gap under the HUD, or below the board: never behind the score or buttons
+      vx:0.06+Math.random()*0.08,a:0.35+Math.random()*0.3}; }
     case 'storm': return {x:Math.random()*W,y:initial?Math.random()*H:-10,vy:3+Math.random()*2,
       len:10+Math.random()*8,a:0.2+Math.random()*0.15};
     default: return {};
@@ -197,6 +224,11 @@ function stepAmbient(list,effect,dt,boost,alphaMul,respawn){
       ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
       ctx.globalAlpha=p.a*alphaMul; ctx.fillStyle=`hsl(${p.hue} 90% 65%)`;
       ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h); ctx.restore();
+    } else if(effect==='clouds'){                 // (7.5b) slow puffs drifting right, one cached sprite each
+      p.x+=p.vx*dt*boost;
+      const cw=W*0.3*p.s;
+      if(p.x>W+cw){ if(respawn) Object.assign(p,ambientParticle(effect,false)); else{ list.splice(i,1); continue; } }
+      ctx.globalAlpha=p.a*alphaMul; ctx.drawImage(cloudSprite(),p.x-cw/2,p.y,cw,cw*0.45);
     } else if(effect==='storm'){
       p.y+=p.vy*dt*boost;
       if(p.y>H+20){ if(respawn) Object.assign(p,ambientParticle(effect,false)); else{ list.splice(i,1); continue; } }
@@ -207,6 +239,17 @@ function stepAmbient(list,effect,dt,boost,alphaMul,respawn){
   ctx.globalAlpha=1;
 }
 
+let _cloud=null;
+function cloudSprite(){                           // a soft white puff, built once (drawn scaled)
+  if(_cloud) return _cloud;
+  const w=160,h=72,cv=document.createElement('canvas'); cv.width=w; cv.height=h; const x=cv.getContext('2d');
+  for(const [cx,cy,r] of [[46,46,24],[78,34,32],[112,44,26],[132,52,16],[28,54,14]]){
+    const g=x.createRadialGradient(cx,cy,r*0.2,cx,cy,r); g.addColorStop(0,'rgba(255,255,255,.95)'); g.addColorStop(.7,'rgba(255,255,255,.75)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    x.fillStyle=g; x.beginPath(); x.arc(cx,cy,r,0,6.283); x.fill();
+  }
+  return _cloud=cv;
+}
+
 /* ── flip transition: a diagonal card-flip wave across the board, then the
    tray, swapping from one world+skin to another. All timings in frames
    (~60/s). Skipped (snapped instantly) under prefers-reduced-motion.    */
@@ -214,13 +257,15 @@ const FLIP_WAVE=28, FLIP_CELL=16, FLIP_GAP=6, FLIP_STAGGER=5, FLIP_TRAY=14;
 const FLIP_BG_DUR=FLIP_WAVE+FLIP_CELL;
 const FLIP_TOTAL=FLIP_WAVE+FLIP_CELL+FLIP_GAP+2*FLIP_STAGGER+FLIP_TRAY;
 function resetWorld(){
-  curWorld=CFG.HOME_WORLD; curSkin=CFG.STYLE;
+  jw=null; jStage=journeyTarget(); jShown=jStage; jPend=null;
+  curWorld=homeSky(); curSkin=CFG.STYLE;
   buildCache();                     // curSkin may have just changed (a fresh run can follow a skin pick)
   ambient=spawnAmbient(worldDef(curWorld).effect); ambientOld=[]; ambientBurst=0;
   bgFrom=curWorld; bgT=1; flip=null; transform=null; transformCool=0; lightningT=0;
   renderPips();
 }
 function startFlip(toWorld,toSkin){
+  jw=null;
   if(reduce){                                    // snap straight there, no animation
     curWorld=toWorld; curSkin=toSkin; buildCache();
     ambient=spawnAmbient(worldDef(curWorld).effect); ambientOld=[];
@@ -236,12 +281,13 @@ function startFlip(toWorld,toSkin){
 // the bonus trays' sky: only the background and its particles change, over ~BONUS_SKY_FRAMES; her tiles are never touched
 const BONUS_SKY_FRAMES=70;
 function startSky(toWorld){
+  jw=null;
   if(reduce){ curWorld=toWorld; ambient=spawnAmbient(worldDef(toWorld).effect); ambientOld=[]; bgFrom=toWorld; bgT=1; return; }
   bgFrom=curWorld; bgT=0; ambientOld=ambient; curWorld=toWorld; ambient=spawnAmbient(worldDef(toWorld).effect);
 }
-function stepFlip(dt){
-  if(!flip){ if(bgT<1){ bgT=Math.min(1,bgT+dt/BONUS_SKY_FRAMES); if(bgT>=1) ambientOld=[]; } return; }
+function stepFlip(dt){                           // (while a journey wipe runs it owns the sky: bgT waits)
+  if(!flip){ if(bgT<1&&!jw){ bgT=Math.min(1,bgT+dt/BONUS_SKY_FRAMES); if(bgT>=1) ambientOld=[]; } return; }
   flip.t+=dt;
-  if(bgT<1){ bgT=Math.min(1,flip.t/FLIP_BG_DUR); if(bgT>=1) ambientOld=[]; }
+  if(bgT<1&&!jw){ bgT=Math.min(1,flip.t/FLIP_BG_DUR); if(bgT>=1) ambientOld=[]; }
   if(flip.t>=FLIP_TOTAL) flip=null;
 }

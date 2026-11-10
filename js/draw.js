@@ -84,11 +84,11 @@ function edgeGlow(rgb,strength){
   if(dR>2){ ctx.fillStyle=mk(W,0,W-dR,0); ctx.fillRect(W-dR,0,dR,H); }
 }
 // the sky gradient and the board glow are rebuilt only when their colours change — not per frame
-let _sky=null;
+const _sky=new Map();                                  // a few colour pairs (a journey wipe draws two skies a frame)
 function skyFill(top,bot){
-  if(_sky&&_sky.top===top&&_sky.bot===bot&&_sky.H===H) return _sky.g;
-  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,top); g.addColorStop(1,bot);
-  _sky={top,bot,H,g}; return g;
+  const k=top+bot+H; let g=_sky.get(k); if(g) return g;
+  g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,top); g.addColorStop(1,bot);
+  if(_sky.size>12) _sky.clear(); _sky.set(k,g); return g;
 }
 const GLOWS=new Map();
 function glowSprite(hue){
@@ -157,11 +157,20 @@ function drawPressureRim(now){                         // the board frame: cool 
   ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;            ctx.lineWidth=2+2*p;      ctx.stroke();
   if(scr.relief>0.01){ ctx.strokeStyle=`rgba(143,247,255,${scr.relief*0.8})`; ctx.lineWidth=4+8*scr.relief; ctx.stroke(); }
 }
+let closerK=0;                                         // (7.3) the closer shimmer, eased in and out
 function drawTrayBand(){                               // the tray dims as the room shrinks: a soft dark band behind the pieces (never over them)
-  if(scr.p<0.02) return;
   const a=slotRect(0), z=slotRect(2);
+  closerK+=((CFG.FX_CLOSER_GLOW&&closerTray&&state==='play'&&tray.some(t=>t)?1:0)-closerK)*0.08;
+  if(closerK<0.01) closerK=0;
+  if(scr.p<0.02&&!closerK) return;
   roundPath(ctx,a.x-6,a.y,z.x+z.w-a.x+12,a.h,14);
-  ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); ctx.globalAlpha=1;
+  if(scr.p>=0.02){ ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); }
+  if(closerK){                                         // (7.3) a closer: a soft pale glow behind the pieces, breathing; reduced motion holds still
+    const b=reduce?0.6:0.5+0.5*Math.sin(performance.now()*0.004);
+    ctx.globalAlpha=closerK*(0.10+0.08*b); ctx.fillStyle='#BFF6FF'; ctx.fill();
+    ctx.globalAlpha=closerK*(0.35+0.3*b); ctx.strokeStyle='#DFFBFF'; ctx.lineWidth=2; ctx.stroke();
+  }
+  ctx.globalAlpha=1;
 }
 
 /* Whole-screen mode looks (plan 6.7). Four states she can read from across the room, each one eased weight in `lk`, drawn on the same
@@ -297,6 +306,65 @@ function stepConfetti(dt){
   ctx.globalAlpha=1;
 }
 
+/* (7.5) blocks that crumble. A cleared gem cracks (crack(), drawn over the gem in the clear's ~6 frames), then
+   breaks into angular fragments (spawnRubble) that fall under gravity, bounce once on floorY (just above the bottom
+   safe area) and fade. Rubble is drawn in the board layer before the live gems and tray pieces (drawRubble), so it
+   falls behind them and never covers a live gem. How much rubble follows the 6.3 hierarchy, by the shatter's tier:
+   1 single line (one small piece per gem: crisp), 2 multi-line or star, 3 combo BIG_COMBO+, 4 clean sweep. Every
+   piece counts against the particle budget (fxLive), so a slow frame sheds rubble first. */
+const RUBBLE_PER=[0,1,2,3,4], RUBBLE_G=0.36;
+function crack(s,x,y,k){                             // a zigzag across the gem, drawn in as k goes 0 -> 1
+  if(!s.ck){                                         // across the line's direction, so a row's gems split side to side
+    const pts=[], n=4;
+    for(let j=0;j<=n;j++){ const a=j/n, w=(j===0||j===n)?0:(Math.random()-.5)*.36; pts.push(s.horiz?[.5+w,a]:[a,.5+w]); }
+    s.ck=pts;
+  }
+  const pts=s.ck, m=Math.max(1,Math.ceil(k*(pts.length-1)));
+  ctx.beginPath(); ctx.moveTo(x+pts[0][0]*cell,y+pts[0][1]*cell);
+  for(let j=1;j<=m;j++) ctx.lineTo(x+pts[j][0]*cell,y+pts[j][1]*cell);
+  ctx.globalAlpha=0.55*k; ctx.strokeStyle='rgba(20,10,40,1)'; ctx.lineWidth=Math.max(1.5,cell*.07); ctx.stroke();
+  ctx.globalAlpha=0.9*k;  ctx.strokeStyle='#fff';             ctx.lineWidth=Math.max(1,cell*.03);  ctx.stroke();
+  ctx.globalAlpha=1;
+}
+function spawnRubble(s,cx,cy,g){
+  const n=Math.min(RUBBLE_PER[s.tier||2]||2,Math.max(0,fxRoom()));
+  const away=Math.atan2(cy-s.oy,cx-s.ox), kick=s.tier>=3?1.6:s.tier===2?1:0.5;   // bigger clears push rubble a little away from the piece
+  for(let k=0;k<n;k++){
+    const sz=cell*(s.tier===1?.34:.28+Math.random()*.16), pts=[], sides=Math.random()<.3?3:4;
+    for(let j=0;j<sides;j++){                        // an irregular shard: corners at uneven angles and radii
+      const a=(j+Math.random()*.6)/sides*6.283, rr=sz*(.7+Math.random()*.3);   // chunky, not slivers: these are bits of block
+      pts.push(Math.cos(a)*rr,Math.sin(a)*rr);
+    }
+    const ox=(n>1?(k/(n-1)-.5):0)*cell*.5+(Math.random()-.5)*cell*.2, oy=(Math.random()-.5)*cell*.3;
+    rubble.push({x:cx+ox,y:cy+oy,vx:Math.cos(away)*kick*Math.random()+(Math.random()-.5)*1.6+ox*.04,
+      vy:-1.2-Math.random()*(1.2+kick),rot:Math.random()*6.283,vr:(Math.random()-.5)*.28,pts,
+      col:`hsl(${g.h} ${g.s}% 58%)`,hi:`hsl(${g.h} ${g.s}% 82%)`,bn:0,fade:1,dust:s.tier===4});
+  }
+}
+function drawRubble(dt){
+  for(let i=rubble.length-1;i>=0;i--){
+    const b=rubble[i];
+    b.vy+=RUBBLE_G*dt; b.x+=b.vx*dt; b.y+=b.vy*dt; b.rot+=b.vr*dt;
+    if(b.y>floorY){                                    // the bottom of the screen: one bounce, then it rests and fades
+      b.y=floorY;
+      if(!b.bn){ b.bn=1; b.vy*=-0.35; b.vx*=0.6; b.vr*=0.5;
+        if(b.dust&&fxRoom()>0) dust.push({x:b.x,y:floorY,vx:(Math.random()-.5)*2,vy:-.6-Math.random(),r:cell*.08,life:1}); }
+      else { b.vy=0; b.vx*=Math.pow(.8,dt); b.vr*=Math.pow(.8,dt); }
+    }
+    if(b.bn) b.fade-=dt*0.05;                          // ~20 frames after the bounce
+    if(b.fade<=0||b.x<-40||b.x>W+40){ rubble.splice(i,1); continue; }
+    const c=Math.cos(b.rot), sn=Math.sin(b.rot), P=b.pts;
+    ctx.globalAlpha=Math.min(1,b.fade*1.5);
+    ctx.beginPath();
+    for(let j=0;j<P.length;j+=2){ const px=b.x+P[j]*c-P[j+1]*sn, py=b.y+P[j]*sn+P[j+1]*c; j?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+    ctx.closePath(); ctx.fillStyle=b.col; ctx.fill();
+    ctx.beginPath();                                   // a lit facet: the shard's first edge to its centre
+    ctx.moveTo(b.x+P[0]*c-P[1]*sn,b.y+P[0]*sn+P[1]*c); ctx.lineTo(b.x+P[2]*c-P[3]*sn,b.y+P[2]*sn+P[3]*c); ctx.lineTo(b.x,b.y);
+    ctx.closePath(); ctx.fillStyle=b.hi; ctx.globalAlpha*=0.8; ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
 /* frame budget (plan 2.2). Every frame measures the gap since the one before. Effect particles share one
    budget, PARTICLE_CAP scaled by perf.fx: a frame over FRAME_BUDGET_MS (or 1.5x the device's own frame
    interval, so a 30 Hz Low Power Mode phone isn't punished for every frame) cuts it, frames on time grow it back
@@ -304,7 +372,7 @@ function stepConfetti(dt){
    slowest frame of the last two seconds, how many frames have run long (tap it to reset), the time the game's
    own code took in the last frame, and the particle budget. */
 const perf={gaps:new Float32Array(120),gi:0,over:0,work:0,fx:1,hud:null};
-const fxLive=()=>goldRain.length+bursts.length+shards.length+sparkles.length+dust.length+chunks.length+confetti.length;
+const fxLive=()=>goldRain.length+bursts.length+shards.length+sparkles.length+dust.length+chunks.length+confetti.length+rubble.length;
 function fxRoom(){ return Math.round(CFG.PARTICLE_CAP*perf.fx)-fxLive(); }
 function perfFrame(gap){
   if(!(gap>0&&gap<250)) return;                     // the first frame, or back from the background: not a frame she saw
@@ -333,6 +401,118 @@ function perfHud(now){
   perf.hud.style.color=mx>CFG.FRAME_BUDGET_MS?'#FFB3B3':'#fff';
 }
 
+
+/* (7.5b) The journey sky, Endless and Daily (CFG.JOURNEY_SKY; Settings -> Look -> Advanced). The sky travels as the score
+   climbs, dawn -> day -> golden hour -> night -> aurora -> space (CFG.JOURNEY_AT), and every clean sweep jumps one stage on
+   top (jJumps, saved with the run). A stage is a JOURNEY world (worlds.js) plus a cached decor sprite. It is drawn in the sky
+   layer only, so pressure (6.6) and the mode looks (6.7) sit on top as before and no gem, board or tray pixel changes.
+   A stage change is a top-down wipe of the whole sky: calm after a score threshold (it waits for the next deal plus
+   JOURNEY_WAIT frames, ~1.4 s, a faint edge), quicker with a bright leading edge after a sweep (once its confetti settles).
+   Bonus trays and transformations take the sky over as before; a stage passed meanwhile wipes in when they hand back.
+   Reduced motion: no wipe, the stage simply changes. */
+let jStage=0, jJumps=0, jShown=0, jw=null, jPend=null, jSweep=false;   // target stage, sweeps this run, stage on screen, the wipe, a pending change
+const journeyOn=()=>!!CFG.JOURNEY_SKY&&paced();
+function journeyTarget(){
+  const at=CFG.JOURNEY_AT; let k=0;
+  for(let i=1;i<at.length;i++) if(score>=at[i]) k=i;
+  return Math.min(JOURNEY.length-1,k+jJumps);
+}
+const homeSky=()=>journeyOn()?JOURNEY[jStage].id:CFG.HOME_WORLD;   // where the sky goes back to when nothing else owns it
+function journeySweep(){ jJumps++; if(journeyOn()){ jSweep=true; jPend={t:CFG.JOURNEY_WAIT+30}; } }   // place(): a clean sweep
+function journeyDealt(){ if(journeyOn()&&!jPend&&journeyTarget()>jStage) jPend={t:CFG.JOURNEY_WAIT}; } // stepDeal(): a tray was dealt
+function stepJourney(dt){
+  if(!jPend) return;
+  if((jPend.t-=dt)>0) return;
+  jPend=null; journeyAdvance();
+}
+function journeyAdvance(){
+  if(!journeyOn()) return;
+  jStage=Math.max(jStage,journeyTarget());
+  if(jStage===jShown||!isJourney(curWorld)) return;    // a bonus or transformation owns the sky: it wipes in at the hand-back
+  const to=JOURNEY[jStage].id;
+  if(reduce){ syncHomeSky(); return; }
+  bgFrom=curWorld; ambientOld=ambient; curWorld=to; ambient=spawnAmbient(worldDef(to).effect);
+  beginWipe();
+}
+function beginWipe(){                                  // bgFrom/ambientOld = the old sky, curWorld/ambient = the new one
+  jw={from:bgFrom,t:0,dur:jSweep?50:84,sweep:jSweep}; jSweep=false; jShown=jStage; bgT=1;
+}
+function journeyHandBack(){                            // right after endBonus/endTransform sent the sky home
+  if(!journeyOn()||!isJourney(curWorld)) return;
+  if(jStage!==jShown&&!reduce&&bgFrom!==curWorld) beginWipe(); else { jShown=jStage; jSweep=false; }
+}
+function syncHomeSky(){                                // snap to her home sky (a Settings change, reduced motion): no animation
+  jStage=Math.max(jStage,journeyTarget());
+  if(transform||bonus) return;
+  const id=homeSky(); jw=null; jShown=jStage; jSweep=false;
+  curWorld=id; ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1;
+}
+// the decor: one cached sprite per stage (and pale or not), at half the screen's pixels, drawn with one drawImage
+const _decor={};
+function decorSprite(id){
+  const pale=paleTheme(), k=id+(pale?'p':''); let d=_decor[k];
+  if(d&&d.W===W&&d.H===H) return d.cv;
+  const sc=Math.max(0.5,dpr*0.5), cv=document.createElement('canvas');
+  cv.width=Math.max(1,Math.round(W*sc)); cv.height=Math.max(1,Math.round(H*sc));
+  const x=cv.getContext('2d'); x.scale(sc,sc);
+  let seed=7; const r=()=>((seed=(seed*16807)%2147483647)/2147483647);   // the same stars every time
+  const glow=(cx,cy,rad,col,a)=>{ const g=x.createRadialGradient(cx,cy,0,cx,cy,rad); g.addColorStop(0,`rgba(${col},${a})`); g.addColorStop(1,`rgba(${col},0)`); x.fillStyle=g; x.fillRect(cx-rad,cy-rad,rad*2,rad*2); };
+  const disc=(cx,cy,rad,fill)=>{ x.fillStyle=fill; x.beginPath(); x.arc(cx,cy,rad,0,6.283); x.fill(); };
+  const stars=(n,y1,amax)=>{ for(let i=0;i<n;i++){ x.globalAlpha=(0.25+r()*0.75)*amax; disc(r()*W,r()*H*y1,0.5+r()*1.1,'#fff'); } x.globalAlpha=1; };
+  const haze=(col,a,hgt)=>{ const g=x.createLinearGradient(0,H-hgt,0,H); g.addColorStop(0,`rgba(${col},0)`); g.addColorStop(1,`rgba(${col},${a})`); x.fillStyle=g; x.fillRect(0,H-hgt,W,hgt); };
+  const S=Math.min(W,H*0.6);
+  switch(worldDef(id).decor){
+    case 'dawn':                                       // the last stars fading, a sun just over the horizon
+      stars(26,0.35,0.6); haze('255,170,120',0.55,H*0.35);
+      glow(W*0.78,H*0.97,S*0.55,'255,190,140',0.55); disc(W*0.78,H*0.97,S*0.1,'rgba(255,226,170,.95)'); break;
+    case 'day':                                        // a small bright sun high up, a light haze low down
+      glow(W*0.3,H*0.145,S*0.32,'255,250,220',0.6); disc(W*0.3,H*0.145,S*0.055,'rgba(255,252,235,.95)'); haze('235,245,255',0.35,H*0.3); break;
+    case 'golden':                                     // a big low sun and a warm horizon
+      haze('255,170,60',0.5,H*0.4); glow(W*0.2,H*0.98,S*0.7,'255,190,90',0.6); disc(W*0.2,H*0.98,S*0.15,'rgba(255,214,130,.9)'); break;
+    case 'night':                                      // a crescent moon
+      stars(30,0.9,0.5); glow(W*0.62,H*0.145,S*0.3,'190,210,255',0.25);
+      { const mr=S*0.06, m=document.createElement('canvas'); m.width=m.height=Math.ceil(mr*2*sc)+2; const mx=m.getContext('2d'); mx.scale(sc,sc);   // the crescent on its own little canvas
+        mx.fillStyle='rgba(236,240,255,.95)'; mx.beginPath(); mx.arc(mr,mr,mr,0,6.283); mx.fill();
+        mx.globalCompositeOperation='destination-out'; mx.beginPath(); mx.arc(mr*1.45,mr*0.75,mr*0.92,0,6.283); mx.fill();
+        x.drawImage(m,W*0.62-mr,H*0.145-mr,m.width/sc,m.height/sc); } break;
+    case 'aurora':                                     // stars and a green glow over a dark horizon
+      stars(45,0.8,0.6); glow(W*0.5,H*0.05,S*0.9,'60,255,170',0.16); glow(W*0.15,H*0.2,S*0.5,'120,140,255',0.12); haze('0,8,12',0.6,H*0.18); break;
+    case 'space':                                      // nebula clouds, dense stars, a ringed planet
+      glow(W*0.25,H*0.3,S*0.8,'150,60,220',0.22); glow(W*0.8,H*0.62,S*0.7,'30,170,200',0.16); stars(90,1,0.8);
+      glow(W*0.66,H*0.145,S*0.18,'255,190,140',0.25); disc(W*0.66,H*0.145,S*0.06,'rgba(232,150,110,1)');
+      x.strokeStyle='rgba(255,220,180,.7)'; x.lineWidth=2; x.beginPath(); x.ellipse(W*0.66,H*0.145,S*0.115,S*0.028,-0.3,0,6.283); x.stroke(); break;
+  }
+  _decor[k]={W,H,cv}; return cv;
+}
+function drawDecor(id,a){
+  if(!isJourney(id)||a<=0.01) return;
+  ctx.globalAlpha=a*(paleTheme()?0.55:1); ctx.drawImage(decorSprite(id),0,0,W,H); ctx.globalAlpha=1;
+}
+let _jband=null;
+function wipeBand(){                                   // a soft horizontal band of light: the wipe's leading edge
+  if(_jband) return _jband;
+  const cv=document.createElement('canvas'); cv.width=4; cv.height=64; const x=cv.getContext('2d'), g=x.createLinearGradient(0,0,0,64);
+  g.addColorStop(0,'rgba(255,250,235,0)'); g.addColorStop(.5,'rgba(255,250,235,1)'); g.addColorStop(1,'rgba(255,250,235,0)'); x.fillStyle=g; x.fillRect(0,0,4,64);
+  return _jband=cv;
+}
+function paintSky(id,list,respawn,dt,aboost){          // one whole sky: gradient, decor, ambient
+  const c=bgOf(id); ctx.fillStyle=skyFill(c.top,c.bottom); ctx.fillRect(0,0,W,H);
+  drawDecor(id,1);
+  stepAmbient(list,worldDef(id).effect,dt,aboost,1,respawn);
+}
+function drawWipe(dt,aboost){                          // the new sky comes down from the top over the old one
+  jw.t+=dt;
+  const u=Math.min(1,jw.t/jw.dur), e=u<0.5?2*u*u:1-2*(1-u)*(1-u), fe=H*0.16, y=e*(H+fe)-fe;   // y: where the solid new sky ends
+  paintSky(jw.from,ambientOld,false,dt,aboost);
+  if(y>0){ ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,y); ctx.clip(); paintSky(curWorld,ambient,true,dt,aboost); ctx.restore(); }
+  else stepAmbient(ambient,worldDef(curWorld).effect,dt,aboost,0,true);
+  const c=bgOf(curWorld), mid=lerpCol(c.top,c.bottom,clamp(y/H,0,1));   // the feathered edge: the new sky's colour fading out below the line
+  const g=ctx.createLinearGradient(0,y,0,y+fe); g.addColorStop(0,mid); g.addColorStop(1,mid.replace('rgb','rgba').replace(')',',0)'));
+  ctx.fillStyle=g; ctx.fillRect(0,y,W,fe);
+  ctx.globalAlpha=(jw.sweep?0.55:0.14)*Math.sin(Math.PI*u); ctx.drawImage(wipeBand(),0,y-fe*0.2,W,fe*(jw.sweep?1.1:0.8)); ctx.globalAlpha=1;
+  if(u>=1){ jw=null; ambientOld=[]; bgFrom=curWorld; bgT=1; }
+}
+
 let last=0;
 function frame(now){
   requestAnimationFrame(frame);
@@ -355,16 +535,19 @@ function frame(now){
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
-  stepFlip(dt);
-  const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
-    : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
-       lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
-  ctx.fillStyle=skyFill(bgTop,bgBot); ctx.fillRect(0,0,W,H);     // gradient object cached per colour pair (a new one each frame is slow on iOS)
-
+  stepFlip(dt); stepJourney(dt);
   ambientBurst*=Math.pow(.88,dt);
   const aboost=1+ambientBurst*1.8+(bonus&&!reduce?0.6:0);   // a bonus keeps the sky's particles livelier
-  if(bgT<1) stepAmbient(ambientOld,worldDef(bgFrom).effect,dt,aboost,1-easeOutCubic(bgT),false);
-  stepAmbient(ambient,worldDef(curWorld).effect,dt,aboost,bgT<1?easeOutCubic(bgT):1,true);
+  if(jw) drawWipe(dt,aboost);                         // (7.5b) a journey stage coming in
+  else {
+    const [bgTop,bgBot]=bgT>=1 ? [bgOf(curWorld).top,bgOf(curWorld).bottom]
+      : [lerpCol(bgOf(bgFrom).top,bgOf(curWorld).top,easeOutCubic(bgT)),
+         lerpCol(bgOf(bgFrom).bottom,bgOf(curWorld).bottom,easeOutCubic(bgT))];
+    ctx.fillStyle=skyFill(bgTop,bgBot); ctx.fillRect(0,0,W,H);     // gradient object cached per colour pair (a new one each frame is slow on iOS)
+    if(bgT<1){ drawDecor(bgFrom,1-easeOutCubic(bgT)); drawDecor(curWorld,easeOutCubic(bgT)); } else drawDecor(curWorld,1);
+    if(bgT<1) stepAmbient(ambientOld,worldDef(bgFrom).effect,dt,aboost,1-easeOutCubic(bgT),false);
+    stepAmbient(ambient,worldDef(curWorld).effect,dt,aboost,bgT<1?easeOutCubic(bgT):1,true);
+  }
 
   if(worldDef(curWorld).flash && !reduce && Math.random()<0.006*dt) lightningT=1;
   lightningT=Math.max(0,lightningT-dt/10);
@@ -453,6 +636,7 @@ function frame(now){
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 
+  drawRubble(dt);                                    // (7.5) behind the live gems and the tray: it falls through empty cells and off the board
   const claySquash=curSkin==='clay';
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
     const g=grid[r][c]; if(!g) continue;
@@ -568,7 +752,8 @@ function frame(now){
   /* line clear, in frames. Optional blink, then either:
      squash — each gem collapses to a white-hot sliver along its line and is gone in ~6 frames (Block Blast's beat), or
      burst  — each gem pops and becomes a whole block flung away from where the piece landed */
-  const squash=CFG.CLEAR_STYLE==='squash', POP=squash?6:7;
+  const crumble=CFG.CLEAR_STYLE==='crumble'&&!reduce;     // (7.5) reduced motion: crumble falls back to the squash
+  const squash=CFG.CLEAR_STYLE==='squash'||(CFG.CLEAR_STYLE==='crumble'&&reduce), POP=squash||crumble?6:7;
   for(let i=shatters.length-1;i>=0;i--){
     const s=shatters[i]; s.t+=dt;
     if(s.t<0){                                       // blink phase, timed from the clear itself so the line flashes in unison
@@ -578,7 +763,8 @@ function frame(now){
     if(s.t>=POP){
       const g=GEMS[s.gi], cx=bx+(s.c+.5)*cell, cy=by+(s.r+.5)*cell;
       const room=fxRoom()>0;                               // the bits below are skipped once the particle budget is spent
-      if(room && squash && !reduce && !s.star && s.big){                       // two little squares drift off the bar (a bigger clear only)
+      if(crumble){ if(room) spawnRubble(s,cx,cy,g); }
+      else if(room && squash && !reduce && !s.star && s.big){                       // two little squares drift off the bar (a bigger clear only)
         for(let k=0;k<2;k++) shards.push({x:cx+(Math.random()-.5)*cell*.6,y:cy+(Math.random()-.5)*cell*.3,vx:(Math.random()-.5)*2,vy:-1-Math.random()*2,r:cell*(.05+Math.random()*.05),life:1,sq:true});
       } else if(room && !squash && CFG.FX_CHUNKS && !reduce){
         const ang=Math.atan2(cy-s.oy,cx-s.ox)+(Math.random()-.5)*.5;   // away from the placed piece
@@ -587,14 +773,18 @@ function frame(now){
           vr:(Math.random()-.5)*.5,sz:cell*.86,life:1,gi:s.gi,
           col:`hsl(${g.h} ${g.s}% 60%)`,hi:`hsl(${g.h} ${g.s}% 84%)`});
       }
-      for(let k=0;room&&k<(reduce?1:s.star?4:s.big?3:1);k++){               // a few bright specks per gem
+      for(let k=0;room&&k<(reduce?1:crumble&&s.tier===1?0:s.star?4:s.big?3:1);k++){   // (7.5) a crumbled single line drops rubble only               // a few bright specks per gem
         const a=Math.random()*6.283,sp=2+Math.random()*4;
         shards.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,r:cell*(.05+Math.random()*.08),life:1});
       }
       shatters.splice(i,1); continue;
     }
     const p=s.t/POP, e=easeOutCubic(p);
-    if(squash&&!s.star){                                 // thins to a bright sliver along the line, stretching slightly into it
+    if(crumble&&!s.star){                                // (7.5) a crack runs across the gem and it shudders, whiter, about to break
+      const jx=p>.5?(Math.random()-.5)*cell*.05:0;
+      gem(s.gi,bx+s.c*cell+jx,by+s.r*cell,cell,1-0.06*e,1,0.15+0.45*e);
+      crack(s,bx+s.c*cell+jx,by+s.r*cell,Math.min(1,p*1.6));
+    } else if(squash&&!s.star){                                 // thins to a bright sliver along the line, stretching slightly into it
       const thin=Math.max(0.04,1-e*0.97), wide=1+0.12*e;
       if(s.horiz) gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,wide,1,0.55+0.45*e,false,thin);
       else        gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,thin,1,0.55+0.45*e,false,wide);

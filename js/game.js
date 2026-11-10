@@ -55,7 +55,7 @@ function triggerTransform(id){
 function endTransform(){
   transform=null;
   transformCool=CFG.TRANSFORM_COOLDOWN; specialEnd=Math.max(specialEnd,trayNo);   // the next tray carries no special
-  startFlip(CFG.HOME_WORLD,CFG.STYLE);
+  startFlip(homeSky(),CFG.STYLE); journeyHandBack();
   renderPips();
 }
 /* ═══════ the specials (plan 4.5) ═══════
@@ -108,7 +108,7 @@ function startBonus(){
 }
 function endBonus(){                                // place(): the last bonus tray was just emptied
   const b=bonus; bonus=null; specialEnd=trayNo;
-  startSky(CFG.HOME_WORLD);
+  startSky(homeSky()); journeyHandBack();
   Sfx.bonusEnd();
   if(b.extra>0){
     bonusTag={txt:'+'+b.extra.toLocaleString()+' bonus'};
@@ -172,7 +172,7 @@ function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
-  const roomBefore=paced()?roomOf(packGrid(grid)):1;   // (6.3) how cramped the board was before this drop, for the narrow escape
+  const gridBefore=packGrid(grid), roomBefore=paced()?roomOf(gridBefore):1;   // (6.3) how cramped the board was before this drop, for the narrow escape
   const bump=CFG.FX_LAND_BUMP&&!reduce;
   if(!s.star) s.cells.forEach(([dr,dc])=>{ grid[r+dr][c+dc]={gi:t.gi,t:1,f:1,l:bump?1:0}; });   // f = a brief glint, l = the landing thump; a star leaves no gem
   if(bump){                                        // the thump: a ring spreads out from under the piece, dust kicks out sideways
@@ -245,7 +245,7 @@ function place(idx,r,c){
       const delay=s.star?starMs+d*(reduce?0:CFG.STAR_STAGGER):(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;   // a star's cross lights up from the star outward after its charge
       maxDelay=Math.max(maxDelay,delay);
       cellsGone.push([rr,cc,delay]);
-      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,big:!single,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
+      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,big:!single,tier:single?1:loud?3:2,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
       if(CFG.FX_SCORE_ORBS && loud && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
         dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
@@ -303,7 +303,9 @@ function place(idx,r,c){
       swept=true; trayHadSweep=true;
       ambientBurst=1.8;
       if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
+      for(const sh of shatters) if(sh.t<=0) sh.tier=4;   // (7.5) the sweep's gems all crumble at the biggest size
       pushBanner('CLEAN SWEEP','+'+bonus);         // the achievement first, then the world it earns
+      journeySweep();                              // (7.5b) the sky jumps a stage (before a Rainbow may take it over)
       triggerTransform('rainbow');
       for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
       shake=16*CFG.SHAKE; glowT=1.6;
@@ -323,6 +325,7 @@ function place(idx,r,c){
     if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
   }
 
+  if(paced()) waveAfterDrop(gridBefore,total,countFlat(packGrid(grid)),combo,roomBefore<CFG.ROOM_EDGE);   // (7.3) setups and closer triggers
   if(paced()) tension+=(1-roomOf(packGrid(grid))-tension)*0.5;   // (6.1) a display value now (the border glow): how cramped the board is, eased
   else tension=Math.min(1,tension+(1-mobility())*CFG.TENSION_DRIFT);
 
@@ -393,7 +396,7 @@ function stepDeal(){
   const end=performance.now()+CFG.DEAL_SLICE_MS;
   let r;
   do r=dealing.it.next(); while(!r.done && performance.now()<end);
-  if(r.done){ dealing=null; checkStuck(); syncActions(); saveRun(); }
+  if(r.done){ dealing=null; checkStuck(); syncActions(); saveRun(); journeyDealt(); }
 }
 function cancelDeal(){ if(dealing){ dealing.it.return(); dealing=null; } }   // a new run or a rescue deals its own tray
 

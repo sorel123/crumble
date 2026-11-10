@@ -16,10 +16,12 @@ function snapshot(){
     golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies, so the snapshot does not move while the live hand goes on
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     bonusMeter, specialEnd,
-    pace:{...pace},                                 // (6.1) the dealer's phase, so resume keeps the rhythm
+    pace:{...pace},
+    wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
-    bonus:bonus?{left:bonus.left,extra:bonus.extra}:null
+    bonus:bonus?{left:bonus.left,extra:bonus.extra}:null,
+    jy:jJumps                                         // (7.5b) sweeps this run: the journey sky's extra stages
   };
 }
 const isInt=(v,a,b)=>Number.isInteger(v)&&v>=a&&v<=b;
@@ -45,12 +47,20 @@ function restore(o){
   goldenReplan(); goldenArrive=999;                  // the plan is not stored: it is worked out again from the board and the pieces left
   goldenNext=!!o.goldenNext; goldenCool=Math.max(0,o.goldenCool|0); trayHadSweep=!!o.trayHadSweep;
   trayCombo=o.trayCombo|0; starForced=!!o.starForced; starCool=isInt(o.starCool,0,1e3)?o.starCool:0; transformCool=Math.max(0,o.transformCool|0);
+  jJumps=isInt(o.jy,0,99)?o.jy:0;                   // (7.5b) older saves: no jumps, the stage follows the score
   resetWorld(); transformCool=Math.max(0,o.transformCool|0);   // (resetWorld clears the cooldown)
   renderPips();
   bonusMeter=isInt(o.bonusMeter,0,1e4)?Math.min(o.bonusMeter,CFG.BONUS_METER):0; bonusTag=null;
   specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
   const pc=o.pace, PH=['calm','building','edge','recovery','relief'];   // (6.1) older saves have none: start calm
   pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
+  resetWave(); const w=o.wave;                       // (7.3) older saves have none: a fresh wave
+  if(w&&isInt(w.n,0,1e6)&&isInt(w.at,1,99)&&Array.isArray(w.setups)&&isInt(w.closerCool,0,99)&&isInt(w.dryN,0,1e6)&&Array.isArray(w.bigHist)){
+    wave={n:w.n,at:w.at,due:!!w.due}; closerNext=!!w.closerNext; closerCool=w.closerCool; dryN=w.dryN; closerTray=!!w.closerTray; trayClear=!!w.trayClear;
+    bigHist=w.bigHist.filter(v=>isInt(v,0,3)).slice(-4);
+    setups=w.setups.filter(u=>u&&isInt(u.k,0,SETUP_RECTS.length-1)&&isInt(u.r,0,N-1)&&isInt(u.c,0,N-1)&&isInt(u.age,0,99)).slice(0,3)
+      .filter(u=>u.r+SETUP_RECTS[u.k].rows<=N&&u.c+SETUP_RECTS[u.k].cols<=N).map(u=>({k:u.k,r:u.r,c:u.c,age:u.age,dealt:!!u.dealt}));
+  }
   roomNow=roomOf(packGrid(grid)); resetPressure(true);
   const b=o.bonus;                                  // a live bonus carries on with the trays it had left (the sky is back at once)
   if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){

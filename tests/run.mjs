@@ -375,6 +375,69 @@ test('6.3 animation hierarchy: two lines are bigger than one; a narrow escape an
   assert.ok(sweep.banners.includes('CLEAN SWEEP') && !sweep.banners.includes('PHEW!'), 'a sweep keeps its own banner, not the escape one');
 });
 
+test('7.5 crumble: cleared gems crack into rubble that falls behind the board, bounces once at the bottom and is gone; bigger clears drop more', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'crumble', 'crumble is the default clear');
+  // follow the rubble from outside: most pieces alive at once, whether any bounced, how long until it is all gone
+  const watch = () => page.evaluate(() => new Promise(res => {
+    let most = 0, bounced = false, k = 0, low = 0; const t0 = performance.now();
+    const step = () => {
+      most = Math.max(most, rubble.length); bounced = bounced || rubble.some(b => b.bn);
+      low = Math.max(low, ...rubble.map(b => b.y), 0);
+      if ((++k > 10 && !rubble.length && !shatters.length) || k > 400) return res({ most, bounced, low, ms: performance.now() - t0, frames: k, floorY, H, left: rubble.length });
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }));
+  await page.evaluate(() => { perf.fx = 1; });
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const one = await watch();
+  assert.equal(one.left, 0, 'a single line\'s rubble is all gone');
+  assert.ok(one.most >= 6 && one.most <= 8, `a single line drops one small piece per gem (${one.most})`);
+  assert.ok(one.bounced && one.low <= one.floorY + 0.01 && one.floorY < one.H, 'it bounces on the floor, just above the bottom of the screen');
+  assert.ok(one.frames < 130, `and is gone in about two seconds of frames (${one.frames})`);
+  await dealt(page);
+  await page.evaluate(() => { perf.fx = 1; });
+  await setup(page, { rows: THREE_LINES, trayShapes: [4, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  const multi = await watch();
+  assert.ok(multi.most > one.most * 2, `three lines drop more rubble (${multi.most} vs ${one.most})`);
+  assert.equal(multi.left, 0, 'and it is gone too');
+  // the 6.3 rule: rubble is drawn before the live gems, so it never covers one
+  const order = await page.evaluate(() => new Promise(res => {
+    const log = []; const dr = drawRubble, gm = gem;
+    window.drawRubble = dt => { log.push('rubble'); dr(dt); };
+    window.gem = (...a) => { if (log[log.length - 1] !== 'gem') log.push('gem'); gm(...a); };
+    rubble.push({ x: W / 2, y: by, vx: 0, vy: 0, rot: 0, vr: 0, pts: [0, 0, 5, 0, 0, 5], col: '#f00', hi: '#fff', bn: 0, fade: 1 });
+    requestAnimationFrame(() => { window.drawRubble = dr; window.gem = gm; rubble.length = 0; res(log); });
+  }));
+  assert.ok(order.indexOf('rubble') >= 0 && order.indexOf('rubble') < order.indexOf('gem'), 'rubble is drawn before the board\'s gems: ' + order.slice(0, 4).join(','));
+  // it shares the particle budget
+  const capped = await page.evaluate(() => {
+    perf.fx = 0.3;
+    const g = GEMS[0];
+    for (let k = 0; k < 200; k++) spawnRubble({ tier: 4, ox: 0, oy: 0 }, W / 2, by, g);
+    return { live: fxLive(), cap: Math.round(CFG.PARTICLE_CAP * perf.fx) };
+  });
+  assert.ok(capped.live <= capped.cap, `rubble is held to the particle budget (${capped.live} <= ${capped.cap})`);
+  await page.evaluate(() => { rubble.length = 0; perf.fx = 1; });
+});
+
+test('7.5 crumble: squash and burst stay in Admin; an old saved Admin tuning does not bring squash back', async ({ page, server }) => {
+  await page.evaluate(() => localStorage.setItem('crumble.dev.6', JSON.stringify({ CLEAR_STYLE: 'squash', SHAKE: 0.5 })));
+  await page.goto(server.url + '?dev');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  const r = await page.evaluate(() => ({ style: CFG.CLEAR_STYLE, shake: CFG.SHAKE, opts: DEV_CHOICES.find(c => c[0] === 'CLEAR_STYLE')[2].map(o => o.value) }));
+  assert.equal(r.style, 'crumble', 'the old squash default is dropped once');
+  assert.deepEqual(r.opts, ['crumble', 'squash', 'burst']);
+  await page.evaluate(() => { CFG.CLEAR_STYLE = 'squash'; devSave(); });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'squash', 'a choice made after this sticks');
+  await page.evaluate(() => localStorage.removeItem('crumble.dev.6'));
+});
+
 test('the opening: 100 seeded new games each clear a line within the first three placements', async ({ page }) => {
   const r = await page.evaluate(async () => {
     const out = [];
@@ -639,6 +702,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
       bonus = k % 3 === 2 ? { left: 2, extra: 0 } : null;
       const run = stepwise => {
         grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9; pace = { ...pace0 }; starCool = 0; specialEnd = -99; tray = [null, null, null];
+        wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
         goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
         if (stepwise) { const it = dealSteps(); while (!it.next().done) performance.now(); } else genTray();   // stepwise: one candidate per call, as frames would
         return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier;
@@ -734,8 +798,8 @@ test('Settings fits one screen; a look sets theme, world, skin and motif togethe
   assert.equal(await page.locator('#lookGrid .look-btn').count(), 9, 'five everyday looks and the four earned ones');
   assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'true', 'Classic is lit by default');
   await page.click('#lookGrid [data-id=cotton]');
-  const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, cw: curWorld }));
-  assert.deepEqual(await look(), { t: 'cotton', w: 'blossom', s: 'clay', m: 'heart', cs: 'clay', cw: 'blossom' });
+  const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, home: curWorld === homeSky() }));   // (7.5b) the sky shows her home sky: the journey in Endless, else her world
+  assert.deepEqual(await look(), { t: 'cotton', w: 'blossom', s: 'clay', m: 'heart', cs: 'clay', home: true });
   assert.equal(await page.getAttribute('#lookGrid [data-id=cotton]', 'aria-pressed'), 'true');
   assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'false');
   assert.ok(await page.locator('#lookGrid [data-id=neon]').isDisabled(), 'Neon is locked until its skin is earned');
@@ -746,7 +810,7 @@ test('Settings fits one screen; a look sets theme, world, skin and motif togethe
   assert.equal(await page.locator('#lookGrid [aria-pressed=true]').count(), 0);
   await page.click('#lookGrid [data-id=mint]');
   await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
-  assert.deepEqual(await look(), { t: 'mint', w: 'forest', s: 'blocks', m: 'none', cs: 'blocks', cw: 'forest' });
+  assert.deepEqual(await look(), { t: 'mint', w: 'forest', s: 'blocks', m: 'none', cs: 'blocks', home: true });
   await page.click('#startSettings');
   assert.equal(await page.getAttribute('#lookGrid [data-id=mint]', 'aria-pressed'), 'true', 'the saved look is lit after a reload');
   await page.evaluate(() => { unlocked.add('neon'); renderLooks(); });
@@ -1108,7 +1172,7 @@ test('the bonus pays x2 on every placement, counts trays down, ends after the la
     tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }]; dealing = null;
     place(0, 0, 0); out.mid = bonus && bonus.left; place(1, 3, 3); place(2, 6, 6);
     out.ended = bonus === null; out.specialEnd = specialEnd; out.tag = bonusTag && bonusTag.txt; out.chip = el('bonusChip').textContent.trim(); out.want = '+' + bb.extra.toLocaleString() + ' bonus'; out.grew = bb.extra > 120;
-    out.home = curWorld === CFG.HOME_WORLD;
+    out.home = curWorld === homeSky();
     return out;
   });
   assert.ok(r.plain > 0 && r.dbl === 2 * r.plain, `double: ${r.dbl} vs ${r.plain}`);
@@ -1138,7 +1202,7 @@ test('a bonus plays through three real trays: left counts 3, 2, 1, then it ends;
   }
   assert.deepEqual(seen, [3, 2, 1]);
   await dealt(page);
-  const end = await page.evaluate(() => ({ bonus, world: curWorld === CFG.HOME_WORLD, skin: curSkin }));
+  const end = await page.evaluate(() => ({ bonus, world: curWorld === homeSky(), skin: curSkin }));
   assert.deepEqual(end, { bonus: null, world: true, skin: skin }, 'it ended after the third tray; her tiles never changed');
   assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), [], 'no page errors');
 });
@@ -1170,7 +1234,7 @@ test('the bonus is saved and resumed (meter and trays left), a bonus move double
     return { gain: score - s0, extra: bonus.extra - x0 };
   });
   assert.ok(u.gain > 0 && u.extra > 0, 'the move was doubled');
-  const n = await page.evaluate(() => { start(); return { bonus, meter: bonusMeter, world: curWorld === CFG.HOME_WORLD, chip: el('bonusChip').textContent.trim() }; });
+  const n = await page.evaluate(() => { start(); return { bonus, meter: bonusMeter, world: curWorld === homeSky(), chip: el('bonusChip').textContent.trim() }; });
   assert.deepEqual(n, { bonus: null, meter: 0, world: true, chip: '×2 bonus' });
 });
 
@@ -1182,7 +1246,7 @@ test('dealing is untouched by a live bonus: the same board and dice deal the sam
     CFG.SPECIALS.star = CFG.SPECIALS.golden = false;                // (those two only roll dice while no bonus is live, which would shift the stream)
     for (let k = 0; k < 8; k++) {
       grid = grid.map(r => r.map(() => (keep() < 0.3 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
-      const run = b => { bonus = b; trayNo = 10; tension = k / 7; carry = []; golden = null; goldenNext = false; starForced = false; Math.random = seeded(50 + k); genTray(); bonus = null; return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier; };
+      const run = b => { bonus = b; trayNo = 10; tension = k / 7; carry = []; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; specialEnd = -99; golden = null; goldenNext = false; starForced = false; Math.random = seeded(50 + k); genTray(); bonus = null; return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier; };
       out.push([run(null), run({ left: 2, extra: 0 })]);
     }
     Math.random = keep; Object.assign(CFG.SPECIALS, was); return out;
@@ -2166,6 +2230,195 @@ test('music (7.4): the service worker keeps the loops in their own cache, which 
   const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   assert.match(sw, /MUSIC_CACHE='crumble-music'/); assert.match(sw, /k!==MUSIC_CACHE/);
   assert.ok(!/music\//.test(sw.match(/const ASSETS=(\[.*?\]);/s)[1]), 'not precached: lazy-loaded');
+});
+
+// ---- payoff waves, setups and closers (plan 7.3) ----
+const B73 = `const B73 = rows => { grid = rows.map(r => [...r].map(ch => (ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null))); return packGrid(grid); };
+  const W73 = () => { wave = { n: 0, at: 5, due: false }; setups = []; closerNext = false; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; closerTray = false;
+    golden = null; goldenNext = false; bonus = null; transform = null; starForced = false; starCool = 9; specialEnd = -99; trayNo = 10; pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; tray = [null, null, null]; };`;
+
+test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, then never again for that setup', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73();
+    // rows 6-7 full but columns 2-3; above the gap, row 5 is open at columns 2-4: a ragged gap, not yet squared off
+    B73(['00000000','00000000','00000000','00000000','00000000','00000111','11001111','11001111']);
+    const o = {};
+    const hole = SHAPES.find(s => s.rows === 2 && s.cols === 2 && s.n === 4);
+    const pre = packGrid(grid);
+    grid[5][2] = grid[5][3] = { gi: 0, t: 1, f: 0, l: 0 };                         // her 1x2 squares it off: the 2x2 hole is walled in
+    waveAfterDrop(pre, 0, countFlat(packGrid(grid)), 0, false);
+    o.setups = setups.map(u => [SETUP_RECTS[u.k].rows, SETUP_RECTS[u.k].cols, u.r, u.c]);
+    const d0 = waveStats.dealt;
+    CFG.SETUP_CHANCE = 1; tray = [null, null, null]; genTray();
+    o.first = tray.some(t => t.s === hole) && setups.some(u => u.dealt);
+    o.dealt = waveStats.dealt - d0;
+    // she ignores it: the next deals never force it again (with chance 1 any hole piece now comes only by itself)
+    let forced = 0; const orig = offerSetup;
+    for (let k = 0; k < 2; k++) { tray = [null, null, null]; const d1 = waveStats.dealt; genTray(); forced += waveStats.dealt - d1; }
+    o.again = forced;
+    // a gap that existed before the drop is not a setup
+    W73(); const same = B73(['00000000','00000000','00000000','00000000','00000000','00000000','11001111','11001111']);
+    waveAfterDrop(same, 0, countFlat(same), 0, false); o.old = setups.length;
+    return o; })()`);
+  assert.ok(r.setups.some(([h, w, rr, cc]) => h === 2 && w === 2 && rr === 6 && cc === 2), 'the 2x2 hole is a setup: ' + JSON.stringify(r.setups));
+  assert.ok(r.first, 'with SETUP_CHANCE 1 the next tray carries the 2x2');
+  assert.equal(r.dealt, 1);
+  assert.equal(r.again, 0, 'one offer per setup');
+  assert.equal(r.old, 0, 'a hole she did not just make is no setup');
+});
+
+test('7.3 no tedium: never three small pieces while a big one fits; the 4+ floor over five trays', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73(); const one = SHAPES[0], two = SHAPES[1], three = SHAPES[3];
+    const open = B73(Array(8).fill('00000000'));
+    const big = h => h.filter(s => s.n >= 4).length;
+    const o = { open: big(noTedium(open, [one, two, three], 'honest')) };
+    // only singles and bars of 2 fit: the hand is left alone
+    const tight = B73(['10101010','01010101','10101010','01010101','10101010','01010101','10101010','01010101']);
+    o.tight = big(noTedium(tight, [one, one, one], 'honest'));
+    bigHist = [0, 0, 1, 0];                                                         // 1 big piece in the last four trays: this tray brings the rest
+    o.floor = big(noTedium(open, [SHAPES[5], one, two], 'honest'));
+    // and in play: 40 deals on an open-ish board never deal three small pieces
+    W73(); let small = 0;
+    for (let k = 0; k < 40; k++) { B73(['00000000','00000000','00000000','00000000','00000000','11100000','11110000','11111000']); tray = [null, null, null]; genTray(); if (tray.every(t => t.s.n <= 3)) small++; }
+    o.small = small; return o; })()`);
+  assert.ok(r.open >= 1, 'an open board turns a small hand into one with a 4+ piece');
+  assert.equal(r.tight, 0, 'no 4+ piece fits: unchanged');
+  assert.ok(r.floor >= 3, 'the floor brings the 4+ count over five trays up to BIG_FLOOR');
+  assert.equal(r.small, 0);
+});
+
+test('7.3 payoff: a big block that clears 2+ lines at once when the board offers one, nothing forced when it does not', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73();
+    const twoRows = B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']);
+    const h = runSteps(payoffSteps(twoRows, 0.2));
+    const [lo, hi] = packBits(twoRows);
+    const bam = h && h.some(s => s.n >= 4 && placeMasks(s).some(m => !(lo & m.lo) && !(hi & m.hi) && applyBits(lo, hi, s, m) >= 2));
+    const none = runSteps(payoffSteps(B73(Array(8).fill('00000000')), 0.2));
+    // dealt by the clock: due now, the tray is a PAYOFF
+    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']); wave.at = 1; genTray();
+    const dealtTier = lastTier, after = wave.n;
+    // an empty board offers no payoff: a build tray, and the clock stays due for the next one
+    W73(); B73(Array(8).fill('00000000')); wave.at = 1; genTray();
+    return { bam, none, dealtTier, after, emptyTier: lastTier, stillDue: wave.due }; })()`);
+  assert.ok(r.bam, 'the hand holds a big block that clears two lines in one drop');
+  assert.equal(r.none, null);
+  assert.equal(r.dealtTier, 'PAYOFF'); assert.equal(r.after, 0, 'the clock restarts');
+  assert.notEqual(r.emptyTier, 'PAYOFF'); assert.ok(r.stillDue, 'retries next tray');
+});
+
+test('7.3 closers: earned triggers deal a planned sweep with the shimmer, count as a special, and give way to a golden hand', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const rows = ['00000000','00000000','00000000','00000000','00000000','00000000','00111111','11111000'];
+    const o = {};
+    W73(); B73(rows); const before = packGrid(grid);
+    waveAfterDrop(before, 1, 11, 1, false); o.lowGems = closerNext;                 // a clear leaving 11 gems earns one
+    W73(); waveAfterDrop(before, 1, 30, 3, false); o.combo = closerNext;            // so does combo 3
+    W73(); waveAfterDrop(before, 0, 30, 0, false); o.nothing = closerNext;          // a drop with no clear does not
+    W73(); B73(rows); closerNext = true; genTray();
+    o.tier = lastTier; o.glow = closerTray; o.special = specialEnd === trayNo; o.cool = closerCool;
+    o.sweeps = evalHand(packGrid(grid), tray.map(t => t.s), 3000000).sweep;
+    W73(); B73(rows); closerNext = true; dryN = CFG.DRY_TRAYS; genTray(); o.dry = lastTier;   // a dry spell on its own is a payoff, never a sweep
+    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']); dryN = CFG.DRY_TRAYS; genTray(); o.dryOnly = lastTier;
+    W73(); B73(rows); closerNext = true; goldenNext = true; genTray(); o.golden = lastTier;   // a golden hand due goes first
+    W73(); B73(rows); closerNext = true; specialEnd = trayNo; genTray(); o.afterSpecial = lastTier;  // never right after a special
+    return o; })()`);
+  assert.ok(r.lowGems && r.combo && !r.nothing, 'the triggers');
+  assert.equal(r.tier, 'CLOSER'); assert.ok(r.glow, 'the tray shimmers'); assert.ok(r.special, 'it counts as the special'); assert.ok(r.cool > 0);
+  assert.ok(r.sweeps, 'the closer hand can empty the board');
+  assert.equal(r.dryOnly, 'PAYOFF', 'stalling earns lines, not a reset');
+  assert.notEqual(r.afterSpecial, 'CLOSER');
+  assert.notEqual(r.golden, 'CLOSER');
+});
+
+test('7.3 the wave state is saved with the run and survives a resume', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73(); wave = { n: 3, at: 6, due: true }; setups = [{ k: 0, r: 6, c: 2, age: 1, dealt: true }]; closerNext = true; closerCool = 2; dryN = 4; bigHist = [1, 2]; closerTray = true;
+    const snap = JSON.parse(JSON.stringify(snapshot()));
+    W73(); restore(snap);
+    const ok = wave.n === 3 && wave.at === 6 && wave.due && setups.length === 1 && setups[0].dealt && closerNext && closerCool === 2 && dryN === 4 && bigHist.join() === '1,2' && closerTray;
+    delete snap.wave; restore(snap);                                           // an older save: a fresh wave
+    return { ok, old: wave.n === 0 && setups.length === 0 && !closerNext }; })()`);
+  assert.ok(r.ok, 'round trip'); assert.ok(r.old, 'older saves start a fresh wave');
+});
+
+test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, saved with the run; Adventure and the switch keep her world', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const st = () => page.evaluate(() => ({ w: curWorld, stage: jStage, shown: jShown, wipe: !!jw, sweep: !!(jw && jw.sweep), jumps: jJumps }));
+  const done = () => page.waitForFunction(() => !jw && !jPend, null, { timeout: 5000 });
+  assert.equal((await st()).w, 'j0', 'a run starts at dawn');
+  await page.evaluate(() => { score = 600; journeyDealt(); });                           // past 500: day, after the next deal
+  assert.equal((await st()).w, 'j0', 'nothing changes on the clear itself');
+  await page.waitForFunction(() => !!jw, null, { timeout: 3000 });
+  assert.deepEqual(await st(), { w: 'j1', stage: 1, shown: 1, wipe: true, sweep: false, jumps: 0 }, 'a calm wipe to day');
+  await done();
+  await page.evaluate(() => { CFG.SPECIALS.transform = false; journeySweep(); });         // a clean sweep jumps a stage
+  await page.waitForFunction(() => !!jw, null, { timeout: 3000 });
+  assert.deepEqual(await st(), { w: 'j2', stage: 2, shown: 2, wipe: true, sweep: true, jumps: 1 }, 'a sweep wipe to golden hour');
+  await done();
+  const r = await page.evaluate(() => {
+    score = 3000; jStage = journeyTarget();                                              // night by score, plus the sweep: aurora
+    const snap = JSON.parse(JSON.stringify(snapshot())), out = { jy: snap.jy };
+    jJumps = 0; restore(snap); out.resumed = [curWorld, !!jw];
+    delete snap.jy; restore(snap); out.old = curWorld;
+    score = 99999; jJumps = 5; out.cap = journeyTarget();
+    mode = 'adventure'; syncHomeSky(); out.adv = curWorld === CFG.HOME_WORLD;
+    mode = 'endless'; syncHomeSky(); out.back = curWorld;
+    el('journeyOn').checked = false; el('journeyOn').dispatchEvent(new Event('change'));
+    out.off = curWorld === CFG.HOME_WORLD && JSON.parse(localStorage.getItem('crumble.skins')).journey === false;
+    el('journeyOn').checked = true; el('journeyOn').dispatchEvent(new Event('change'));
+    start(); out.fresh = [curWorld, jJumps, jStage];
+    return out;
+  });
+  assert.equal(r.jy, 1, 'sweeps are saved with the run');
+  assert.deepEqual(r.resumed, ['j4', false], 'a resume snaps to its stage, no wipe');
+  assert.equal(r.old, 'j3', 'an older save follows the score alone');
+  assert.equal(r.cap, 5, 'space is the last stage');
+  assert.ok(r.adv, 'Adventure keeps her own world');
+  assert.equal(r.back, 'j5');
+  assert.ok(r.off, 'the Settings switch brings her world back and is saved');
+  assert.deepEqual(r.fresh, ['j0', 0, 0], 'a new run starts at dawn again');
+});
+
+test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back with a wipe, and it fits the frame budget', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const px = () => page.evaluate(() => { grid[4][4] = { gi: 2, t: 1, f: 0, l: 0 }; shake = 0; const g = (x, y) => { const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data; return [d[0], d[1], d[2]]; };
+    return { corner: g(3, 3), gem: g(bx + 4.5 * cell, by + 4.5 * cell) }; });
+  const moved = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+  await page.evaluate(() => { grid[4][4] = { gi: 2, t: 1, f: 0, l: 0 }; });
+  await page.waitForTimeout(400);
+  const base = await px();
+  await watchFrames(page); await frameLog(page);
+  await page.evaluate(() => { score = 600; journeyDealt(); jPend.t = 1; });
+  await page.waitForFunction(() => jw && jw.t > jw.dur * 0.5, null, { timeout: 3000 });
+  const mid = await px();
+  assert.ok(moved(mid.gem, base.gem) <= 5, 'a gem pixel is untouched mid-wipe: ' + base.gem + ' vs ' + mid.gem);
+  assert.ok(moved(mid.corner, base.corner) > 8, 'the sky has changed at the top: ' + base.corner + ' -> ' + mid.corner);
+  await page.waitForFunction(() => !jw, null, { timeout: 3000 });
+  const work = (await frameLog(page)).work.sort((a, b) => a - b);
+  const p90 = work[Math.floor(work.length * 0.9)];
+  console.log(`     (wipe: ${work.length} frames, p90 ${p90.toFixed(1)} ms, max ${work[work.length - 1].toFixed(1)} ms)`);
+  assert.ok(p90 < 12, 'wipe frames stay cheap: p90 ' + p90.toFixed(1) + ' ms');
+  const b = await page.evaluate(async () => {
+    startBonus(); score = 2000; journeyDealt(); jPend.t = 1;
+    await new Promise(res => setTimeout(res, 300));
+    const during = [curWorld, jStage, jShown];
+    endBonus(); const after = [curWorld, !!jw, jShown];
+    return { during, after };
+  });
+  assert.deepEqual(b.during, ['bonus', 2, 1], 'while a bonus owns the sky the stage moves on quietly');
+  assert.deepEqual(b.after, ['j2', true, 2], 'and wipes in when the bonus hands back');
+  const pale = await page.evaluate(() => { CFG.THEME = 'daylight'; applyTheme(); const c = bgOf('j5'); CFG.THEME = 'classic'; applyTheme(); return c; });
+  const lum = h => { const n = parseInt(h.slice(1), 16); return 0.3 * (n >> 16) + 0.59 * (n >> 8 & 255) + 0.11 * (n & 255); };
+  assert.ok(lum(pale.top) > 140, 'a dark-ink theme gets a pale space so its text stays readable: ' + pale.top);
 });
 
 for (const { name, fn } of tests) {

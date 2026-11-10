@@ -3,6 +3,7 @@
 /* ═══════ developer panel ═══════
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
+  ['FX_CLOSER_GLOW','Closer shimmer on the tray (7.3)'],
   ['SPECIALS.bonus','Special: Bonus trays (x2)'],
   ['SPECIALS.star','Special: Star Gem'],
   ['SPECIALS.golden','Special: Golden Hand'],
@@ -31,10 +32,11 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
 const DEV_ACTIONS=[['Fill bonus meter',()=>{ if(!bonus){ bonusMeter=CFG.BONUS_METER; syncBonusChip(); } }],
   ['Bonus trays',()=>{ if(!bonus){ if(transform) endTransform(); bonusMeter=0; startBonus(); } }],
   ...Object.keys(ACHIEVE).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]),
+  ['Next sky (7.5b)',()=>{ journeySweep(); if(jPend) jPend.t=1; }],
   ['Reset unlocks',()=>{ discoveredWorlds.clear(); newLook=false; saveSkinSave(); renderWorlds(); renderLooks(); syncLookDot(); }]];
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
-  ['CLEAR_STYLE','Clear style',opt(['squash','Squash to a bar'],['burst','Blocks fly out']),()=>{}],
+  ['CLEAR_STYLE','Clear style',opt(['crumble','Crumble to rubble'],['squash','Squash to a bar'],['burst','Blocks fly out']),()=>{}],
   ['SND_PICKUP','Pickup sound',opt(['slide','Slide'],['soft','Soft'],['swish','Swish'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.pickup(),60); }],
   ['SND_PLACE','Place sound',opt(['drop','Drop'],['wood','Wood'],['soft','Soft'],['original','Original'],['off','Off']),()=>{ ac(); setTimeout(()=>Sfx.place(1),60); }]
 ];
@@ -63,6 +65,18 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['GIFT_CHANCE','Pace: calm gift chance',0,1,0.01],
   ['HONEST_TRIES','Pace: honest hands looked at',1,36,1],
   ['BUILD_BIAS','Pace: building small-piece bias',0,1,0.05],
+  ['WAVE_MIN','Payoff: every (min trays)',1,10,1],
+  ['WAVE_MAX','Payoff: every (max trays)',1,12,1],
+  ['PAYOFF_LINES','Payoff: lines it must offer',1,4,1],
+  ['BUILD_W','Payoff: build-piece weight',0,4,0.1],
+  ['SETUP_CHANCE','Setup: piece chance per tray',0,1,0.05],
+  ['SETUP_TRAYS','Setup: trays open',1,6,1],
+  ['CLOSER_GEMS','Closer: gems left at most',0,30,1],
+  ['CLOSER_COMBO','Closer: combo',2,8,1],
+  ['CLOSER_TARGET','Closer: sweep cells at most',10,27,1],
+  ['CLOSER_COOL','Closer: cooldown (trays)',0,15,1],
+  ['DRY_TRAYS','Dry spell: trays to a payoff',2,12,1],
+  ['BIG_FLOOR','4+ pieces per five trays',0,10,1],
   ['TENSION_UP','Adventure: tension up (no clear)',0,0.5,0.01],
   ['TENSION_DOWN','Tension down (clear)',0,0.5,0.01],
   ['TENSION_DRIFT','Tension drift (cramped)',0,0.3,0.01],
@@ -108,11 +122,12 @@ const cfgSet=(k,v)=>{ const [a,b]=k.split('.'); if(b) CFG[a][b]=v; else CFG[a]=v
 const DEV_DEFAULTS=Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)]));   // the values written in the file
 const DEV_STORE='crumble.dev.6';   // bumped when the drag went to glide + ghost (after plan 2.1), so older saved tuning doesn't override the new defaults
 function devSave(){
-  try{ localStorage.setItem(DEV_STORE,JSON.stringify(Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)])))); }catch(e){}
+  try{ localStorage.setItem(DEV_STORE,JSON.stringify({...Object.fromEntries(DEV_KEYS.map(k=>[k,cfgGet(k)])),clearV:1})); }catch(e){}
 }
 function devLoad(){
   try{
     const o=JSON.parse(localStorage.getItem(DEV_STORE)||'{}');
+    if(!o.clearV) delete o.CLEAR_STYLE;                  // (7.5) tuning saved before crumble was the default keeps its other values but not the old 'squash'
     for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);
     for(const [k,,options] of DEV_CHOICES) if(!options.some(x=>x.value===CFG[k])) CFG[k]=DEV_DEFAULTS[k];
   }catch(e){}

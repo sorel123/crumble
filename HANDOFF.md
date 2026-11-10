@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after recorded music (plan PR 7.4).
+Last updated 2026-11-10, after recorded music (plan PR 7.4) and the journey sky (7.5).
 
 ---
 
@@ -74,12 +74,13 @@ Last updated 2026-11-09, after recorded music (plan PR 7.4).
 - **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). Plan 6.0: 2-4 gems are scattered outside the seeded lines, so that first clear leaves blocks; about 1 in 8 openings (`CFG.OPENING_SWEEP_CHANCE`) keep the board bare and can sweep. No special (golden hand, star, transformation, bonus) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
 - **Specials, one switch each (4.5):** `CFG.SPECIALS = {bonus:true, star:true, golden:true, transform:true}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **the Blast Round was replaced by automatic bonus trays (6.2)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; **transformations are back as achievements (4.5d)**. Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
-- Clears: `'squash'` (default) or `'burst'`; per-cell point tags, COMBO slam
+- Clears: `'crumble'` (default since 7.5), `'squash'` or `'burst'`; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
 - **Golden hand (4.5c)** — the rarest, biggest special: a gold tray whose target lines glow on the board; finding it pays ×3. See the 4.5c section at the end.
 - **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
 - **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
+- **Journey sky (7.5b, Endless and Daily)** — the sky travels with the score (dawn → space) and every clean sweep jumps a stage with a whole-sky wipe. On by default; Settings → Look → Advanced has the switch (off = her chosen world). See the 7.5b section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
@@ -182,6 +183,8 @@ Top to bottom:
 | (6.5) | One sound family: an arbiter in `audio.js` gives each moment one main sound (priority, ducking, deferral); every clear has a dry impact under its glass tail; narrow escape (`Sfx.phew`) and NEW BEST / LEVEL CLEARED (`Sfx.fanfare`) are their own events; the Strings set, soft pickup tick and drop click are the default for everyone once (`sndV`). Section at the end |
 | (6.1) | Pressure and recovery: `roomOf()` measures room on the board; phases calm/building/edge/recovery/relief pick the tray (`paceTier`); honest trays return, edge trays only promise each piece a spot, recovery is a sequence she must see; the second rescue is earned; strong bot added to `tools/bot-sim.mjs`. See the 6.1 section |
 | (6.6) | Pressure on screen: one eased `scr` layer (sky wash, vignette, board rim, tray band, relief flash) driven by the room metric and phase in Endless/Daily. See the 6.6 section |
+| (7.3) | Payoff waves, setups and closers (Endless/Daily): a payoff tray every 4-6 trays, the exact piece for a hole she squared off, earned closers (planned sweep, tray shimmer), no three-small-piece trays. See the 7.3 section |
+| (7.5b) | Journey sky (Endless/Daily): the sky travels dawn, day, golden hour, night, aurora, space as the score climbs; a clean sweep jumps a stage; stage changes wipe down the whole sky. See the 7.5b section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -296,7 +299,7 @@ the numbers are what matter):
 
 What changed to match:
 
-- `CLEAR_STYLE: 'squash'` (default) — each cleared gem thins to a white-hot
+- `CLEAR_STYLE: 'squash'` (the default until 7.5's crumble) — each cleared gem thins to a white-hot
   sliver along its line (`horiz` on the shatter decides the axis) over 6
   frames; `CLEAR_BLINK` default 0; `CLEAR_STAGGER` 0.35. `'burst'` keeps the
   flying blocks from the first juice pass.
@@ -988,3 +991,88 @@ gets tense with the board. Code is `js/music.js` (loaded after `audio.js`; also 
   tight board differs from a calm one, levels (peak < -12 dBFS), ducking dips it > 6 dB, the switch, the intensity easing, the arbiter hook. If it
   is too quiet or too present on the phone, change `MUSIC_VOL` (or the `.5` in `musicLevel()`) first; if the heartbeat is annoying raise the `.28` threshold in `E.sched`.
   Whole-screen mode states (6.7) have no music of their own yet; a bonus or golden hand would be a natural place for a brighter variant.
+
+---
+
+## Payoff waves, setups and closers (plan 7.3)
+
+Jay (round three): "it doesn't get easy and try to clear often enough", "background triggers to give great blocks to close it out for a
+full reset", and, from Block Blast, set up then pay off: square an area off, then the perfect 2x2 or 2x3 arrives "not all the time,
+just sometimes". Too many 2-3 cell pieces are "annoying". Endless and Daily only (`paced()`); Adventure keeps its tension wave. All of it is
+in `solver.js` (the block after `roomOf`/`paceTier`), on top of the 6.1 phases: edge and recovery trays stay honest and never carry any of it.
+
+- **The wave clock** (`wave`, `waveTick`, `waveTier`). Every `WAVE_MIN`..`WAVE_MAX` (4-6) trays a payoff is due. Ordinary trays weight the
+  squaring-off pieces up (`BUILD_SET`: 2x2, 2x3, 3x2, 1x3/3x1, 1x4/4x1; `BUILD_W` 1.6 in `weightedShape`). The payoff tray (`payoffSteps`,
+  label `PAYOFF`) is one big block (`PAYOFF_SET`: 2x2, 2x3, 3x2, 3x3, bars of 4-5) that completes `PAYOFF_LINES` (2)+ lines in a single drop,
+  plus two ordinary pieces, all playable. No TIDY/GUIDE on it. It pays only what the board offers: if no big block has a 2-line drop, the tray
+  is an ordinary one and the clock tries again next tray. A relief tray, a closer or a golden hand counts as the payoff (`waveDone`).
+- **Setups** (`findHoles`, `waveAfterDrop`, `offerSetup`). After every drop, `findHoles` lists empty exact rectangles (`SETUP_RECTS`) whose
+  filling completes a line and whose edge neighbours are at least `SETUP_WALLED` (85%) filled or wall; the biggest, not its parts. A hole that
+  her drop just made (it was not a hole before) is a setup, at most 3 open. Each of the next `SETUP_TRAYS` (3) trays has `SETUP_CHANCE` (0.75) of
+  carrying the exact piece, swapped into the smallest slot only if the hand stays playable. One offer per setup: once its piece is in a
+  tray (rolled or by chance) it is never forced again. A setup closes when filled or broken.
+- **Closers** (earned). A clear that leaves `CLOSER_GEMS` (14) or fewer gems, reaching combo `CLOSER_COMBO` (3), or a clear that gets her
+  out of the edge sets `closerNext`. The next tray (if no star/golden hand is due or live and the last tray carried no special) tries
+  `closerSteps`: the exact-tiling planner (`planSweepSteps` with `CLOSER_TARGET` 20 cells and `tilesSweep`, which checks drop orders instead
+  of the budgeted solver, which missed sweeps that need singles) then `sweepSeqSteps` (three drops that each complete a line, clears
+  between them). Found: label `CLOSER`, a soft pale shimmer behind the tray (`closerTray`, `drawTrayBand`, `FX_CLOSER_GLOW`, still under
+  reduced motion), `specialEnd=trayNo` (it counts as the special: the next tray carries none), cooldown `CLOSER_COOL` (5). Not found: a
+  close-in payoff (the payoff hand that clears the most gems), and if the board is still small the closer tries again next tray. The
+  relief tray's planned sweep (6.1) uses the same planner and shimmers too.
+- **Dry spell.** `DRY_TRAYS` (6) trays without a clear make the payoff due now: lines, never a sweep, so stalling earns no reset.
+- **No tedium** (`noTedium`). While a 4+ cell piece fits the board, a hand is never three pieces of 3 cells or fewer, and the 4+ pieces in
+  any five trays are at least `BIG_FLOOR` (5) (`bigHist` holds the last four trays). Swaps keep the hand playable (edge: every piece fits).
+- **Saved** with the run (`wave` in the snapshot); older saves start a fresh wave. Every roll is `rnd()`, so the Daily is the same for everyone.
+- **Admin:** sliders for every key above and a toggle for the shimmer. `waveStats` (setups made / dealt, closer tries; not saved) feeds the sim.
+
+Measured with `tools/bot-sim.mjs` (casual bot, 4 seeds x 4000 trays; the casual bot now takes the obvious drop that clears the most lines,
+and the baseline was re-run with the same bot). New columns: trays per multi-line clear, full resets per game, closers and payoffs per game,
+trays between payoffs, setups paid (share of setups that got their piece within three trays, not counting holes she filled herself before
+the next tray), setups per tray, small-only trays and the longest run, fewest 4+ pieces in any five trays, games ended, 10th percentile
+game length, edge holds per game.
+
+| | before (main) | after |
+|---|---|---|
+| median trays per game (4 seeds) | 109, 124, 104, 78 | 95, 114, 118, 70 |
+| 10th percentile game | 21, 32, 12, 21 | 23, 27, 9, 18 |
+| games ended in 16000 trays | 100 | 96 |
+| edge holds per game | 5.4 | 5.8 |
+| trays per multi-line clear | 8.1 | 6.0 |
+| full resets per game | 0.13 | 0.18 |
+| closers per game | - | 0.15 |
+| trays between payoffs (median) | 14 (relief only) | 6 |
+| setups paid within 3 trays | - | 54-58% |
+| small-only trays / longest run | 4% / 2-3 | 0% / 1 |
+| deal cost p95 / max (ms, whole deal, sliced in game) | 5.5 / 28 | 7.6 / 51 |
+
+Missed target: 1-3 full resets per game. A 3-piece sweep needs the gems in a few lines; in casual play the board at a closer's deal
+holds 12-24 gems spread over many lines and only a few percent are sweepable in three drops, by either planner. Making resets common would
+mean keeping the board much emptier, i.e. an easier game. Levers if Jay wants more: `CLOSER_GEMS` up, `CLOSER_COOL` down, or a lower
+`ROOM_OK`/`ROOM_EDGE` so the board runs emptier.
+
+
+## Blocks that crumble (plan 7.5, first zazz idea)
+
+The name of the game, on screen: a cleared gem cracks and falls off the board as rubble. `CFG.CLEAR_STYLE` `'crumble'` is the default; `'squash'` and `'burst'` stay in Admin (Clear style). Code is the "(7.5) blocks that crumble" block in `js/draw.js` (`crack`, `spawnRubble`, `drawRubble`, `RUBBLE_PER`, `RUBBLE_G`).
+
+- **Beat unchanged.** The clear still takes the same ~6 frames (100 ms): a white zigzag crack draws across each gem (across the line's direction) while it whitens and shudders, then it breaks into chunky 3-4 sided shards in the gem's colour. They fall under gravity, bounce once on `floorY` (set in `layout()`: just above the bottom safe area), then rest and fade (~20 frames). A single line's rubble is gone in about a second and a half.
+- **Behind, never over.** `drawRubble` runs in the board layer before the live gems and the tray pieces, so rubble is seen through empty cells and below the board, and never covers a live gem (a test checks the draw order).
+- **6.3 tiers.** `shatters[].tier` (set in `place()`): 1 single line = one small shard per gem and no specks (crisp); 2 multi-line or star = 2 shards plus the usual specks; 3 combo `BIG_COMBO`+ = 3 with more sideways kick away from the piece; 4 clean sweep = 4, with a dust puff where they land. A star keeps its own cross blast.
+- **Budget.** Rubble counts in `fxLive()`, so it shares `PARTICLE_CAP` x `perf.fx`; a slow frame sheds rubble first. Drawing is two small path fills per shard, no per-shard save/restore.
+- **Reduced motion** falls back to the squash. **Admin store:** `devSave` now writes `clearV:1`; a saved tuning without it drops its `CLEAR_STYLE` once (it held the old `'squash'` default), keeping the rest.
+- Tests: the two "7.5 crumble" scenarios in `tests/run.mjs`.
+
+## Journey sky (plan 7.5, second zazz idea)
+
+The background travels as the run goes: dawn, day, golden hour, night, aurora, space. Code is the "(7.5b) journey sky" block in `js/draw.js` (state, triggers, decor, wipe) and `JOURNEY` in `js/worlds.js` (the six stages as worlds). Endless and Daily only (`journeyOn()` = `CFG.JOURNEY_SKY && paced()`); Adventure keeps her world and its mint look.
+
+- **Stages.** `CFG.JOURNEY_AT` = 0 / 500 / 1500 / 3000 / 6000 / 10000. The casual bot's finished games have a median score of about 3500, so a typical game reaches night and a great one space. Every clean sweep adds one stage on top (`jJumps`, saved in the snapshot as `jy`; older saves follow the score). Space is the last.
+- **A stage is a world:** gradient + one ambient effect (day has a new `clouds` effect, golden hour `embers`, night and space `stars`, aurora `ribbons`) + a decor sprite cached per stage at half resolution (`decorSprite`: low sun at dawn, small sun by day, big low sun at golden hour, crescent moon, aurora glow, ringed planet and nebula in space). Suns, moon and planet sit in the gap between the HUD and the board or low behind the tray, never behind the score or the buttons; clouds drift only there too. `isJourney(id)`; `worldDef('j3')` resolves like any world.
+- **Her look.** Colours are mid-to-dark so white HUD text (Classic, Night) reads on every stage. A light theme with dark ink (Daylight, Cotton Candy, Mint, Paper) gets a pale version, each stage mixed 70% into her theme's own sky (`bgOf`, `paleTheme()`), decor at 55%. Board, tiles and motif are untouched. `homeSky()` is where the sky goes home to: the journey stage, or `CFG.HOME_WORLD` with it off or in Adventure. `syncHomeSky()` snaps there (Settings changes, reduced motion).
+- **Changing stage (6.3 hierarchy).** A score threshold is calm: checked when a tray has been dealt (`journeyDealt`, from `stepDeal`), then `JOURNEY_WAIT` (30) frames later the new sky wipes down from the top over ~1.4 s with a feathered edge and a faint band of light; no sound, no text. A sweep (`journeySweep`, from `place()`) waits for its confetti and wipes in ~0.8 s with a bright leading edge. The wipe (`drawWipe`) draws the old sky, then the new one clipped above the line; it is all in the sky layer, so pressure (6.6), the mode looks (6.7) and everything on the board draw on top as before (a test checks a gem pixel mid-wipe).
+- **Bonus and transformations** still take the sky over (`startSky('bonus')`, `startFlip`); while they own it a stage passed moves on quietly, and when they hand back (`endBonus`/`endTransform` -> `journeyHandBack`) the new stage wipes in instead of the crossfade. A sweep usually starts a Rainbow transformation, so its jump is often seen when the Rainbow ends.
+- **Settings:** Settings → Look → Advanced, "Journey sky" (saved as `journey` in `crumble.skins`). Admin has a "Next sky (7.5b)" button.
+- **Cost:** one cached gradient, one drawImage of the decor sprite; during a wipe two skies and one gradient for the edge (~80 frames). Measured in the test: our JS per frame p90 0.3 ms during a wipe.
+- **Check on the phone:** play an Endless game past 500 (day) and 1500 (golden hour), and watch a clean sweep jump a stage. If a stage is too bright behind white text, darken its `top` in `JOURNEY`; if the stages come too slowly or fast, change `JOURNEY_AT`.
+- Tests: the two "journey sky (7.5b)" scenarios.
+

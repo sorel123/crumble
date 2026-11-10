@@ -29,6 +29,23 @@ const CFG = {
   HONEST_TRIES:   2,     // candidate hands an honest tray looks at (the tidiest playable of these): a light hand, not a search
   BUILD_BIAS:     0.3,   // building phase: the crowded-board small-piece bias is scaled by this, so big pieces keep coming
 
+  // payoff waves, setups and closers (plan 7.3, Endless and Daily; see solver.js)
+  WAVE_MIN:       4,     // a payoff tray (big blocks, PAYOFF_LINES+ lines) is due every WAVE_MIN..WAVE_MAX trays
+  WAVE_MAX:       6,
+  PAYOFF_LINES:   2,     // a payoff hand must offer at least this many lines, or the tray is an ordinary one and the clock retries
+  PAYOFF_TRIES:   12,    // candidate payoff hands looked at
+  BUILD_W:        1.6,   // weight on the squaring-off pieces (2x2, 2x3, 3x2, 1x3/3x1, 1x4/4x1) in ordinary trays
+  SETUP_CHANCE:   0.75,   // per tray, odds an open setup's exact piece is dealt (one offer per setup)
+  SETUP_TRAYS:    3,     // trays a setup stays open
+  SETUP_WALLED:   0.85,  // share of a hole's edge neighbours that must be filled or wall for it to count as squared off
+  CLOSER_GEMS:    14,    // a clear leaving this many gems or fewer earns a closer (a planned sweep with a shimmer on the tray)
+  CLOSER_COMBO:   3,     // ...so does reaching this combo (and getting out of an edge hold)
+  CLOSER_TARGET:  20,    // most empty cells a closer's three pieces may fill
+  CLOSER_COOL:    5,     // trays after a closer before the next
+  DRY_TRAYS:      6,     // trays with no clear that make a payoff tray due now (lines, never a sweep)
+  BIG_FLOOR:      5,     // pieces of 4+ cells across any five trays, kept where they fit
+  FX_CLOSER_GLOW: true,  // the shimmer behind a closer tray
+
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
   TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped
@@ -76,7 +93,7 @@ const CFG = {
   OBVIOUS:        12,     // plan 3.4: score per piece in a hand with an OBVIOUS clear (a 5-7/8 full line with one plain gap it drops into); 0 = off
   OBVIOUS_MAX:    2,      // ...counted for at most this many pieces: one or two easy moves a tray, not three (every tray a gift is too much)
   ALT:            0.5,    // plan 3.4: score per legal spot (up to 8) for the hand's smallest piece of 2+ cells: room to put the awkward one
-  CLEAR_STYLE:    'squash', // 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
+  CLEAR_STYLE:    'crumble', // (7.5) 'crumble': each gem cracks and breaks into rubble that falls off the board, bounces once at the bottom of the screen and fades; 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
   FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
@@ -134,6 +151,9 @@ const CFG = {
   SND_SET:        'strings',  // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)
   SND_PICKUP:     'soft',     // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
   SND_PLACE:      'drop',     // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
+  JOURNEY_SKY:    true,       // (7.5b) Endless/Daily: the sky travels dawn -> day -> golden hour -> night -> aurora -> space (Settings -> Look, Advanced)
+  JOURNEY_AT:     [0,500,1500,3000,6000,10000],   // score where each journey stage starts; every clean sweep also jumps one stage
+  JOURNEY_WAIT:   30,         // frames after a deal (or a sweep's confetti) before a stage change starts, so it never lands on a clear
   MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects
   MUSIC_PICK:     'shuffle', // (7.4) 'shuffle' or a MUSIC_TRACKS id (js/music.js); Off is the switch above
   MUSIC_VOL:      .5,         // 0..1; the music is quiet at .5 on purpose
