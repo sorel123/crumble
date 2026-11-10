@@ -459,11 +459,13 @@ const PLACE_SMP={drop:['pl_drop',.11], wood:['pl_wood',.11], soft:['pl_soft',.07
 /* what the game calls: pickup/place follow their own choices; everything else follows the chosen set */
 const Sfx={
   pickup(){
+    haptic('pickup');
     const k=CFG.SND_PICKUP;
     if(k==='original') return ORIG_SFX.pickup(CFG.SND_PICKUP_VOL);
     const v=PICKUP_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PICKUP_VOL,rate:jit()}); }
   },
   place(n=1){                                                // bigger pieces land a touch lower
+    haptic('place');
     const k=CFG.SND_PLACE;
     if(k==='original') return ORIG_SFX.place(CFG.SND_PLACE_VOL);
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
@@ -554,7 +556,7 @@ function arbFlush(){
   for(const e of later) setTimeout(()=>sfxEvent(e.fn,e.a,true),Math.max(0,(arbLead.until-now)*1000)+40);
 }
 function sfxEvent(fn,a,late=false){
-  const d=EVT[fn]; ac();
+  const d=EVT[fn]; ac(); haptic(fn,a[0]);
   arbQ.push({fn,a,late,p:typeof d.p==='function'?d.p(a):d.p,hold:d.hold,same:d.same});
   if(arbQ.length===1) queueMicrotask(arbFlush);
 }

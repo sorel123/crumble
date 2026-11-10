@@ -169,6 +169,7 @@ const CFG = {
   JOURNEY_SKY:    true,       // (7.5b) Endless/Daily: the sky travels dawn -> day -> golden hour -> night -> aurora -> space (Settings -> Look, Advanced)
   JOURNEY_AT:     [0,500,1500,3000,6000,10000].map(n=>n*SCORE_SCALE),   // score where each journey stage starts; every clean sweep also jumps one stage
   JOURNEY_WAIT:   30,         // frames after a deal (or a sweep's confetti) before a stage change starts, so it never lands on a clear
+  HAPTICS:        true,       // (5.1) the iPhone app buzzes on pickup, place, clears, combos (js/native.js); the web build has nothing to buzz
   MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects
   MUSIC_PICK:     'shuffle', // (7.4) 'shuffle' or a MUSIC_TRACKS id (js/music.js); Off is the switch above
   MUSIC_VOL:      .5,         // 0..1; the music is quiet at .5 on purpose

@@ -4,9 +4,16 @@
   "description": "Crumble is a plain static site; this package.json exists only for the browser tests in tests/.",
   "scripts": {
     "test": "node tools/stamp-sw.mjs --check && node tests/run.mjs",
-    "stamp": "node tools/stamp-sw.mjs"
+    "stamp": "node tools/stamp-sw.mjs",
+    "build:www": "node tools/build-www.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"
+  },
+  "dependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.6.0"
   }
 }

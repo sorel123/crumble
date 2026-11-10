@@ -3030,6 +3030,41 @@ test('7.5g timelapse: a short run shows no replay; the share picture gets a four
   assert.equal(await page.evaluate(() => CFG.FX_TIMELAPSE), false, 'still off after a reload');
 });
 
+test('haptics: silent no-op on the web, buzzes in the app (fake Capacitor), strongest moment wins, Settings switch', async ({ page, errors }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => Native.on()), false, 'a browser is not the app');
+  await setup(page, { rows: EMPTY });
+  await dragPiece(page, 0, 3, 3);                                   // web: places fine, nothing to buzz
+  await dealt(page);
+  await page.click('#setBtn');
+  assert.equal(await page.isHidden('#hapTog'), true, 'no Haptics switch on the web');
+  await page.click('#setDone');
+  await page.evaluate(() => {                                       // pretend to be the app: the bridge looks Capacitor up at call time
+    window.__hap = [];
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { Haptics: {
+      impact: o => { __hap.push('impact:' + o.style); return Promise.resolve(); },
+      notification: o => { __hap.push('notify:' + o.type); return Promise.resolve(); } } } };
+  });
+  const flush = () => page.evaluate(() => new Promise(r => setTimeout(r, 60)).then(() => __hap.splice(0)));
+  await setup(page, { rows: EMPTY });
+  await dragPiece(page, 1, 3, 3);                                   // slot 0 was used above
+  const buzz = await flush();
+  assert.ok(buzz.includes('impact:LIGHT') && buzz.includes('impact:MEDIUM'), 'pickup then place buzz: ' + buzz);
+  await dealt(page);
+  await page.evaluate(() => { Sfx.place(1); Sfx.clear(1, 0, 1); Sfx.combo(3, 1, 0); });
+  assert.deepEqual(await flush(), ['impact:HEAVY'], 'place + clear + combo in one moment: one buzz, the biggest');
+  await page.evaluate(() => Sfx.deny());
+  assert.deepEqual(await flush(), ['notify:WARNING']);
+  await page.click('#setBtn');
+  assert.equal(await page.isVisible('#hapTog'), true, 'the switch shows in the app');
+  await page.click('#hapOn');
+  await page.click('#setDone');
+  assert.ok(await page.evaluate(() => !CFG.HAPTICS && JSON.parse(localStorage.getItem('crumble.skins')).haptics === false), 'off, and saved');
+  await page.evaluate(() => { Sfx.clear(1, 0, 1); Sfx.pickup(); });
+  assert.deepEqual(await flush(), [], 'off: silent');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
