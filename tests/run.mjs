@@ -2579,6 +2579,135 @@ test('7.5c anticipation: reduced motion keeps a steady glow and no shiver; holdi
   assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
 });
 
+// (7.5d) a streak of `n` clears: a single cell finishing row 0, n times (each drop is its own tray, so the dealer waits)
+const streak = async (page, n) => {
+  for (let k = 0; k < n; k++) {
+    await dealt(page);
+    await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
+    await dragPiece(page, 0, 0, 0);
+    await frames(page, 4);
+  }
+};
+const fireRead = page => page.evaluate(() => ({ combo, k: fire.k, flare: fire.flare, tier: fire.tier, embers: fire.embers.length, smoke: fire.smoke.length }));
+
+test('7.5d combo fire: lights at combo 3, hotter each step, the held piece sheds embers, a miss snuffs it in a puff', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { window.__sfx = []; const s = Sfx.snuff; Sfx.snuff = (...a) => { __sfx.push('snuff'); s(...a); }; });
+  await streak(page, 2);
+  await frames(page, 30);
+  let f = await fireRead(page);
+  assert.ok(f.combo === 2 && f.k === 0, 'combo 2 is still the calm tier: no fire ' + JSON.stringify(f));
+  await streak(page, 1);
+  assert.ok((await fireRead(page)).flare > 0.5, 'combo 3 catches with a flare');
+  await frames(page, 40);
+  const c3 = await fireRead(page);
+  assert.ok(c3.combo === 3 && c3.k > 0.3 && c3.tier === 0, 'combo 3: burning, orange ' + JSON.stringify(c3));
+  await streak(page, 2); await frames(page, 40);
+  const c5 = await fireRead(page);
+  assert.ok(c5.combo === 5 && c5.k > c3.k + 0.2 && c5.tier === 2, `hotter each step (${c3.k.toFixed(2)} -> ${c5.k.toFixed(2)}), white-hot from 5`);
+  // the held piece sheds embers as it moves
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [4, 0, 0] });
+  await page.evaluate(() => { fire.embers.length = 0; window.__emb = 0; const of = stepFire; stepFire = dt => { of(dt); __emb = Math.max(__emb, fire.embers.length); }; });
+  const g = await geometry(page), s = await page.evaluate(() => ({ rows: tray[0].s.rows, cols: tray[0].s.cols }));
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+  for (let k = 0; k < 15; k++) { const p = fingerFor(g, s, 5 - k * 0.3, 1 + k * 0.2); await page.mouse.move(p.x, p.y); await frames(page, 1); }
+  assert.ok(await page.evaluate(() => __emb) >= 5, 'dragging trails embers: ' + await page.evaluate(() => __emb));
+  // a miss: the piece lands without clearing, the streak ends
+  const p = fingerFor(g, s, 4, 4); await page.mouse.move(p.x, p.y); await frames(page, 2); await page.mouse.up();
+  await frames(page, 3);
+  const out = await fireRead(page);
+  assert.ok(out.combo === 0 && out.smoke >= 10, 'snuffed: smoke puffs off the rim ' + JSON.stringify(out));
+  assert.deepEqual(await page.evaluate(() => __sfx), ['snuff'], 'with its own soft sound, once');
+  await frames(page, 40);
+  assert.equal((await fireRead(page)).k, 0, 'and the flames are out');
+  // a new run starts cold, and a miss without a streak is silent
+  await streak(page, 3); await frames(page, 20);
+  assert.ok((await fireRead(page)).k > 0.2);
+  await page.evaluate(() => { start(); });
+  const fresh = await fireRead(page);
+  assert.ok(fresh.k === 0 && fresh.smoke === 0 && fresh.embers === 0, 'a new run starts with no fire and no puff ' + JSON.stringify(fresh));
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 4, 4); await frames(page, 3);
+  assert.deepEqual(await page.evaluate(() => __sfx), ['snuff'], 'no snuff without a fire');
+});
+
+test('7.5d combo fire: never over a gem, off with its switch (saved), steady under reduced motion, a bonus owns the rim', async ({ page }) => {
+  await play(page);
+  const gemPx = async () => { await page.evaluate(() => { grid[4][4] = { gi: 2, t: 1, f: 0, l: 0 }; grid[0][3] = { gi: 2, t: 1, f: 0, l: 0 }; shake = 0; punchT = 0; }); await frames(page, 2); return page.evaluate(() => {
+    const g = (x, y) => { const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data; return [d[0], d[1], d[2]]; };
+    return [g(bx + 4.5 * cell, by + 4.5 * cell), g(bx + 3.5 * cell, by + 0.2 * cell)]; }); };
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await frames(page, 20);
+  const cold = await gemPx();
+  await page.evaluate(() => { combo = 6; fire.tier = 2; for (let i = 0; i < 30; i++) fireEmber(bx + cell * (3 + Math.random() * 2), by + cell * (Math.random() * 5), 0, 0); });
+  await frames(page, 30);
+  assert.ok(await page.evaluate(() => fire.k) > 0.9, 'burning hot');
+  const hot = await gemPx();
+  const diff = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+  assert.ok(diff(cold[0], hot[0]) <= 3 && diff(cold[1], hot[1]) <= 3, `gems look the same with the fire on, embers pass behind them: ${JSON.stringify(cold)} vs ${JSON.stringify(hot)}`);
+  // the switch: Settings > Look > Advanced
+  await page.click('#setBtn');
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#fireOn'), true, 'on by default');
+  await page.uncheck('#fireOn');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(SKIN_STORE)).fire), false, 'saved with her settings');
+  await page.click('#setDone');
+  await frames(page, 90);
+  assert.equal(await page.evaluate(() => fire.k), 0, 'off: the flames fade out mid-streak');
+  await page.evaluate(() => { fireCombo(); });
+  assert.equal(await page.evaluate(() => fire.flare), 0, 'and a new step does not light it');
+  await page.reload();
+  await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => CFG.FX_COMBO_FIRE), false, 'still off after a reload');
+  await page.evaluate(() => { CFG.FX_COMBO_FIRE = true; saveSkinSave(); });
+  // a bonus: its violet rim owns the frame
+  if (await page.evaluate(() => state) !== 'play') await play(page);
+  await page.evaluate(() => { combo = 6; });
+  await frames(page, 30);
+  assert.ok(await page.evaluate(() => fire.k) > 0.9);
+  await page.evaluate(() => { bonus = { left: 3, extra: 0 }; });
+  await frames(page, 90);
+  assert.equal(await page.evaluate(() => fire.k), 0, 'during a bonus the fire waits');
+  await page.evaluate(() => { bonus = null; combo = 0; });
+  // reduced motion: steady rim and tray glow, no embers, the snuff is a fade with no smoke
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
+  if (await page.evaluate(() => state) !== 'play') await play(page);
+  await streak(page, 4); await frames(page, 30);
+  const r = await fireRead(page);
+  assert.ok(r.k > 0.4 && r.embers === 0, 'reduced motion: it burns, but no sparks fly ' + JSON.stringify(r));
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 4, 4); await frames(page, 3);
+  const rs = await fireRead(page);
+  assert.ok(rs.combo === 0 && rs.smoke === 0, 'and goes out with a fade, no smoke ' + JSON.stringify(rs));
+});
+
+test('7.5d combo fire: dragging at combo 6 with embers and a burning rim fits the frame budget', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await setup(page, { rows: THREE_LINES, trayShapes: [4, 4, 4] });
+  await page.evaluate(() => { combo = 6; fire.tier = 2; });
+  await frames(page, 30);
+  await watchFrames(page); await frameLog(page);
+  const g = await geometry(page), s = await page.evaluate(() => ({ rows: tray[0].s.rows, cols: tray[0].s.cols }));
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+  for (let k = 0; k < 50; k++) {
+    const f = fingerFor(g, s, 3.5 * Math.abs(Math.sin(k / 8)), 0.5 + 3 * Math.abs(Math.sin(k / 5)));
+    await page.mouse.move(f.x, f.y); await frames(page, 1);
+  }
+  const n = await page.evaluate(() => fire.embers.length), work = (await frameLog(page)).work.sort((a, b) => a - b);
+  await page.mouse.up();
+  const p90 = work[Math.floor(work.length * 0.9)];
+  console.log(`     (combo fire drag: ${work.length} frames, ${n} embers, p90 ${p90.toFixed(2)} ms, max ${work[work.length - 1].toFixed(2)} ms)`);
+  assert.ok(n > 5 && n <= 36, 'embers live, and capped: ' + n);
+  assert.ok(p90 < 12, 'drag frames stay cheap with the fire: p90 ' + p90.toFixed(2) + ' ms');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

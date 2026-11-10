@@ -147,6 +147,7 @@ const CFG = {
   FX_TENSION_BORDER: true,   // board border glow: calm (cool) -> warm as tension rises
   FX_STAR_BURST:     true,   // star gem: beam through it in the tray, hint ring on the best cell, charge + beams + sparkles on the clear
   FX_PUNCH_ZOOM:     true,   // (combo BIG_COMBO+) brief 2-3% punch zoom
+  FX_COMBO_FIRE:     true,   // (7.5d) from combo BIG_COMBO the board rim burns (hotter each step), the dragged piece sheds embers, the tray glows; a miss snuffs it in a puff
   FX_ANTICIPATION:   true,   // (7.5c) while she drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
   ANTIC_REACH:       2.5,    // (7.5c) cells from a completing landing where the shiver starts; it peaks as the piece arrives
   ANTIC_SHIVER:      1.2,    // (7.5c) most the gems move, in px (reduced motion: no movement, a steady soft glow)

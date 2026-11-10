@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, glint:CFG.FX_ANTICIPATION, lookV:2, sndV:2
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, lookV:2, sndV:2
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -36,6 +36,7 @@ function loadSkinSave(){
     if(typeof o.journey==='boolean') CFG.JOURNEY_SKY=o.journey;     // (7.5b)
     if(o.clear==='crumble'||o.clear==='squash') CFG.CLEAR_STYLE=o.clear;   // Settings > Look > Clear effect: Crumble or Classic (the squash)
     if(typeof o.glint==='boolean'&&'FX_ANTICIPATION' in CFG) CFG.FX_ANTICIPATION=o.glint;   // Glints while dragging (7.5c)
+    if(typeof o.fire==='boolean') CFG.FX_COMBO_FIRE=o.fire;            // Combo fire (7.5d)
     if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
   }catch(e){}
 }
@@ -175,6 +176,7 @@ function renderSndSet(){
 function renderFxPicks(){                             // Settings > Look: Clear effect and Glints while dragging
   el('clearPick').value=CFG.CLEAR_STYLE==='crumble'?'crumble':'squash';   // 'burst' (Admin only) shows as Classic
   el('glintTog').hidden=!('FX_ANTICIPATION' in CFG); el('glintOn').checked=!!CFG.FX_ANTICIPATION;
+  el('fireOn').checked=!!CFG.FX_COMBO_FIRE;
 }
 function renderMusicPick(){
   const cur=CFG.MUSIC?CFG.MUSIC_PICK:'off';
@@ -192,6 +194,7 @@ function buildSettingsUI(){
   el('musicPick').onchange=()=>{ const v=el('musicPick').value; if(v!=='off') ac(); musicSetPick(v); renderMusicPick(); saveSkinSave(); };   // Off is the music switch
   el('clearPick').onchange=()=>{ CFG.CLEAR_STYLE=el('clearPick').value; saveSkinSave(); };     // takes effect from the next clear, mid-run too
   el('glintOn').onchange=()=>{ CFG.FX_ANTICIPATION=el('glintOn').checked; saveSkinSave(); };
+  el('fireOn').onchange=()=>{ CFG.FX_COMBO_FIRE=el('fireOn').checked; saveSkinSave(); };   // (7.5d) off mid-streak: the flames fade
   el('journeyOn').onchange=()=>{ CFG.JOURNEY_SKY=el('journeyOn').checked; saveSkinSave(); syncHomeSky(); };   // (7.5b)
   renderThemes(); renderSndSet(); el('sndOn').checked=!muted; renderMusicPick(); el('journeyOn').checked=CFG.JOURNEY_SKY; renderFxPicks();
 }

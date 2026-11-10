@@ -162,13 +162,162 @@ function drawTrayBand(){                               // the tray dims as the r
   const a=slotRect(0), z=slotRect(2);
   closerK+=((CFG.FX_CLOSER_GLOW&&closerTray&&state==='play'&&tray.some(t=>t)?1:0)-closerK)*0.08;
   if(closerK<0.01) closerK=0;
-  if(scr.p<0.02&&!closerK) return;
+  const fk=fire.k*(state==='play'&&tray.some(t=>t)?1:0);
+  if(scr.p<0.02&&!closerK&&fk<0.01) return;
   roundPath(ctx,a.x-6,a.y,z.x+z.w-a.x+12,a.h,14);
   if(scr.p>=0.02){ ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); }
+  if(fk>=0.01){                                       // (7.5d) combo fire: the tray glows warm behind the pieces, breathing with the flames
+    const b=reduce?0.6:0.5+0.5*Math.sin(performance.now()*0.006), [core,edge]=FIRE_TINTS[fire.tier];
+    ctx.globalAlpha=fk*(0.12+0.08*b); ctx.fillStyle=`rgb(${edge})`; ctx.fill();
+    ctx.globalAlpha=fk*(0.45+0.3*b); ctx.strokeStyle=`rgb(${core})`; ctx.lineWidth=2+fire.flare*2; ctx.stroke();
+  }
   if(closerK){                                         // (7.3) a closer: a soft pale glow behind the pieces, breathing; reduced motion holds still
     const b=reduce?0.6:0.5+0.5*Math.sin(performance.now()*0.004);
     ctx.globalAlpha=closerK*(0.10+0.08*b); ctx.fillStyle='#BFF6FF'; ctx.fill();
     ctx.globalAlpha=closerK*(0.35+0.3*b); ctx.strokeStyle='#DFFBFF'; ctx.lineWidth=2; ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+
+/* Combo fire (plan 7.5d). From combo BIG_COMBO (3) the streak burns: flame tongues lick outward from the board frame, hotter
+   with each step (orange at 3, gold at 4, white-hot from 5); the piece she drags sheds embers; the tray glows warm behind the
+   pieces. When a drop does not clear, the streak is over: the flames drop and a ring of smoke puffs off the rim with a soft "pff".
+   One eased heat, `fire.k` (combo 3 = .4 .. combo 6+ = 1), plus `fire.flare`, a short kick on every new step. Everything sits in
+   the board layer under the gems: the rim, the tray band, and capped lists of cheap sprites (embers, smoke); a bonus's own rim
+   owns the frame, so the fire waits. Reduced motion: a steady warm rim and tray glow, no embers, and the snuff is a fade.
+   Settings > Look > Advanced "Combo fire" (FX_COMBO_FIRE) turns all of it off. */
+const fire={k:0,flare:0,tier:0,out:0,embers:[],smoke:[],px:null,py:0,acc:0,idle:0};
+const FIRE_TINTS=[['255,150,40','255,90,20'],['255,210,80','255,140,30'],['255,250,225','255,190,90']];   // [core, edge] per tier
+const _flames={};
+function flameSprite(tier){                              // one soft tongue of fire, tip up, cached per tier and cell size, full-res at its tallest (see drawFireRim)
+  const key=tier+'|'+cell; let sp=_flames[key]; if(sp) return sp;
+  const w=cell*0.9, h=cell*1.75, cv=document.createElement('canvas');
+  cv.width=Math.max(1,Math.round(w*dpr)); cv.height=Math.max(1,Math.round(h*dpr));
+  const x=cv.getContext('2d'); x.scale(cv.width/w,cv.height/h); x.globalCompositeOperation='lighter';
+  const [core,edge]=FIRE_TINTS[tier];
+  const blob=(cy,rx,ry,stops)=>{                         // a radial glow stretched upward into a tongue
+    x.save(); x.translate(w/2,cy); x.scale(1,ry/rx);
+    const g=x.createRadialGradient(0,0,0,0,0,rx); stops.forEach(([o,c])=>g.addColorStop(o,c));
+    x.fillStyle=g; x.beginPath(); x.arc(0,0,rx,0,6.283); x.fill(); x.restore();
+  };
+  blob(h*0.74,w*0.5,h*0.62,[[0,`rgba(${edge},0.75)`],[0.45,`rgba(${edge},0.45)`],[1,`rgba(${edge},0)`]]);   // the body, tapering to a tip
+  blob(h*0.8,w*0.24,h*0.3,[[0,`rgba(${core},0.95)`],[0.6,`rgba(${core},0.4)`],[1,`rgba(${core},0)`]]);       // the hot heart near the base
+  for(const k in _flames) if(!k.endsWith('|'+cell)) delete _flames[k];   // a resize drops the old sizes
+  sp={cv,w,h}; _flames[key]=sp; return sp;
+}
+let _ember=null, _puff=null;
+function emberSprite(){                                  // a hot dot with a soft halo
+  if(_ember&&_ember.c===cell) return _ember.cv;
+  const r=Math.max(4,cell*0.16), cv=document.createElement('canvas'); cv.width=cv.height=Math.max(2,Math.round(r*2*dpr));
+  const x=cv.getContext('2d'), m=cv.width/2, g=x.createRadialGradient(m,m,0,m,m,m);
+  g.addColorStop(0,'rgba(255,245,210,1)'); g.addColorStop(0.3,'rgba(255,170,60,.85)'); g.addColorStop(1,'rgba(255,90,20,0)');
+  x.fillStyle=g; x.fillRect(0,0,cv.width,cv.width); _ember={c:cell,cv}; return cv;
+}
+function puffSprite(){                                   // a soft grey ball of smoke
+  if(_puff&&_puff.c===cell) return _puff.cv;
+  const r=cell*0.5, cv=document.createElement('canvas'); cv.width=cv.height=Math.max(2,Math.round(r*2*dpr*0.5));
+  const x=cv.getContext('2d'), m=cv.width/2, g=x.createRadialGradient(m,m,0,m,m,m);
+  g.addColorStop(0,'rgba(235,232,240,.95)'); g.addColorStop(0.55,'rgba(195,190,205,.55)'); g.addColorStop(1,'rgba(150,146,160,0)');
+  x.fillStyle=g; x.fillRect(0,0,cv.width,cv.width); _puff={c:cell,cv}; return cv;
+}
+const fireOn=()=>CFG.FX_COMBO_FIRE&&!bonus&&state==='play';
+function fireTarget(){ return fireOn()&&combo>=CFG.BIG_COMBO?Math.min(1,0.4+0.2*(combo-CFG.BIG_COMBO)):0; }   // combo 3 = .4, 4 = .6, 5 = .8, 6+ = 1
+function fireReset(){ fire.k=0; fire.flare=0; fire.out=0; fire.embers.length=0; fire.smoke.length=0; fire.px=null; fire.acc=0; }
+function fireCombo(){                                   // place(): a clear made combo `combo`
+  if(!fireOn()||combo<CFG.BIG_COMBO) return;
+  fire.flare=1; fire.out=0; fire.tier=combo>=5?2:combo>=4?1:0;
+  if(!reduce) for(let i=0;i<6;i++) fireEmber(bx-9+Math.random()*(B+18),by-9,(Math.random()-.5)*1.5,-2-Math.random()*2.5);   // a burst of sparks off the top
+}
+function fireSnuff(){                                   // place(): a drop that did not clear, with the streak burning
+  if(fire.k<0.05) return;
+  fire.out=1; fire.flare=0;
+  Sfx.snuff();
+  if(reduce) return;
+  const n=16, P=2*(B+18)*2;
+  for(let i=0;i<n;i++){
+    const [x,y,nx,ny]=rimPoint((i+Math.random()*0.5)/n*P);
+    fire.smoke.push({x:x+nx*4,y:y+ny*4,vx:nx*0.5+(Math.random()-.5)*0.3,vy:ny*0.5-0.6-Math.random()*0.4,s:0.5+Math.random()*0.3,life:1});
+  }
+}
+function fireEmber(x,y,vx,vy){
+  if(fire.embers.length>=Math.round(36*perf.fx)) return;
+  fire.embers.push({x,y,vx,vy,life:1,r:0.6+Math.random()*0.5});
+}
+function rimPoint(d){                                     // a point at distance d around the board frame, clockwise from the top-left: [x, y, outward nx, ny]
+  const L=B+18, x0=bx-9, y0=by-9;
+  d=((d%(4*L))+4*L)%(4*L);
+  if(d<L) return [x0+d,y0,0,-1];
+  if(d<2*L) return [x0+L,y0+d-L,1,0];
+  if(d<3*L) return [x0+L-(d-2*L),y0+L,0,1];
+  return [x0,y0+L-(d-3*L),-1,0];
+}
+function stepFire(dt){
+  const t=fireTarget();
+  if(fire.out>0){ fire.k*=Math.pow(0.82,dt); fire.out=Math.max(0,fire.out-dt/40); }
+  else fire.k+=(t-fire.k)*Math.min(1,dt*(t>fire.k?0.12:0.08));
+  if(fire.k<0.004) fire.k=0;
+  fire.flare=Math.max(0,fire.flare-dt/28);
+  if(fire.k>0.05&&!reduce&&drag&&tray[drag.i]&&drag.cx!=null){   // embers shed by the dragged piece, by distance moved, and a slow smoulder when it is still
+    const s=tray[drag.i].s;
+    if(fire.px!=null) fire.acc+=Math.hypot(drag.cx-fire.px,drag.cy-fire.py);
+    fire.px=drag.cx; fire.py=drag.cy; fire.idle+=dt;
+    const step=cell*(0.45-0.2*fire.k);
+    while(fire.acc>=step||fire.idle>=14){
+      if(fire.acc>=step) fire.acc-=step; else fire.idle=0;
+      const [dr,dc]=s.cells[(Math.random()*s.cells.length)|0];
+      fireEmber(drag.cx+(dc+Math.random()-s.cols/2)*cell,drag.cy+(dr+Math.random()-s.rows/2)*cell,(Math.random()-.5)*1.2,-0.6-Math.random()*1.4);
+      fire.idle=0;
+    }
+  } else { fire.px=null; fire.acc=0; }
+  if(fire.k>0.05&&!reduce&&Math.random()<0.25*fire.k*dt){   // a few sparks lift off the top of the rim
+    fireEmber(bx-9+Math.random()*(B+18),by-9-cell*0.3*Math.random(),(Math.random()-.5)*0.8,-1.2-Math.random()*1.8);
+  }
+}
+function drawFireRim(now){                             // the board layer, after the rim: a warm stroke and the tongues, all outside the frame
+  const k=fire.k; if(k<=0.01) return;
+  const fl=fire.flare, [core,edge]=FIRE_TINTS[fire.tier];
+  roundPath(ctx,bx-9,by-9,B+18,B+18,20);                // the frame itself glows hot: one stroke (wide strokes are what cost)
+  ctx.strokeStyle=`rgba(${core},${0.55+0.35*k})`; ctx.lineWidth=3+3*k+3*fl; ctx.stroke();
+  const sp=flameSprite(fire.tier), L=B+18, side=bx-9>cell*0.4, n=side?30:16, P=side?4*L:2*L;   // with no margin beside the board (a phone), only top and bottom burn
+  const M=ctx.getTransform(), a=Math.min(1,0.35+0.65*k);
+  ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=a;
+  ctx.imageSmoothingEnabled=false;                       // (perf) the sprite is full-res and only ever drawn smaller, so no filtering is needed; filtered blits were most of the cost
+  for(let i=0;i<n;i++){
+    let d=(i+0.5)/n*P; if(!side&&d>=L) d+=L;            // top edge, then (skipping the right side) the bottom edge
+    const [x,y,nx,ny]=rimPoint(d);
+    const fx=reduce?0.7:0.5+0.3*Math.sin(now*0.013+i*1.7)+0.2*Math.sin(now*0.029+i*2.9);
+    let h=cell*(0.45+0.85*k)*(0.7+0.45*fx)*(1+0.5*fl);
+    if(ny>0) h*=0.45; else if(ny<0) h*=1.15; else h*=0.7;   // short under the board (the tray lives there), tallest on top, sides in between
+    const w=sp.w*(h/sp.h)*(1.15+0.3*k);
+    if(ny<0){ ctx.drawImage(sp.cv,x-w/2,y-h*0.85,w,h); continue; }   // the top burns straight up: no transform
+    let dx=nx, dy=ny-0.7; const m=Math.hypot(dx,dy)||1; dx/=m; dy/=m;   // outward, leaning up like real fire
+    ctx.translate(x,y); ctx.rotate(Math.atan2(dx,-dy));
+    ctx.drawImage(sp.cv,-w/2,-h*0.85,w,h);
+    ctx.setTransform(M);
+  }
+  ctx.imageSmoothingEnabled=true; ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+}
+function drawFireParticles(dt){                        // embers (additive) and smoke: in the board layer, under the gems, the tray and the held piece
+  const E=fire.embers, S=fire.smoke;
+  if(E.length){
+    const sp=emberSprite(), r0=Math.max(4,cell*0.16);
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for(let i=E.length-1;i>=0;i--){
+      const e=E[i]; e.x+=e.vx*dt; e.y+=e.vy*dt; e.vy-=0.02*dt; e.vx*=Math.pow(0.97,dt); e.life-=dt*0.03;
+      if(e.life<=0){ E[i]=E[E.length-1]; E.pop(); continue; }
+      const r=r0*e.r*(0.4+0.6*e.life);
+      ctx.globalAlpha=Math.min(1,e.life*1.4); ctx.drawImage(sp,e.x-r,e.y-r,r*2,r*2);
+    }
+    ctx.restore();
+  }
+  if(S.length){
+    const sp=puffSprite();
+    for(let i=S.length-1;i>=0;i--){
+      const p=S[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=Math.pow(0.96,dt); p.vy*=Math.pow(0.985,dt); p.life-=dt*0.022; p.s+=dt*0.018;
+      if(p.life<=0){ S[i]=S[S.length-1]; S.pop(); continue; }
+      const r=cell*0.5*p.s;
+      ctx.globalAlpha=0.85*p.life*Math.min(1,(1-p.life)*6+0.3); ctx.drawImage(sp,p.x-r,p.y-r,r*2,r*2);
+    }
   }
   ctx.globalAlpha=1;
 }
@@ -686,6 +835,8 @@ function frame(now){
   }
 
   drawModeRing(now);                                 // (6.7) the mode ring outside the frame
+  stepFire(dt); if(CFG.FX_COMBO_FIRE) drawFireRim(now);   // (7.5d) combo fire: over the rim, under the gems
+  drawFireParticles(dt);                             // (7.5d) embers and the snuff's smoke: under the gems too, so a spark never covers a piece
   drawTrayBand();                                    // (6.6) in the board layer, so nothing that flies over the tray (chunks, shards) is ever dimmed by it
   drawGoldPlan(now,!!(drag&&tray[drag.i]));           // (4.5c) before the held piece's preview, so the preview wins where they overlap
 

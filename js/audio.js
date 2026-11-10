@@ -479,6 +479,10 @@ el('mute').onclick=e=>{ e.stopPropagation(); setMuted(!muted); };
    other moment in the game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise
    (meter full), and a bell cadence over a soft hit (bonus over). */
 const SHARED_SFX={                                    // the same in every set (they are the bonus trays' and the golden hand's own)
+  snuff(){ play(0,t=>{                                // (7.5d) combo fire goes out: a soft falling breath of air and a low puff
+    noiseHit(t,{dur:.38,f0:2600,f1:450,q:.9,vol:.035,wet:.2,atk:.025});
+    noiseHit(t+.01,{dur:.2,f0:380,f1:160,q:.7,vol:.03,type:'lowpass',atk:.01});
+  }); },
   bonusReady(){ play(0,t=>{ [0,4,7,12].forEach((s,i)=>bell(t+i*.07,{f:784*semis(s),dur:.8,vol:.06,wet:.3})); }); },
   bonusStart(){ play(.02,t=>{
     noiseHit(t,{dur:.45,f0:300,f1:6000,q:1.2,vol:.06,wet:.2,atk:.38});                  // the whoosh up
@@ -535,6 +539,7 @@ function humSet(k){
 const DUCK=.4;
 const EVT={
   starPick:  {p:0,hold:0,  same:'drop'},
+  snuff:     {p:1,hold:.3, same:'duck'},     // (7.5d) the combo fire goes out
   clear:     {p:1,hold:.5, same:'duck'},     // the impact + glass tail; ducked under a jingle, dropped by a moment that carries its own impact (see arbFlush)
   deny:      {p:1,hold:.2, same:'duck'},
   combo:     {p:2,hold:.7, same:'duck'},     // the same clear sound, a step higher

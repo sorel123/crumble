@@ -216,6 +216,7 @@ function place(idx,r,c){
     hitWait=reduce?0:s.star?starMs:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
     
     combo++; trayCombo=Math.max(trayCombo,combo);
+    fireCombo();                                   // (7.5d) the streak catches fire from BIG_COMBO
     chargeBonus(total,combo);                      // every clear fills the bonus meter
     if(special('star') && combo>=CFG.STAR_COMBO) starForced=true;
     if(combo>=CFG.TRANSFORM_COMBO) triggerTransform('volcano');
@@ -324,6 +325,7 @@ function place(idx,r,c){
     if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
   } else {
+    if(combo>=CFG.BIG_COMBO) fireSnuff();           // (7.5d) the streak is over: the flames go out in a puff
     combo=0;
     if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
   }
