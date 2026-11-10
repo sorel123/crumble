@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, journey:CFG.JOURNEY_SKY, lookV:2, sndV:2
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, glint:CFG.FX_ANTICIPATION, lookV:2, sndV:2
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -32,7 +32,10 @@ function loadSkinSave(){
     if(o.sndV!==2) CFG.SND_SET='strings';                          // 6.5: everyone starts on the new sound family once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
+    if(o.musicPick==='shuffle'||MUSIC_TRACKS.some(t=>t.id===o.musicPick)) CFG.MUSIC_PICK=o.musicPick;   // 7.4
     if(typeof o.journey==='boolean') CFG.JOURNEY_SKY=o.journey;     // (7.5b)
+    if(o.clear==='crumble'||o.clear==='squash') CFG.CLEAR_STYLE=o.clear;   // Settings > Look > Clear effect: Crumble or Classic (the squash)
+    if(typeof o.glint==='boolean'&&'FX_ANTICIPATION' in CFG) CFG.FX_ANTICIPATION=o.glint;   // Glints while dragging (7.5c)
     if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
   }catch(e){}
 }
@@ -169,6 +172,14 @@ function renderThemes(){
 function renderSndSet(){
   el('sndSetRow').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(CFG.SND_SET===b.dataset.id)));
 }
+function renderFxPicks(){                             // Settings > Look: Clear effect and Glints while dragging
+  el('clearPick').value=CFG.CLEAR_STYLE==='crumble'?'crumble':'squash';   // 'burst' (Admin only) shows as Classic
+  el('glintTog').hidden=!('FX_ANTICIPATION' in CFG); el('glintOn').checked=!!CFG.FX_ANTICIPATION;
+}
+function renderMusicPick(){
+  const cur=CFG.MUSIC?CFG.MUSIC_PICK:'off';
+  el('musicPick').value=cur;
+}
 function buildSettingsUI(){
   const make=(label,id,fn)=>{ const b=document.createElement('button'); b.type='button'; b.dataset.id=id;
     b.textContent=label; b.onclick=e=>{ e.stopPropagation(); fn(id); }; return b; };
@@ -177,14 +188,17 @@ function buildSettingsUI(){
   for(const [id,label] of SOUND_STYLES) el('sndSetRow').append(make(label,id,v=>{
     CFG.SND_SET=v; renderSndSet(); saveSkinSave(); ac(); setTimeout(()=>Sfx.clear(1,0,1),60); }));   // a quick taste of the style
   el('sndOn').onchange=()=>setMuted(!el('sndOn').checked);
-  el('musicOn').onchange=()=>{ CFG.MUSIC=el('musicOn').checked; saveSkinSave(); if(CFG.MUSIC) ac(); musicSync(); };
+  for(const [id,label] of MUSIC_PICKS) el('musicPick').append(Object.assign(document.createElement('option'),{value:id,textContent:label}));
+  el('musicPick').onchange=()=>{ const v=el('musicPick').value; if(v!=='off') ac(); musicSetPick(v); renderMusicPick(); saveSkinSave(); };   // Off is the music switch
+  el('clearPick').onchange=()=>{ CFG.CLEAR_STYLE=el('clearPick').value; saveSkinSave(); };     // takes effect from the next clear, mid-run too
+  el('glintOn').onchange=()=>{ CFG.FX_ANTICIPATION=el('glintOn').checked; saveSkinSave(); };
   el('journeyOn').onchange=()=>{ CFG.JOURNEY_SKY=el('journeyOn').checked; saveSkinSave(); syncHomeSky(); };   // (7.5b)
-  renderThemes(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC; el('journeyOn').checked=CFG.JOURNEY_SKY;
+  renderThemes(); renderSndSet(); el('sndOn').checked=!muted; renderMusicPick(); el('journeyOn').checked=CFG.JOURNEY_SKY; renderFxPicks();
 }
 function openSettings(){
   if(newLook){ newLook=false; syncLookDot(); saveSkinSave(); }
   if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); }           // the game waits while Settings is open
-  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC; el('journeyOn').checked=CFG.JOURNEY_SKY;
+  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted; renderMusicPick(); el('journeyOn').checked=CFG.JOURNEY_SKY; renderFxPicks();
   el('setPanel').hidden=false;
 }
 el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };

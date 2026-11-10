@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-10, after anticipation (plan PR 7.5, third zazz idea).
+Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky and anticipation (7.5).
 
 ---
 
@@ -74,7 +74,7 @@ Last updated 2026-11-10, after anticipation (plan PR 7.5, third zazz idea).
 - **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). Plan 6.0: 2-4 gems are scattered outside the seeded lines, so that first clear leaves blocks; about 1 in 8 openings (`CFG.OPENING_SWEEP_CHANCE`) keep the board bare and can sweep. No special (golden hand, star, transformation, bonus) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
 - **Specials, one switch each (4.5):** `CFG.SPECIALS = {bonus:true, star:true, golden:true, transform:true}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **the Blast Round was replaced by automatic bonus trays (6.2)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; **transformations are back as achievements (4.5d)**. Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
-- Clears: `'crumble'` (default since 7.5), `'squash'` or `'burst'`; per-cell point tags, COMBO slam
+- Clears: `'crumble'` (default since 7.5), `'squash'` or `'burst'` (Admin); Settings → Look → Advanced has "Clear effect" Crumble / Classic (= squash) and "Glints while dragging" (`FX_ANTICIPATION`, shown only when the game has it), saved as `clear` / `glint` in `crumble.skins` and live mid-run; per-cell point tags, COMBO slam
   with fireworks, praise words, score orbs, COLOR GONE bonus, clean sweep bonus,
   NEW BEST moment.
 - **Golden hand (4.5c)** — the rarest, biggest special: a gold tray whose target lines glow on the board; finding it pays ×3. See the 4.5c section at the end.
@@ -115,7 +115,7 @@ Last updated 2026-11-10, after anticipation (plan PR 7.5, third zazz idea).
 | `js/render.js` | `layout`, tile renderers, `SKINS`, `buildCache` |
 | `js/samples.js` | `SAMPLES` base64 MP3 data (~190 KB, data only) |
 | `js/audio.js` | synth sets, recorded bank, `Sfx` |
-| `js/music.js` | generative calm music, tension layer, ducking (6.8) |
+| `js/music.js` | recorded music loops (`music/*.m4a`), picker, pressure response, ducking (7.4) |
 | `js/game.js` | `place`, bonus trays, input |
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
@@ -931,7 +931,41 @@ the board frame (15 px out; the pressure / bonus rim is inside it), so gems and 
 - Pressure (6.6) still owns the board frame in Endless/Daily; a bonus halves the pressure wash as before. Colours are `TINTS`; tune the alphas in `drawModeWash` first if a look is too loud.
 - Test: "whole-screen mode looks (6.7)" (corner margin changes, a gem pixel does not, each fades out).
 
-## Calm music (plan 6.8)
+## Recorded music (plan 7.4; replaces the generated score of 6.8)
+
+Jay found the synthesised music "pretty bad" and asked for much better, tween-friendly, with a few options to choose from. `js/music.js`
+now plays four recorded loops in `music/` (loaded after `audio.js`; also in `sw.js` `ASSETS`). Nothing is synthesised; if a file cannot be
+fetched the game is quiet (no fallback). Ducking, the intensity hook (`musicTarget`/`musicTick`), `musicSync`/`musicNewRun`/`musicDuck` and the 7.0 audio unlock are unchanged.
+
+- **Tracks.** All by Abstraction Music / Tallbeard Studios (Ben Burnes), "Music Loop Bundle", https://tallbeard.itch.io/music-loop-bundle, dedicated to
+  the public domain under **CC0 1.0** (the bundle's licence text; no attribution needed, commercial use fine; it only asks not to use the music for NFTs or AI training, or to resell it unmodified).
+  We got the files through the `jfpx/cc0-media-library` music-v1 release zip (sha256 checked against its SHA256SUMS), because kenney.nl, opengameart, itch and
+  archive.org are blocked from the cloud sandbox. The `jfpx` catalog is the provenance record: it lists the OpenGameArt/itch source and a licence file per track.
+
+  | file | name | mood | catalog id (original title) | length |
+  |---|---|---|---|---|
+  | `music/sunny-lofi.m4a` | Sunny Lo-fi | warm, bright, laid-back (~86 bpm) | `abstraction-4e6836606331898f144502c1` ("Sketchbook 2024-09-25", LoFi) | 90 s |
+  | `music/bounce.m4a` | Bounce | playful, funky (~92 bpm) | `abstraction-36d4672d475a362f4c61d313` ("Sketchbook 2024-05-22", Funk) | 50 s |
+  | `music/daydream.m4a` | Daydream | dreamy, calm | `abstraction-6b13391bc1b3862dbf2cd5c9` ("Sketchbook 2024-06-12", Ambient) | 48 s |
+  | `music/momentum.m4a` | Momentum | a little more driving (~129 bpm) | `abstraction-417fa91b83fab8b8be52a4e5` ("Sketchbook 2024-10-30", Electronic) | 54 s |
+
+  Transcoded from the creator's Ogg loops with `ffmpeg -map 0:a:0 -map_metadata -1 -c:a aac -b:a 96k -ar 44100 -movflags +faststart` (80k for Sunny Lo-fi), which also drops the
+  embedded album art. Each is under 1 MB. The AAC edit list keeps the exact length, so decodeAudioData's buffer is the same number of samples as the original loop (checked in Chromium).
+  **To swap a track**, drop in a new file under a NEW name (the music cache never clears) and edit `MUSIC_TRACKS`; add its source and licence to this table.
+- **Chosen by metadata, not by ear.** There is no audio in the cloud, so I picked by style tags, tempo, brightness and a measured loop seam (the end meets the start within ~0.03 of full scale),
+  and I trimmed the level of each loop (`gain` in `MUSIC_TRACKS`) towards the same loudness. Jay vetoes by ear; to swap, see above. Other loops in that release that could be tried:
+  the Chiptune, Silly and Jazz styles. Safari's loop seam is unchecked: if it clicks there, loop with `loopStart/loopEnd` or crossfade the ends.
+- **Picker.** Settings -> Sound: the Music control is a dropdown next to Sound effects (`#musicPick`: Shuffle / Sunny / Bounce / Daydream / Momentum / Off; `CFG.MUSIC_PICK`, saved as `musicPick` in `crumble.skins`; Shuffle by default).
+  Off is the old music switch (`CFG.MUSIC`, so a saved `music:false` still means Off). It is a dropdown rather than chips because a chip row made Settings scroll (the "Settings fits one screen" test). Shuffle moves to another loop at each new run (crossfade ~1.4 s); a chosen track stays across runs.
+- **Pressure.** `musicTarget()` (from `scr.p`, 6.6) feeds `setI`: the low-pass opens from 6.5 kHz (calm) to 18 kHz (tight) and the level lifts by up to 30% (`musicLpHz`, `musicLift`). No extra layer.
+- **Loading.** Lazy: `musicLoad(idx)` fetches and decodes a loop the first time it is wanted; only the playing loop stays decoded (a 90 s stereo loop is ~30 MB of float samples).
+  `sw.js` serves `/music/` from its own cache, `crumble-music`, filled on first play and kept across game updates (not precached, so installing the game stays small).
+- **Level.** Unchanged: `CFG.MUSIC_VOL` (.5; Admin slider) x .5 through the phone-speaker high-pass on `musBus`, not the limiter. The loops are louder than the old synth bed (about -17 dB rms before that gain), so if they sit too loud, lower `MUSIC_VOL` first.
+- **Tests.** Offline rendering with a stand-in loop (quiet, pressure brightens and lifts, ducking dips > 6 dB), the real files decode and are under 1 MB with a closed seam, the picker/switch/saving, the arbiter hook, the cache name.
+
+## Calm music (plan 6.8, superseded by 7.4)
+
+The generated score that 7.4 replaced (Web Audio pads and bells; kenney.nl could not be reached then). Kept for history; its code is gone.
 
 Jay asked if music was worthwhile; a quiet bed under a puzzle game is, as long as it stays out of the way of the sound family and
 gets tense with the board. Code is `js/music.js` (loaded after `audio.js`; also in `sw.js` `ASSETS`).
@@ -1040,7 +1074,7 @@ The background travels as the run goes: dawn, day, golden hour, night, aurora, s
 - **Changing stage (6.3 hierarchy).** A score threshold is calm: checked when a tray has been dealt (`journeyDealt`, from `stepDeal`), then `JOURNEY_WAIT` (30) frames later the new sky wipes down from the top over ~1.4 s with a feathered edge and a faint band of light; no sound, no text. A sweep (`journeySweep`, from `place()`) waits for its confetti and wipes in ~0.8 s with a bright leading edge. The wipe (`drawWipe`) draws the old sky, then the new one clipped above the line; it is all in the sky layer, so pressure (6.6), the mode looks (6.7) and everything on the board draw on top as before (a test checks a gem pixel mid-wipe).
 - **Bonus and transformations** still take the sky over (`startSky('bonus')`, `startFlip`); while they own it a stage passed moves on quietly, and when they hand back (`endBonus`/`endTransform` -> `journeyHandBack`) the new stage wipes in instead of the crossfade. A sweep usually starts a Rainbow transformation, so its jump is often seen when the Rainbow ends.
 - **Settings:** Settings → Look → Advanced, "Journey sky" (saved as `journey` in `crumble.skins`). Admin has a "Next sky (7.5b)" button.
-- **Cost:** one cached gradient, one drawImage of the decor sprite; during a wipe two skies and one gradient for the edge (~80 frames). Measured in the test: our JS per frame p90 0.3 ms during a wipe.
+- **Cost:** a steady sky (journey or not) is one cached full-pixel plate (`skyPlate()`: gradient + decor baked together), drawn 1:1 with one blit; the last two plates are kept so a wipe draws both skies plus one gradient for the edge (~80 frames). Before this (2026-11-10) the gradient was filled and a half-size decor sprite scaled over the whole screen every frame, which made drawing about 40% dearer (raster-inclusive frame p90 at 4x CPU throttle: idle 61-84 ms vs 40-45 before 7.5; now 34-38). The "frame budget: a drag toward a completing line" test checks one plate blit a frame.
 - **Check on the phone:** play an Endless game past 500 (day) and 1500 (golden hour), and watch a clean sweep jump a stage. If a stage is too bright behind white text, darken its `top` in `JOURNEY`; if the stages come too slowly or fast, change `JOURNEY_AT`.
 - Tests: the two "journey sky (7.5b)" scenarios.
 
@@ -1051,7 +1085,7 @@ A line one piece from clearing comes alive as she brings the right piece to it. 
 - **When.** Only while a piece is held, never at rest, so it is not a hint before she picks one up. On pickup, `antList` lists every legal landing of the held piece that completes a line (and which lines; star pieces skipped, they have their own cross preview). Each frame, a line's target is the closeness of the floating piece to the nearest landing that completes it: 0 at `ANTIC_REACH` (2.5) cells, smoothstep up to 1 on arrival. The wrong piece (one that cannot complete it anywhere) wakes nothing.
 - **Look (6.3: below a single clear).** The line's gems shiver (at most `ANTIC_SHIVER`, 1.2 px, a ~13 Hz wobble scaled by closeness) and a glint runs along the line about once a second, through `gem()`'s own flash value, so nothing is drawn over the board as a layer. Once the piece is seated in a completing slot the coloured line preview takes over: those lines stop shivering. Reduced motion: no shiver, no travelling glint, a steady soft brightening.
 - **Hum.** A held voice (sine + a soft triangle an octave up, a light tremolo) on the synth chain, so the phone-speaker filter reaches it; it fades in with closeness and glides G4 -> D5 (both on the game's pentatonic), holds at the top while seated in a completing slot, and stops the moment the piece lands, goes back or the drag is cancelled. Not an arbiter event (no ducking). Respects mute; never creates the audio context. Level `HUM_VOL` (1 is very quiet).
-- **Switches.** `CFG.FX_ANTICIPATION` (visuals) and `CFG.ANTICIPATION_HUM` (sound), each an Admin toggle; Admin sliders for reach, shiver and hum volume.
+- **Switches.** `CFG.FX_ANTICIPATION` is the whole cue (it is Settings → Look → Advanced "Glints while dragging", from #48, saved as `glint`); `CFG.ANTICIPATION_HUM` turns just the sound off (Admin). Admin sliders for reach, shiver and hum volume.
 - **Cost.** One pass over the board on pickup; per frame one distance per completing landing and a couple of `sin` per gem in a live line, no allocations. Measured in the test with five live rows: our JS per frame p90 0.4 ms.
 - **Check on the phone:** pick up a piece that finishes a nearly-full line and move it slowly toward the gap; the line should start to tremble about two cells out and the hum should rise. If the hum is too loud or too faint, `HUM_VOL`; if the shiver starts too early, lower `ANTIC_REACH`.
 - Tests: the two "7.5c anticipation" scenarios.
