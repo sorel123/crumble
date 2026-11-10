@@ -71,7 +71,7 @@ test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, E
   await page.click('#pauseResume');
   await page.click('#pauseBtn');
   assert.equal(await page.textContent('#pauseNew'), 'New game', 'the confirm resets when the card opens again');
-  await page.click('#pauseHome'); await page.waitForSelector('#menuCard:not([hidden])');
+  await page.click('#pauseHome'); await page.waitForFunction(() => hero.card === el('menuCard'));   // the menu's buttons are set up by its first frame
   assert.deepEqual(await page.evaluate(() => ({ sub: el('menuBest').textContent, back: el('menuClose').hidden, saved: JSON.parse(localStorage.getItem(runStore('endless'))).score })),
     { sub: 'Continue · 1.2k', back: true, saved: 1240 });
   await page.click('#menuEndless');
@@ -3234,6 +3234,34 @@ test('haptics: silent no-op on the web, buzzes in the app (fake Capacitor), stro
   await page.evaluate(() => { Sfx.clear(1, 0, 1); Sfx.pickup(); });
   assert.deepEqual(await flush(), [], 'off: silent');
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
+test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle, 5 under the pause card', async ({ page }) => {
+  await play(page); await dealt(page);
+  const rate = ms => page.evaluate(ms => new Promise(res => { const l0 = last; let n = 0, p = last;
+    const f = () => { if (last !== p) { n++; p = last; } if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(n * 1000 / ms); };
+    const t0 = performance.now(); requestAnimationFrame(f); }), ms);
+  await page.evaluate(() => { CFG.FRAME_FULL_MS = 600; CFG.FRAME_DOZE_MS = 2500; lastInput = performance.now(); });
+  const busy = await rate(400);
+  assert.ok(busy > 45, `full speed right after a touch (${busy}/s)`);
+  await page.waitForTimeout(400);
+  const idle = await rate(1000);
+  assert.ok(idle > 22 && idle < 38, `about 30 a second once it settles (${idle}/s)`);
+  await page.waitForTimeout(1200);
+  const doze = await rate(1000);
+  assert.ok(doze > 10 && doze < 20, `about 15 a second after a long while untouched (${doze}/s)`);
+  await page.mouse.move(10, 300); await page.mouse.move(12, 302);
+  const back = await rate(300);
+  assert.ok(back > 45, `a touch brings full speed back at once (${back}/s)`);
+  await page.click('#pauseBtn');
+  await page.waitForTimeout(300);
+  const pz = await rate(1000);
+  assert.ok(pz <= 7, `the pause card: a few frames a second (${pz}/s)`);
+  await page.click('#pauseResume');
+  await page.evaluate(() => { CFG.FRAME_PACING = false; });
+  await page.waitForTimeout(100);
+  const off = await rate(500);
+  assert.ok(off > 45, `the switch off: every frame (${off}/s)`);
 });
 
 for (const { name, fn } of tests) {

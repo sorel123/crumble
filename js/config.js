@@ -191,6 +191,10 @@ const CFG = {
   FRAME_BUDGET_MS: 20,   // a frame slower than this counts as long (the ?dev overlay counts them) and shrinks the particle budget
   PARTICLE_CAP:   260,   // most effect particles alive at once (fireworks, specks, dust, confetti); scaled down while frames run long
   DEAL_SLICE_MS:  4,     // ms of tray dealing per frame after a drop (the deal is spread over frames, never inside the clear's first one)
+  // (8.5) frame pacing, for battery and heat: full speed only while something moves fast (see frameGap in draw.js)
+  FRAME_PACING:   true,  // off = redraw the whole screen every frame, as before
+  FRAME_FULL_MS:  2500,  // full speed for this long after any touch (and after a deal, a score or the run's state changes)
+  FRAME_DOZE_MS:  20000, // then 30 frames a second; after this long with no touch, 15
 
   SHOW_TENSION: false    // debug readout; off for the player (Admin can turn it on)
 };

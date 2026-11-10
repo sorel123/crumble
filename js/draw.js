@@ -746,12 +746,39 @@ function antCell(r,c,now){
   _af=v*(.08+.34*Math.max(0,1-Math.abs(along-head)/1.3));
 }
 
+/* (8.5) Frame pacing, for battery and heat. The canvas used to redraw the whole screen every frame forever, even under the
+   pause card. Now it draws every frame only while something moves fast (a drag, a clear and its effects, a deal, the score
+   counting, a sky wipe, and for CFG.FRAME_FULL_MS after any touch); 30 a second when only the slow things move (the sky's
+   drift, the tray's bob, the fire rim); 15 after CFG.FRAME_DOZE_MS with no touch; 5 under the pause card or Settings (the
+   game is frozen there, the few frames only pick up a new look); 30 on the front menu. dt still measures real time, so
+   nothing moves slower, it only moves in bigger steps. Paced frames are not counted by perfFrame (they are not late). */
+let lastInput=0, paceSig='', paceFull=true;
+['pointerdown','pointermove','pointerup','keydown'].forEach(t=>addEventListener(t,()=>{ lastInput=performance.now(); },{passive:true,capture:true}));
+function fxBusy(){
+  return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
+    ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
+    ||slams.length||bursts.length||praises.length||banners.length||goldRain.length||orbs.length||rings.length||dust.length
+    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length);
+}
+function frameGap(now){                                // ms between drawn frames; 0 = every frame
+  if(!CFG.FRAME_PACING) return 0;
+  if(homeCard()!==hero.card) return 0;                 // the front menu opening or closing: at once (homeFrame sets up its card)
+  if(paused) return 200;
+  if(hero.card) return 33;
+  const sig=state+'|'+score+'|'+(tray[0]?1:0)+(tray[1]?1:0)+(tray[2]?1:0)+'|'+(bonus?1:0)+'|'+combo;
+  if(sig!==paceSig){ paceSig=sig; lastInput=now; }     // something happened on its own (a deal, the run ending): full speed for a moment
+  if(now-lastInput<CFG.FRAME_FULL_MS||fxBusy()) return 0;
+  return now-lastInput<CFG.FRAME_DOZE_MS?33:66;
+}
+
 let last=0;
 function frame(now){
   requestAnimationFrame(frame);
+  const gap=frameGap(now);
+  if(gap&&now-last<gap-4) return;                     // not yet: a paced frame (the 4 ms slack lands it on the display's own tick)
   const t0=performance.now();
-  perfFrame(now-last);
-  const dt=paused?0:Math.min(2.5,(now-last)/16.67)||1; last=now;
+  if(paceFull&&!gap) perfFrame(now-last); paceFull=!gap;
+  const dt=paused?0:Math.min(gap?gap/16.67+.5:2.5,(now-last)/16.67)||1; last=now;
   if(hitWait>0) hitWait-=dt; else shake*=Math.pow(.85,dt);
   glowT*=Math.pow(.93,dt);
 
