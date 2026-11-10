@@ -153,6 +153,7 @@ const CFG = {
   CHASE_HOT:         .9,     // (7.5e) from this share the bar glows
   CHASE_SKY_MIN:     500,    // (7.5e) a best below this beats with the banner only, so a tiny early best does not skip dawn
   FX_MASCOT:         true,   // (7.5f) a cookie crumb on the board's top-left corner: nods/hops/smirks on clears, sweats when it is tight, faints on game over (js/mascot.js)
+  FX_TIMELAPSE:      true,   // (7.5g) the run's boards are recorded (capped, in the run save) and replay on the game-over card (js/timelapse.js)
   FX_ANTICIPATION:   true,   // (7.5c) while she drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
   ANTIC_REACH:       2.5,    // (7.5c) cells from a completing landing where the shiver starts; it peaks as the piece arrives
   ANTIC_SHIVER:      1.2,    // (7.5c) most the gems move, in px (reduced motion: no movement, a steady soft glow)

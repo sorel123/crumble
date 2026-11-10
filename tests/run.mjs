@@ -2900,6 +2900,104 @@ test('7.5f mascot: a drag and three-line clears with the crumb reacting fit the 
   assert.ok(p90 < 12, 'frames stay cheap with the crumb: p90 ' + p90.toFixed(2) + ' ms');
 });
 
+// ── 7.5g timelapse ──
+const tlPlace = async (page, r, c) => {                   // one drop of a single cell, the tray refilled so no deal is due
+  await dealt(page);
+  await page.evaluate(() => { tray = [{ s: SHAPES[0], gi: 2 }, { s: SHAPES[0], gi: 3 }, { s: SHAPES[0], gi: 4 }]; });
+  await dragPiece(page, 0, r, c);
+};
+
+test('7.5g timelapse: every drop is recorded with the run, survives a reload, and long runs stay capped', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => tlReset());
+  for (const [r, c] of [[0, 0], [2, 2], [4, 4]]) await tlPlace(page, r, c);
+  const t = await page.evaluate(() => ({ ...tl, saved: JSON.parse(localStorage.getItem(runStore(mode))).tl }));
+  assert.equal(t.n, 3, 'three drops counted');
+  assert.equal(t.f.length, 4, 'the opening plus a picture per drop');
+  assert.equal(t.f[3][4 * 8 + 4], '2', 'the last picture has the gem just dropped');
+  assert.deepEqual(t.saved.f, t.f, 'the pictures are in the run save');
+  await page.reload();
+  await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell && state === 'play');
+  assert.deepEqual(await page.evaluate(() => tl.f), t.f, 'resume brings the timelapse back');
+  // a long run: the cap halves the pictures and doubles the stride, opening kept
+  const long = await page.evaluate(() => {
+    const first = tl.f[0];
+    for (let k = 0; k < 400; k++) { grid[k % 8][(k >> 3) % 8] = grid[k % 8][(k >> 3) % 8] ? null : { gi: k % 6, t: 1, f: 0, l: 0 }; tlRecord(); }
+    return { len: tl.f.length, s: tl.s, keptFirst: tl.f[0] === first, bytes: JSON.stringify(tlSnap()).length };
+  });
+  assert.ok(long.len <= 96 && long.len > 24, 'capped at TL_MAX pictures: ' + long.len);
+  assert.ok(long.s >= 4 && long.keptFirst, 'stride grew and the opening stayed ' + JSON.stringify(long));
+  assert.ok(long.bytes < 8000, 'small enough for every save: ' + long.bytes + ' bytes');
+  // a damaged or older save: the timelapse starts at the resumed board, the run still loads
+  assert.ok(await page.evaluate(() => { const o = snapshot(); o.tl = { s: 1, n: 0, f: ['bad'] }; return restore(o) && tl.f.length === 1 && tl.f[0] === tlPic(grid); }));
+  assert.ok(await page.evaluate(() => { const o = snapshot(); delete o.tl; return restore(o) && tl.f.length === 1; }));
+});
+
+test('7.5g timelapse: it plays on the game-over card without holding up the buttons; a tap skips, a second tap replays', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => tlReset());
+  for (const [r, c] of [[0, 0], [1, 1], [2, 2], [3, 3], [5, 5]]) await tlPlace(page, r, c);
+  await dealt(page);
+  await page.evaluate(() => { score = 900; best = 800; rescuesUsed = 0; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  const s = await page.evaluate(() => ({ shown: !el('tlBoard').hidden, playing: !tlPlay.done, frames: tlPlay.f.length, dur: tlPlay.dur }));
+  assert.ok(s.shown && s.playing, 'the replay is running ' + JSON.stringify(s));
+  assert.equal(s.frames, 6);
+  assert.ok(s.dur >= 2000 && s.dur <= 4500, 'a few seconds');
+  const lay = await page.evaluate(() => { const r = id => el(id).getBoundingClientRect(); return { tl: r('tlBoard'), btns: ['reviveBtn', 'againBtn', 'overMenuBtn'].map(r), h: innerHeight }; });
+  assert.ok(lay.btns.every(b => b.bottom <= lay.h && b.top >= lay.tl.bottom), 'the buttons sit under it, on screen');
+  await page.click('#tlBoard');
+  assert.ok(await page.evaluate(() => tlPlay.done && state === 'over'), 'a tap skips to the end and changes nothing else');
+  await page.waitForFunction(() => !tlPlay.raf, null, { timeout: 2000 });   // the end flash breathes out, then it stops drawing
+  await page.click('#tlBoard');
+  assert.ok(await page.evaluate(() => !tlPlay.done), 'a second tap plays it again');
+  await page.click('#reviveBtn');                         // mid-replay: the rescue is not held up
+  assert.ok(await page.evaluate(() => state === 'play' && el('overCard').hidden && !tlPlay.raf && tl.f.length === 6), 'the rescue goes straight on; the run keeps its timelapse');
+  await dealt(page);
+  await page.evaluate(() => { gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  await page.click('#againBtn');
+  assert.ok(await page.evaluate(() => state === 'play' && tl.f.length === 1 && !tlPlay.f), 'Start over: a fresh timelapse from the new opening');
+});
+
+test('7.5g timelapse: a short run shows no replay; the share picture gets a four-board strip; the switch (saved) turns it off', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.evaluate(() => { score = 50; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isVisible('#tlBoard'), false, 'nothing to replay after no drops');
+  await page.click('#againBtn');
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => tlReset());
+  for (const [r, c] of [[0, 0], [1, 1], [2, 2], [3, 3]]) await tlPlace(page, r, c);
+  const strip = await page.evaluate(() => shareData().strip);
+  assert.equal(strip.length, 4);
+  assert.equal(strip[0], '.'.repeat(64), 'from the opening ...');
+  assert.equal(strip[3].replace(/\./g, '').length, 4, '... to the board she ended on');
+  assert.ok(await page.evaluate(() => drawShareCard(shareData()).width === SHARE_W), 'the card draws');
+  await page.click('#setBtn');
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#tlOn'), true, 'on by default');
+  await page.click('#tlOn');
+  await page.click('#setDone');
+  assert.ok(await page.evaluate(() => !CFG.FX_TIMELAPSE && JSON.parse(localStorage.getItem('crumble.skins')).tl === false), 'off, and saved');
+  await page.evaluate(() => tlReset());
+  await tlPlace(page, 5, 5);
+  assert.ok(await page.evaluate(() => tl.f.length === 0 && shareData().strip === null), 'off: nothing recorded, no strip');
+  await dealt(page);
+  await page.evaluate(() => { gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isVisible('#tlBoard'), false, 'off: no replay');
+  await page.reload();
+  await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => CFG.FX_TIMELAPSE), false, 'still off after a reload');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

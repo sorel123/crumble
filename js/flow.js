@@ -24,6 +24,7 @@ async function gameOver(){
   btn.textContent='Keep going';
   shareSetup();                                      // (4.4) Share shows for Endless and Daily runs only
   el('overCard').hidden=false;
+  tlShow();                                          // (7.5g) the run replays on the card; the buttons above are already live
 }
 // The one rescue of a run (plan 7.1): offered on the game-over card while she has it and the run is worth saving.
 // Every check for it goes through here, so an ad can gate it later in one place. A level always offers its rescue.
@@ -35,7 +36,7 @@ async function rescue(){
   Sfx.rescue();
   combo=0; goldenNext=false; cancelDeal(); genRescue();
   if(paced()){ paceSet('recovery'); pace.n=CFG.RECOVERY_TRIES; } else tension=0.5;   // (6.1) the rescue tray is her last recovery try: clear out and relief follows, miss and it is the edge again
-  el('overCard').hidden=true; state='play';
+  el('overCard').hidden=true; tlStop(); state='play';
   syncActions(); saveRun();
 }
 // everything in flight that a new run, or a restored one, starts without (effects, banners, drag, the bonus)
@@ -56,6 +57,6 @@ function start(){
   jJumps=0; resetWorld();                           // (7.5b) the journey starts at dawn
   chaseBest=mode==='endless'?best:0;                // (7.5e) the best this run chases
   shownScore=0; el('scoreVal').textContent='0';
-  stuck=false; cancelDeal(); openBoard(); syncHud(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
+  stuck=false; cancelDeal(); openBoard(); tlReset(); syncHud(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   syncActions(); saveRun();
 }

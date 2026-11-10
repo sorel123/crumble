@@ -173,6 +173,8 @@
            background:var(--overlay);
            backdrop-filter:blur(5px);z-index:3}   /* above the action row (bonus) */
   .overlay[hidden]{display:none}
+  #tlBoard{width:148px;height:148px;cursor:pointer;touch-action:manipulation;flex:none}   /* (7.5g) the run's timelapse on the game-over card */
+  #tlBoard[hidden]{display:none}
   .title{font-size:clamp(46px,15vw,78px);font-weight:700;line-height:.92;letter-spacing:-.03em;
          text-shadow:0 0 40px rgba(255,212,92,.3)}
   .title em{font-style:normal;color:var(--accent)}
@@ -340,6 +342,7 @@
         <label class="tog"><span>Combo fire: the board burns on a streak</span><input type="checkbox" id="fireOn"></label>
         <label class="tog"><span>Chase your best: a bar to your best score</span><input type="checkbox" id="chaseOn"></label>
         <label class="tog"><span>Mascot: a crumb that reacts to your game</span><input type="checkbox" id="mascotOn"></label>
+        <label class="tog"><span>Timelapse: replay your run on game over</span><input type="checkbox" id="tlOn"></label>
         <p class="lbl section-lbl">World</p>
         <div class="skins" id="worldGrid"></div>
         <p class="lbl section-lbl">Skin</p>
@@ -415,6 +418,7 @@
     <p class="eyebrow" id="overEye">No room left</p>
     <p class="big" id="overScore">0</p>
     <p class="sub" id="overMsg"></p>
+    <canvas id="tlBoard" hidden role="img" aria-label="Your run as a timelapse. Tap to skip, tap again to replay."></canvas>
     <button class="cta" id="reviveBtn">Keep going</button>
     <button class="ghost" id="shareBtn" type="button" hidden>Share</button>
     <button class="ghost" id="againBtn">Start over</button>
@@ -445,6 +449,7 @@
 <script src="js/draw.js"></script>
 <script src="js/flow.js"></script>
 <script src="js/save.js"></script>
+<script src="js/timelapse.js"></script>
 <script src="js/modes.js"></script>
 <script src="js/mascot.js"></script>
 <script src="js/goals.js"></script>
