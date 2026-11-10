@@ -6,13 +6,13 @@
 const SHARE_W=1080, SHARE_H=1350;
 const SHARE_FILE='crumble-score.png';
 
-// the board as she left it: filled cells in a soft gold, empty ones as faint slots
-function drawShareBoard(g,x,y,size){
-  const n=N, cs=size/n, pad=cs*0.08;
+// the board as she left it (or a timelapse picture, pic): filled cells in a soft gold, empty ones as faint slots
+function drawShareBoard(g,x,y,size,pic){
+  const n=N, cs=size/n, pad=cs*0.08, rim=size*0.028;
   g.fillStyle='rgba(255,255,255,.10)';
-  g.beginPath(); g.roundRect(x-18,y-18,size+36,size+36,36); g.fill();
+  g.beginPath(); g.roundRect(x-rim,y-rim,size+rim*2,size+rim*2,rim*2); g.fill();
   for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-    const on=grid&&grid[r]&&grid[r][c];
+    const on=pic?pic[r*n+c]!=='.':grid&&grid[r]&&grid[r][c];
     g.fillStyle=on?'#FFD86B':'rgba(255,255,255,.08)';
     g.beginPath(); g.roundRect(x+c*cs+pad,y+r*cs+pad,cs-pad*2,cs-pad*2,cs*0.22); g.fill();
   }
@@ -34,10 +34,18 @@ function drawShareCard(d){
   g.fillText(String(d.score),SHARE_W/2,430);
   g.font='600 42px system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
   g.globalAlpha=.85; g.fillText(d.sub,SHARE_W/2,500); g.globalAlpha=1;
-  const size=640;
-  drawShareBoard(g,(SHARE_W-size)/2,560,size);
+  const strip=d.strip&&d.strip.length===4;            // (7.5g) the run in four boards under the final one
+  const size=strip?500:640;
+  drawShareBoard(g,(SHARE_W-size)/2,strip?550:560,size);
+  if(strip){
+    const m=150, gap=46, x0=(SHARE_W-(m*4+gap*3))/2, y=1105;
+    d.strip.forEach((p,i)=>drawShareBoard(g,x0+i*(m+gap),y,m,p));
+    g.fillStyle='rgba(255,255,255,.5)';
+    for(let i=0;i<3;i++){ const ax=x0+(i+1)*(m+gap)-gap/2, ay=y+m/2;   // a small arrow between boards: the run goes left to right
+      g.beginPath(); g.moveTo(ax-7,ay-10); g.lineTo(ax+7,ay); g.lineTo(ax-7,ay+10); g.closePath(); g.fill(); }
+  }
   g.font='600 44px system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
-  g.globalAlpha=.9; g.fillText("Can you beat it?",SHARE_W/2,SHARE_H-70); g.globalAlpha=1;
+  g.globalAlpha=.9; g.fillText("Can you beat it?",SHARE_W/2,SHARE_H-(strip?36:70)); g.globalAlpha=1;
   return cv;
 }
 
@@ -47,10 +55,17 @@ function shareData(){
   return {
     score:score,
     label:daily?"Today's Daily board":'Endless run',
-    sub:daily?'Daily challenge':(score>=best&&score>0?'New best!':'Best: '+best)
+    sub:daily?'Daily challenge':(score>=best&&score>0?'New best!':'Best: '+best),
+    strip:shareStrip()
   };
 }
 
+// (7.5g) four pictures from the timelapse: the opening, a third in, two thirds in, the end; none for a short run
+function shareStrip(){
+  if(!CFG.FX_TIMELAPSE) return null;
+  const f=tlFrames(); if(f.length<4) return null;
+  return [0,1,2,3].map(i=>f[Math.round(i*(f.length-1)/3)]);
+}
 function shareSetup(){
   const can=(mode==='endless'||mode==='daily')&&score>0;
   el('shareBtn').hidden=!can;

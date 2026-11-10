@@ -85,6 +85,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 - **Combo fire (7.5d)** — from combo 3 the board rim burns (hotter each step), the held piece sheds embers and the tray glows; a drop that does not clear snuffs it in a puff of smoke. Settings → Look → Advanced "Combo fire". See the 7.5d section at the end.
 - **Chase your best (7.5e)** — in Endless a slim bar under the score fills toward her best, "N to beat" from 75%, a glow from 90%; passing it raises NEW BEST and jumps the journey sky a stage. Settings → Look → Advanced "Chase your best". See the 7.5e section at the end.
 - **Mascot crumb (7.5f)** — a cookie crumb on the board's top-left corner nods, hops or smirks on clears, sweats when the board is tight and faints on game over. Settings → Look → Advanced "Mascot". See the 7.5f section at the end.
+- **Timelapse (7.5g)** — the run replays on a small board on the game-over card in a few seconds; the share picture gets a four-board strip of the run. Settings → Look → Advanced "Timelapse". See the 7.5g section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
@@ -193,6 +194,7 @@ Top to bottom:
 | (7.5d) | Combo fire: from combo 3 the rim burns hotter each step, the held piece sheds embers, the tray glows; a miss snuffs it in a puff. See the 7.5d section |
 | (7.5e) | Chase your best: a bar under the score fills toward her best; passing it raises NEW BEST and jumps the journey sky a stage. See the 7.5e section |
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
+| (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1134,3 +1136,15 @@ A sidekick on the board. Code is `js/mascot.js` (the SVG, `mascotStep` called fr
 - **Switch.** `CFG.FX_MASCOT`, Settings → Look → Advanced "Mascot: a crumb that reacts to your game" (saved as `mascot`), also in Admin.
 - **Check on the phone:** the crumb should stand on the board's top-left corner; clear one line (nod), two (hop), three in a row (smirk), then miss (flat stare); fill the board until it sweats; run out of moves and it should faint. If it is too busy, turn it off in Settings, or shorten the `ms` holds in `MASCOT_ACT`.
 - Tests: the three "7.5f mascot" scenarios.
+
+## Timelapse (plan 7.5, seventh zazz idea)
+
+The whole run in a few seconds on the game-over card. Code is `js/timelapse.js`; it is fed by `tlReset()` in `start()`, `tlRecord()` at the end of `place()`, `tlSnap()`/`tlLoad()` in the run save, and `tlShow()` in `gameOver()`. All modes.
+
+- **Recording.** After the opening and after every drop the board is kept as a 64-character string ('.' or the gem index). Pictures, not moves, so stars, rescues and specials need no re-simulation. Saved in the run snapshot as `tl: {s, n, f}`, at most `TL_MAX` (96) pictures, about 6 KB: at the cap every other picture is dropped and the stride doubles, so a long run still spans start to end. An older save starts its timelapse at the resumed board.
+- **Replay.** A 148 px board under the message plays the pictures over 2 to 4.5 s (70 ms a picture), easing out; a landing gem pops in, a cleared one shrinks away; at the end the rim flashes gold once and it stops drawing. A tap skips to the end, a tap after that plays it again. The buttons are live from the first frame: Keep going, Share and Start over never wait for it. A run with under three pictures shows none. Reduced motion: the final board only.
+- **Share.** The share picture keeps the final board (a little smaller) and adds the opening, a third, two thirds and the end as a strip of four small boards.
+- **Cost.** Recording is one short string per drop. The replay has its own rAF loop on a small canvas (empty slots in one path). At 4x CPU throttle on the game-over card, p90 frame (code + raster) was 43 ms with the replay against 39 ms without.
+- **Switch.** `CFG.FX_TIMELAPSE`, Settings → Look → Advanced "Timelapse: replay your run on game over" (saved as `tl`), also in Admin. Off: nothing is recorded, no replay, no strip.
+- **Check on the phone:** play a run out; the small board should replay it while the buttons already work; tap it to jump to the end; Share should show the four-board strip.
+- Tests: the three "7.5g timelapse" scenarios.
