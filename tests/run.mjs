@@ -1019,7 +1019,7 @@ test('a new deploy shows "Update ready" after the run, and tapping it reloads on
   await Promise.all([page.waitForNavigation(), page.click('#updateToast')]);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   const keys = await page.evaluate(() => caches.keys());
-  assert.deepEqual(keys, ['crumble-deploy2'], 'the old cache is gone');
+  assert.deepEqual(keys.filter(k => k !== 'crumble-music').sort(), ['crumble-deploy2'], 'the old cache is gone (the music cache stays)');
 });
 
 // No Undo, no mid-run Rescue, no End run (plan 7.1): running out of moves ends the run; the game-over card has one rescue.
@@ -2130,59 +2130,79 @@ test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tin
   assert.deepEqual(await page.evaluate(() => [lk.prog, lk.flash, lk.bonus]), [0, 0, 0], 'a new run starts with no mode look');
 });
 
-// ---- music (plan 6.8) ----
-// Rendered offline (no audio hardware needed): the same engine the live game uses, on an OfflineAudioContext.
+// ---- music (plans 6.8, 7.4) ----
+// Recorded loops. The engine is rendered offline (no audio hardware needed) on an OfflineAudioContext with a stand-in loop.
 const renderMusic = (page, opts) => page.evaluate(async ({ secs, i, track, duckAt }) => {
   const SR = 22050, oc = new OfflineAudioContext(1, SR * secs, SR), dest = oc.createGain(); dest.connect(oc.destination);
-  const E = createMusic(oc, dest); E.start(0, track, .25); E.setI(i, 0); if (i > 0) E.nodes.tg.gain.value = .1 * i;
-  E.sched(secs); if (duckAt !== null) E.duck(.3, 1.5, duckAt);
+  const loop = oc.createBuffer(1, SR * 2, SR), ch = loop.getChannelData(0);          // 2 s: a low tone with a bright, buzzy top
+  for (let k = 0; k < ch.length; k++) ch[k] = .3 * Math.sin(2 * Math.PI * 220 * k / SR) + .15 * Math.sin(2 * Math.PI * 6000 * k / SR) + .1 * Math.sin(2 * Math.PI * 9500 * k / SR);
+  const E = createMusic(oc, dest); E.start(0, .25); E.play(loop, track, 0, .05); E.setI(i, 0);
+  if (duckAt !== null) E.duck(.3, 1.5, duckAt);
   const d = (await oc.startRendering()).getChannelData(0), db = (a, b) => { let s = 0; for (let k = a * SR; k < b * SR; k++) s += d[k] * d[k]; return 10 * Math.log10(s / ((b - a) * SR) + 1e-12); };
   let pk = 0; for (const v of d) pk = Math.max(pk, Math.abs(v));
   return { peak: 20 * Math.log10(pk), rms: db(4, secs), before: db(duckAt === null ? 0 : duckAt - 1, duckAt === null ? 1 : duckAt), under: db(duckAt === null ? 0 : duckAt, duckAt === null ? 1 : duckAt + 1) };
 }, { secs: 16, i: 0, track: 0, duckAt: null, ...opts });
 
-test('music (6.8): every piece is an 8-bar loop that comes out the same each time, inside its scale, and thins as it gets tight', async ({ page }) => {
-  const r = await page.evaluate(() => MUSIC_TRACKS.map((T, tr) => {
-    const same = Array.from({ length: MUSIC_BARS }, (_, b) => JSON.stringify(musicPlan(tr, b)) === JSON.stringify(musicPlan(tr, b + MUSIC_BARS)));
-    const bells = Array.from({ length: MUSIC_BARS }, (_, b) => musicPlan(tr, b).bells), all = bells.flat();
-    const kept = d => all.filter(s => s.q < s.p0 * musicDensity(d)).length;
-    return { same: same.every(Boolean), inScale: all.every(s => T.scale.includes(s.midi)), calm: kept(0), tight: kept(1), chords: Array.from({ length: MUSIC_BARS }, (_, b) => musicPlan(tr, b).chord.pad.length) };
-  }));
-  assert.equal(r.length, 3, 'three pieces');
-  for (const t of r) {
-    assert.ok(t.same, 'a loop repeats exactly'); assert.ok(t.inScale, 'every bell is in the pentatonic scale, so nothing can clash');
-    assert.ok(t.calm > t.tight && t.tight >= 2, `calm keeps more bells than tight (${t.calm} vs ${t.tight}), but a tight bar is never empty`);
-    assert.ok(t.chords.every(n => n === 4));
+test('music (7.4): four recorded loops, each small, that decode and loop without a click, and nothing is synthesised', async ({ page, srv }) => {
+  assert.equal(await page.evaluate(() => MUSIC_TRACKS.length), 4, 'four moods');
+  for (const t of await page.evaluate(() => MUSIC_TRACKS)) {
+    assert.ok(fs.statSync(new URL('../' + t.file, import.meta.url)).size < 1e6, `${t.file} is under 1 MB`);
+    const r = await page.evaluate(async f => {
+      const c = new OfflineAudioContext(2, 44100, 44100), buf = await c.decodeAudioData(await (await fetch(f)).arrayBuffer());
+      const a = buf.getChannelData(0), step = 400; let mx = 0, rms = 0;
+      for (let k = 1; k < a.length; k++) { mx = Math.max(mx, Math.abs(a[k] - a[k - 1])); rms += a[k] * a[k]; }
+      return { dur: buf.duration, rms: Math.sqrt(rms / a.length), seam: Math.abs(a[0] - a[a.length - 1]), maxStep: mx, head: Math.abs(a[0]) };
+    }, '/' + t.file);
+    assert.ok(r.dur > 25 && r.dur < 120, `${t.id}: ${r.dur.toFixed(1)} s of music`);
+    assert.ok(r.rms > .05 && r.rms < .35, `${t.id}: sensible level (${r.rms.toFixed(3)})`);
+    assert.ok(r.seam < .2, `${t.id}: the end meets the start (${r.seam.toFixed(3)})`);
   }
+  const src = fs.readFileSync(new URL('../js/music.js', import.meta.url), 'utf8');
+  assert.ok(!/createOscillator/.test(src), 'no synthesis in the music');
 });
 
-test('music (6.8): quiet by design, a tight board is audibly different, and a clear ducks it', async ({ page }) => {
+test('music (7.4): quiet by design, a tight board is brighter and louder, and a clear ducks it', async ({ page }) => {
   const calm = await renderMusic(page, { i: 0 }), tight = await renderMusic(page, { i: 1 }), ducked = await renderMusic(page, { duckAt: 8 });
-  assert.ok(calm.peak < -12 && calm.peak > -40, `quiet but there (peak ${calm.peak.toFixed(1)} dBFS)`);
-  assert.ok(calm.rms < -24 && calm.rms > -45, `rms ${calm.rms.toFixed(1)} dBFS sits well under the sound effects`);
-  assert.ok(Math.abs(tight.rms - calm.rms) > .3, `the tension layer changes the mix (${calm.rms.toFixed(1)} -> ${tight.rms.toFixed(1)})`);
-  assert.ok(tight.peak < -10, 'and still never loud');
+  assert.ok(calm.peak < -8 && calm.peak > -40, `quiet but there (peak ${calm.peak.toFixed(1)} dBFS)`);
+  assert.ok(tight.rms - calm.rms > 1, `pressure opens the filter and lifts the level (${calm.rms.toFixed(1)} -> ${tight.rms.toFixed(1)} dB)`);
+  assert.ok(tight.peak < -4, 'and it is still never loud');
   assert.ok(ducked.before - ducked.under > 6, `ducking dips it by more than 6 dB (${ducked.before.toFixed(1)} -> ${ducked.under.toFixed(1)})`);
-  for (const track of [1, 2]) { const t = await renderMusic(page, { track }); assert.ok(t.rms > -45 && t.peak < -12, 'the other pieces sit at the same level'); }
+  for (const track of [1, 2, 3]) { const t = await renderMusic(page, { track }); assert.ok(t.rms > -45 && t.peak < -4, 'the other loops sit at a similar level'); }
 });
 
-test('music (6.8): on by default at a low volume, its own Settings switch, saved, and independent of Sound effects', async ({ page }) => {
+test('music (7.4): on by default at a low volume, Shuffle by default, a picker where Off is the switch, all saved', async ({ page }) => {
   assert.equal(await page.evaluate(() => CFG.MUSIC), true, 'on by default');
+  assert.equal(await page.evaluate(() => CFG.MUSIC_PICK), 'shuffle', 'Shuffle by default');
   assert.ok(await page.evaluate(() => CFG.MUSIC_VOL * .5 <= .3), 'low by default');
   await play(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
   await page.click('#setBtn');
-  assert.equal(await page.isChecked('#musicOn'), true);
-  await page.uncheck('#musicOn');
-  assert.equal(await page.evaluate(() => musicE), null, 'switching it off stops the engine');
+  assert.deepEqual(await page.$$eval('#musicPick option', os => os.map(o => o.textContent)), ['Shuffle', 'Sunny', 'Bounce', 'Daydream', 'Momentum', 'Off']);
+  assert.equal(await page.inputValue('#musicPick'), 'shuffle');
+  await page.selectOption('#musicPick', 'bounce');
+  assert.equal(await page.evaluate(() => musicTrackNo), 1, 'picking a track plays it');
+  await page.waitForFunction(() => musicE && musicE.idx === 1, null, { timeout: 8000 });
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.skins')).musicPick), 'bounce', 'and it is remembered');
+  await page.evaluate(() => { start(); });
+  assert.equal(await page.evaluate(() => musicTrackNo), 1, 'a chosen track stays across runs');
+  await page.selectOption('#musicPick', 'off');
+  assert.equal(await page.evaluate(() => musicE), null, 'Off stops the engine');
+  assert.equal(await page.evaluate(() => CFG.MUSIC), false, 'and is the music switch');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.skins')).music), false, 'and it is remembered');
   await page.check('#sndOn'); await page.uncheck('#sndOn');
   assert.equal(await page.evaluate(() => musicE), null, 'Sound effects does not bring it back');
-  await page.check('#musicOn');
-  assert.notEqual(await page.evaluate(() => musicE), null, 'switching it on starts it again');
+  await page.selectOption('#musicPick', 'bounce');
+  assert.notEqual(await page.evaluate(() => musicE), null, 'picking a track switches it on again');
+  assert.equal(await page.inputValue('#musicPick'), 'bounce');
 });
 
-test('music (6.8): the intensity layer follows the pressure on screen and drops when she is clear', async ({ page }) => {
+test('music (7.4): a loop starts playing on its own after the first touch, and only the playing loop stays decoded', async ({ page }) => {
+  await play(page);
+  await page.waitForFunction(() => musicE !== null && musicE.idx >= 0, null, { timeout: 8000 });
+  assert.deepEqual(await page.evaluate(() => Object.keys(musicBufs).map(Number)), await page.evaluate(() => [musicE.idx]));
+});
+
+test('music (7.4): the pressure response follows the pressure on screen and drops when she is clear', async ({ page }) => {
   await play(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
   const m = await page.evaluate(() => { const o = {}; scr.p = 0; o.calm = musicTarget(); scr.p = .55; o.build = musicTarget(); scr.p = .8; o.edge = musicTarget(); scr.p = 1; o.tight = musicTarget(); state = 'over'; o.over = musicTarget(); state = 'play'; return o; });
@@ -2194,7 +2214,7 @@ test('music (6.8): the intensity layer follows the pressure on screen and drops 
   await page.waitForFunction(() => musicMi < .3, null, { timeout: 9000 });
 });
 
-test('music (6.8): the sound arbiter ducks it under the winning event, deeper for bigger ones, and a new run picks another piece', async ({ page }) => {
+test('music (7.4): the sound arbiter ducks it under the winning event, deeper for bigger ones, and shuffle moves on each run', async ({ page }) => {
   await play(page); await spySet(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
   const lvl = async fns => { await page.evaluate(f => { musicE.duckEnd = 0; musicE.duckLvl = 1; arbLead = { p: 0, until: 0 }; for (const x of f) eval(x); }, fns); await tick(page); return page.evaluate(() => musicE.duckLvl); };
@@ -2203,7 +2223,13 @@ test('music (6.8): the sound arbiter ducks it under the winning event, deeper fo
   assert.equal(await lvl(['Sfx.starPick()']), 1, 'the star pickup tick (priority 0) leaves it alone');
   const before = await page.evaluate(() => musicTrackNo);
   await page.evaluate(() => { start(); });
-  assert.notEqual(await page.evaluate(() => musicTrackNo), before, 'a new run moves to another piece');
+  assert.notEqual(await page.evaluate(() => musicTrackNo), before, 'a new run moves to another loop');
+});
+
+test('music (7.4): the service worker keeps the loops in their own cache, which a game update does not clear', async ({ page }) => {
+  const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.match(sw, /MUSIC_CACHE='crumble-music'/); assert.match(sw, /k!==MUSIC_CACHE/);
+  assert.ok(!/music\//.test(sw.match(/const ASSETS=(\[.*?\]);/s)[1]), 'not precached: lazy-loaded');
 });
 
 // ---- payoff waves, setups and closers (plan 7.3) ----

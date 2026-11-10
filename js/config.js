@@ -155,6 +155,7 @@ const CFG = {
   JOURNEY_AT:     [0,500,1500,3000,6000,10000],   // score where each journey stage starts; every clean sweep also jumps one stage
   JOURNEY_WAIT:   30,         // frames after a deal (or a sweep's confetti) before a stage change starts, so it never lands on a clear
   MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects
+  MUSIC_PICK:     'shuffle', // (7.4) 'shuffle' or a MUSIC_TRACKS id (js/music.js); Off is the switch above
   MUSIC_VOL:      .5,         // 0..1; the music is quiet at .5 on purpose
   SND_PICKUP_VOL: 1,
   SND_PLACE_VOL:  1,
