@@ -498,35 +498,6 @@ const SHARED_SFX={                                    // the same in every set (
   }); }
 };
 
-/* ═══ (7.5c) the anticipation hum ═══
-   While she drags a piece toward a landing that completes a line, a soft tone fades in under everything and glides up
-   from G4 to D5 (both on the game's pentatonic) as the piece gets there, with a light shimmer that quickens. It is not an
-   event (no arbiter, no ducking): it is a held voice whose level follows `k` (0..1) every frame, and it is silent again
-   the moment the piece lands, goes back, or the drag is cancelled. The same in every sound set, on the synth chain, so the
-   phone-speaker filter reaches it. Never creates the audio context: until her first touch has made one, it does nothing. */
-let hum=null, humK=0;
-const HUM_LO=392, HUM_HI=392*Math.pow(2,7/12);
-function humSet(k){
-  k=CFG.ANTICIPATION_HUM&&!muted&&actx&&actx.state==='running'?Math.max(0,Math.min(1,k)):0;
-  if(Math.abs(k-humK)<.01&&!(k===0&&humK!==0)) return;            // only move the voice when it really changes
-  humK=k;
-  if(!hum){
-    if(k===0) return;
-    const c=actx, g=c.createGain(), trem=c.createGain(), lfo=c.createOscillator(), depth=c.createGain();
-    g.gain.value=0; trem.gain.value=1; depth.gain.value=0;
-    lfo.type='sine'; lfo.frequency.value=5; lfo.connect(depth); depth.connect(trem.gain);
-    const o1=c.createOscillator(), o2=c.createOscillator(), g2=c.createGain();
-    o1.type='sine'; o2.type='triangle'; o1.frequency.value=HUM_LO; o2.frequency.value=HUM_LO*2; o2.detune.value=4; g2.gain.value=.22;
-    o1.connect(trem); o2.connect(g2); g2.connect(trem); trem.connect(g); g.connect(master);
-    for(const o of [o1,o2,lfo]) o.start();
-    hum={g,o1,o2,lfo,depth};
-  }
-  const t=actx.currentTime, f=HUM_LO+(HUM_HI-HUM_LO)*k;
-  hum.g.gain.setTargetAtTime(k>0?.05*CFG.HUM_VOL*Math.pow(k,1.4):0,t,k>0?.08:.05);
-  hum.o1.frequency.setTargetAtTime(f,t,.06); hum.o2.frequency.setTargetAtTime(f*2,t,.06);
-  hum.lfo.frequency.setTargetAtTime(5+5*k,t,.1); hum.depth.gain.setTargetAtTime(.25*k,t,.1);
-}
-
 /* ═══ one sound family: who gets the mix (plan 6.5) ═══
    Every event the game raises (all but pickup/place, which are quiet ticks of their own) goes through a small arbiter.
    Events raised in the same tick are collected and the highest priority plays in full; the others are dropped, played

@@ -2499,18 +2499,17 @@ const holdAt = async (page, i, r, c) => {
   await page.mouse.move(f.x, f.y, { steps: 3 });
   await frames(page, 30);
 };
-const antRead = page => page.evaluate(() => { antCell(0, 4, performance.now()); return { row0: antV[0], others: Math.max(...antV.slice(1)), any: antAny, hum: antHum, ax: _ax, ay: _ay, af: _af, n: antN }; });
+const antRead = page => page.evaluate(() => { antCell(0, 4, performance.now()); return { row0: antV[0], others: Math.max(...antV.slice(1)), any: antAny, ax: _ax, ay: _ay, af: _af, n: antN }; });
 
-test('7.5c anticipation: a line one piece from clearing shivers and glints as the right piece nears it, and the hum rises', async ({ page }) => {
+test('7.5c anticipation: a line one piece from clearing shivers and glints as the right piece nears it', async ({ page }) => {
   await play(page);
-  await page.evaluate(() => { window.__hum = []; const h = humSet; humSet = k => { __hum.push(k); h(k); }; });
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 1, 0] });
   await frames(page, 5);
   assert.equal((await antRead(page)).any, false, 'at rest nothing moves: it is not a hint before she picks a piece up');
   await holdAt(page, 0, 6, 6);
   let a = await antRead(page);
   assert.equal(a.n, 1, 'the single cell completes row 0 from exactly one landing');
-  assert.ok(a.row0 < 0.01 && a.hum < 0.01, 'far from it: nothing yet ' + JSON.stringify(a));
+  assert.ok(a.row0 < 0.01, 'far from it: nothing yet ' + JSON.stringify(a));
   await holdAt(page, 0, 1.6, 1.2);
   const near = await antRead(page);
   assert.ok(near.row0 > 0.05 && near.others === 0, 'within reach the row comes alive, and only that row: ' + JSON.stringify(near));
@@ -2518,33 +2517,29 @@ test('7.5c anticipation: a line one piece from clearing shivers and glints as th
   assert.ok(Math.hypot(near.ax, near.ay) <= 1.2 + 1e-6, 'by at most ANTIC_SHIVER px');
   await holdAt(page, 0, 0.9, 0.5);
   const nearer = await antRead(page);
-  assert.ok(nearer.row0 > near.row0 && nearer.hum > near.hum, `closer = stronger (${near.row0.toFixed(2)} -> ${nearer.row0.toFixed(2)}, hum ${near.hum.toFixed(2)} -> ${nearer.hum.toFixed(2)})`);
+  assert.ok(nearer.row0 > near.row0, `closer = stronger (${near.row0.toFixed(2)} -> ${nearer.row0.toFixed(2)})`);
   await holdAt(page, 0, 0, 0);
   const seated = await antRead(page);
   assert.ok(await page.evaluate(() => drag.slot && drag.slot.r === 0 && drag.slot.c === 0), 'seated in the completing slot');
   assert.ok(seated.row0 < 0.01, 'seated: the coloured line preview owns the row, so it stops shivering');
-  assert.ok(seated.hum > 0.9, 'and the hum holds at its top: ' + seated.hum);
   await page.mouse.up();
   await frames(page, 3);
-  const after = await page.evaluate(() => ({ hum: antHum, last: __hum[__hum.length - 1], row: grid[0].every(Boolean) }));
+  const after = await page.evaluate(() => ({ row: grid[0].every(Boolean) }));
   assert.equal(after.row, false, 'the row cleared');
-  assert.equal(after.hum, 0, 'the hum stops the moment the piece lands');
-  assert.equal(after.last, 0, 'and the voice is told so');
-  assert.ok((await page.evaluate(() => __hum)).some(k => k > 0.5), 'the hum was driven up while she held it');
   // the wrong piece: a domino cannot complete row 0 (the gap is one cell), so nothing happens near it
   await dealt(page);
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [1, 1, 1] });
   await holdAt(page, 0, 0.5, 0.5);
   const wrong = await antRead(page);
-  assert.ok(wrong.n === 0 && !wrong.any && wrong.hum === 0, 'the wrong piece wakes nothing: ' + JSON.stringify(wrong));
+  assert.ok(wrong.n === 0 && !wrong.any, 'the wrong piece wakes nothing: ' + JSON.stringify(wrong));
   await page.mouse.up();
-  // switches: visuals off keep the hum; hum off keeps the visuals
+  // switch: Glints while dragging off
   await dealt(page);
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
   await page.evaluate(() => { CFG.FX_ANTICIPATION = false; });
   await holdAt(page, 0, 0.8, 0.4);
   const off = await antRead(page);
-  assert.ok(!off.any && off.hum === 0, 'Glints while dragging off (FX_ANTICIPATION): no shiver and no hum');
+  assert.ok(!off.any, 'Glints while dragging off (FX_ANTICIPATION): no shiver');
   await page.mouse.up();
   await page.evaluate(() => { CFG.FX_ANTICIPATION = true; });
 });
