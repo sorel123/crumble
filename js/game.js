@@ -377,6 +377,7 @@ function place(idx,r,c){
     trayHadSweep=false; trayCombo=0;
     dealLater();
   }
+  tlRecord();                                        // (7.5g) the board as this drop left it, for the game-over timelapse
   stats.placed++; stats.lines+=total; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
   playedToday(); checkGoals();                       // (4.2) the day counts, a reached goal gets its banner
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level

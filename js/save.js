@@ -22,7 +22,8 @@ function snapshot(){
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     bonus:bonus?{left:bonus.left,extra:bonus.extra}:null,
     jy:jJumps,                                        // (7.5b) sweeps this run: the journey sky's extra stages
-    cb:chaseBest                                      // (7.5e) the best this run chases (the live `best` is rewritten mid-run by saveStats)
+    cb:chaseBest,                                     // (7.5e) the best this run chases (the live `best` is rewritten mid-run by saveStats)
+    tl:tlSnap()                                       // (7.5g) the timelapse's board pictures, capped (timelapse.js)
   };
 }
 const isInt=(v,a,b)=>Number.isInteger(v)&&v>=a&&v<=b;
@@ -50,6 +51,7 @@ function restore(o){
   trayCombo=o.trayCombo|0; starForced=!!o.starForced; starCool=isInt(o.starCool,0,1e3)?o.starCool:0; transformCool=Math.max(0,o.transformCool|0);
   chaseBest=isInt(o.cb,0,1e9)?o.cb:best;            // (7.5e) older saves: the stored best
   jJumps=isInt(o.jy,0,99)?o.jy:0;                   // (7.5b) older saves: no jumps, the stage follows the score
+  tlLoad(o.tl);                                     // (7.5g) after the grid is back: an older save starts its timelapse here
   resetWorld(); transformCool=Math.max(0,o.transformCool|0);   // (resetWorld clears the cooldown)
   renderPips();
   bonusMeter=isInt(o.bonusMeter,0,1e4)?Math.min(o.bonusMeter,CFG.BONUS_METER):0; bonusTag=null;

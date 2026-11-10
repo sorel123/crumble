@@ -225,7 +225,7 @@ function openMenu(){
 }
 function closeMenu(){                              // back to wherever she came from: the game, or the card that was up (a won level, game over)
   el('menuCard').hidden=true;
-  if(state==='won') el('winCard').hidden=false; else if(state==='over') el('overCard').hidden=false;
+  if(state==='won') el('winCard').hidden=false; else if(state==='over'){ el('overCard').hidden=false; tlResume(); }
   if(!overlayOpen()) paused=false;
 }
 function playEndless(){
