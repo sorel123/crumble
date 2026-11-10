@@ -214,8 +214,8 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard'].some(id=>!el(id).hidden); }
-function pauseForMenu(){ if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); } }
+function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard','devPanel'].some(id=>!el(id).hidden); }
+function pauseForMenu(){ if(state==='play'){ paused=true; hapSelect('end'); drag=null; shake=0; hesVoid(); } }
 function hideMenus(){ el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
 function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
 function openMenu(){
@@ -281,6 +281,12 @@ function openPause(){
   el('pauseCard').hidden=false;
 }
 function closePause(){ pauseNewReset(); el('pauseCard').hidden=true; if(!overlayOpen()) paused=false; }
+addEventListener('keydown',e=>{                          // (C4) desktop: Escape or P opens and closes the pause card
+  if(e.ctrlKey||e.metaKey||e.altKey||e.repeat) return;
+  const k=e.key; if(k!=='Escape'&&k!=='p'&&k!=='P') return;
+  if(!el('pauseCard').hidden){ closePause(); return; }
+  if(state==='play'&&!overlayOpen()) openPause();
+});
 el('pauseBtn').onclick=e=>{ e.stopPropagation(); openPause(); };
 el('pauseResume').onclick=e=>{ e.stopPropagation(); closePause(); };
 el('pauseHome').onclick=e=>{ e.stopPropagation(); pauseNewReset(); el('pauseCard').hidden=true; saveRun(); openMenu(); };

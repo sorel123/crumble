@@ -47,6 +47,18 @@ function hapFire(t){
   try{ (NOTIFY[t]?h.notification({type:t}):h.impact({style:t}))?.catch?.(()=>{}); }catch(e){}
 }
 
+// (C1) The drag's slot tick: Haptics selection API (selectionStart .. selectionChanged .. selectionEnd), at most one per 40 ms.
+let hapSelOn=false, hapSelLast=0;
+function hapSelect(k){
+  if(!CFG.HAPTICS || !Native.on()) return;
+  const h=Native.plugin('Haptics'); if(!h) return;
+  try{
+    if(k==='start'){ if(!hapSelOn){ hapSelOn=true; h.selectionStart()?.catch?.(()=>{}); } }
+    else if(k==='end'){ if(hapSelOn){ hapSelOn=false; h.selectionEnd()?.catch?.(()=>{}); } }
+    else if(hapSelOn){ const now=performance.now(); if(now-hapSelLast<CFG.SLOT_TICK_MS) return; hapSelLast=now; h.selectionChanged()?.catch?.(()=>{}); }
+  }catch(e){}
+}
+
 /* ═══════ Game Center (plan 5.3): leaderboards and achievements, iPhone app only ═══════
    Quiet: no sign-in sheet. The only buttons are "🏆 Leaderboards" (1.1 F) on the game-over card (Endless and Daily)
    and in Settings' footer, and they show only in the app while signed in (gcButtons). If the phone is signed in to Game Center, scores and reached goals
