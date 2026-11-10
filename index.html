@@ -146,12 +146,13 @@
   #setList{flex:1 1 auto;min-height:0;width:min(380px,100%);overflow-y:auto;touch-action:pan-y;
            display:flex;flex-direction:column;align-items:center;gap:12px;padding:2px 4px 8px}
   .setgroup{align-self:stretch;text-align:left;font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-            margin-top:10px;padding-top:14px;border-top:1px solid var(--divider)}
+            margin-top:4px;padding-top:10px;border-top:1px solid var(--divider)}
   .setgroup:first-child{margin-top:0;padding-top:0;border-top:0}
   .section-lbl{align-self:flex-start;margin:-4px 0 -6px 2px}
   #setList .togpair{align-self:stretch;display:flex;gap:18px}
   #setList .togpair .tog{flex:1;gap:8px}
   #setList .tog{align-self:stretch;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:600;padding:4px 2px}
+  #setList .tog[hidden]{display:none}
   #setList input[type=checkbox]{width:24px;height:24px;accent-color:var(--gold)}
   .looks{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:min(300px,100%)}
   .look-btn{font-family:var(--font);font-size:12.5px;font-weight:600;color:var(--fg);background:var(--chip);
@@ -263,6 +264,8 @@
         <p class="lbl section-lbl">Theme</p>
         <div class="skins" id="themeGrid"></div>
         <label class="tog"><span>Journey sky: dawn to space as you score</span><input type="checkbox" id="journeyOn"></label>
+        <div class="togpair"><label class="tog"><span>Clear effect</span><select id="clearPick" aria-label="Clear effect"><option value="crumble">Crumble</option><option value="squash">Classic</option></select></label>
+        <label class="tog" id="glintTog"><span>Glints while dragging</span><input type="checkbox" id="glintOn"></label></div>
         <p class="lbl section-lbl">World</p>
         <div class="skins" id="worldGrid"></div>
         <p class="lbl section-lbl">Skin</p>

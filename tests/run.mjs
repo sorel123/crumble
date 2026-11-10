@@ -2421,6 +2421,65 @@ test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back wi
   assert.ok(lum(pale.top) > 140, 'a dark-ink theme gets a pale space so its text stays readable: ' + pale.top);
 });
 
+test('frame budget: a drag toward a completing line, with anticipation on where it exists, draws the steady sky as one cached blit', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.evaluate(() => { if ('FX_ANTICIPATION' in CFG) CFG.FX_ANTICIPATION = true; });
+  await setup(page, { rows: THREE_LINES, trayShapes: [4, 4, 4] });
+  await frames(page, 10);
+  await page.evaluate(() => {                                   // count the sky's own work: gradients made, full-screen blits
+    window.__sky = { grads: 0, full: 0, n: 0 };
+    const cg = ctx.createLinearGradient, di = ctx.drawImage, of = frame;
+    ctx.createLinearGradient = function () { __sky.grads++; return cg.apply(this, arguments); };
+    ctx.drawImage = function (img) { if (_plates.some(p => p.cv === img)) __sky.full++; return di.apply(this, arguments); };
+    frame = function (now) { of(now); __sky.n++; };
+  });
+  await watchFrames(page); await frameLog(page);
+  const g = await geometry(page), from = g.trayCenters[0];
+  const s = await page.evaluate(() => ({ rows: tray[0].s.rows, cols: tray[0].s.cols }));
+  await page.mouse.move(from.x, from.y); await page.mouse.down();
+  for (let k = 0; k < 40; k++) {                                // sweep toward and away from the landing that finishes three lines
+    const f = fingerFor(g, s, 3.5 * Math.abs(Math.sin(k / 8)), 0.5 * Math.sin(k / 5));
+    await page.mouse.move(f.x, f.y); await frames(page, 1);
+  }
+  const sky = await page.evaluate(() => __sky), work = (await frameLog(page)).work.sort((a, b) => a - b);
+  await page.mouse.up();
+  const p90 = work[Math.floor(work.length * 0.9)];
+  console.log(`     (drag: ${work.length} frames, p90 ${p90.toFixed(1)} ms, max ${work[work.length - 1].toFixed(1)} ms)`);
+  assert.ok(p90 < 12, 'drag frames stay cheap: p90 ' + p90.toFixed(1) + ' ms');
+  assert.ok(sky.n > 30 && sky.full - sky.n >= 0 && sky.full - sky.n <= 1, `one cached sky plate blit a frame, not a gradient plus a scaled decor layer (${sky.full} blits in ${sky.n} frames; the frame already queued when the counter went in is unwrapped)`);
+});
+
+test('Settings > Look: Clear effect (Crumble / Classic) and Glints while dragging save, and change mid-run', async ({ page }) => {
+  await play(page);
+  await page.click('#setBtn');
+  await page.click('#advLook summary');
+  assert.equal(await page.inputValue('#clearPick'), 'crumble', 'Crumble is the default');
+  await page.selectOption('#clearPick', 'squash');
+  assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'squash', 'Classic is the squash, at once');
+  const glint = await page.evaluate(() => 'FX_ANTICIPATION' in CFG);
+  assert.equal(await page.isVisible('#glintOn'), glint, 'the glint switch shows only when the game has the glints');
+  if (glint) { await page.uncheck('#glintOn'); assert.equal(await page.evaluate(() => CFG.FX_ANTICIPATION), false); }
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(SKIN_STORE)));
+  assert.equal(saved.clear, 'squash', 'saved with her other settings');
+  await page.click('#setDone');
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { window.__rub = 0; const of = frame; frame = function (now) { of(now); __rub = Math.max(__rub, rubble.length); }; });
+  await dragPiece(page, 0, 0, 0);
+  await frames(page, 30);
+  assert.equal(await page.evaluate(() => __rub), 0, 'the next clear is Classic: no rubble');
+  await page.evaluate(() => { CFG.CLEAR_STYLE = 'crumble'; });
+  await dealt(page);
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  await frames(page, 30);
+  assert.ok(await page.evaluate(() => __rub) > 0, 'and Crumble drops rubble (so the check above means something)');
+  await page.evaluate(() => { CFG.CLEAR_STYLE = 'squash'; saveSkinSave(); });
+  await page.reload();
+  await page.waitForFunction(() => typeof CFG !== 'undefined' && typeof cell !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => CFG.CLEAR_STYLE), 'squash', 'and it is still Classic after a reload');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
