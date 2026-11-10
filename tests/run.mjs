@@ -3257,7 +3257,10 @@ test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle
   await page.waitForTimeout(300);
   const pz = await rate(1000);
   assert.ok(pz <= 7, `the pause card: a few frames a second (${pz}/s)`);
-  await page.click('#pauseResume');
+  await page.click('#pauseHome'); await page.waitForFunction(() => hero.card === el('menuCard'));
+  const home = await rate(1000);
+  assert.ok(home > 22 && home < 38, `Home from a game (still paused underneath): the menu sky at 30 a second (${home}/s)`);
+  await page.click('#menuEndless'); await page.waitForFunction(() => state === 'play' && !paused && !hero.card);
   await page.evaluate(() => { CFG.FRAME_PACING = false; });
   await page.waitForTimeout(100);
   const off = await rate(500);

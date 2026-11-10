@@ -763,8 +763,8 @@ function fxBusy(){
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
   if(homeCard()!==hero.card) return 0;                 // the front menu opening or closing: at once (homeFrame sets up its card)
+  if(hero.card) return 33;                             // first: Home from a game keeps the game paused, the menu's sky still drifts
   if(paused) return 200;
-  if(hero.card) return 33;
   const sig=state+'|'+score+'|'+(tray[0]?1:0)+(tray[1]?1:0)+(tray[2]?1:0)+'|'+(bonus?1:0)+'|'+combo;
   if(sig!==paceSig){ paceSig=sig; lastInput=now; }     // something happened on its own (a deal, the run ending): full speed for a moment
   if(now-lastInput<CFG.FRAME_FULL_MS||fxBusy()) return 0;
