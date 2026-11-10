@@ -11,7 +11,7 @@ async function gameOver(){
   if(mode==='adventure'&&lvl) levelFailed();
   else if(mode==='daily') dailyOver();
   else {
-    best=Math.max(best,score); syncHud(); saveStats();
+    best=Math.max(best,score); syncHud(); saveStats(); gcSync();
     const newSkins=checkUnlocks();
     el('overScore').textContent=score;
     el('overMsg').textContent=(newSkins.length?'New skin unlocked: '+newSkins.join(', ')+'! ':'')
