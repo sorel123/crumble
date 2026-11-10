@@ -11,6 +11,16 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
 <title>Crumble</title>
+<meta name="description" content="Drag shapes, clear lines, chase clean sweeps.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Crumble">
+<meta property="og:description" content="Drag shapes, clear lines, chase clean sweeps.">
+<meta property="og:url" content="https://crumble.win/">
+<meta property="og:image" content="https://crumble.win/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://crumble.win/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
@@ -244,6 +254,8 @@
   .secondChance{display:flex;flex-direction:column;align-items:center;gap:8px}
   .secondChance[hidden]{display:none}
   .secondChance .sub{font-size:13px;opacity:.7}
+  .overRow{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .overRow:not(:has(button:not([hidden]))){display:none}
   .eyebrow{font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;opacity:.6}
   .big{font-size:clamp(56px,19vw,92px);font-weight:700;line-height:1;color:var(--gold);
        text-shadow:0 0 34px rgba(255,212,92,.4)}
@@ -440,6 +452,7 @@
     <p class="setnote" id="setNote">Saved as your default for every game.</p>
     <div class="devbtns">
       <button class="ghost" id="adminBtn" hidden>Admin</button>
+      <button class="ghost" id="gcSetBtn" type="button" hidden>🏆 Leaderboards</button>
       <button class="cta" id="setDone">Done</button>
     </div>
   </div>
@@ -509,7 +522,8 @@
       <button class="cta" id="reviveBtn">Second chance</button>
       <p class="sub" id="reviveNote">Clears space so you can keep this run. Once per game.</p>
     </div>
-    <button class="ghost" id="shareBtn" type="button" hidden>Share</button>
+    <div class="overRow"><button class="ghost" id="shareBtn" type="button" hidden>Share</button>
+    <button class="ghost" id="gcOverBtn" type="button" hidden>🏆 Leaderboards</button></div>
     <button class="ghost" id="againBtn">Play again</button>
     <button class="ghost" id="overMenuBtn">Home</button>
   </div>

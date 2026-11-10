@@ -60,7 +60,8 @@ function hapSelect(k){
 }
 
 /* ═══════ Game Center (plan 5.3): leaderboards and achievements, iPhone app only ═══════
-   Quiet: no sign-in sheet, no new buttons. If the phone is signed in to Game Center, scores and reached goals
+   Quiet: no sign-in sheet. The only buttons are "🏆 Leaderboards" (1.1 F) on the game-over card (Endless and Daily)
+   and in Settings' footer, and they show only in the app while signed in (gcButtons). If the phone is signed in to Game Center, scores and reached goals
    go up in the background and show in Apple's Games app; otherwise nothing happens. The ids below must match
    the ones made in App Store Connect (HANDOFF.md, "Game Center"). */
 const GC={
@@ -86,7 +87,15 @@ function gcSet(r){
   const on=!!r.signedIn;
   if(on && !GC.on){ GC.sent.clear(); GC.on=true; gcSync(); }   // newly signed in (maybe another player): send it all again
   else GC.on=on;
+  gcButtons();
 }
+// "🏆 Leaderboards" (1.1 F): opens Game Center's own dashboard over the game. Only while signed in, in the app.
+function gcButtons(){
+  const on=GC.on&&Native.on(), b=document.getElementById('gcOverBtn'), s=document.getElementById('gcSetBtn');
+  if(b) b.hidden=!(on&&(mode==='endless'||mode==='daily'));
+  if(s) s.hidden=!on;
+}
+function gcShow(){ if(GC.on) gcCall('show'); }
 function gcSync(){                                   // the Endless best and every goal reached so far; cheap, idempotent
   if(!GC.on) return;
   if(best>0) gcCall('submitScore',{id:GC.BEST,score:best});

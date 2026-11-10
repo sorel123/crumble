@@ -1885,12 +1885,31 @@ test('share card: Share hands the picture to the share sheet when the browser ca
   await page.evaluate(() => {
     window.__shared = null;
     navigator.canShare = () => true;
-    navigator.share = async d => { window.__shared = { name: d.files[0].name, type: d.files[0].type, size: d.files[0].size }; };
+    navigator.share = async d => { window.__shared = { name: d.files[0].name, type: d.files[0].type, size: d.files[0].size, text: d.text }; };
   });
   await page.click('#shareBtn');
   await page.waitForFunction(() => window.__shared);
   const s = await page.evaluate(() => window.__shared);
   assert.equal(s.name, 'crumble-score.png'); assert.equal(s.type, 'image/png'); assert.ok(s.size > 5000);
+  assert.equal(s.text, 'My Crumble score: 300. Can you beat it? https://crumble.win');
+});
+
+test('share card: footer invites with the site, and a Daily share text says the board is the same for everyone', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate(() => { mode = 'daily'; score = 250; const d = shareText(); mode = 'endless'; return [SHARE_FOOTER, d]; });
+  assert.equal(r[0], 'Can you beat it?  \u00B7  crumble.win');
+  assert.equal(r[1], "Today's Daily: 250. Same board for everyone: https://crumble.win");
+});
+
+test('link preview: Open Graph tags and a 1200x630 image are in the page', async ({ page }) => {
+  await play(page);
+  const m = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('meta[property^="og:"],meta[name="twitter:card"]')].map(e => [e.getAttribute('property') || e.name, e.content])));
+  assert.equal(m['og:title'], 'Crumble'); assert.equal(m['og:url'], 'https://crumble.win/');
+  assert.equal(m['og:description'], 'Drag shapes, clear lines, chase clean sweeps.');
+  assert.equal(m['twitter:card'], 'summary_large_image');
+  assert.equal(m['og:image'], 'https://crumble.win/og-image.png');
+  const png = fs.readFileSync(new URL('../og-image.png', import.meta.url));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1200, 630]);
 });
 
 test('share card: where the share sheet cannot take files, the picture is saved instead', async ({ page }) => {
@@ -3263,6 +3282,45 @@ test('haptics: silent no-op on the web, buzzes in the app (fake Capacitor), stro
   assert.ok(await page.evaluate(() => !CFG.HAPTICS && JSON.parse(localStorage.getItem('crumble.skins')).haptics === false), 'off, and saved');
   await page.evaluate(() => { Sfx.clear(1, 0, 1); Sfx.pickup(); });
   assert.deepEqual(await flush(), [], 'off: silent');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
+test('1.1 F Leaderboards: hidden on the web, shown in the app only while signed in to Game Center, opens the dashboard', async ({ page, errors }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { score = 420; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isHidden('#gcOverBtn'), true, 'web: no Leaderboards button on the game-over card');
+  await page.click('#againBtn'); await dealt(page);
+  await openSet(page);
+  assert.equal(await page.isHidden('#gcSetBtn'), true, 'web: none in Settings either');
+  await closeSet(page);
+  await page.evaluate(() => {                                       // the app, not signed in yet
+    window.__gc = [];
+    let fire = null;
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { GameCenter: {
+      signIn: () => Promise.resolve({ signedIn: false }), status: () => Promise.resolve({ signedIn: false }),
+      submitScore: () => Promise.resolve({ sent: true }), unlock: () => Promise.resolve({ sent: true }),
+      show: () => { __gc.push('show'); return Promise.resolve({ shown: true }); },
+      addListener: (n, f) => { fire = f; } } } };
+    window.__gcFire = r => fire(r);
+    gcStart();
+  });
+  await page.waitForTimeout(50);
+  await openSet(page);
+  assert.equal(await page.isHidden('#gcSetBtn'), true, 'app, signed out: hidden');
+  await page.evaluate(() => __gcFire({ signedIn: true }));          // signs in from iPhone Settings while running
+  assert.equal(await page.isVisible('#gcSetBtn'), true, 'signed in: Settings shows it');
+  await page.click('#gcSetBtn');
+  await closeSet(page);
+  await page.evaluate(() => { state = 'play'; score = 500; gameOver(); });
+  await page.waitForSelector('#overCard:not([hidden])');
+  assert.equal(await page.isVisible('#gcOverBtn'), true, 'Endless game over: shown');
+  await page.click('#gcOverBtn');
+  assert.deepEqual(await page.evaluate(() => __gc), ['show', 'show'], 'each button opens Game Center');
+  await page.evaluate(() => { state = 'play'; mode = 'adventure'; lvl = LEVELS[0]; lv = { lines: 0, pieces: 0, combo: 0, swept: false }; gameOver(); });
+  assert.equal(await page.isHidden('#gcOverBtn'), true, 'an Adventure level: no leaderboard to show');
+  await page.evaluate(() => { mode = 'endless'; __gcFire({ signedIn: false }); });
+  assert.equal(await page.evaluate(() => el('gcSetBtn').hidden && el('gcOverBtn').hidden), true, 'signed out again: both hidden');
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
 });
 
