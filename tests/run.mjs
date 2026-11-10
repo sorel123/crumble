@@ -2457,6 +2457,7 @@ test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, 
     waveAfterDrop(pre, 0, countFlat(packGrid(grid)), 0, false);
     o.setups = setups.map(u => [SETUP_RECTS[u.k].rows, SETUP_RECTS[u.k].cols, u.r, u.c]);
     const d0 = waveStats.dealt;
+    closerCool = 9;                                                                  // (1.1 A) this small board can be swept: keep the sweep chase out of a setups test
     CFG.SETUP_CHANCE = 1; tray = [null, null, null]; genTray();
     o.first = tray.some(t => t.s === hole) && setups.some(u => u.dealt);
     o.dealt = waveStats.dealt - d0;
@@ -2553,6 +2554,71 @@ test('7.3 the wave state is saved with the run and survives a resume', async ({ 
     delete snap.wave; restore(snap);                                           // an older save: a fresh wave
     return { ok, old: wave.n === 0 && setups.length === 0 && !closerNext }; })()`);
   assert.ok(r.ok, 'round trip'); assert.ok(r.old, 'older saves start a fresh wave');
+});
+
+test('1.1 A sweep hunt: finds sweeps that need a clear mid-way or no exact tiling; a small calm board off cooldown gets one, on cooldown it does not', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = {};
+    const sweeps = h => !!h && evalHand(packGrid(grid), h, 3000000).sweep;
+    // row 7 needs columns 0-2, row 6 needs 5-7, column 7 above them is filled: the 1x3 clears row 7, then a corner piece takes
+    // row 6 and column 7 together; no greedy cover tiles that exactly
+    B73(['00000001','00000001','00000001','00000001','00000001','00000001','11111000','00011111']);
+    const [lo, hi] = packBits(packGrid(grid));
+    o.hunt = sweeps(runSteps(sweepHuntSteps(lo, hi)));
+    o.gap = sweepGap(lo, hi) < 99;
+    B73(['10000001','00000000','00010000','00000000','01000000','00000100','00000000','10000001']);   // scattered: no cover of four lines
+    { const [l2, h2] = packBits(packGrid(grid)); o.scatter = runSteps(sweepHuntSteps(l2, h2)); o.scatterGap = sweepGap(l2, h2); }
+    // an ordinary tray on a small calm board, nothing due: the chase deals the sweep, with the shimmer
+    W73(); sweepCool = 0; B73(['00000000','00000000','00000000','00000000','00000000','00000000','00111111','11111000']); wave.n = 0; wave.at = 9; jack.at = 99; genTray();
+    o.tier = lastTier; o.glow = closerTray; o.sweeps = sweeps(tray.map(t => t.s)); o.cool = closerCool;
+    W73(); sweepCool = 0; B73(['00000000','00000000','00000000','00000000','00000000','00000000','00111111','11111000']); wave.at = 9; jack.at = 99; closerCool = 3; genTray();
+    o.coolTier = lastTier; o.coolGlow = closerTray;
+    return o; })()`);
+  assert.ok(r.hunt, 'the hunt finds the clear-then-sweep hand');
+  assert.ok(r.gap);
+  assert.equal(r.scatter, null); assert.equal(r.scatterGap, 99);
+  assert.equal(r.tier, 'CLOSER'); assert.ok(r.glow && r.sweeps && r.cool > 0, 'a real sweep hand, shimmering, then the cooldown');
+  assert.notEqual(r.coolTier, 'CLOSER'); assert.ok(!r.coolGlow, 'spaced by the cooldown');
+});
+
+test('1.1 A two-tray chase: a closer on a small board with no sweep gets a set-up hand that can leave one, the next tray hunts once, and it survives a resume', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    CFG.CHASE_TRIES = 8;                                                            // off by default (measured gain too small for its cost); the mechanism still works
+    const o = {}, rows = ['00000000','00000000','00000000','00000000','11110000','11111100','11000011','00000011'];
+    W73(); sweepCool = 0; B73(rows); const a = packGrid(grid);
+    { const [lo, hi] = packBits(a); o.none = runSteps(sweepHuntSteps(lo, hi)); }
+    let found = false;
+    for (let k = 0; k < 20 && !found; k++) { W73(); sweepCool = 0; chaseCool = 0; B73(rows); wave.at = 9; jack.at = 99; closerNext = true; rndSrc = mulberry(300 + k); genTray(); found = lastTier === 'SETUP'; }
+    rndSrc = null;
+    o.found = found; o.next = chaseNext;
+    const snap = JSON.parse(JSON.stringify(snapshot())); chaseNext = false; restore(snap); o.saved = chaseNext;
+    // the next tray is the chase's one try: a closer is due regardless of the closer's own trigger; then the chase is over
+    tray = [null, null, null]; genTray(); o.after = chaseNext; o.afterTier = lastTier;
+    return o; })()`);
+  assert.equal(r.none, null, 'this board has no three-piece sweep');
+  assert.ok(r.found, 'a set-up hand is dealt'); assert.ok(r.next && r.saved, 'the chase is remembered across a resume');
+  assert.ok(!r.after, 'one try only');
+});
+
+test('1.1 A sweep cue: "Sweep is on" shows only with a sweep hand in the tray, and goes (with the shimmer) once the pieces left cannot sweep', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = {}, vis = () => !el('sweepChip').hidden;
+    W73(); sweepCool = 0; B73(['00000000','00000000','00000000','00000000','00000000','00000000','00111111','11111000']); wave.at = 9; jack.at = 99; genTray(); syncActions();
+    o.tier = lastTier; o.on = vis();
+    // a drop that cannot be part of the sweep: the first piece far from the gap, somewhere it fits
+    const i = tray.findIndex(t => t); const s = tray[i].s;
+    let spot = null; for (let rr = 0; rr <= N - s.rows && !spot; rr++) for (let cc = 0; cc <= N - s.cols && !spot; cc++) if (canPlace(s, rr, cc, grid)) spot = [rr, cc];
+    place(i, spot[0], spot[1]); syncActions();
+    o.after = vis(); o.glow = closerTray;
+    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11100000']); closerCool = 9; genTray(); syncActions();
+    o.plain = vis(); o.plainTier = lastTier;
+    return o; })()`);
+  assert.equal(r.tier, 'CLOSER'); assert.ok(r.on, 'the pill shows with a sweep hand');
+  assert.ok(!r.after && !r.glow, 'a drop that spoils the sweep takes the pill and the shimmer away');
+  assert.ok(!r.plain, 'no pill on an ordinary tray (' + r.plainTier + ')');
 });
 
 test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, saved with the run; Adventure and the switch keep her world', async ({ page }) => {
