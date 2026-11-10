@@ -514,7 +514,7 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
   // (6.1) honest and edge hands get no help at all; a recovery hand is scored on the sequence, not on easy drops
   const guided = !puzzle && tier!=='honest' && tier!=='edge' && tier!=='recovery';
   const [blo,bhi]=packBits(a0);
-  const buildUp=tier==='honest'&&paced()&&CFG.BUILD_UP>0&&wave.n>=wave.at-1;   // (8.2) the tray before a payoff, or a payoff the board could not give yet
+  const buildUp=tier==='honest'&&paced()&&CFG.BUILD_UP>0&&trayNo>CFG.EARLY_TRAYS&&wave.n>=wave.at-1;   // (8.2) the tray before a payoff, or a payoff the board could not give yet (the opening trays keep their own light deal)
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<candidates;i++){
     const hand=makeHand(density);
