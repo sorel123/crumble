@@ -502,7 +502,7 @@ const Sfx={
    speaker, and the music (6.8) ignored it, so a "muted" game kept playing music. */
 function syncSoundBtns(){
   const m=el('mute'), n=el('musicBtn');
-  if(m){ m.textContent=muted?'🔇':'🔊'; m.classList.toggle('off',muted); m.setAttribute('aria-pressed',muted?'false':'true'); }
+  if(m){ m.classList.toggle('off',muted); m.setAttribute('aria-pressed',muted?'false':'true'); }
   if(n){ n.classList.toggle('off',!CFG.MUSIC); n.setAttribute('aria-pressed',CFG.MUSIC?'true':'false'); }
 }
 function setMuted(on,save=true){                     // the speaker button and Settings > Sound effects
