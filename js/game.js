@@ -316,16 +316,18 @@ function place(idx,r,c){
       Sfx.sweep();
       tension=0;
     }
-    if(CFG.FX_NARROW_ESCAPE&&wasTight&&!swept&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE){   // (6.3) a narrow escape: out of the edge or a recovery. Its own short flourish: a gold rim, two soft rings, one word
+    const escaped=wasTight&&!swept&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE;   // (6.3) out of the edge or a recovery
+    if(CFG.FX_NARROW_ESCAPE&&escaped){   // (6.3) a narrow escape: out of the edge or a recovery. Its own short flourish: a gold rim, two soft rings, one word
       stats.escapes=(stats.escapes|0)+1;
       if(!reduce){ borderFlash={t:-(maxDelay+4),col:'143,247,255'}; for(let k=0;k<2;k++) waves.push({x:bx+B/2,y:by+B/2,t:-(maxDelay+4)/14-k*0.2}); }
       pushBanner('PHEW!','that was close',"#8FF7FF",1.3);
       Sfx.phew(total,beat,combo);                      // (6.5) the clear's own sound plus one stronger accent; it outranks the plain clear raised above
     }
     if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
+    mascotClear(total,combo,swept,escaped);          // (7.5f) the crumb reacts, sized like the clear
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
   } else {
-    if(combo>=CFG.BIG_COMBO) fireSnuff();           // (7.5d) the streak is over: the flames go out in a puff
+    if(combo>=CFG.BIG_COMBO){ fireSnuff(); mascotAct('flat'); }   // (7.5d) the streak is over: the flames go out in a puff; (7.5f) the crumb gives it a flat stare
     combo=0;
     if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
   }

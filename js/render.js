@@ -365,6 +365,7 @@ function layout(){
   SPRITES.clear(); TILES.clear();
   buildCache();
   buildBoardBg();
+  mascotPlace();                               // (7.5f) the crumb sits on the frame's corner
   GEMS.forEach(g=>glowSprite(g.h));            // the board glow takes the cleared gem's colour: build those now, not mid-clear
 }
 addEventListener('resize',layout);

@@ -29,6 +29,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['FX_COMBO_SLAM','COMBO slam + fireworks (combo 3+)'],
   ['FX_COMBO_FIRE','Combo fire: burning rim, embers, snuff (7.5d)'],
   ['FX_CHASE','Chase your best: score bar + sky jump (7.5e)'],
+  ['FX_MASCOT','Mascot crumb (7.5f)'],
   ['SHOW_TENSION','Debug readout']
 ];
 // instant-trigger buttons for testing — each just calls triggerTransform(id)
