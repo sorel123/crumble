@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:2
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, quiet, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:2
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -41,7 +41,9 @@ function loadSkinSave(){
     if(typeof o.chase==='boolean') CFG.FX_CHASE=o.chase;              // Chase your best (7.5e)
     if(typeof o.mascot==='boolean') CFG.FX_MASCOT=o.mascot;           // the mascot crumb (7.5f)
     if(typeof o.tl==='boolean') CFG.FX_TIMELAPSE=o.tl;                // the game-over timelapse (7.5g)
+    if(typeof o.quiet==='boolean') quiet=o.quiet;                     // the speaker button's hush-everything
     if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
+    syncMuteBtn();
   }catch(e){}
 }
 // call whenever `best` changes; returns the names of any skins newly earned

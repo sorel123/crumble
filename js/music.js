@@ -84,7 +84,7 @@ function musicTick(){
   if(musicE.idx!==musicTrackNo&&!musicE.loading){ musicE.loading=true; musicPlay().finally(()=>{ if(musicE) musicE.loading=false; }); }   // also retries a failed fetch
 }
 function musicSync(){                                           // call whenever the switch, the tab or the context changes
-  const want=CFG.MUSIC&&actx&&!document.hidden;
+  const want=CFG.MUSIC&&!quiet&&actx&&!document.hidden;   // the speaker button's hush silences the music too
   if(!want){ if(musicE){ musicE.stop(); musicE=null; clearInterval(musicTimer); } return; }
   if(musicE){ musicE.setLevel(musicLevel()); return; }
   if(musicPickIdx()>=0) musicTrackNo=musicPickIdx();
@@ -98,8 +98,8 @@ function musicNewRun(){                                         // shuffling, a 
 }
 function musicSetPick(id){                                      // the Settings picker: 'shuffle', a track id, or 'off' (the switch)
   if(id==='off'){ CFG.MUSIC=false; }
-  else{ CFG.MUSIC_PICK=id; CFG.MUSIC=true; if(musicPickIdx()>=0) musicTrackNo=musicPickIdx(); }
-  musicSync();
+  else{ CFG.MUSIC_PICK=id; CFG.MUSIC=true; quiet=false; if(musicPickIdx()>=0) musicTrackNo=musicPickIdx(); }   // picking music lifts the hush
+  musicSync(); syncMuteBtn();
 }
 function musicDuck(p,secs){ if(musicE&&p>0) musicE.duck(musicDuckLevel(p),Math.min(2,secs)); }
 document.addEventListener('visibilitychange',musicSync);
