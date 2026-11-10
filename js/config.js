@@ -34,10 +34,12 @@ const CFG = {
   BUILD_BIAS:     0.3,   // building phase: the crowded-board small-piece bias is scaled by this, so big pieces keep coming
 
   // payoff waves, setups and closers (plan 7.3, Endless and Daily; see solver.js)
-  WAVE_MIN:       4,     // a payoff tray (big blocks, PAYOFF_LINES+ lines) is due every WAVE_MIN..WAVE_MAX trays
-  WAVE_MAX:       6,
-  PAYOFF_LINES:   2,     // a payoff hand must offer at least this many lines, or the tray is an ordinary one and the clock retries
+  WAVE_MIN:       3,     // a payoff tray is due every WAVE_MIN..WAVE_MAX trays (8.2: was 4..6)
+  WAVE_MAX:       5,
+  PAYOFF_LINES:   2,     // a payoff hand: a big block clearing this many lines in one drop (8.2: failing that, any piece that does)
   PAYOFF_TRIES:   12,    // candidate payoff hands looked at
+  BUILD_UP:       4,     // (8.2) the honest tray before a payoff favours a hand whose tidiest play leaves a gap a big block clears 2+ lines in (score per such block)
+  BUILD_TRIES:    6,     // ...and looks at this many candidate hands, not HONEST_TRIES
   BUILD_W:        1.6,   // weight on the squaring-off pieces (2x2, 2x3, 3x2, 1x3/3x1, 1x4/4x1) in ordinary trays
   SETUP_CHANCE:   0.75,   // per tray, odds an open setup's exact piece is dealt (one offer per setup)
   SETUP_TRAYS:    3,     // trays a setup stays open
@@ -46,7 +48,13 @@ const CFG = {
   CLOSER_COMBO:   3,     // ...so does reaching this combo (and getting out of an edge hold)
   CLOSER_TARGET:  20,    // most empty cells a closer's three pieces may fill
   CLOSER_COOL:    5,     // trays after a closer before the next
-  DRY_TRAYS:      6,     // trays with no clear that make a payoff tray due now (lines, never a sweep)
+  DRY_TRAYS:      4,     // trays with no clear that make a payoff tray due now (lines, never a sweep; 8.2: was 6)
+  JACKPOT_MIN:    8,     // (8.2) a jackpot hand, behind the scenes (no banner, no multiplier): all three pieces clear JACKPOT_LINES+
+  JACKPOT_MAX:    12,    //   lines in sequence (or a planned sweep), due every JACKPOT_MIN..MAX trays; it waits while the board is on the edge
+  JACKPOT_LINES:  3,
+  JACKPOT_DRY:    1,     //   each tray with no clear brings it this many trays sooner (a dry spell runs it forward)
+  JACKPOT_TRIES:  48,    //   candidate hands the jackpot search looks at
+  JACKPOT_EACH:   15,    //   score per piece of the hand that clears a line right now (so it pays drop by drop, not only to a planned order)
   BIG_FLOOR:      5,     // pieces of 4+ cells across any five trays, kept where they fit
   FX_CLOSER_GLOW: true,  // the shimmer behind a closer tray
 

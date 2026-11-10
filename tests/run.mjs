@@ -565,7 +565,7 @@ test('star gem: dealt only when a cross is worth it, with a cooldown, and never 
     CFG.ROOM_EDGE = 0;                                                     // the rest checks the star's own rules, away from the edge
     grid = empty(); out.empty = starBest(grid).n;
     diagBoard(); out.diag = starBest(grid).n; out.at = starAt(3, 3);
-    const deal = (setup) => { trayNo = 9; starForced = true; starCool = 0; specialEnd = -99; tray = [null, null, null]; setup && setup(); genTray(); return tray.some(t => t && t.s.star); };
+    const deal = (setup) => { trayNo = 9; starForced = true; starCool = 0; specialEnd = -99; resetWave(); tray = [null, null, null]; setup && setup(); genTray(); return tray.some(t => t && t.s.star); };   // (8.2) fresh payoff and jackpot clocks: a due one deals instead of a star
     grid = empty(); out.emptyDealt = deal();
     for (let i = 0; i < 5; i++) { grid = empty(); for (let k = 0; k < 6; k++) { grid[0][k] = { gi: 0, t: 1, f: 0, l: 0 }; grid[1][k] = { gi: 0, t: 1, f: 0, l: 0 }; } out.thin = (out.thin || starBest(grid).n); }
     diagBoard(); out.worth = deal();
@@ -2322,7 +2322,7 @@ test('music (7.4): the service worker keeps the loops in their own cache, which 
 
 // ---- payoff waves, setups and closers (plan 7.3) ----
 const B73 = `const B73 = rows => { grid = rows.map(r => [...r].map(ch => (ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null))); return packGrid(grid); };
-  const W73 = () => { wave = { n: 0, at: 5, due: false }; setups = []; closerNext = false; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; closerTray = false;
+  const W73 = () => { wave = { n: 0, at: 5, due: false }; jack = { n: 0, at: 10 }; setups = []; closerNext = false; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; closerTray = false;
     golden = null; goldenNext = false; bonus = null; transform = null; starForced = false; starCool = 9; specialEnd = -99; trayNo = 10; pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; tray = [null, null, null]; };`;
 
 test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, then never again for that setup', async ({ page }) => {
@@ -2979,6 +2979,47 @@ const tlPlace = async (page, r, c) => {                   // one drop of a singl
   await page.evaluate(() => { tray = [{ s: SHAPES[0], gi: 2 }, { s: SHAPES[0], gi: 3 }, { s: SHAPES[0], gi: 4 }]; });
   await dragPiece(page, 0, r, c);
 };
+
+test('8.2 jackpot hand: due on its own clock, three pieces worth 3+ lines, a dry tray runs it forward, and it survives a resume', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73(); const o = {};
+    const rows = ['00000000','00000000','00000000','00000000','11111100','11111100','11111100','11111100'];
+    const h = runSteps(jackpotSteps(B73(rows), 0.4));
+    o.jackLines = h ? evalHand(packGrid(grid), h, 6000).lines : 0;
+    o.emptyNone = runSteps(jackpotSteps(B73(Array(8).fill('00000000')), 0)) === null;    // nothing to clear: no jackpot, never a fake one
+    // dealt by its clock: due now, the tray is a JACKPOT and both clocks restart
+    W73(); B73(rows); trayNo = 20; specialEnd = -99; jack.at = 1; genTray();
+    o.tier = lastTier; o.jackN = jack.n; o.waveN = wave.n;
+    // a tray with no clear moves the jackpot clock 1 + JACKPOT_DRY, a tray with a clear 1
+    W73(); trayClear = false; waveTick(); o.dry = jack.n; W73(); trayClear = true; waveTick(); o.wet = jack.n;
+    // an edge tray is never a jackpot
+    W73(); jack.at = 1; o.edge = waveTier('edge', true);
+    // the clock is in the run save
+    jack = { n: 5, at: 9 }; const snap = JSON.parse(JSON.stringify(snapshot())); jack = { n: 0, at: 12 }; o.restored = restore(snap); o.saved = jack;
+    return o; })()`);
+  assert.ok(r.jackLines >= 3, 'the jackpot hand clears 3+ lines (' + r.jackLines + ')');
+  assert.ok(r.emptyNone, 'an empty board gets no jackpot');
+  assert.equal(r.tier, 'JACKPOT'); assert.equal(r.jackN, 0); assert.equal(r.waveN, 0, 'a jackpot is also the payoff');
+  assert.equal(r.dry, 2); assert.equal(r.wet, 1);
+  assert.equal(r.edge, null);
+  assert.ok(r.restored); assert.deepEqual(r.saved, { n: 5, at: 9 });
+});
+
+test('8.2 golden hand: one queued while a bonus is live waits for the gate instead of being rerolled away', async ({ page }) => {
+  await play(page);
+  await setup(page, { rows: EMPTY });
+  const r = await page.evaluate(() => {
+    const o = {};
+    goldenNext = true; goldenCool = 0; bonus = { left: 3, extra: 0 }; trayNo = 20; specialEnd = -99;
+    tray = [{ s: SHAPES[0], gi: 0 }, null, null];
+    place(0, 0, 0);                                  // the last piece of the tray, while the bonus runs: the tray-end roll used to drop the queued hand
+    o.kept = goldenNext; o.gate = specialOk();
+    return o;
+  });
+  assert.equal(r.kept, true, 'the queued golden hand is kept');
+  assert.equal(r.gate, false, 'it waits: the gate is shut while the bonus runs');
+});
 
 test('7.5g timelapse: every drop is recorded with the run, survives a reload, and long runs stay capped', async ({ page }) => {
   await play(page);

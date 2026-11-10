@@ -66,7 +66,7 @@ function evalHand(a0,shapes,budget){
     if(i===3){
       res.ok=true; if(acc>res.lines) res.lines=acc;
       const cl=base-pop32(lo)-pop32(hi); if(cl>res.cleared) res.cleared=cl;
-      const rg=roughBits(lo,hi); if(rg<res.rough) res.rough=rg;
+      const rg=roughBits(lo,hi); if(rg<res.rough){ res.rough=rg; res.flo=lo; res.fhi=hi; }   // (8.2) the tidiest board it can leave
       return;
     }
     const k=order[i], s=shapes[k];
@@ -355,9 +355,10 @@ const BUILD_SET=new Set(SETUP_RECTS.filter(s=>s.n>=3&&s.n<=6));                 
 const PAYOFF_SET=SHAPES.filter(s=>s.n>=4&&s.n===s.rows*s.cols);                             // big blocks: 2x2, 2x3, 3x2, 3x3, bars of 4 and 5
 const BIG_SHAPES=SHAPES.filter(s=>s.n>=4);
 const waveStats={setups:0,dealt:0,missed:0,closed:0,closerTries:0};   // setups made / setup pieces dealt, this session only (the bot sim reads them)
-let wave={n:0,at:5,due:false}, setups=[], closerNext=false, closerCool=0, dryN=0, bigHist=[], closerTray=false, trayClear=false;
+let wave={n:0,at:5,due:false}, jack={n:0,at:10}, setups=[], closerNext=false, closerCool=0, dryN=0, bigHist=[], closerTray=false, trayClear=false;
 const waveAt=()=>CFG.WAVE_MIN+((rnd()*(CFG.WAVE_MAX-CFG.WAVE_MIN+1))|0);
-function resetWave(){ wave={n:0,at:waveAt(),due:false}; setups=[]; closerNext=false; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
+const jackAt=()=>CFG.JACKPOT_MIN+((rnd()*(CFG.JACKPOT_MAX-CFG.JACKPOT_MIN+1))|0);
+function resetWave(){ wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
 /* every empty exact rectangle of SETUP_RECTS on the board whose filling completes a line, with at least SETUP_WALLED of
    the cells around it filled or wall. Returned as {k: index in SETUP_RECTS, r, c, lo, hi}. */
 function findHoles(lo,hi){
@@ -402,11 +403,12 @@ function waveAfterDrop(before,lines,gemsLeft,comboNow,wasTight){
     waveStats.setups++;
   }
 }
-/* the start of a deal: age setups, count the dry spell, and decide whether this tray is a closer or a payoff.
-   Returns 'closer' | 'payoff' | null. tier is the 6.1 tier; edge and recovery trays are never either. */
+/* the start of a deal: age setups, count the dry spell, and decide whether this tray is a closer, a jackpot or a payoff.
+   Returns 'closer' | 'jackpot' | 'payoff' | null. tier is the 6.1 tier; edge and recovery trays are never either. */
 function waveTick(){
   if(!paced()) return;
   setups=setups.filter(u=>{ if(++u.age<=CFG.SETUP_TRAYS) return true; if(!u.dealt) waveStats.missed++; return false; });
+  jack.n+=1+(trayClear?0:CFG.JACKPOT_DRY);              // (8.2) a dry tray runs the jackpot clock forward
   dryN=trayClear?0:dryN+1; trayClear=false;
   closerCool=Math.max(0,closerCool-1);
   wave.n++;
@@ -416,17 +418,45 @@ function waveTick(){
 function waveTier(tier,specialsFree){
   if(!paced()) return null;
   if(tier==='edge'||tier==='recovery') return null;
-  if(tier==='sweep'||tier==='jackpot'&&pace.ph==='relief'){ waveDone(); return null; }   // relief is the payoff
+  if(tier==='sweep'||tier==='jackpot'&&pace.ph==='relief'){ jackDone(); return null; }   // relief is the payoff (and the jackpot)
   if(closerNext&&closerCool<=0&&specialsFree){ closerNext=false; return 'closer'; }
+  if(jack.n>=jack.at) return 'jackpot';                 // (8.2) a behind-the-scenes jackpot; if the board has none it falls back to a payoff
   return wave.due?'payoff':null;
 }
 function waveDone(){ wave={n:0,at:waveAt(),due:false}; dryN=0; }
+function jackDone(){ jack={n:0,at:jackAt()}; waveDone(); }   // a jackpot (or a golden hand, or a sweep) is also the payoff
+// the most lines one drop of s completes on this board
+const bestDrop=(lo,hi,s)=>{ let best=0; for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(l>best) best=l; } return best; };
+/* (8.2) how many of the big blocks have a drop that completes 2+ lines on this board (0..PAYOFF_SET.length) */
+const payoffRoom=(lo,hi)=>lo===undefined?0:PAYOFF_SET.reduce((n,s)=>n+(bestDrop(lo,hi,s)>=2?1:0),0);
+/* (8.2) a jackpot hand: three pieces that together clear JACKPOT_LINES+ lines when played in the right order (or empty
+   the board), scored so it also pays drop by drop. The golden hand's jackpot search, without the gold: nothing on screen
+   says so, it just plays big. null if the board offers none this tray. */
+function* jackpotSteps(a0,density){
+  const [lo,hi]=packBits(a0), keys=SHAPES.filter(s=>!s.star&&bestDrop(lo,hi,s)>=2);   // pieces with a multi-line drop right now
+  let best=null, bestSc=-Infinity;
+  for(let i=0;i<CFG.JACKPOT_TRIES;i++){
+    const hand=makeHand(density);
+    if(keys.length&&rnd()<0.8) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];   // most tries carry one: the bam she can see
+    const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
+    if(ev.ok&&(ev.sweep||ev.lines>=CFG.JACKPOT_LINES)){
+      // played drop by drop it still pays: big single drops and obvious clears count, and the board it leaves stays tidy
+      const sc=(ev.sweep?60:0)+ev.lines*10+(ev.imm>=2?30:0)+ev.imm*12+ev.immPieces*CFG.JACKPOT_EACH+ev.obvPieces*8-CFG.TIDY*ev.rough;
+      if(sc>bestSc){ bestSc=sc; best=hand; }
+    }
+    yield;
+  }
+  return best;
+}
 /* a payoff hand: one big block that completes PAYOFF_LINES+ lines in a single drop (the bam), plus two ordinary pieces,
-   all three playable. Pays only what the board offers: null if no big block has such a drop. closeIn (a closer that
+   all three playable (8.2: if no big block has such a drop, any piece that has one). Pays only what the board offers: null if
+   no piece has such a drop, and the clock tries again next tray. closeIn (a closer that
    could not sweep): of those hands, the one that can clear the most gems, so the next closer has a smaller board. */
 function* payoffSteps(a0,density,closeIn=false){
+  const need=CFG.PAYOFF_LINES;
   const [lo,hi]=packBits(a0), keys=[];
-  for(const s of PAYOFF_SET){ let best=0; for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(l>best) best=l; } if(best>=CFG.PAYOFF_LINES) keys.push(s); }
+  for(const s of PAYOFF_SET) if(bestDrop(lo,hi,s)>=need) keys.push(s);
+  if(!keys.length) for(const s of SHAPES) if(!s.star&&bestDrop(lo,hi,s)>=need) keys.push(s);   // (8.2) no big block fits the gap: any piece that does (a corner piece or a dot where a row and a column cross)
   if(!keys.length) return null;
   let bestHand=null, bestSc=-Infinity;
   for(let i=0;i<CFG.PAYOFF_TRIES;i++){
@@ -484,6 +514,7 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
   // (6.1) honest and edge hands get no help at all; a recovery hand is scored on the sequence, not on easy drops
   const guided = !puzzle && tier!=='honest' && tier!=='edge' && tier!=='recovery';
   const [blo,bhi]=packBits(a0);
+  const buildUp=tier==='honest'&&paced()&&CFG.BUILD_UP>0&&wave.n>=wave.at-1;   // (8.2) the tray before a payoff, or a payoff the board could not give yet
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<candidates;i++){
     const hand=makeHand(density);
@@ -495,14 +526,14 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
       sc=fit===3?10:-200+fit;
     }
     else if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
-    else if(tier==='honest') sc=10-CFG.TIDY*ev.rough;   // any playable hand, prefer the tidiest of a few
+    else if(tier==='honest') sc=10-CFG.TIDY*ev.rough+(buildUp?CFG.BUILD_UP*payoffRoom(ev.flo,ev.fhi):0);   // any playable hand, prefer the tidiest of a few (8.2: before a payoff, one that leaves a multi-line gap)
     else if(tier==='recovery') sc=ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough+(ev.immPieces<=1?15:0)-(ev.obvPieces>1?15:0);   // the way out is a sequence she has to see
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
     if(ev.ok&&guided) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
     if(ev.ok&&guided) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
     if(tier==='edge'){ if(sc>0) break; }
-    else if(tier==='honest'){ if(bestEv&&bestEv.ok&&i>=CFG.HONEST_TRIES-1) break; }
+    else if(tier==='honest'){ if(bestEv&&bestEv.ok&&i>=(buildUp?CFG.BUILD_TRIES:CFG.HONEST_TRIES)-1) break; }
     else if(tier==='recovery'){ if(ev.ok && i>=7 && ev.lines>=want && ev.immPieces<=1) break; }
     else if(ev.ok && i>=7 && ev.lines>=want && ev.rough<=bestRough && (puzzle||!CFG.GUIDE||ev.obvPieces>0)) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
@@ -584,7 +615,7 @@ function* dealSteps(){
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
   const wantStar=!wt && tier!=='edge' && tier!=='recovery' && special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || rnd()<CFG.STAR_CHANCE);
 
-  if(goldenNext && special('golden') && specialOk()){ goldenNext=false; if(yield* genGoldenSteps(a0,density)){ waveDone(); waveDealt(tray.map(t=>t.s)); return; } }   // (4.5c) the shared special rules: trays 1-5, one live, never two in a row
+  if(goldenNext && special('golden') && specialOk()){ goldenNext=false; if(yield* genGoldenSteps(a0,density)){ jackDone(); waveDealt(tray.map(t=>t.s)); return; } }   // (4.5c) the shared special rules: trays 1-5, one live, never two in a row
 
   if(mode==='adventure'&&lvl&&lvl.goal.type==='sweep'){   // (4.1) a sweep level: a sweep is dealt whenever one can be built
     const h=yield* planSweepSteps(a0);
@@ -598,13 +629,19 @@ function* dealSteps(){
   if(wt==='closer'){                                    // (7.3) an earned closer: a planned sweep, the tray shimmers
     waveStats.closerTries++;
     const h=yield* closerSteps(a0);
-    if(h){ commitTray(h,'CLOSER'); specialEnd=trayNo; closerCool=CFG.CLOSER_COOL; sweepCool=CFG.SWEEP_COOLDOWN; waveDone(); waveDealt(h); return; }
+    if(h){ commitTray(h,'CLOSER'); specialEnd=trayNo; closerCool=CFG.CLOSER_COOL; sweepCool=CFG.SWEEP_COOLDOWN; jackDone(); waveDealt(h); return; }
     wave.due=true; wt='closein';                        // no sweep on this board yet: a payoff that clears the most it can
     if(countFlat(a0)<=CFG.CLOSER_GEMS) closerNext=true;   // a small board stays on the hook: the closer tries again next tray
+  }
+  if(wt==='jackpot'){                                   // (8.2) three pieces, 3+ lines; else the payoff below (the jackpot stays due)
+    const h=yield* jackpotSteps(a0,density);
+    if(h){ commitTray(h,'JACKPOT'); jackDone(); waveDealt(h); return; }
+    wt='payoff';
   }
   if(wt==='payoff'||wt==='closein'){                    // (7.3) a big block that clears PAYOFF_LINES+ at once, if the board offers one; else build and retry next tray
     const h=yield* payoffSteps(a0,density,wt==='closein');
     if(h){ commitTray(h,'PAYOFF'); waveDone(); waveDealt(h); return; }
+
   }
 
   let {hand}=yield* pickHandSteps(a0,paced()&&pace.ph==='building'?density*CFG.BUILD_BIAS:density,tier,wantStar);
