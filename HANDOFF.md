@@ -1259,3 +1259,20 @@ The start card (launch with no saved run) and the mode menu (Home after a game, 
 - Settings opened from the menu sits above it (`#setPanel` z-index 4), and Done keeps the game paused while the menu is still up.
 - Reduced motion: no drops, ripples, flips or sky travel.
 - Tests: the three "front menu (8.3)" scenarios.
+- Tests: the two "front menu (8.3)" scenarios.
+
+## crumble.win and App Store assets (release prep)
+
+- **Pages for the store listing:** `privacy/` and `support/` (styled by `site.css`) are plain pages for the App Store
+  Connect Privacy Policy URL and Support URL. They are not in the service worker's precache list, so they are not in the
+  app build. The service worker now sends page loads it has not cached to the network and falls back to the game only
+  when offline, so a visitor who has played can still open /privacy/.
+- **App Store link:** set `CFG.APP_STORE_ID` (digits, App Store Connect, App Information, Apple ID) and the start card in a
+  browser shows "Get Crumble for iPhone". It never shows inside the app.
+- **Custom domain:** GitHub Pages, Settings, Pages, Custom domain `crumble.win` (that commits a `CNAME` file). Set the DNS
+  first, or the github.io address redirects to a domain that does not resolve yet.
+- **Screenshots and preview video:** `tools/appstore/`. `record.mjs <seed> <drops> <outdir> <scale>` plays a seeded bot
+  game on a manual clock and saves every frame (443x960 CSS, scale 3 = 1329x2880) plus `log.json` (score, combo per
+  frame); seed 5 with 45 drops gives combo 6 and a clean sweep. `dailyshot.mjs` shoots the Daily calendar. `compose.mjs
+  spec.json outdir` adds captions at 1320x2868. The video is the frames through ffmpeg at 886x1920, 30 fps, with a CC0
+  music loop.

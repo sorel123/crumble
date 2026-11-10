@@ -1,0 +1,15 @@
+import { serve } from '../../tests/harness.mjs';
+import { chromium } from 'playwright';
+const srv = await serve();
+const b = await chromium.launch();
+const ctx = await b.newContext({ viewport: { width: 443, height: 960 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+const d = {}; const sc = [5120, 8340, 3960, 12780, 7410, 9950, 6230, 15420, 4480, 11060];
+for (let i = 1; i <= 9; i++) d[`2026-11-${String(i).padStart(2, '0')}`] = { s: sc[i], l: 20 + i * 3, n: 1 + (i % 3) };
+await page.addInitScript(dd => { if (!localStorage.getItem('crumble.daily')) localStorage.setItem('crumble.daily', JSON.stringify({ v: 1, d: dd })); }, d);
+await page.goto(srv.url);
+await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
+await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(2500);
+await page.click('#startDaily'); await page.waitForTimeout(1200);
+await page.screenshot({ path: process.argv[2] || 'daily.jpg', type: 'jpeg', quality: 95 });
+await b.close(); await srv.close();

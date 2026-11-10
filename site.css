@@ -1,0 +1,16 @@
+/* Styles for the crumble.win info pages (privacy, support). Not part of the game or the app build. */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap');
+:root{color-scheme:dark}
+html{background:#150B26}
+body{margin:0;min-height:100vh;background:radial-gradient(120% 70% at 50% 0%,#4a2470 0%,#2a1446 45%,#150B26 100%) fixed;
+  color:#f3ecff;font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:28px 22px 60px}
+h1,h2,h3{font-family:Fredoka,sans-serif;line-height:1.15}
+h1{font-size:40px;margin:22px 0 6px;color:#fff}
+h2{font-size:24px;margin:34px 0 6px;color:#ffd35c}
+h3{font-size:19px;margin:22px 0 2px;color:#fff}
+p{margin:8px 0}
+a{color:#7fe3ff}
+.back{font-family:Fredoka,sans-serif;font-weight:600;text-decoration:none;color:#ffd35c}
+.date{opacity:.7;font-size:15px}
+.foot{margin-top:40px;opacity:.8}
