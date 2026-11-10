@@ -54,7 +54,7 @@ function checkGoals(announce=true){
     if(goals.done.has(rungId(f,n))||f.val()<n) continue;
     goals.done.add(rungId(f,n)); any=true; top=f.text(n);
   }
-  if(any){ saveGoals(); if(announce&&top) pushBanner('GOAL REACHED',top,'#FFE9A8'); if(el('goalsCard')&&!el('goalsCard').hidden) renderGoals(); }
+  if(any){ saveGoals(); gcSync(); if(announce&&top) pushBanner('GOAL REACHED',top,'#FFE9A8'); if(el('goalsCard')&&!el('goalsCard').hidden) renderGoals(); }
 }
 
 /* ── the card ── */

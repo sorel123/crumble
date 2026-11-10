@@ -46,3 +46,29 @@ function hapFire(t){
   const h=Native.plugin('Haptics'); if(!h) return;
   try{ (NOTIFY[t]?h.notification({type:t}):h.impact({style:t}))?.catch?.(()=>{}); }catch(e){}
 }
+
+/* ═══════ Game Center (plan 5.3): leaderboards and achievements, iPhone app only ═══════
+   Quiet: no sign-in sheet, no new buttons. If the phone is signed in to Game Center, scores and reached goals
+   go up in the background and show in Apple's Games app; otherwise nothing happens. The ids below must match
+   the ones made in App Store Connect (HANDOFF.md, "Game Center"). */
+const GC={
+  BEST:'crumble.endless.best',            // classic leaderboard, all-time: the Endless best
+  DAILY:'crumble.daily',                  // recurring leaderboard, resets daily: today's Daily score
+  ach:id=>'crumble.goal.'+id.replace(':','.'),   // a goal rung "lines:25" -> achievement "crumble.goal.lines.25"
+  on:false, sent:new Set()
+};
+function gcCall(method,arg){
+  const p=Native.plugin('GameCenter'); if(!p) return Promise.resolve(null);
+  try{ return p[method](arg).catch(()=>null); }catch(e){ return Promise.resolve(null); }
+}
+function gcStart(){                                  // once at launch, from main.js
+  if(!Native.on()) return;
+  gcCall('signIn').then(r=>{ GC.on=!!(r&&r.signedIn); if(GC.on) gcSync(); });
+}
+function gcSync(){                                   // the Endless best and every goal reached so far; cheap, idempotent
+  if(!GC.on) return;
+  if(best>0) gcCall('submitScore',{id:GC.BEST,score:best});
+  const ids=[...goals.done].filter(id=>!GC.sent.has(id));
+  if(ids.length) gcCall('unlock',{ids:ids.map(GC.ach)}).then(r=>{ if(r&&r.sent) ids.forEach(id=>GC.sent.add(id)); });
+}
+function gcDaily(sc){ if(GC.on && sc>0) gcCall('submitScore',{id:GC.DAILY,score:sc}); }

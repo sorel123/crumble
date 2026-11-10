@@ -79,7 +79,7 @@ const dailyBest=()=>(daily.d[dk||dailyKey()]||{s:0}).s;
 const dailySeed=tag=>'crumble-daily-'+dk+'-'+tag;
 const fmtScore=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=10000?Math.round(n/1000)+'k':n>=1000?(n/1000).toFixed(1)+'k':String(n);
 function dailyOver(){                                // the game-over card, for a Daily
-  const r=recordDaily(dk,score,lv.lines,lv.rec); lv.rec=true;
+  const r=recordDaily(dk,score,lv.lines,lv.rec); lv.rec=true; gcDaily(score);
   el('overEye').textContent='Daily · '+new Date(dk+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
   el('overScore').textContent=score;
   el('overMsg').textContent=score>=r.s&&score>0?'Your best today!':'Best today: '+r.s+'. Same board, try again.';

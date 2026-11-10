@@ -484,21 +484,75 @@ force-close, so write on `visibilitychange` too, not only on placement.
 Rescues exist on the game-over card only. Add the mid-run version: dimmed
 until genuinely out of moves, then spends a rescue the same way.
 
-### 3. Capacitor / native iOS (only if the PWA proves it's worth it)
+### 3. The iPhone app (Capacitor, plan 5.1 to 5.3)
+
+The `ios/` folder is the Xcode project (Capacitor 8, Swift Package Manager, no CocoaPods). Bundle id
+`win.crumble.app`, iPhone only, portrait only. The web build stays the development build; the app wraps the
+same files.
 
 ```
-npm i @capacitor/core @capacitor/cli @capacitor/ios
-npx cap init
-# index.html + js/ -> www/
-npx cap add ios && npx cap open ios
+npm ci
+npm run build:www && npx cap sync ios     # after any change to js/ or index.html
+npx cap open ios                          # or xcodebuild -project ios/App/App.xcodeproj -scheme App ...
 ```
 
-Needs a Mac with Xcode. Free Apple ID allows 7-day sideloading to your own
-device; $99/yr Apple Developer only for TestFlight / the App Store.
+Native code of our own lives in `ios/App/App/GameCenter.swift`: `MainViewController` (Capacitor's bridge,
+registering our in-app plugins) and `GameCenterPlugin`. JS calls it through `js/native.js`.
 
-**If this is ever aimed at kids officially:** COPPA and Google Play Families
-policy mean contextual-only ads, certified networks, no behavioral targeting —
-which cuts ad revenue substantially. Decide that before building toward IAP.
+#### Game Center (plan 5.3)
+
+Quiet by design: no sign-in sheet at launch and no new buttons. If the phone is signed in to Game Center, the
+app sends the Endless best (after every Endless game and at launch), today's Daily score (after every Daily),
+and every goal rung reached (as achievements). People see them in Apple's Games app. If not signed in, nothing
+is sent and the game is unchanged.
+
+One-time setup in App Store Connect (needs Jay's account; ids must match `GC` in `js/native.js` exactly):
+
+1. Xcode: Signing & Capabilities, pick the team, add the **Game Center** capability (the entitlement file
+   `ios/App/App/App.entitlements` is already there).
+2. App Store Connect: create the app record for `win.crumble.app`, then Features, Game Center:
+   - Leaderboard **Classic**, id `crumble.endless.best`, "Best score", integer, high to low, keep best.
+   - Leaderboard **Recurring**, id `crumble.daily`, "Daily", starts today, duration 1 day, integer, high to
+     low, keep best.
+   - One achievement per goal rung (100 points total across them is fine; the ids are what matter):
+
+- `crumble.goal.lines.25`
+- `crumble.goal.lines.100`
+- `crumble.goal.lines.250`
+- `crumble.goal.lines.500`
+- `crumble.goal.lines.1000`
+- `crumble.goal.lines.2500`
+- `crumble.goal.games.3`
+- `crumble.goal.games.10`
+- `crumble.goal.games.25`
+- `crumble.goal.games.50`
+- `crumble.goal.games.100`
+- `crumble.goal.combo.3`
+- `crumble.goal.combo.4`
+- `crumble.goal.combo.5`
+- `crumble.goal.combo.6`
+- `crumble.goal.combo.8`
+- `crumble.goal.sweeps.1`
+- `crumble.goal.sweeps.3`
+- `crumble.goal.sweeps.10`
+- `crumble.goal.sweeps.25`
+- `crumble.goal.stars.10`
+- `crumble.goal.stars.30`
+- `crumble.goal.stars.60`
+- `crumble.goal.stars.90`
+- `crumble.goal.days.3`
+- `crumble.goal.days.7`
+- `crumble.goal.days.14`
+- `crumble.goal.days.30`
+- `crumble.goal.days.60`
+- `crumble.goal.bonus.1`
+- `crumble.goal.bonus.5`
+- `crumble.goal.bonus.15`
+
+Until those exist, the calls fail quietly (they are caught) and nothing shows.
+
+**If this is ever aimed at kids officially:** COPPA and Apple's Kids Category rules apply: no behavioural
+ad targeting, limited analytics.
 
 ### Release checklist (before anyone but her plays it)
 
