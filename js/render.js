@@ -355,7 +355,7 @@ function layout(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const cs=getComputedStyle(safeProbe);
   const insetT=parseFloat(cs.paddingTop)||0, insetB=parseFloat(cs.paddingBottom)||0;
-  const HUD=92+insetT, Hb=H-insetB; hudH=HUD; floorY=Hb-4;
+  const HUD=92+insetT, Hb=H-insetB; hudH=HUD;
   B=Math.min(W-26,Hb-HUD-190,520);
   cell=B/N; bx=(W-B)/2;
   by=HUD+Math.max(8,(Hb-HUD-B-cell*2.6-24)*0.34);

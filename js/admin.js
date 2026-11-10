@@ -109,6 +109,7 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['CLEAR_BLINK','Clear: blink frames',0,14,1],
   ['COLOR_GONE_BONUS','Colour-gone bonus (per colour)',0,200,10],
   ['CLEAR_STAGGER','Clear: pop spread (frames/cell)',0,3,0.1],
+  ['CRUMBLE_STAGGER','Crumble: crack wave (frames/cell)',0,3,0.05],
   ['BONUS_METER','Bonus: meter to fill',3,30,1],
   ['BONUS_COMBO_MAX','Bonus: most extra meter per combo',0,5,1],
   ['BONUS_TRAYS','Bonus: trays it lasts',1,3,1],

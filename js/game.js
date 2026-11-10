@@ -242,7 +242,10 @@ function place(idx,r,c){
       lastGi=g.gi; cleared++;
       // optional blink, then the collapse ripples outward from the placed piece
       const d=Math.hypot(rr+0.5-cr,cc+0.5-cc0);
-      const delay=s.star?starMs+d*(reduce?0:CFG.STAR_STAGGER):(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;   // a star's cross lights up from the star outward after its charge
+      const crumbleWave=CFG.CLEAR_STYLE==='crumble'&&!reduce;   // (7.5) a crumbling line breaks as a wave along itself, out from the piece
+      const delay=s.star?starMs+d*(reduce?0:CFG.STAR_STAGGER)
+        :crumbleWave?CFG.CLEAR_BLINK+Math.abs(horiz?cc+0.5-cc0:rr+0.5-cr)*CFG.CRUMBLE_STAGGER
+        :(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;   // a star's cross lights up from the star outward after its charge
       maxDelay=Math.max(maxDelay,delay);
       cellsGone.push([rr,cc,delay]);
       shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,big:!single,tier:single?1:loud?3:2,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
