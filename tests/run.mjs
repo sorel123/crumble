@@ -17,6 +17,33 @@ test('loads with no errors and shows the start card', async ({ page, errors }) =
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), [], 'no script errors (the blocked web font is expected)');
 });
 
+test('front menu (8.3): gem logo, crumb, travelling sky, no board or HUD behind it; Home after a game shows the same', async ({ page }) => {
+  const r = await page.evaluate(() => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => res({
+    tiles: [...document.querySelectorAll('#startCard .lt b')].map(b => b.textContent).join(''),
+    crumb: !!document.querySelector('#startCard #heroCrumb svg'), inGameCrumb: el('mascot').hidden,
+    homeUp: el('stage').classList.contains('homeUp'), hud: getComputedStyle(document.querySelector('.hud')).visibility,
+    how: el('startHow').hidden, fits: el('startSettings').getBoundingClientRect().bottom <= innerHeight,
+  })))));
+  assert.deepEqual(r, { tiles: 'CRUMBLE', crumb: true, inGameCrumb: true, homeUp: true, hud: 'hidden', how: false, fits: true });
+  const sky = await page.evaluate(() => new Promise(res => { hero.skyAt = performance.now() - SKY_HOLD - 1; setTimeout(() => res({ sky: hero.sky, wiping: !!hero.wipe }), 200); }));
+  assert.deepEqual(sky, { sky: 1, wiping: true }, 'the sky moves on to the next journey stage');
+  await play(page); await dealt(page);
+  assert.equal(await page.evaluate(() => el('stage').classList.contains('homeUp')), false, 'the HUD is back in a game');
+  await page.evaluate(() => { best = 4321; score = 0; gameOver(); });
+  await page.click('#overMenuBtn'); await page.waitForSelector('#menuCard:not([hidden])');
+  const m = await page.evaluate(() => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => res({
+    tiles: document.querySelectorAll('#menuCard .lt').length, stats: el('menuStats').textContent, back: el('menuClose').textContent,
+    fits: el('menuClose').getBoundingClientRect().bottom <= innerHeight })))));
+  assert.deepEqual(m, { tiles: 7, stats: '👑 Best 4,321', back: 'Back', fits: true });
+});
+test('front menu (8.3): Settings opened over the mode menu keeps the game paused when it closes', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.click('#modeTag'); await page.click('#menuSettings'); await page.click('#setDone');
+  assert.deepEqual(await page.evaluate(() => ({ paused, menu: !el('menuCard').hidden })), { paused: true, menu: true });
+  await page.click('#menuClose');
+  assert.equal(await page.evaluate(() => paused), false);
+});
+
 test('Play starts a run: the seeded opening board, three playable pieces', async ({ page }) => {
   await play(page);
   const s = await snap(page);
@@ -682,6 +709,8 @@ test('a 3-line clear: the next tray is dealt after the clear starts (frame times
 test('a deal runs in small slices, and pickups wait for it', async ({ page }) => {
   await play(page);
   await watchFrames(page);
+  await setup(page, { rows: THREE_LINES.map((r, i) => (i < 3 ? '00000000' : r)), trayShapes: [0, 1, 2] });
+  await page.evaluate(() => dealLater()); await dealt(page);    // a warm-up deal: the first one on a cold page runs unoptimised code
   await setup(page, { rows: THREE_LINES.map((r, i) => (i < 3 ? '00000000' : r)), trayShapes: [0, 1, 2] });
   await frameLog(page);
   const g = await geometry(page);

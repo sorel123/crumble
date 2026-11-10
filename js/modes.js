@@ -217,10 +217,10 @@ function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=nul
 function openMenu(){
   pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('goalsCard').hidden=true;
   const today=daily.d[dailyKey()], liveD=peekRun('daily');
-  el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'Same board for everyone, once a day';
-  el('menuAdvSub').textContent=advStars()?'★ '+advStars()+' of '+LEVELS.length*3+' · level '+nextLevel().id:'Goal levels, no timer';
+  el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'New board today';
+  el('menuAdvSub').textContent=advStars()?'Level '+nextLevel().id+' · ★ '+advStars():'Goal levels, no timer';
   el('menuGoalsSub').textContent=streakNow()?'🔥 '+streakNow()+(streakNow()===1?' day':' days')+' in a row':'Streak and unlocks';
-  el('menuBest').textContent=best?'Best '+best:'Play as long as you can';
+  el('menuBest').textContent='Play as long as you can';
   el('menuCard').hidden=false;
 }
 function closeMenu(){                              // back to wherever she came from: the game, or the card that was up (a won level, game over)

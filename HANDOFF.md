@@ -126,6 +126,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 | `js/draw.js` | `frame` and effects |
 | `js/flow.js` | `gameOver`, `rescue`, `start` |
 | `js/save.js` | `snapshot`/`restore`, run autosave, best + stats |
+| `js/home.js` | the front menu's showpiece: gem logo, crumb, travelling sky (8.3) |
 | `js/goals.js` | Goals card, unlock progress, play streak (4.2) |
 | `js/modes.js` | Adventure levels, goals, map, mode menu, saved progress (4.1) |
 | `js/ui.js` | persistence, unlocks, Settings |
@@ -198,6 +199,7 @@ Top to bottom:
 | (7.5e) | Chase your best: a bar under the score fills toward her best; passing it raises NEW BEST and jumps the journey sky a stage. See the 7.5e section |
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
 | (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
+| (8.3) | Front menu showpiece: the start card and the mode menu share one look (gem logo in her skin, the crumb, the journey sky travelling behind, a 2x2 of mode tiles). See the 8.3 section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1244,3 +1246,15 @@ The whole run in a few seconds on the game-over card. Code is `js/timelapse.js`;
 - **Switch.** `CFG.FX_TIMELAPSE`, Settings → Look → Advanced "Timelapse: replay your run on game over" (saved as `tl`), also in Admin. Off: nothing is recorded, no replay, no strip.
 - **Check on the phone:** play a run out; the small board should replay it while the buttons already work; tap it to jump to the end; Share should show the four-board strip.
 - Tests: the three "7.5g timelapse" scenarios.
+
+## Front menu showpiece (plan 8.3)
+
+The start card (launch with no saved run) and the mode menu (Home after a game, or the mode chip) share one look. Code is `js/home.js` and the `.home` / `.hero` / `.lt` / `button.tile` CSS in `index.html`.
+
+- **Gem logo.** CRUMBLE on two rows of tiles drawn from her skin's gem sprites (`gemBig`; Crum in colours, ble in gold), redrawn when the skin changes. The tiles drop in when a menu opens (Web Animations on `.lf`), then a ripple and glint run along them every 4.2 s (CSS on `.lt` and `.lf::after`). A tapped tile flips and plays a place sound.
+- **The crumb.** `#heroCrumb` reuses `MASCOT_SVG` and the mascot CSS (selectors are `:is(#mascot,#heroCrumb)`), stands on the M, blinks, looks toward touches, smirks when tapped. The in-game `#mascot` hides while a menu is up.
+- **The sky.** `homeFrame()` runs at the top of `frame()`: while a home card is up it paints the journey stages in turn (`SKY_HOLD` ms each, a top-down wipe between) and `frame()` returns early, so the board, tray and effects are not drawn. `#stage.homeUp` hides the HUD. The overlay has no backdrop blur, so the menu is cheaper to draw than the old card.
+- **Words.** `homeFill()` writes her best and streak chips and each tile's progress; the how-to line shows only before her first game.
+- Settings opened from the menu sits above it (`#setPanel` z-index 4), and Done keeps the game paused while the menu is still up.
+- Reduced motion: no drops, ripples, flips or sky travel.
+- Tests: the two "front menu (8.3)" scenarios.
