@@ -169,8 +169,6 @@ const CFG = {
   MUSIC_VOL:      .5,         // 0..1; the music is quiet at .5 on purpose
   SND_PICKUP_VOL: 1,
   SND_PLACE_VOL:  1,
-  ANTICIPATION_HUM: true,     // (7.5c) a soft tone that rises as she drags a piece toward a landing that completes a line (under Sound effects)
-  HUM_VOL:        1,          // (7.5c) its level; 1 is very quiet on purpose
   PHONE_SPEAKER:  false,      // synth sounds only: cut the bass a phone speaker can't play (it just distorts)
 
   // frame budget (plan 2.2): the phone should never show a frame over FRAME_BUDGET_MS during a clear

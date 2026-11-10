@@ -81,7 +81,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 - **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
 - **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
 - **Journey sky (7.5b, Endless and Daily)** — the sky travels with the score (dawn → space) and every clean sweep jumps a stage with a whole-sky wipe. On by default; Settings → Look → Advanced has the switch (off = her chosen world). See the 7.5b section at the end.
-- **Anticipation (7.5c)** — while she holds a piece, a line it could complete shivers and glints as she brings it near the landing, and a soft hum rises. See the 7.5c section at the end.
+- **Anticipation (7.5c)** — while she holds a piece, a line it could complete shivers and glints as she brings it near the landing. (It had a rising hum; Jay found it annoying and it was removed.) See the 7.5c section at the end.
 - **Combo fire (7.5d)** — from combo 3 the board rim burns (hotter each step), the held piece sheds embers and the tray glows; a drop that does not clear snuffs it in a puff of smoke. Settings → Look → Advanced "Combo fire". See the 7.5d section at the end.
 - **Chase your best (7.5e)** — in Endless a slim bar under the score fills toward her best, "N to beat" from 75%, a glow from 90%; passing it raises NEW BEST and jumps the journey sky a stage. Settings → Look → Advanced "Chase your best". See the 7.5e section at the end.
 - **Mascot crumb (7.5f)** — a cookie crumb on the board's top-left corner nods, hops or smirks on clears, sweats when the board is tight and faints on game over. Settings → Look → Advanced "Mascot". See the 7.5f section at the end.
@@ -189,7 +189,7 @@ Top to bottom:
 | (6.6) | Pressure on screen: one eased `scr` layer (sky wash, vignette, board rim, tray band, relief flash) driven by the room metric and phase in Endless/Daily. See the 6.6 section |
 | (7.3) | Payoff waves, setups and closers (Endless/Daily): a payoff tray every 4-6 trays, the exact piece for a hole she squared off, earned closers (planned sweep, tray shimmer), no three-small-piece trays. See the 7.3 section |
 | (7.5b) | Journey sky (Endless/Daily): the sky travels dawn, day, golden hour, night, aurora, space as the score climbs; a clean sweep jumps a stage; stage changes wipe down the whole sky. See the 7.5b section |
-| (7.5c) | Anticipation: a line the held piece can complete shivers and glints as the piece nears that landing, and a soft hum rises. See the 7.5c section |
+| (7.5c) | Anticipation: a line the held piece can complete shivers and glints as the piece nears that landing. See the 7.5c section |
 | (7.5d) | Combo fire: from combo 3 the rim burns hotter each step, the held piece sheds embers, the tray glows; a miss snuffs it in a puff. See the 7.5d section |
 | (7.5e) | Chase your best: a bar under the score fills toward her best; passing it raises NEW BEST and jumps the journey sky a stage. See the 7.5e section |
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
@@ -1087,14 +1087,14 @@ The background travels as the run goes: dawn, day, golden hour, night, aurora, s
 
 ## Anticipation (plan 7.5, third zazz idea)
 
-A line one piece from clearing comes alive as she brings the right piece to it. Code is the "(7.5c) anticipation" block in `js/draw.js` (`antList`, `stepAnticipation`, `antCell`) and `humSet` in `js/audio.js`. All modes.
+A line one piece from clearing comes alive as she brings the right piece to it. Code is the "(7.5c) anticipation" block in `js/draw.js` (`antList`, `stepAnticipation`, `antCell`).All modes.
 
 - **When.** Only while a piece is held, never at rest, so it is not a hint before she picks one up. On pickup, `antList` lists every legal landing of the held piece that completes a line (and which lines; star pieces skipped, they have their own cross preview). Each frame, a line's target is the closeness of the floating piece to the nearest landing that completes it: 0 at `ANTIC_REACH` (2.5) cells, smoothstep up to 1 on arrival. The wrong piece (one that cannot complete it anywhere) wakes nothing.
 - **Look (6.3: below a single clear).** The line's gems shiver (at most `ANTIC_SHIVER`, 1.2 px, a ~13 Hz wobble scaled by closeness) and a glint runs along the line about once a second, through `gem()`'s own flash value, so nothing is drawn over the board as a layer. Once the piece is seated in a completing slot the coloured line preview takes over: those lines stop shivering. Reduced motion: no shiver, no travelling glint, a steady soft brightening.
-- **Hum.** A held voice (sine + a soft triangle an octave up, a light tremolo) on the synth chain, so the phone-speaker filter reaches it; it fades in with closeness and glides G4 -> D5 (both on the game's pentatonic), holds at the top while seated in a completing slot, and stops the moment the piece lands, goes back or the drag is cancelled. Not an arbiter event (no ducking). Respects mute; never creates the audio context. Level `HUM_VOL` (1 is very quiet).
-- **Switches.** `CFG.FX_ANTICIPATION` is the whole cue (it is Settings → Look → Advanced "Glints while dragging", from #48, saved as `glint`); `CFG.ANTICIPATION_HUM` turns just the sound off (Admin). Admin sliders for reach, shiver and hum volume.
+- **No sound.** There was a rising hum; Jay found it very annoying (2026-11-10) and the code, the `ANTICIPATION_HUM` and `HUM_VOL` settings and their tests were removed. The cue is visual only.
+- **Switches.** `CFG.FX_ANTICIPATION` is the whole cue (it is Settings → Look → Advanced "Glints while dragging", from #48, saved as `glint`). Admin sliders for reach and shiver.
 - **Cost.** One pass over the board on pickup; per frame one distance per completing landing and a couple of `sin` per gem in a live line, no allocations. Measured in the test with five live rows: our JS per frame p90 0.4 ms.
-- **Check on the phone:** pick up a piece that finishes a nearly-full line and move it slowly toward the gap; the line should start to tremble about two cells out and the hum should rise. If the hum is too loud or too faint, `HUM_VOL`; if the shiver starts too early, lower `ANTIC_REACH`.
+- **Check on the phone:** pick up a piece that finishes a nearly-full line and move it slowly toward the gap; the line should start to tremble about two cells out. If the shiver starts too early, lower `ANTIC_REACH`.
 - Tests: the two "7.5c anticipation" scenarios.
 
 ## Combo fire (plan 7.5, fourth zazz idea)

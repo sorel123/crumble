@@ -49,14 +49,12 @@ const DEV_PREVIEWS=[['Clear',()=>Sfx.clear(1,0,1)],['Combo ×4',()=>Sfx.combo(4,
   ['Big praise',()=>Sfx.praise(4)],['Sweep',()=>Sfx.sweep(0)],['Golden',()=>Sfx.goldenWin()],
   ['Bonus start',()=>Sfx.bonusStart()],['Bonus ready',()=>Sfx.bonusReady()],['Bonus over',()=>Sfx.bonusEnd()],['Star dealt',()=>Sfx.starIn()],['Star blast',()=>Sfx.star(9)]];
 const DEV_SOUND_TOGGLES=[       // shown in the Sound section
-  ['PHONE_SPEAKER','Phone speaker mode (cut bass)'],
-  ['ANTICIPATION_HUM','Anticipation hum (7.5c)']
+  ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
 ];
 const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['MUSIC_VOL','Music volume',0,1,0.05],
   ['SND_PICKUP_VOL','Pickup volume',0,1.5,0.05],
   ['SND_PLACE_VOL','Place volume',0,1.5,0.05],
-  ['HUM_VOL','Anticipation hum volume',0,2,0.05],
   ['TRANSFORM_PLACEMENTS','Transform length (placements)',1,15,1],
   ['TRANSFORM_MULT','Transform score multiplier',1,4,0.1],
   ['TRANSFORM_COOLDOWN','Transform cooldown (trays)',0,15,1],
