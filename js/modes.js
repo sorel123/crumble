@@ -157,6 +157,11 @@ function chaseSync(){
   box.querySelector('.fill').style.transform='scaleX('+q+')';
   box.querySelector('.to').textContent=near?need+' to beat':'';
 }
+function hudFit(){                                 // (8.4) six- and seven-digit scores step down a size so the top bar fits
+  const sv=el('scoreVal'), n=sv.textContent.length;
+  sv.classList.toggle('long',n>=6); sv.classList.toggle('xlong',n>=7);
+  el('bestVal').classList.toggle('long',el('bestVal').textContent.length>=7);
+}
 function syncHud(){
   const adventure=mode==='adventure'&&lvl;
   let lbl='Best', val=best;
@@ -168,7 +173,7 @@ function syncHud(){
     else if(g.type==='score'){ lbl='Goal'; val=g.n; }
     else { lbl='Goal'; val='Empty it'; }
   }
-  el('bestLbl').textContent=lbl; el('bestVal').textContent=val;
+  el('bestLbl').textContent=lbl; el('bestVal').textContent=val; hudFit();
   chaseSync();
 }
 // place() calls this after every placement

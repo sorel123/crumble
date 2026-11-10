@@ -33,8 +33,11 @@
   .score{font-size:38px;font-weight:700;line-height:1;margin-top:1px;
          text-shadow:0 0 18px var(--glow);transform-origin:0 60%;transition:transform .13s cubic-bezier(.2,1.8,.4,1)}
   .score.bump{transform:scale(1.22)}
+  .score.long{font-size:32px;margin-top:4px}   /* (8.4) big scores shrink so the three buttons stay on screen */
+  .score.xlong{font-size:27px;margin-top:7px}
   .best{transition:transform .13s cubic-bezier(.2,1.8,.4,1)}
   .best.bump{transform:scale(1.3)}
+  .best.long{font-size:16px}
   #chase{display:flex;align-items:center;gap:6px;margin-top:6px;height:10px;transform-origin:0 50%}
   #chase .track{position:relative;width:76px;height:4px;border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--fg) 18%,transparent)}
   #chase .fill{position:absolute;inset:0;border-radius:2px;background:var(--best);transform-origin:0 50%;transform:scaleX(0);transition:transform .15s linear}
@@ -105,7 +108,7 @@
   @keyframes mDrip{0%{opacity:0;transform:none}20%{opacity:1}80%{opacity:1;transform:translateY(7px)}100%{opacity:0;transform:translateY(8px)}}
   @keyframes mFlick{0%{opacity:1;transform:none}100%{opacity:0;transform:translate(6px,-5px)}}
   @keyframes mRoll{0%{transform:none}30%{transform:translate(0,-1.8px)}55%{transform:translate(1.3px,-1.5px)}75%{transform:translate(-1.3px,-1.5px)}100%{transform:none}}
-  .right{text-align:right;display:flex;gap:10px;align-items:flex-start}
+  .right{text-align:right;display:flex;gap:8px;align-items:flex-start}
   #musicBtn{position:relative}
   #mute.off,#musicBtn.off{opacity:.55}
   #musicBtn.off::after{content:'';position:absolute;left:9px;right:9px;top:50%;height:2.5px;border-radius:2px;background:var(--fg);transform:rotate(-45deg)}
