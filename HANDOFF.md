@@ -1284,12 +1284,14 @@ The start card (launch with no saved run) and the mode menu (Home after a game, 
 `js/guide.js`. A brand-new player (Endless, `stats.games === 0` before this game is counted, no best, `crumble.guide` not
 set) opens on three hand-built boards instead of `seedOpening()`, then ordinary dealing.
 - **Lessons** (`GUIDE_LESSONS`, drawn as 8 strings: `X` gem, `a`/`b`/`c` the target gaps): 1 "Fill a row" (a row with a
-  3-wide gap; tray 1x3, 1x2, dot), 2 "Plan two moves" (two columns with a 4-tall gap; two squares, the first sets up the
-  second, which clears both; a dot), 3 "Empty the board!" (three rows, each with a gap for one piece; 1x4, square, 1x3:
-  every drop clears something, any order, the last sweeps; the tray shimmers like a closer). Lessons 1 and 2 keep a few
-  loose gems so their clears are not sweeps. Each line is a banner (`pushBanner`, slower). Between lessons
-  `dealLater()` waits `CFG.GUIDE_WAIT` (20) frames, the last board's leftovers crumble away (no points) and the next pops in.
-  After lesson 3: "You've got it!" and `seedOpening('light')` as tray 1, score kept.
+  3-wide gap; the tray holds only the 1x3), 2 "Plan two moves" (two columns with a 4-tall gap; two squares, the first
+  sets up the second, which clears both), 3 "Empty the board!" (three rows, each with a gap for one piece; 1x4, square,
+  1x3: every drop clears something, any order, the last sweeps; the tray shimmers like a closer). One board throughout
+  (Jay: nothing of hers may crumble away between lessons): a tray holds only the lesson's pieces, and the next lesson
+  only adds gems, popping in, around what is there (`guideFits`: none in its gaps). Lessons 1 and 2 add a few loose
+  gems so their clears are not sweeps; each lies in a row lesson 3 completes. Each line is a banner (`pushBanner`).
+  Between lessons `dealLater()` waits `CFG.GUIDE_WAIT` (20) frames. After lesson 3: "You've got it!" and
+  `seedOpening('light')` as tray 1, score kept.
 - **Off-script:** `dealSteps()` asks `guideDeal()` first. A lesson tray that ended without its lesson (no line, fewer
   than two lines, no sweep) ends the guide quietly: no line, the ordinary dealer deals from her board as tray 1.
 - **Hint:** after `CFG.GUIDE_HINT_MS` (6 s) with no pickup, the first open gap that a tray piece fits pulses as a ghost

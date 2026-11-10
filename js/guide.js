@@ -6,7 +6,10 @@
    score stays). No arrows, no forced moves: any legal move is allowed. The only help is a ghost pulse on the target
    cells after CFG.GUIDE_HINT_MS with no piece picked up. If a lesson's tray ends without its lesson (no row filled, no
    two lines, no sweep) the guide ends quietly and the ordinary dealer takes over from the board as it stands.
-     1  "Fill a row"      one row with a 3-wide gap; the tray holds the 1x3 that fills it and two small pieces
+   One board all the way through: a lesson's tray holds only the pieces the lesson needs, so nothing of hers is left
+   lying about, and the next lesson only adds gems (popping in) around the loose ones already there. The loose gems of
+   lessons 1 and 2 sit in the rows lesson 3 completes, so the sweep takes them too.
+     1  "Fill a row"      one row with a 3-wide gap; the tray holds only the 1x3 that fills it
      2  "Plan two moves"  two columns with a 2-wide double gap: the first square sets up the second, which clears both
      3  "Empty the board!" three rows, each with a gap for one piece; every drop clears something and the last one sweeps
    Specials stay off while it runs (trays 1-3 carry none anyway; transformations are held, and a golden hand, star or
@@ -14,9 +17,10 @@
    force-quit resumes mid-guide. `crumble.guide` = '1' once it has ended, completed or not, or once any game has ended:
    it is never shown again. Daily and Adventure never show it. */
 const GUIDE_STORE='crumble.guide';
-// boards: X = a gem (lessons 1 and 2 keep a few loose ones, so their clears are not sweeps); a, b, c = the target gaps (the hint pulses them, in that order), d = the lines they lie in (r|c)
+// boards: X = a gem (lessons 1 and 2 add a few loose ones, so their clears are not sweeps; each lies in a row lesson 3 completes);
+// a, b, c = the target gaps (the hint pulses them, in that order); dir = whether the gaps complete rows or columns. tray: null = an empty slot
 const GUIDE_LESSONS=[
-  {line:'Fill a row', tray:[1,3,0], dir:'r', won:g=>g.ln>=1, board:[
+  {line:'Fill a row', tray:[null,3,null], dir:'r', won:g=>g.ln>=1, board:[
     '........',
     '.X......',
     '........',
@@ -25,7 +29,7 @@ const GUIDE_LESSONS=[
     'XXaaaXXX',
     '........',
     '...X....']},
-  {line:'Plan two moves', tray:[9,0,9], dir:'c', won:g=>g.ln>=2, board:[
+  {line:'Plan two moves', tray:[9,null,9], dir:'c', won:g=>g.ln>=2, board:[
     '...XX...',
     'X..XX...',
     '...aa...',
@@ -56,20 +60,18 @@ let guideIdleT=0;        // when she last did something (the tray arrived, a pic
 function guideSeen(){ try{ return localStorage.getItem(GUIDE_STORE)==='1'; }catch(e){ return true; } }   // no storage: never (it would show every launch)
 function guideMark(){ try{ localStorage.setItem(GUIDE_STORE,'1'); }catch(e){} }
 const guideFresh=()=>CFG.GUIDE&&mode==='endless'&&stats.games===0&&!best&&!guideSeen();   // start() asks before it counts the game
-// lay lesson n: the last lesson's leftovers crumble away (no points), the new board pops in, its tray and its line
+// can lesson n be laid on this board? no gem already there may sit in one of its gaps
+const guideFits=n=>GUIDE_LESSONS[n-1].board.every((row,r)=>[...row].every((v,c)=>v==='X'||v==='.'||!grid[r][c]));
+// lay lesson n: the gems it needs pop in around what is already on the board, then its tray and its line
 function guideLay(n){
   const L=GUIDE_LESSONS[n-1], first=n===1;
-  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    const g=grid[r][c]; if(!g||first) continue;
-    const d=reduce?0:(r+c)*0.3;
-    shatters.push({r,c,gi:g.gi,horiz:true,star:false,big:false,tier:1,t:-d,t0:-d,ox:bx+B/2,oy:by+B/2});
-  }
-  grid=empty();
+  if(first) grid=empty();
   L.board.forEach((row,r)=>[...row].forEach((v,c)=>{
-    if(v==='X') grid[r][c]={gi:(rnd()*NCOLOR)|0,t:first||reduce?1:-0.2-(r+c)*0.04,f:0,l:0};   // t<0: the gem waits, then grows in
+    if(v==='X'&&!grid[r][c]) grid[r][c]={gi:(rnd()*NCOLOR)|0,t:first||reduce?1:-0.2-(r+c)*0.04,f:0,l:0};   // t<0: the gem waits, then grows in
   }));
   trayNo=n; guide={n,ln:0,sw:false,dn:0}; guideIdleT=performance.now();
-  commitTray(L.tray.map(i=>SHAPES[i]),'GUIDE');
+  commitTray(L.tray.filter(i=>i!=null).map(i=>SHAPES[i]),'GUIDE');
+  let k=0; tray=L.tray.map(i=>i==null?null:tray[k++]);   // the lesson's pieces in their own slots, the others empty
   hesVoid();                                         // a lesson is no hesitation sample
   closerTray=n===GUIDE_LESSONS.length;               // the sweep lesson's tray shimmers like a closer
   pushBanner(L.line,'',undefined,0.85);
@@ -89,7 +91,7 @@ const guideTouch=()=>{ guideIdleT=performance.now(); };   // a pickup
 function guideDeal(){
   const n=guide.n;
   if(!GUIDE_LESSONS[n-1].won(guide)){ guideEnd(); return false; }   // off-script: quietly, the ordinary dealer deals from this board
-  if(n<GUIDE_LESSONS.length){ guideLay(n+1); return true; }
+  if(n<GUIDE_LESSONS.length){ if(!guideFits(n+1)){ guideEnd(); return false; } guideLay(n+1); return true; }
   guideEnd();
   pushBanner("You've got it!",'','#8FF7FF',1);
   seedOpening('light');                              // an ordinary light opening, tray 1 (her score stays)
