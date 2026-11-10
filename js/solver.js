@@ -595,6 +595,7 @@ function starBest(g=grid){
 const starAt=(r,c,g=grid)=>g[r].reduce((a,v)=>a+(v?1:0),0)+g.reduce((a,row)=>a+(row[c]?1:0),0);   // gems a star dropped on (r,c) would clear
 function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
+  if(guide&&guideDeal()) return;                       // (1.1 D) the guided first game deals its own lessons
   trayNo++;
   if(mode==='daily') rndSrc=mulberry(hashStr(dailySeed(trayNo)));   // (4.1b) every tray of the Daily is dealt from the date's stream, so two phones see the same dice
   if(bonusDue()) startBonus();                         // (6.2) a full meter: this tray and the next two pay x2; dealing below is unchanged
@@ -658,9 +659,9 @@ function* dealSteps(){
    instead of emptying the board (no clean-sweep bonus on move one). About 1 in 8 keep the board bare, so a
    sweep is still possible sometimes, never always. */
 let openingKind='busy';   // plan 7.2: which kind of opening the last game was dealt (light, gift or busy)
-function seedOpening(){
+function seedOpening(force){                               // force: 'light' after the guided first game (1.1 D)
   const u=rnd();                                           // plan 7.2: a weighted roll, so most games open calm
-  let kind=u<CFG.OPENING_LIGHT?'light':u<CFG.OPENING_LIGHT+CFG.OPENING_GIFT?'gift':'busy';
+  let kind=force||(u<CFG.OPENING_LIGHT?'light':u<CFG.OPENING_LIGHT+CFG.OPENING_GIFT?'gift':'busy');
   if(kind==='light'){                                      // 3-8 loose gems, at most 3 to a row or column: nothing is near complete
     for(let attempt=0;attempt<200;attempt++){
       const g=empty(), nLoose=3+((rnd()*6)|0), rowN=new Array(N).fill(0), colN=new Array(N).fill(0);

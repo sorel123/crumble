@@ -116,10 +116,11 @@ function levelBoard(L){
   return empty();
 }
 // called by start(): the board a new run opens with
-function openBoard(){
+function openBoard(fresh){                          // fresh: a brand-new player's first game opens on the guide (1.1 D)
   lv={lines:0,pieces:0,combo:0,swept:false}; rndSrc=null;
   if(mode==='daily'){ dk=dailyKey(); rndSrc=mulberry(hashStr(dailySeed('open'))); seedOpening(); rndSrc=null; return; }
   if(mode==='adventure'&&lvl&&lvl.fill>0){ grid=levelBoard(lvl); trayNo=0; genTray(); }
+  else if(fresh) guideLay(1);
   else seedOpening();
   if(mode==='adventure'&&lvl) pushBanner('LEVEL '+lvl.id,goalText(lvl.goal));
 }

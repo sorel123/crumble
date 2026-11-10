@@ -4,7 +4,7 @@
 async function gameOver(){
   if(state!=='play') return;
   if(paused){ setTimeout(gameOver,300); return; }
-  state='over'; clearRun(); stuck=false; syncActions();
+  state='over'; clearRun(); stuck=false; syncActions(); guideMark();   // (1.1 D) once any game has ended, the guide never shows
   const prevBest=best;
   stats.totalScore+=score;
   el('overEye').textContent='Endless'; el('overTitle').textContent='Out of moves'; el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Home';
@@ -48,15 +48,16 @@ function clearRunFx(){
   bonus=null; bonusTag=null; clearTimeout(bonusTagT);
   tags=[]; slams=[]; bands=[]; borderFlash=null;
   confetti=[]; goldenCele=null; goldRain=[]; goldenArrive=999; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
-  fireReset(); chaseKey='';                         // (7.5e) a new or restored run's marker appears without the pop
+  fireReset(); chaseKey=''; guide=null;                         // (7.5e) a new or restored run's marker appears without the pop
 }
 function start(){
+  const fresh=guideFresh();                         // (1.1 D) asked before this game is counted
   layout();
   grid=empty(); score=0; combo=0; rescuesUsed=0; pace={ph:'calm',n:0,hold:0,len:0}; roomNow=1; resetPressure(false); tension=0; sweepCool=0; trayNo=0; carry=[]; bonusMeter=0; specialEnd=-99; resetWave();
   clearRunFx(); stats.games++; musicNewRun();
   jJumps=0; resetWorld();                           // (7.5b) the journey starts at dawn
   chaseBest=mode==='endless'?best:0;                // (7.5e) the best this run chases
   shownScore=0; el('scoreVal').textContent='0';
-  stuck=false; cancelDeal(); openBoard(); tlReset(); syncHud(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
+  stuck=false; cancelDeal(); openBoard(fresh); tlReset(); syncHud(); el('startCard').hidden=true; el('overCard').hidden=true; state='play';
   syncActions(); saveRun();
 }
