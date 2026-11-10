@@ -2395,6 +2395,95 @@ test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back wi
   assert.ok(lum(pale.top) > 140, 'a dark-ink theme gets a pale space so its text stays readable: ' + pale.top);
 });
 
+// (7.5c) hold tray piece `i` with its top-left floating at fractional board cell (r, c): real pointer events, finger stays down
+const holdAt = async (page, i, r, c) => {
+  const g = await geometry(page);
+  const s = await page.evaluate(i => ({ rows: tray[i].s.rows, cols: tray[i].s.cols }), i);
+  const f = fingerFor(g, s, r, c);
+  if (!(await page.evaluate(() => !!drag))) { const from = g.trayCenters[i]; await page.mouse.move(from.x, from.y); await page.mouse.down(); }
+  await page.mouse.move(f.x, f.y, { steps: 3 });
+  await frames(page, 30);
+};
+const antRead = page => page.evaluate(() => { antCell(0, 4, performance.now()); return { row0: antV[0], others: Math.max(...antV.slice(1)), any: antAny, hum: antHum, ax: _ax, ay: _ay, af: _af, n: antN }; });
+
+test('7.5c anticipation: a line one piece from clearing shivers and glints as the right piece nears it, and the hum rises', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { window.__hum = []; const h = humSet; humSet = k => { __hum.push(k); h(k); }; });
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 1, 0] });
+  await frames(page, 5);
+  assert.equal((await antRead(page)).any, false, 'at rest nothing moves: it is not a hint before she picks a piece up');
+  await holdAt(page, 0, 6, 6);
+  let a = await antRead(page);
+  assert.equal(a.n, 1, 'the single cell completes row 0 from exactly one landing');
+  assert.ok(a.row0 < 0.01 && a.hum < 0.01, 'far from it: nothing yet ' + JSON.stringify(a));
+  await holdAt(page, 0, 1.6, 1.2);
+  const near = await antRead(page);
+  assert.ok(near.row0 > 0.05 && near.others === 0, 'within reach the row comes alive, and only that row: ' + JSON.stringify(near));
+  assert.ok(Math.hypot(near.ax, near.ay) > 0 && near.af > 0, 'its gems shiver and glint');
+  assert.ok(Math.hypot(near.ax, near.ay) <= 1.2 + 1e-6, 'by at most ANTIC_SHIVER px');
+  await holdAt(page, 0, 0.9, 0.5);
+  const nearer = await antRead(page);
+  assert.ok(nearer.row0 > near.row0 && nearer.hum > near.hum, `closer = stronger (${near.row0.toFixed(2)} -> ${nearer.row0.toFixed(2)}, hum ${near.hum.toFixed(2)} -> ${nearer.hum.toFixed(2)})`);
+  await holdAt(page, 0, 0, 0);
+  const seated = await antRead(page);
+  assert.ok(await page.evaluate(() => drag.slot && drag.slot.r === 0 && drag.slot.c === 0), 'seated in the completing slot');
+  assert.ok(seated.row0 < 0.01, 'seated: the coloured line preview owns the row, so it stops shivering');
+  assert.ok(seated.hum > 0.9, 'and the hum holds at its top: ' + seated.hum);
+  await page.mouse.up();
+  await frames(page, 3);
+  const after = await page.evaluate(() => ({ hum: antHum, last: __hum[__hum.length - 1], row: grid[0].every(Boolean) }));
+  assert.equal(after.row, false, 'the row cleared');
+  assert.equal(after.hum, 0, 'the hum stops the moment the piece lands');
+  assert.equal(after.last, 0, 'and the voice is told so');
+  assert.ok((await page.evaluate(() => __hum)).some(k => k > 0.5), 'the hum was driven up while she held it');
+  // the wrong piece: a domino cannot complete row 0 (the gap is one cell), so nothing happens near it
+  await dealt(page);
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [1, 1, 1] });
+  await holdAt(page, 0, 0.5, 0.5);
+  const wrong = await antRead(page);
+  assert.ok(wrong.n === 0 && !wrong.any && wrong.hum === 0, 'the wrong piece wakes nothing: ' + JSON.stringify(wrong));
+  await page.mouse.up();
+  // switches: visuals off keep the hum; hum off keeps the visuals
+  await dealt(page);
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { CFG.FX_ANTICIPATION = false; });
+  await holdAt(page, 0, 0.8, 0.4);
+  const off = await antRead(page);
+  assert.ok(!off.any && off.hum > 0.2, 'FX_ANTICIPATION off: no shiver, the hum still rises');
+  await page.mouse.up();
+  await page.evaluate(() => { CFG.FX_ANTICIPATION = true; });
+});
+
+test('7.5c anticipation: reduced motion keeps a steady glow and no shiver; holding near several lines fits the frame budget', async ({ page, errors }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
+  if (await page.evaluate(() => state) !== 'play') await play(page);   // a saved run reopens straight into play
+  await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
+  await holdAt(page, 0, 0.8, 0.4);
+  const a = await antRead(page);
+  assert.ok(a.row0 > 0.2 && a.ax === 0 && a.ay === 0 && a.af > 0, 'reduced motion: the row brightens but does not move ' + JSON.stringify(a));
+  await page.mouse.up();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
+  if (await page.evaluate(() => state) !== 'play') await play(page);   // a saved run reopens straight into play
+  // a 5-bar near five half-columns-short rows: many landings, five live lines at once
+  await setup(page, { rows: ['01111111', '01111111', '01111111', '01111111', '01111111', '11110000', '00000000', '00000000'], trayShapes: [8, 0, 0] });
+  await watchFrames(page);
+  await frameLog(page);
+  await holdAt(page, 0, 1.3, 1.2);
+  await frames(page, 60);
+  const live = await page.evaluate(() => [...antV].filter(v => v > 0.01).length);
+  assert.ok(live >= 5, 'five rows come alive together: ' + live);
+  const work = (await frameLog(page)).work.sort((x, y) => x - y);
+  const p90 = work[Math.floor(work.length * 0.9)];
+  console.log(`     (anticipation: ${work.length} frames, p90 ${p90.toFixed(2)} ms, max ${work[work.length - 1].toFixed(2)} ms)`);
+  assert.ok(p90 < 12, 'held frames stay cheap: p90 ' + p90.toFixed(2) + ' ms');
+  await page.mouse.up();
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

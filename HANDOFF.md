@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-10, after the journey sky (plan PR 7.5, second zazz idea).
+Last updated 2026-11-10, after anticipation (plan PR 7.5, third zazz idea).
 
 ---
 
@@ -81,6 +81,7 @@ Last updated 2026-11-10, after the journey sky (plan PR 7.5, second zazz idea).
 - **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
 - **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
 - **Journey sky (7.5b, Endless and Daily)** — the sky travels with the score (dawn → space) and every clean sweep jumps a stage with a whole-sky wipe. On by default; Settings → Look → Advanced has the switch (off = her chosen world). See the 7.5b section at the end.
+- **Anticipation (7.5c)** — while she holds a piece, a line it could complete shivers and glints as she brings it near the landing, and a soft hum rises. See the 7.5c section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
@@ -185,6 +186,7 @@ Top to bottom:
 | (6.6) | Pressure on screen: one eased `scr` layer (sky wash, vignette, board rim, tray band, relief flash) driven by the room metric and phase in Endless/Daily. See the 6.6 section |
 | (7.3) | Payoff waves, setups and closers (Endless/Daily): a payoff tray every 4-6 trays, the exact piece for a hole she squared off, earned closers (planned sweep, tray shimmer), no three-small-piece trays. See the 7.3 section |
 | (7.5b) | Journey sky (Endless/Daily): the sky travels dawn, day, golden hour, night, aurora, space as the score climbs; a clean sweep jumps a stage; stage changes wipe down the whole sky. See the 7.5b section |
+| (7.5c) | Anticipation: a line the held piece can complete shivers and glints as the piece nears that landing, and a soft hum rises. See the 7.5c section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1042,3 +1044,14 @@ The background travels as the run goes: dawn, day, golden hour, night, aurora, s
 - **Check on the phone:** play an Endless game past 500 (day) and 1500 (golden hour), and watch a clean sweep jump a stage. If a stage is too bright behind white text, darken its `top` in `JOURNEY`; if the stages come too slowly or fast, change `JOURNEY_AT`.
 - Tests: the two "journey sky (7.5b)" scenarios.
 
+## Anticipation (plan 7.5, third zazz idea)
+
+A line one piece from clearing comes alive as she brings the right piece to it. Code is the "(7.5c) anticipation" block in `js/draw.js` (`antList`, `stepAnticipation`, `antCell`) and `humSet` in `js/audio.js`. All modes.
+
+- **When.** Only while a piece is held, never at rest, so it is not a hint before she picks one up. On pickup, `antList` lists every legal landing of the held piece that completes a line (and which lines; star pieces skipped, they have their own cross preview). Each frame, a line's target is the closeness of the floating piece to the nearest landing that completes it: 0 at `ANTIC_REACH` (2.5) cells, smoothstep up to 1 on arrival. The wrong piece (one that cannot complete it anywhere) wakes nothing.
+- **Look (6.3: below a single clear).** The line's gems shiver (at most `ANTIC_SHIVER`, 1.2 px, a ~13 Hz wobble scaled by closeness) and a glint runs along the line about once a second, through `gem()`'s own flash value, so nothing is drawn over the board as a layer. Once the piece is seated in a completing slot the coloured line preview takes over: those lines stop shivering. Reduced motion: no shiver, no travelling glint, a steady soft brightening.
+- **Hum.** A held voice (sine + a soft triangle an octave up, a light tremolo) on the synth chain, so the phone-speaker filter reaches it; it fades in with closeness and glides G4 -> D5 (both on the game's pentatonic), holds at the top while seated in a completing slot, and stops the moment the piece lands, goes back or the drag is cancelled. Not an arbiter event (no ducking). Respects mute; never creates the audio context. Level `HUM_VOL` (1 is very quiet).
+- **Switches.** `CFG.FX_ANTICIPATION` (visuals) and `CFG.ANTICIPATION_HUM` (sound), each an Admin toggle; Admin sliders for reach, shiver and hum volume.
+- **Cost.** One pass over the board on pickup; per frame one distance per completing landing and a couple of `sin` per gem in a live line, no allocations. Measured in the test with five live rows: our JS per frame p90 0.4 ms.
+- **Check on the phone:** pick up a piece that finishes a nearly-full line and move it slowly toward the gap; the line should start to tremble about two cells out and the hum should rise. If the hum is too loud or too faint, `HUM_VOL`; if the shiver starts too early, lower `ANTIC_REACH`.
+- Tests: the two "7.5c anticipation" scenarios.

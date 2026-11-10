@@ -513,6 +513,71 @@ function drawWipe(dt,aboost){                          // the new sky comes down
   if(u>=1){ jw=null; ambientOld=[]; bgFrom=curWorld; bgT=1; }
 }
 
+/* (7.5c) Anticipation. While she holds a piece, every line it could complete somewhere on the board is "live"; as the
+   floating piece comes within CFG.ANTIC_REACH cells of a landing that completes it, that line's gems shiver (at most
+   CFG.ANTIC_SHIVER px) and a glint runs along it through gem()'s own flash, and the hum (audio.js, humSet) rises. Nothing is
+   drawn over the board as a layer of its own (6.3: a pre-placement cue sits below a single clear). Once the piece is seated
+   in a completing slot the coloured line preview takes over: those lines stop shivering and the hum holds at its top.
+   Only while a piece is held, never at rest, so it is not a hint before she picks one up. The completing landings are
+   listed once per pickup (antList); each frame is one distance per landing plus a sin or two per gem in a live line.
+   Reduced motion: no shiver and no travelling glint, a steady soft brightening. */
+const antV=new Float32Array(2*N), antT=new Float32Array(2*N);   // per line (rows 0..N-1, then columns): eased value, this frame's target
+const antR=new Int8Array(N*N), antC=new Int8Array(N*N), antM=new Int32Array(N*N);   // completing landings: top-left and a bitmask of the lines
+let antN=0, antKey=null, antAny=false, antHum=0;
+function antList(s){                                   // every legal landing of `s` that completes a line, with the lines it completes
+  antN=0;
+  if(s.star) return;                                   // the star has its own cross preview
+  const rowN=new Int8Array(N), colN=new Int8Array(N);
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]){ rowN[r]++; colN[c]++; }
+  const addR=new Int8Array(N), addC=new Int8Array(N);
+  for(let r=0;r<=N-s.rows;r++) for(let c=0;c<=N-s.cols;c++){
+    if(!canPlace(s,r,c,grid)) continue;
+    addR.fill(0); addC.fill(0);
+    for(const [dr,dc] of s.cells){ addR[r+dr]++; addC[c+dc]++; }
+    let m=0;
+    for(let q=0;q<N;q++){ if(addR[q]&&rowN[q]+addR[q]===N) m|=1<<q; if(addC[q]&&colN[q]+addC[q]===N) m|=1<<(N+q); }
+    if(m){ antR[antN]=r; antC[antN]=c; antM[antN]=m; antN++; }
+  }
+}
+function stepAnticipation(dt){
+  antT.fill(0); let humT=0;
+  const t=drag&&tray[drag.i];
+  if(t&&state==='play'&&!paused&&(CFG.FX_ANTICIPATION||CFG.ANTICIPATION_HUM)){
+    if(antKey!==t){ antKey=t; antList(t.s); }           // a new pickup (the tray entry object is new per piece)
+    if(antN){
+      const s=t.s, f=floatPos(), fc=(f.x-s.cols*cell/2-bx)/cell, fr=(f.y-s.rows*cell/2-by)/cell, R=Math.max(.5,CFG.ANTIC_REACH);
+      const sl=drag.slot;
+      for(let i=0;i<antN;i++){
+        const seated=sl&&sl.r===antR[i]&&sl.c===antC[i];
+        let k=seated?1:Math.max(0,1-Math.hypot(antR[i]-fr,antC[i]-fc)/R);
+        if(k<=0) continue;
+        k=k*k*(3-2*k); if(k>humT) humT=k;
+        if(seated&&CFG.FX_LINE_PREVIEW) continue;          // the line preview owns these lines now
+        for(let l=0,m=antM[i];m;l++,m>>>=1) if((m&1)&&k>antT[l]) antT[l]=k;
+      }
+    }
+  } else antKey=null;
+  antAny=false;
+  const vis=CFG.FX_ANTICIPATION;
+  for(let l=0;l<2*N;l++){
+    const tg=vis?antT[l]:0, v=antV[l];
+    antV[l]=Math.abs(tg-v)<.004?tg:v+(tg-v)*Math.min(1,dt*(tg>v?.3:.2));
+    if(antV[l]>.01) antAny=true;
+  }
+  antHum=t?antHum+(humT-antHum)*Math.min(1,dt*.35):0;   // eases in while held; the moment it lands or goes back it stops
+  if(actx) humSet(antHum<.01&&humT===0?0:antHum);
+}
+let _ax=0,_ay=0,_af=0;                                 // one gem's shiver offset and glint, written by antCell (no allocation per gem)
+function antCell(r,c,now){
+  const vr=antV[r], vc=antV[N+c], v=vr>vc?vr:vc;
+  if(v<=.01){ _ax=_ay=_af=0; return; }
+  if(reduce){ _ax=_ay=0; _af=v*.16; return; }
+  const A=CFG.ANTIC_SHIVER*v;
+  _ax=A*Math.sin(now*.085+r*1.9+c*2.7); _ay=A*.6*Math.sin(now*.071+r*2.3+c*1.1);
+  const along=vr>=vc?c:r, head=(now*.011)%(N+5)-2.5;   // the glint runs along the line, once a second
+  _af=v*(.08+.34*Math.max(0,1-Math.abs(along-head)/1.3));
+}
+
 let last=0;
 function frame(now){
   requestAnimationFrame(frame);
@@ -636,6 +701,7 @@ function frame(now){
     gh.lines=L; gh.hue=hue; gh.pulse=pulse;
   }
 
+  stepAnticipation(dt);                              // (7.5c) after the slot is known, before the gems read it
   drawRubble(dt);                                    // (7.5) behind the live gems and the tray: it falls through empty cells and off the board
   const claySquash=curSkin==='clay';
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
@@ -651,11 +717,15 @@ function frame(now){
     } else if(claySquash&&g.t<1){
       const q=Math.sin(g.t*Math.PI)*0.17;
       gem(g.gi,bx+c*cell,by+r*cell,cell,base*(1+q),1,0,false,base*(1-q));
-    } else if(g.l>0){                               // landing thump: wide-and-short on impact, springs back over ~8 frames
-      g.l=Math.max(0,g.l-dt*0.17);                // ~6 frames, about 100 ms
-      const q=Math.sin(g.l*Math.PI)*0.11;
-      gem(g.gi,bx+c*cell,by+r*cell,cell,base*(1+q),1,g.f?g.f*g.f*0.45:0,false,base*(1-q*0.7));
-    } else gem(g.gi,bx+c*cell,by+r*cell,cell,base,1,g.f?g.f*g.f*0.45:0);
+    } else {
+      if(antAny) antCell(r,c,now); else _ax=_ay=_af=0;   // (7.5c) a line one piece from clearing shivers and glints
+      const lf=g.f?g.f*g.f*0.45:0, fl=lf>_af?lf:_af;
+      if(g.l>0){                                    // landing thump: wide-and-short on impact, springs back over ~8 frames
+        g.l=Math.max(0,g.l-dt*0.17);                // ~6 frames, about 100 ms
+        const q=Math.sin(g.l*Math.PI)*0.11;
+        gem(g.gi,bx+c*cell+_ax,by+r*cell+_ay,cell,base*(1+q),1,fl,false,base*(1-q*0.7));
+      } else gem(g.gi,bx+c*cell+_ax,by+r*cell+_ay,cell,base,1,fl);
+    }
   }
 
   if(gh && gh.lines && CFG.FX_LINE_PREVIEW && (gh.lines.rows.length||gh.lines.cols.length)){
