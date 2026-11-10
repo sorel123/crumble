@@ -1,0 +1,9 @@
+{
+  "appId": "win.crumble.app",
+  "appName": "Crumble",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#000000"
+  }
+}
