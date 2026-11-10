@@ -366,6 +366,7 @@ function place(idx,r,c){
     pushBanner('NEW BEST!','',"#8FF7FF");
     if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
     glowT=Math.max(glowT,1.4); Sfx.fanfare();
+    if(CFG.FX_CHASE && chaseBest>=CFG.CHASE_SKY_MIN) journeySweep();   // (7.5e) beating her best takes the sky a stage further, with the bright wipe
   }
   if(tray.every(v=>!v) && !dealing){
     if(bonus){ bonus.left--; if(bonus.left<=0) endBonus(); else syncBonusChip(); }   // one bonus tray played

@@ -35,6 +35,19 @@
   .score.bump{transform:scale(1.22)}
   .best{transition:transform .13s cubic-bezier(.2,1.8,.4,1)}
   .best.bump{transform:scale(1.3)}
+  #chase{display:flex;align-items:center;gap:6px;margin-top:6px;height:10px;transform-origin:0 50%}
+  #chase .track{position:relative;width:76px;height:4px;border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--fg) 18%,transparent)}
+  #chase .fill{position:absolute;inset:0;border-radius:2px;background:var(--best);transform-origin:0 50%;transform:scaleX(0);transition:transform .15s linear}
+  #chase .to{font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--best);white-space:nowrap;opacity:0;transition:opacity .3s}
+  #chase.near .to{opacity:.95}
+  #chase.hot .track{animation:chaseHot .8s ease-in-out infinite alternate}
+  #chase.won{animation:chaseWon .7s ease-out forwards}
+  #chase.won .fill{background:#fff}
+  #chase.rm.hot .track{animation:none;box-shadow:0 0 6px var(--best)}
+  #chase.rm.won{animation:chaseFade .4s linear forwards}
+  @keyframes chaseHot{from{box-shadow:0 0 2px var(--best)}to{box-shadow:0 0 9px var(--best)}}
+  @keyframes chaseWon{0%{transform:scale(1);opacity:1}25%{transform:scale(1.3);opacity:1}100%{transform:scale(1.5);opacity:0}}
+  @keyframes chaseFade{to{opacity:0}}
   .right{text-align:right;display:flex;gap:14px;align-items:flex-start}
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--best)}
   #mute,#setBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
@@ -227,6 +240,7 @@
 
   <div class="hud">
     <div><div class="lbl">Score</div><div class="score" id="scoreVal">0</div>
+      <div id="chase" hidden aria-hidden="true"><span class="track"><span class="fill"></span></span><span class="to"></span></div>
       <div class="pips" id="transformPips" hidden></div>
     </div>
     <div class="right">
@@ -267,6 +281,7 @@
         <div class="togpair"><label class="tog"><span>Clear effect</span><select id="clearPick" aria-label="Clear effect"><option value="crumble">Crumble</option><option value="squash">Classic</option></select></label>
         <label class="tog" id="glintTog"><span>Glints while dragging</span><input type="checkbox" id="glintOn"></label></div>
         <label class="tog"><span>Combo fire: the board burns on a streak</span><input type="checkbox" id="fireOn"></label>
+        <label class="tog"><span>Chase your best: a bar to your best score</span><input type="checkbox" id="chaseOn"></label>
         <p class="lbl section-lbl">World</p>
         <div class="skins" id="worldGrid"></div>
         <p class="lbl section-lbl">Skin</p>

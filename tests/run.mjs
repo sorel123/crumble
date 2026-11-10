@@ -2708,6 +2708,92 @@ test('7.5d combo fire: dragging at combo 6 with embers and a burning rim fits th
   assert.ok(p90 < 12, 'drag frames stay cheap with the fire: p90 ' + p90.toFixed(2) + ' ms');
 });
 
+const counted = async page => { await page.waitForFunction(() => shownScore === score, null, { timeout: 5000 }); await frames(page, 1); };
+const chaseRead = page => page.evaluate(() => { const b = el('chase'); return { hidden: b.hidden, cls: b.className, to: b.querySelector('.to').textContent, fill: b.querySelector('.fill').style.transform, target: chaseBest }; });
+
+test('7.5e chase your best: a bar under the score fills toward her best, "N to beat" near it, a glow at the end, gone once passed', async ({ page }) => {
+  await play(page);
+  assert.ok((await chaseRead(page)).hidden, 'her very first run has no best to chase');
+  await page.evaluate(() => { best = 1000; start(); });
+  await dealt(page);
+  let c = await chaseRead(page);
+  assert.ok(!c.hidden && c.target === 1000 && /scaleX\(0\)/.test(c.fill) && c.to === '', 'a new run shows an empty bar to 1000 ' + JSON.stringify(c));
+  await page.evaluate(() => { score = 500; }); await counted(page);
+  c = await chaseRead(page);
+  assert.ok(/scaleX\(0\.5\)/.test(c.fill) && c.to === '' && !/near|hot/.test(c.cls), 'half way: half full, no text yet ' + JSON.stringify(c));
+  await page.evaluate(() => { score = 800; }); await counted(page);
+  c = await chaseRead(page);
+  assert.ok(c.to === '201 to beat' && /near/.test(c.cls) && !/hot/.test(c.cls), 'from 75%: how many to beat it ' + JSON.stringify(c));
+  await page.evaluate(() => { score = 950; }); await counted(page);
+  assert.ok(/hot/.test((await chaseRead(page)).cls), 'from 90% the bar glows');
+  // passing it for real: NEW BEST, the bar pops, the sky jumps a stage with the bright wipe
+  await page.evaluate(() => { window.__sfx = []; const f = Sfx.fanfare; Sfx.fanfare = (...a) => { __sfx.push('fanfare'); f(...a); }; score = 995; shownScore = 995; jPend = null; jw = null; });
+  const j0 = await page.evaluate(() => jJumps);
+  await setup(page, { rows: ['01111111', '00000000', '10000000', ...EMPTY.slice(3)], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  await page.waitForFunction(() => shownScore > 1000, null, { timeout: 3000 });
+  await frames(page, 2);
+  c = await chaseRead(page);
+  assert.ok(!c.hidden && /won/.test(c.cls) && /scaleX\(1\)/.test(c.fill), 'passing it flashes the full bar (no clean sweep: one jump is the chase) ' + JSON.stringify(c));
+  const r = await page.evaluate(() => ({ beaten: bestBeaten, jumps: jJumps, pend: !!jPend, sweep: jSweep, banner: banners.some(b => b.txt === 'NEW BEST!'), sfx: __sfx }));
+  assert.ok(r.beaten && r.banner && r.sfx.length === 1, 'the NEW BEST banner and fanfare, once ' + JSON.stringify(r));
+  assert.ok(r.jumps === j0 + 1 && r.pend && r.sweep, 'the journey sky jumps one stage with the bright wipe ' + JSON.stringify(r));
+  await page.waitForFunction(() => !!jw && jw.sweep, null, { timeout: 4000 });
+  await page.waitForFunction(() => el('chase').hidden, null, { timeout: 2000 });
+  // more points do not bring it back or jump again
+  await page.evaluate(() => { score += 500; }); await frames(page, 30);
+  assert.ok((await chaseRead(page)).hidden && await page.evaluate(() => jJumps) === j0 + 1, 'once a run');
+});
+
+test('7.5e chase your best: the target survives a resume, a small best skips the sky jump, Daily/Adventure and the switch (saved) hide it', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { best = 300; start(); });
+  await dealt(page);
+  const r = await page.evaluate(() => {
+    score = 200; saveRun();                                       // saveStats has now written best = max(best, score)
+    const snap = JSON.parse(JSON.stringify(snapshot())), out = { cb: snap.cb };
+    best = 5000; restore(snap); out.resumed = chaseBest;           // the stored best has moved on: the run still chases 300
+    delete snap.cb; best = 300; restore(snap); out.old = chaseBest;
+    return out;
+  });
+  assert.deepEqual(r, { cb: 300, resumed: 300, old: 300 }, 'the target is saved with the run; an older save chases the stored best');
+  await page.evaluate(() => { score = 295; shownScore = 295; jPend = null; });
+  const j0 = await page.evaluate(() => jJumps);
+  await setup(page, { rows: ['01111111', '00000000', '10000000', ...EMPTY.slice(3)], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  await frames(page, 4);
+  assert.ok(await page.evaluate(() => bestBeaten), 'beaten');
+  assert.equal(await page.evaluate(() => jJumps), j0, 'a best under 500 beats with the banner only: the sky keeps its place');
+  await page.evaluate(() => { best = 1000; start(); });
+  assert.ok(!(await chaseRead(page)).hidden);
+  await page.evaluate(() => { mode = 'daily'; syncHud(); });
+  assert.ok((await chaseRead(page)).hidden, 'not in Daily');
+  await page.evaluate(() => { mode = 'adventure'; syncHud(); });
+  assert.ok((await chaseRead(page)).hidden, 'not in Adventure');
+  await page.evaluate(() => { mode = 'endless'; syncHud(); });
+  assert.ok(!(await chaseRead(page)).hidden, 'back in Endless');
+  await page.click('#setBtn');
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#chaseOn'), true, 'on by default');
+  await page.click('#chaseOn');
+  assert.ok(await page.evaluate(() => !CFG.FX_CHASE && el('chase').hidden && JSON.parse(localStorage.getItem('crumble.skins')).chase === false), 'off: hidden at once, and saved');
+});
+
+test('7.5e chase your best: the bar counting up with the glow on fits the frame budget', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { best = 100000; start(); });
+  await dealt(page);
+  await page.evaluate(() => { score = 92000; shownScore = 92000; });
+  await frames(page, 10);
+  await watchFrames(page); await frameLog(page);
+  for (let k = 0; k < 6; k++) { await page.evaluate(() => { score += 900; }); await frames(page, 10); }
+  const work = (await frameLog(page)).work.sort((a, b) => a - b), c = await chaseRead(page);
+  const p90 = work[Math.floor(work.length * 0.9)];
+  console.log(`     (chase count-up: ${work.length} frames, p90 ${p90.toFixed(2)} ms, max ${work[work.length - 1].toFixed(2)} ms)`);
+  assert.ok(/hot/.test(c.cls) && !c.hidden, 'glowing while it counts ' + JSON.stringify(c));
+  assert.ok(p90 < 12, 'count-up frames stay cheap with the marker: p90 ' + p90.toFixed(2) + ' ms');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
