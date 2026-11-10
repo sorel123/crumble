@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-09, after calm music (plan PR 6.8).
+Last updated 2026-11-10, after payoff waves, setups and closers (plan PR 7.3).
 
 ---
 
@@ -182,6 +182,7 @@ Top to bottom:
 | (6.5) | One sound family: an arbiter in `audio.js` gives each moment one main sound (priority, ducking, deferral); every clear has a dry impact under its glass tail; narrow escape (`Sfx.phew`) and NEW BEST / LEVEL CLEARED (`Sfx.fanfare`) are their own events; the Strings set, soft pickup tick and drop click are the default for everyone once (`sndV`). Section at the end |
 | (6.1) | Pressure and recovery: `roomOf()` measures room on the board; phases calm/building/edge/recovery/relief pick the tray (`paceTier`); honest trays return, edge trays only promise each piece a spot, recovery is a sequence she must see; the second rescue is earned; strong bot added to `tools/bot-sim.mjs`. See the 6.1 section |
 | (6.6) | Pressure on screen: one eased `scr` layer (sky wash, vignette, board rim, tray band, relief flash) driven by the room metric and phase in Endless/Daily. See the 6.6 section |
+| (7.3) | Payoff waves, setups and closers (Endless/Daily): a payoff tray every 4-6 trays, the exact piece for a hole she squared off, earned closers (planned sweep, tray shimmer), no three-small-piece trays. See the 7.3 section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -954,3 +955,62 @@ gets tense with the board. Code is `js/music.js` (loaded after `audio.js`; also 
   tight board differs from a calm one, levels (peak < -12 dBFS), ducking dips it > 6 dB, the switch, the intensity easing, the arbiter hook. If it
   is too quiet or too present on the phone, change `MUSIC_VOL` (or the `.5` in `musicLevel()`) first; if the heartbeat is annoying raise the `.28` threshold in `E.sched`.
   Whole-screen mode states (6.7) have no music of their own yet; a bonus or golden hand would be a natural place for a brighter variant.
+
+---
+
+## Payoff waves, setups and closers (plan 7.3)
+
+Jay (round three): "it doesn't get easy and try to clear often enough", "background triggers to give great blocks to close it out for a
+full reset", and, from Block Blast, set up then pay off: square an area off, then the perfect 2x2 or 2x3 arrives "not all the time,
+just sometimes". Too many 2-3 cell pieces are "annoying". Endless and Daily only (`paced()`); Adventure keeps its tension wave. All of it is
+in `solver.js` (the block after `roomOf`/`paceTier`), on top of the 6.1 phases: edge and recovery trays stay honest and never carry any of it.
+
+- **The wave clock** (`wave`, `waveTick`, `waveTier`). Every `WAVE_MIN`..`WAVE_MAX` (4-6) trays a payoff is due. Ordinary trays weight the
+  squaring-off pieces up (`BUILD_SET`: 2x2, 2x3, 3x2, 1x3/3x1, 1x4/4x1; `BUILD_W` 1.6 in `weightedShape`). The payoff tray (`payoffSteps`,
+  label `PAYOFF`) is one big block (`PAYOFF_SET`: 2x2, 2x3, 3x2, 3x3, bars of 4-5) that completes `PAYOFF_LINES` (2)+ lines in a single drop,
+  plus two ordinary pieces, all playable. No TIDY/GUIDE on it. It pays only what the board offers: if no big block has a 2-line drop, the tray
+  is an ordinary one and the clock tries again next tray. A relief tray, a closer or a golden hand counts as the payoff (`waveDone`).
+- **Setups** (`findHoles`, `waveAfterDrop`, `offerSetup`). After every drop, `findHoles` lists empty exact rectangles (`SETUP_RECTS`) whose
+  filling completes a line and whose edge neighbours are at least `SETUP_WALLED` (85%) filled or wall; the biggest, not its parts. A hole that
+  her drop just made (it was not a hole before) is a setup, at most 3 open. Each of the next `SETUP_TRAYS` (3) trays has `SETUP_CHANCE` (0.75) of
+  carrying the exact piece, swapped into the smallest slot only if the hand stays playable. One offer per setup: once its piece is in a
+  tray (rolled or by chance) it is never forced again. A setup closes when filled or broken.
+- **Closers** (earned). A clear that leaves `CLOSER_GEMS` (14) or fewer gems, reaching combo `CLOSER_COMBO` (3), or a clear that gets her
+  out of the edge sets `closerNext`. The next tray (if no star/golden hand is due or live and the last tray carried no special) tries
+  `closerSteps`: the exact-tiling planner (`planSweepSteps` with `CLOSER_TARGET` 20 cells and `tilesSweep`, which checks drop orders instead
+  of the budgeted solver, which missed sweeps that need singles) then `sweepSeqSteps` (three drops that each complete a line, clears
+  between them). Found: label `CLOSER`, a soft pale shimmer behind the tray (`closerTray`, `drawTrayBand`, `FX_CLOSER_GLOW`, still under
+  reduced motion), `specialEnd=trayNo` (it counts as the special: the next tray carries none), cooldown `CLOSER_COOL` (5). Not found: a
+  close-in payoff (the payoff hand that clears the most gems), and if the board is still small the closer tries again next tray. The
+  relief tray's planned sweep (6.1) uses the same planner and shimmers too.
+- **Dry spell.** `DRY_TRAYS` (6) trays without a clear make the payoff due now: lines, never a sweep, so stalling earns no reset.
+- **No tedium** (`noTedium`). While a 4+ cell piece fits the board, a hand is never three pieces of 3 cells or fewer, and the 4+ pieces in
+  any five trays are at least `BIG_FLOOR` (5) (`bigHist` holds the last four trays). Swaps keep the hand playable (edge: every piece fits).
+- **Saved** with the run (`wave` in the snapshot); older saves start a fresh wave. Every roll is `rnd()`, so the Daily is the same for everyone.
+- **Admin:** sliders for every key above and a toggle for the shimmer. `waveStats` (setups made / dealt, closer tries; not saved) feeds the sim.
+
+Measured with `tools/bot-sim.mjs` (casual bot, 4 seeds x 4000 trays; the casual bot now takes the obvious drop that clears the most lines,
+and the baseline was re-run with the same bot). New columns: trays per multi-line clear, full resets per game, closers and payoffs per game,
+trays between payoffs, setups paid (share of setups that got their piece within three trays, not counting holes she filled herself before
+the next tray), setups per tray, small-only trays and the longest run, fewest 4+ pieces in any five trays, games ended, 10th percentile
+game length, edge holds per game.
+
+| | before (main) | after |
+|---|---|---|
+| median trays per game (4 seeds) | 109, 124, 104, 78 | 95, 114, 118, 70 |
+| 10th percentile game | 21, 32, 12, 21 | 23, 27, 9, 18 |
+| games ended in 16000 trays | 100 | 96 |
+| edge holds per game | 5.4 | 5.8 |
+| trays per multi-line clear | 8.1 | 6.0 |
+| full resets per game | 0.13 | 0.18 |
+| closers per game | - | 0.15 |
+| trays between payoffs (median) | 14 (relief only) | 6 |
+| setups paid within 3 trays | - | 54-58% |
+| small-only trays / longest run | 4% / 2-3 | 0% / 1 |
+| deal cost p95 / max (ms, whole deal, sliced in game) | 5.5 / 28 | 7.6 / 51 |
+
+Missed target: 1-3 full resets per game. A 3-piece sweep needs the gems in a few lines; in casual play the board at a closer's deal
+holds 12-24 gems spread over many lines and only a few percent are sweepable in three drops, by either planner. Making resets common would
+mean keeping the board much emptier, i.e. an easier game. Levers if Jay wants more: `CLOSER_GEMS` up, `CLOSER_COOL` down, or a lower
+`ROOM_OK`/`ROOM_EDGE` so the board runs emptier.
+

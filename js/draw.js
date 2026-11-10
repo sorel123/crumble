@@ -157,11 +157,20 @@ function drawPressureRim(now){                         // the board frame: cool 
   ctx.strokeStyle=`hsla(${hue} 85% 66% / ${a})`;            ctx.lineWidth=2+2*p;      ctx.stroke();
   if(scr.relief>0.01){ ctx.strokeStyle=`rgba(143,247,255,${scr.relief*0.8})`; ctx.lineWidth=4+8*scr.relief; ctx.stroke(); }
 }
+let closerK=0;                                         // (7.3) the closer shimmer, eased in and out
 function drawTrayBand(){                               // the tray dims as the room shrinks: a soft dark band behind the pieces (never over them)
-  if(scr.p<0.02) return;
   const a=slotRect(0), z=slotRect(2);
+  closerK+=((CFG.FX_CLOSER_GLOW&&closerTray&&state==='play'&&tray.some(t=>t)?1:0)-closerK)*0.08;
+  if(closerK<0.01) closerK=0;
+  if(scr.p<0.02&&!closerK) return;
   roundPath(ctx,a.x-6,a.y,z.x+z.w-a.x+12,a.h,14);
-  ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); ctx.globalAlpha=1;
+  if(scr.p>=0.02){ ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); }
+  if(closerK){                                         // (7.3) a closer: a soft pale glow behind the pieces, breathing; reduced motion holds still
+    const b=reduce?0.6:0.5+0.5*Math.sin(performance.now()*0.004);
+    ctx.globalAlpha=closerK*(0.10+0.08*b); ctx.fillStyle='#BFF6FF'; ctx.fill();
+    ctx.globalAlpha=closerK*(0.35+0.3*b); ctx.strokeStyle='#DFFBFF'; ctx.lineWidth=2; ctx.stroke();
+  }
+  ctx.globalAlpha=1;
 }
 
 /* Whole-screen mode looks (plan 6.7). Four states she can read from across the room, each one eased weight in `lk`, drawn on the same

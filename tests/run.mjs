@@ -639,6 +639,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
       bonus = k % 3 === 2 ? { left: 2, extra: 0 } : null;
       const run = stepwise => {
         grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9; pace = { ...pace0 }; starCool = 0; specialEnd = -99; tray = [null, null, null];
+        wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
         goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
         if (stepwise) { const it = dealSteps(); while (!it.next().done) performance.now(); } else genTray();   // stepwise: one candidate per call, as frames would
         return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier;
@@ -1182,7 +1183,7 @@ test('dealing is untouched by a live bonus: the same board and dice deal the sam
     CFG.SPECIALS.star = CFG.SPECIALS.golden = false;                // (those two only roll dice while no bonus is live, which would shift the stream)
     for (let k = 0; k < 8; k++) {
       grid = grid.map(r => r.map(() => (keep() < 0.3 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
-      const run = b => { bonus = b; trayNo = 10; tension = k / 7; carry = []; golden = null; goldenNext = false; starForced = false; Math.random = seeded(50 + k); genTray(); bonus = null; return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier; };
+      const run = b => { bonus = b; trayNo = 10; tension = k / 7; carry = []; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; specialEnd = -99; golden = null; goldenNext = false; starForced = false; Math.random = seeded(50 + k); genTray(); bonus = null; return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier; };
       out.push([run(null), run({ left: 2, extra: 0 })]);
     }
     Math.random = keep; Object.assign(CFG.SPECIALS, was); return out;
@@ -2140,6 +2141,122 @@ test('music (6.8): the sound arbiter ducks it under the winning event, deeper fo
   const before = await page.evaluate(() => musicTrackNo);
   await page.evaluate(() => { start(); });
   assert.notEqual(await page.evaluate(() => musicTrackNo), before, 'a new run moves to another piece');
+});
+
+// ---- payoff waves, setups and closers (plan 7.3) ----
+const B73 = `const B73 = rows => { grid = rows.map(r => [...r].map(ch => (ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null))); return packGrid(grid); };
+  const W73 = () => { wave = { n: 0, at: 5, due: false }; setups = []; closerNext = false; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; closerTray = false;
+    golden = null; goldenNext = false; bonus = null; transform = null; starForced = false; starCool = 9; specialEnd = -99; trayNo = 10; pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; tray = [null, null, null]; };`;
+
+test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, then never again for that setup', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73();
+    // rows 6-7 full but columns 2-3; above the gap, row 5 is open at columns 2-4: a ragged gap, not yet squared off
+    B73(['00000000','00000000','00000000','00000000','00000000','00000111','11001111','11001111']);
+    const o = {};
+    const hole = SHAPES.find(s => s.rows === 2 && s.cols === 2 && s.n === 4);
+    const pre = packGrid(grid);
+    grid[5][2] = grid[5][3] = { gi: 0, t: 1, f: 0, l: 0 };                         // her 1x2 squares it off: the 2x2 hole is walled in
+    waveAfterDrop(pre, 0, countFlat(packGrid(grid)), 0, false);
+    o.setups = setups.map(u => [SETUP_RECTS[u.k].rows, SETUP_RECTS[u.k].cols, u.r, u.c]);
+    const d0 = waveStats.dealt;
+    CFG.SETUP_CHANCE = 1; tray = [null, null, null]; genTray();
+    o.first = tray.some(t => t.s === hole) && setups.some(u => u.dealt);
+    o.dealt = waveStats.dealt - d0;
+    // she ignores it: the next deals never force it again (with chance 1 any hole piece now comes only by itself)
+    let forced = 0; const orig = offerSetup;
+    for (let k = 0; k < 2; k++) { tray = [null, null, null]; const d1 = waveStats.dealt; genTray(); forced += waveStats.dealt - d1; }
+    o.again = forced;
+    // a gap that existed before the drop is not a setup
+    W73(); const same = B73(['00000000','00000000','00000000','00000000','00000000','00000000','11001111','11001111']);
+    waveAfterDrop(same, 0, countFlat(same), 0, false); o.old = setups.length;
+    return o; })()`);
+  assert.ok(r.setups.some(([h, w, rr, cc]) => h === 2 && w === 2 && rr === 6 && cc === 2), 'the 2x2 hole is a setup: ' + JSON.stringify(r.setups));
+  assert.ok(r.first, 'with SETUP_CHANCE 1 the next tray carries the 2x2');
+  assert.equal(r.dealt, 1);
+  assert.equal(r.again, 0, 'one offer per setup');
+  assert.equal(r.old, 0, 'a hole she did not just make is no setup');
+});
+
+test('7.3 no tedium: never three small pieces while a big one fits; the 4+ floor over five trays', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73(); const one = SHAPES[0], two = SHAPES[1], three = SHAPES[3];
+    const open = B73(Array(8).fill('00000000'));
+    const big = h => h.filter(s => s.n >= 4).length;
+    const o = { open: big(noTedium(open, [one, two, three], 'honest')) };
+    // only singles and bars of 2 fit: the hand is left alone
+    const tight = B73(['10101010','01010101','10101010','01010101','10101010','01010101','10101010','01010101']);
+    o.tight = big(noTedium(tight, [one, one, one], 'honest'));
+    bigHist = [0, 0, 1, 0];                                                         // 1 big piece in the last four trays: this tray brings the rest
+    o.floor = big(noTedium(open, [SHAPES[5], one, two], 'honest'));
+    // and in play: 40 deals on an open-ish board never deal three small pieces
+    W73(); let small = 0;
+    for (let k = 0; k < 40; k++) { B73(['00000000','00000000','00000000','00000000','00000000','11100000','11110000','11111000']); tray = [null, null, null]; genTray(); if (tray.every(t => t.s.n <= 3)) small++; }
+    o.small = small; return o; })()`);
+  assert.ok(r.open >= 1, 'an open board turns a small hand into one with a 4+ piece');
+  assert.equal(r.tight, 0, 'no 4+ piece fits: unchanged');
+  assert.ok(r.floor >= 3, 'the floor brings the 4+ count over five trays up to BIG_FLOOR');
+  assert.equal(r.small, 0);
+});
+
+test('7.3 payoff: a big block that clears 2+ lines at once when the board offers one, nothing forced when it does not', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73();
+    const twoRows = B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']);
+    const h = runSteps(payoffSteps(twoRows, 0.2));
+    const [lo, hi] = packBits(twoRows);
+    const bam = h && h.some(s => s.n >= 4 && placeMasks(s).some(m => !(lo & m.lo) && !(hi & m.hi) && applyBits(lo, hi, s, m) >= 2));
+    const none = runSteps(payoffSteps(B73(Array(8).fill('00000000')), 0.2));
+    // dealt by the clock: due now, the tray is a PAYOFF
+    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']); wave.at = 1; genTray();
+    const dealtTier = lastTier, after = wave.n;
+    // an empty board offers no payoff: a build tray, and the clock stays due for the next one
+    W73(); B73(Array(8).fill('00000000')); wave.at = 1; genTray();
+    return { bam, none, dealtTier, after, emptyTier: lastTier, stillDue: wave.due }; })()`);
+  assert.ok(r.bam, 'the hand holds a big block that clears two lines in one drop');
+  assert.equal(r.none, null);
+  assert.equal(r.dealtTier, 'PAYOFF'); assert.equal(r.after, 0, 'the clock restarts');
+  assert.notEqual(r.emptyTier, 'PAYOFF'); assert.ok(r.stillDue, 'retries next tray');
+});
+
+test('7.3 closers: earned triggers deal a planned sweep with the shimmer, count as a special, and give way to a golden hand', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const rows = ['00000000','00000000','00000000','00000000','00000000','00000000','00111111','11111000'];
+    const o = {};
+    W73(); B73(rows); const before = packGrid(grid);
+    waveAfterDrop(before, 1, 11, 1, false); o.lowGems = closerNext;                 // a clear leaving 11 gems earns one
+    W73(); waveAfterDrop(before, 1, 30, 3, false); o.combo = closerNext;            // so does combo 3
+    W73(); waveAfterDrop(before, 0, 30, 0, false); o.nothing = closerNext;          // a drop with no clear does not
+    W73(); B73(rows); closerNext = true; genTray();
+    o.tier = lastTier; o.glow = closerTray; o.special = specialEnd === trayNo; o.cool = closerCool;
+    o.sweeps = evalHand(packGrid(grid), tray.map(t => t.s), 3000000).sweep;
+    W73(); B73(rows); closerNext = true; dryN = CFG.DRY_TRAYS; genTray(); o.dry = lastTier;   // a dry spell on its own is a payoff, never a sweep
+    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']); dryN = CFG.DRY_TRAYS; genTray(); o.dryOnly = lastTier;
+    W73(); B73(rows); closerNext = true; goldenNext = true; genTray(); o.golden = lastTier;   // a golden hand due goes first
+    W73(); B73(rows); closerNext = true; specialEnd = trayNo; genTray(); o.afterSpecial = lastTier;  // never right after a special
+    return o; })()`);
+  assert.ok(r.lowGems && r.combo && !r.nothing, 'the triggers');
+  assert.equal(r.tier, 'CLOSER'); assert.ok(r.glow, 'the tray shimmers'); assert.ok(r.special, 'it counts as the special'); assert.ok(r.cool > 0);
+  assert.ok(r.sweeps, 'the closer hand can empty the board');
+  assert.equal(r.dryOnly, 'PAYOFF', 'stalling earns lines, not a reset');
+  assert.notEqual(r.afterSpecial, 'CLOSER');
+  assert.notEqual(r.golden, 'CLOSER');
+});
+
+test('7.3 the wave state is saved with the run and survives a resume', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    W73(); wave = { n: 3, at: 6, due: true }; setups = [{ k: 0, r: 6, c: 2, age: 1, dealt: true }]; closerNext = true; closerCool = 2; dryN = 4; bigHist = [1, 2]; closerTray = true;
+    const snap = JSON.parse(JSON.stringify(snapshot()));
+    W73(); restore(snap);
+    const ok = wave.n === 3 && wave.at === 6 && wave.due && setups.length === 1 && setups[0].dealt && closerNext && closerCool === 2 && dryN === 4 && bigHist.join() === '1,2' && closerTray;
+    delete snap.wave; restore(snap);                                           // an older save: a fresh wave
+    return { ok, old: wave.n === 0 && setups.length === 0 && !closerNext }; })()`);
+  assert.ok(r.ok, 'round trip'); assert.ok(r.old, 'older saves start a fresh wave');
 });
 
 for (const { name, fn } of tests) {

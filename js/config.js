@@ -29,6 +29,23 @@ const CFG = {
   HONEST_TRIES:   2,     // candidate hands an honest tray looks at (the tidiest playable of these): a light hand, not a search
   BUILD_BIAS:     0.3,   // building phase: the crowded-board small-piece bias is scaled by this, so big pieces keep coming
 
+  // payoff waves, setups and closers (plan 7.3, Endless and Daily; see solver.js)
+  WAVE_MIN:       4,     // a payoff tray (big blocks, PAYOFF_LINES+ lines) is due every WAVE_MIN..WAVE_MAX trays
+  WAVE_MAX:       6,
+  PAYOFF_LINES:   2,     // a payoff hand must offer at least this many lines, or the tray is an ordinary one and the clock retries
+  PAYOFF_TRIES:   12,    // candidate payoff hands looked at
+  BUILD_W:        1.6,   // weight on the squaring-off pieces (2x2, 2x3, 3x2, 1x3/3x1, 1x4/4x1) in ordinary trays
+  SETUP_CHANCE:   0.75,   // per tray, odds an open setup's exact piece is dealt (one offer per setup)
+  SETUP_TRAYS:    3,     // trays a setup stays open
+  SETUP_WALLED:   0.85,  // share of a hole's edge neighbours that must be filled or wall for it to count as squared off
+  CLOSER_GEMS:    14,    // a clear leaving this many gems or fewer earns a closer (a planned sweep with a shimmer on the tray)
+  CLOSER_COMBO:   3,     // ...so does reaching this combo (and getting out of an edge hold)
+  CLOSER_TARGET:  20,    // most empty cells a closer's three pieces may fill
+  CLOSER_COOL:    5,     // trays after a closer before the next
+  DRY_TRAYS:      6,     // trays with no clear that make a payoff tray due now (lines, never a sweep)
+  BIG_FLOOR:      5,     // pieces of 4+ cells across any five trays, kept where they fit
+  FX_CLOSER_GLOW: true,  // the shimmer behind a closer tray
+
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
   TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped
