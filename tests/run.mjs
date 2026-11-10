@@ -798,8 +798,8 @@ test('Settings fits one screen; a look sets theme, world, skin and motif togethe
   assert.equal(await page.locator('#lookGrid .look-btn').count(), 9, 'five everyday looks and the four earned ones');
   assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'true', 'Classic is lit by default');
   await page.click('#lookGrid [data-id=cotton]');
-  const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, cw: curWorld }));
-  assert.deepEqual(await look(), { t: 'cotton', w: 'blossom', s: 'clay', m: 'heart', cs: 'clay', cw: 'blossom' });
+  const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, home: curWorld === homeSky() }));   // (7.5b) the sky shows her home sky: the journey in Endless, else her world
+  assert.deepEqual(await look(), { t: 'cotton', w: 'blossom', s: 'clay', m: 'heart', cs: 'clay', home: true });
   assert.equal(await page.getAttribute('#lookGrid [data-id=cotton]', 'aria-pressed'), 'true');
   assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'false');
   assert.ok(await page.locator('#lookGrid [data-id=neon]').isDisabled(), 'Neon is locked until its skin is earned');
@@ -810,7 +810,7 @@ test('Settings fits one screen; a look sets theme, world, skin and motif togethe
   assert.equal(await page.locator('#lookGrid [aria-pressed=true]').count(), 0);
   await page.click('#lookGrid [data-id=mint]');
   await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
-  assert.deepEqual(await look(), { t: 'mint', w: 'forest', s: 'blocks', m: 'none', cs: 'blocks', cw: 'forest' });
+  assert.deepEqual(await look(), { t: 'mint', w: 'forest', s: 'blocks', m: 'none', cs: 'blocks', home: true });
   await page.click('#startSettings');
   assert.equal(await page.getAttribute('#lookGrid [data-id=mint]', 'aria-pressed'), 'true', 'the saved look is lit after a reload');
   await page.evaluate(() => { unlocked.add('neon'); renderLooks(); });
@@ -1172,7 +1172,7 @@ test('the bonus pays x2 on every placement, counts trays down, ends after the la
     tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }]; dealing = null;
     place(0, 0, 0); out.mid = bonus && bonus.left; place(1, 3, 3); place(2, 6, 6);
     out.ended = bonus === null; out.specialEnd = specialEnd; out.tag = bonusTag && bonusTag.txt; out.chip = el('bonusChip').textContent.trim(); out.want = '+' + bb.extra.toLocaleString() + ' bonus'; out.grew = bb.extra > 120;
-    out.home = curWorld === CFG.HOME_WORLD;
+    out.home = curWorld === homeSky();
     return out;
   });
   assert.ok(r.plain > 0 && r.dbl === 2 * r.plain, `double: ${r.dbl} vs ${r.plain}`);
@@ -1202,7 +1202,7 @@ test('a bonus plays through three real trays: left counts 3, 2, 1, then it ends;
   }
   assert.deepEqual(seen, [3, 2, 1]);
   await dealt(page);
-  const end = await page.evaluate(() => ({ bonus, world: curWorld === CFG.HOME_WORLD, skin: curSkin }));
+  const end = await page.evaluate(() => ({ bonus, world: curWorld === homeSky(), skin: curSkin }));
   assert.deepEqual(end, { bonus: null, world: true, skin: skin }, 'it ended after the third tray; her tiles never changed');
   assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), [], 'no page errors');
 });
@@ -1234,7 +1234,7 @@ test('the bonus is saved and resumed (meter and trays left), a bonus move double
     return { gain: score - s0, extra: bonus.extra - x0 };
   });
   assert.ok(u.gain > 0 && u.extra > 0, 'the move was doubled');
-  const n = await page.evaluate(() => { start(); return { bonus, meter: bonusMeter, world: curWorld === CFG.HOME_WORLD, chip: el('bonusChip').textContent.trim() }; });
+  const n = await page.evaluate(() => { start(); return { bonus, meter: bonusMeter, world: curWorld === homeSky(), chip: el('bonusChip').textContent.trim() }; });
   assert.deepEqual(n, { bonus: null, meter: 0, world: true, chip: '×2 bonus' });
 });
 
@@ -2320,6 +2320,79 @@ test('7.3 the wave state is saved with the run and survives a resume', async ({ 
     delete snap.wave; restore(snap);                                           // an older save: a fresh wave
     return { ok, old: wave.n === 0 && setups.length === 0 && !closerNext }; })()`);
   assert.ok(r.ok, 'round trip'); assert.ok(r.old, 'older saves start a fresh wave');
+});
+
+test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, saved with the run; Adventure and the switch keep her world', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const st = () => page.evaluate(() => ({ w: curWorld, stage: jStage, shown: jShown, wipe: !!jw, sweep: !!(jw && jw.sweep), jumps: jJumps }));
+  const done = () => page.waitForFunction(() => !jw && !jPend, null, { timeout: 5000 });
+  assert.equal((await st()).w, 'j0', 'a run starts at dawn');
+  await page.evaluate(() => { score = 600; journeyDealt(); });                           // past 500: day, after the next deal
+  assert.equal((await st()).w, 'j0', 'nothing changes on the clear itself');
+  await page.waitForFunction(() => !!jw, null, { timeout: 3000 });
+  assert.deepEqual(await st(), { w: 'j1', stage: 1, shown: 1, wipe: true, sweep: false, jumps: 0 }, 'a calm wipe to day');
+  await done();
+  await page.evaluate(() => { CFG.SPECIALS.transform = false; journeySweep(); });         // a clean sweep jumps a stage
+  await page.waitForFunction(() => !!jw, null, { timeout: 3000 });
+  assert.deepEqual(await st(), { w: 'j2', stage: 2, shown: 2, wipe: true, sweep: true, jumps: 1 }, 'a sweep wipe to golden hour');
+  await done();
+  const r = await page.evaluate(() => {
+    score = 3000; jStage = journeyTarget();                                              // night by score, plus the sweep: aurora
+    const snap = JSON.parse(JSON.stringify(snapshot())), out = { jy: snap.jy };
+    jJumps = 0; restore(snap); out.resumed = [curWorld, !!jw];
+    delete snap.jy; restore(snap); out.old = curWorld;
+    score = 99999; jJumps = 5; out.cap = journeyTarget();
+    mode = 'adventure'; syncHomeSky(); out.adv = curWorld === CFG.HOME_WORLD;
+    mode = 'endless'; syncHomeSky(); out.back = curWorld;
+    el('journeyOn').checked = false; el('journeyOn').dispatchEvent(new Event('change'));
+    out.off = curWorld === CFG.HOME_WORLD && JSON.parse(localStorage.getItem('crumble.skins')).journey === false;
+    el('journeyOn').checked = true; el('journeyOn').dispatchEvent(new Event('change'));
+    start(); out.fresh = [curWorld, jJumps, jStage];
+    return out;
+  });
+  assert.equal(r.jy, 1, 'sweeps are saved with the run');
+  assert.deepEqual(r.resumed, ['j4', false], 'a resume snaps to its stage, no wipe');
+  assert.equal(r.old, 'j3', 'an older save follows the score alone');
+  assert.equal(r.cap, 5, 'space is the last stage');
+  assert.ok(r.adv, 'Adventure keeps her own world');
+  assert.equal(r.back, 'j5');
+  assert.ok(r.off, 'the Settings switch brings her world back and is saved');
+  assert.deepEqual(r.fresh, ['j0', 0, 0], 'a new run starts at dawn again');
+});
+
+test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back with a wipe, and it fits the frame budget', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const px = () => page.evaluate(() => { grid[4][4] = { gi: 2, t: 1, f: 0, l: 0 }; shake = 0; const g = (x, y) => { const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data; return [d[0], d[1], d[2]]; };
+    return { corner: g(3, 3), gem: g(bx + 4.5 * cell, by + 4.5 * cell) }; });
+  const moved = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+  await page.evaluate(() => { grid[4][4] = { gi: 2, t: 1, f: 0, l: 0 }; });
+  await page.waitForTimeout(400);
+  const base = await px();
+  await watchFrames(page); await frameLog(page);
+  await page.evaluate(() => { score = 600; journeyDealt(); jPend.t = 1; });
+  await page.waitForFunction(() => jw && jw.t > jw.dur * 0.5, null, { timeout: 3000 });
+  const mid = await px();
+  assert.ok(moved(mid.gem, base.gem) <= 5, 'a gem pixel is untouched mid-wipe: ' + base.gem + ' vs ' + mid.gem);
+  assert.ok(moved(mid.corner, base.corner) > 8, 'the sky has changed at the top: ' + base.corner + ' -> ' + mid.corner);
+  await page.waitForFunction(() => !jw, null, { timeout: 3000 });
+  const work = (await frameLog(page)).work.sort((a, b) => a - b);
+  const p90 = work[Math.floor(work.length * 0.9)];
+  console.log(`     (wipe: ${work.length} frames, p90 ${p90.toFixed(1)} ms, max ${work[work.length - 1].toFixed(1)} ms)`);
+  assert.ok(p90 < 12, 'wipe frames stay cheap: p90 ' + p90.toFixed(1) + ' ms');
+  const b = await page.evaluate(async () => {
+    startBonus(); score = 2000; journeyDealt(); jPend.t = 1;
+    await new Promise(res => setTimeout(res, 300));
+    const during = [curWorld, jStage, jShown];
+    endBonus(); const after = [curWorld, !!jw, jShown];
+    return { during, after };
+  });
+  assert.deepEqual(b.during, ['bonus', 2, 1], 'while a bonus owns the sky the stage moves on quietly');
+  assert.deepEqual(b.after, ['j2', true, 2], 'and wipes in when the bonus hands back');
+  const pale = await page.evaluate(() => { CFG.THEME = 'daylight'; applyTheme(); const c = bgOf('j5'); CFG.THEME = 'classic'; applyTheme(); return c; });
+  const lum = h => { const n = parseInt(h.slice(1), 16); return 0.3 * (n >> 16) + 0.59 * (n >> 8 & 255) + 0.11 * (n & 255); };
+  assert.ok(lum(pale.top) > 140, 'a dark-ink theme gets a pale space so its text stays readable: ' + pale.top);
 });
 
 for (const { name, fn } of tests) {

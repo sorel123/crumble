@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, lookV:2, sndV:2
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, journey:CFG.JOURNEY_SKY, lookV:2, sndV:2
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -32,6 +32,7 @@ function loadSkinSave(){
     if(o.sndV!==2) CFG.SND_SET='strings';                          // 6.5: everyone starts on the new sound family once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
+    if(typeof o.journey==='boolean') CFG.JOURNEY_SKY=o.journey;     // (7.5b)
     if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
   }catch(e){}
 }
@@ -51,7 +52,7 @@ function setMotif(id){ CFG.MOTIF=id; buildCache(); renderMotifs(); renderLooks()
 function setWorld(id){
   if(!isWorldUnlocked(id)) return;
   CFG.HOME_WORLD=id;
-  if(!transform&&!bonus){ curWorld=id; ambient=spawnAmbient(worldDef(id).effect); ambientOld=[]; bgFrom=id; bgT=1; }
+  syncHomeSky();                                    // (with the journey sky on, her world shows in Adventure and when it is off)
   renderWorlds(); renderLooks(); saveSkinSave();
 }
 function renderSkins(){
@@ -124,9 +125,7 @@ function setLook(id){
   if(!transform){                                  // mid-transformation the skin and world apply when it ends
     curSkin=l.style; buildCache();
   }
-  if(!transform&&!bonus){
-    curWorld=l.world; ambient=spawnAmbient(worldDef(l.world).effect); ambientOld=[]; bgFrom=l.world; bgT=1;
-  }
+  syncHomeSky();
   renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); saveSkinSave();
 }
 function lookPreview(cv,l){            // a little board in the look's own sky, panel and tiles
@@ -179,12 +178,13 @@ function buildSettingsUI(){
     CFG.SND_SET=v; renderSndSet(); saveSkinSave(); ac(); setTimeout(()=>Sfx.clear(1,0,1),60); }));   // a quick taste of the style
   el('sndOn').onchange=()=>setMuted(!el('sndOn').checked);
   el('musicOn').onchange=()=>{ CFG.MUSIC=el('musicOn').checked; saveSkinSave(); if(CFG.MUSIC) ac(); musicSync(); };
-  renderThemes(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC;
+  el('journeyOn').onchange=()=>{ CFG.JOURNEY_SKY=el('journeyOn').checked; saveSkinSave(); syncHomeSky(); };   // (7.5b)
+  renderThemes(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC; el('journeyOn').checked=CFG.JOURNEY_SKY;
 }
 function openSettings(){
   if(newLook){ newLook=false; syncLookDot(); saveSkinSave(); }
   if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); }           // the game waits while Settings is open
-  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC;
+  renderLooks(); renderThemes(); renderWorlds(); renderSkins(); renderMotifs(); renderSndSet(); el('sndOn').checked=!muted; el('musicOn').checked=CFG.MUSIC; el('journeyOn').checked=CFG.JOURNEY_SKY;
   el('setPanel').hidden=false;
 }
 el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };

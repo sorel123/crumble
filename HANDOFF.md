@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-10, after blocks that crumble (plan PR 7.5, first zazz idea).
+Last updated 2026-11-10, after the journey sky (plan PR 7.5, second zazz idea).
 
 ---
 
@@ -80,6 +80,7 @@ Last updated 2026-11-10, after blocks that crumble (plan PR 7.5, first zazz idea
 - **Golden hand (4.5c)** — the rarest, biggest special: a gold tray whose target lines glow on the board; finding it pays ×3. See the 4.5c section at the end.
 - **Star gem (4.5b)** — a 1-cell piece that clears its row and column. Dealt only when a cross is worth it; see the 4.5b section at the end.
 - **Achievements and transformations (4.5d)** — four named achievements, one per special, each unlocking a look for good: clean sweep = Rainbow, combo 5 (`TRANSFORM_COMBO`) = Volcano, a star clearing 10+ gems (`TRANSFORM_STAR_GEMS`) = Starfield, completing a golden hand = Gold Vault. See the 4.5d section at the end.
+- **Journey sky (7.5b, Endless and Daily)** — the sky travels with the score (dawn → space) and every clean sweep jumps a stage with a whole-sky wipe. On by default; Settings → Look → Advanced has the switch (off = her chosen world). See the 7.5b section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
@@ -183,6 +184,7 @@ Top to bottom:
 | (6.1) | Pressure and recovery: `roomOf()` measures room on the board; phases calm/building/edge/recovery/relief pick the tray (`paceTier`); honest trays return, edge trays only promise each piece a spot, recovery is a sequence she must see; the second rescue is earned; strong bot added to `tools/bot-sim.mjs`. See the 6.1 section |
 | (6.6) | Pressure on screen: one eased `scr` layer (sky wash, vignette, board rim, tray band, relief flash) driven by the room metric and phase in Endless/Daily. See the 6.6 section |
 | (7.3) | Payoff waves, setups and closers (Endless/Daily): a payoff tray every 4-6 trays, the exact piece for a hole she squared off, earned closers (planned sweep, tray shimmer), no three-small-piece trays. See the 7.3 section |
+| (7.5b) | Journey sky (Endless/Daily): the sky travels dawn, day, golden hour, night, aurora, space as the score climbs; a clean sweep jumps a stage; stage changes wipe down the whole sky. See the 7.5b section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1025,3 +1027,18 @@ The name of the game, on screen: a cleared gem cracks and falls off the board as
 - **Budget.** Rubble counts in `fxLive()`, so it shares `PARTICLE_CAP` x `perf.fx`; a slow frame sheds rubble first. Drawing is two small path fills per shard, no per-shard save/restore.
 - **Reduced motion** falls back to the squash. **Admin store:** `devSave` now writes `clearV:1`; a saved tuning without it drops its `CLEAR_STYLE` once (it held the old `'squash'` default), keeping the rest.
 - Tests: the two "7.5 crumble" scenarios in `tests/run.mjs`.
+
+## Journey sky (plan 7.5, second zazz idea)
+
+The background travels as the run goes: dawn, day, golden hour, night, aurora, space. Code is the "(7.5b) journey sky" block in `js/draw.js` (state, triggers, decor, wipe) and `JOURNEY` in `js/worlds.js` (the six stages as worlds). Endless and Daily only (`journeyOn()` = `CFG.JOURNEY_SKY && paced()`); Adventure keeps her world and its mint look.
+
+- **Stages.** `CFG.JOURNEY_AT` = 0 / 500 / 1500 / 3000 / 6000 / 10000. The casual bot's finished games have a median score of about 3500, so a typical game reaches night and a great one space. Every clean sweep adds one stage on top (`jJumps`, saved in the snapshot as `jy`; older saves follow the score). Space is the last.
+- **A stage is a world:** gradient + one ambient effect (day has a new `clouds` effect, golden hour `embers`, night and space `stars`, aurora `ribbons`) + a decor sprite cached per stage at half resolution (`decorSprite`: low sun at dawn, small sun by day, big low sun at golden hour, crescent moon, aurora glow, ringed planet and nebula in space). Suns, moon and planet sit in the gap between the HUD and the board or low behind the tray, never behind the score or the buttons; clouds drift only there too. `isJourney(id)`; `worldDef('j3')` resolves like any world.
+- **Her look.** Colours are mid-to-dark so white HUD text (Classic, Night) reads on every stage. A light theme with dark ink (Daylight, Cotton Candy, Mint, Paper) gets a pale version, each stage mixed 70% into her theme's own sky (`bgOf`, `paleTheme()`), decor at 55%. Board, tiles and motif are untouched. `homeSky()` is where the sky goes home to: the journey stage, or `CFG.HOME_WORLD` with it off or in Adventure. `syncHomeSky()` snaps there (Settings changes, reduced motion).
+- **Changing stage (6.3 hierarchy).** A score threshold is calm: checked when a tray has been dealt (`journeyDealt`, from `stepDeal`), then `JOURNEY_WAIT` (30) frames later the new sky wipes down from the top over ~1.4 s with a feathered edge and a faint band of light; no sound, no text. A sweep (`journeySweep`, from `place()`) waits for its confetti and wipes in ~0.8 s with a bright leading edge. The wipe (`drawWipe`) draws the old sky, then the new one clipped above the line; it is all in the sky layer, so pressure (6.6), the mode looks (6.7) and everything on the board draw on top as before (a test checks a gem pixel mid-wipe).
+- **Bonus and transformations** still take the sky over (`startSky('bonus')`, `startFlip`); while they own it a stage passed moves on quietly, and when they hand back (`endBonus`/`endTransform` -> `journeyHandBack`) the new stage wipes in instead of the crossfade. A sweep usually starts a Rainbow transformation, so its jump is often seen when the Rainbow ends.
+- **Settings:** Settings → Look → Advanced, "Journey sky" (saved as `journey` in `crumble.skins`). Admin has a "Next sky (7.5b)" button.
+- **Cost:** one cached gradient, one drawImage of the decor sprite; during a wipe two skies and one gradient for the edge (~80 frames). Measured in the test: our JS per frame p90 0.3 ms during a wipe.
+- **Check on the phone:** play an Endless game past 500 (day) and 1500 (golden hour), and watch a clean sweep jump a stage. If a stage is too bright behind white text, darken its `top` in `JOURNEY`; if the stages come too slowly or fast, change `JOURNEY_AT`.
+- Tests: the two "journey sky (7.5b)" scenarios.
+
