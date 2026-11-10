@@ -6,7 +6,7 @@ no bundler, no dependencies, opens straight in a browser (serve over http or
 open the file directly; both work). Hosted on GitHub Pages and played on her iPhone as a home-screen web
 clip.
 
-Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, anticipation and combo fire (7.5).
+Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, anticipation, combo fire, chase your best and the mascot crumb (7.5).
 
 ---
 
@@ -84,6 +84,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 - **Anticipation (7.5c)** — while she holds a piece, a line it could complete shivers and glints as she brings it near the landing, and a soft hum rises. See the 7.5c section at the end.
 - **Combo fire (7.5d)** — from combo 3 the board rim burns (hotter each step), the held piece sheds embers and the tray glows; a drop that does not clear snuffs it in a puff of smoke. Settings → Look → Advanced "Combo fire". See the 7.5d section at the end.
 - **Chase your best (7.5e)** — in Endless a slim bar under the score fills toward her best, "N to beat" from 75%, a glow from 90%; passing it raises NEW BEST and jumps the journey sky a stage. Settings → Look → Advanced "Chase your best". See the 7.5e section at the end.
+- **Mascot crumb (7.5f)** — a cookie crumb on the board's top-left corner nods, hops or smirks on clears, sweats when the board is tight and faints on game over. Settings → Look → Advanced "Mascot". See the 7.5f section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
@@ -191,6 +192,7 @@ Top to bottom:
 | (7.5c) | Anticipation: a line the held piece can complete shivers and glints as the piece nears that landing, and a soft hum rises. See the 7.5c section |
 | (7.5d) | Combo fire: from combo 3 the rim burns hotter each step, the held piece sheds embers, the tray glows; a miss snuffs it in a puff. See the 7.5d section |
 | (7.5e) | Chase your best: a bar under the score fills toward her best; passing it raises NEW BEST and jumps the journey sky a stage. See the 7.5e section |
+| (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1119,3 +1121,16 @@ A run has a visible target. Code is the "Chase your best (7.5e)" block in `js/mo
 - **Switch.** `CFG.FX_CHASE`, Settings → Look → Advanced "Chase your best: a bar to your best score" (saved as `chase`), also in Admin. Off: the bar hides at once and the sky does not jump; NEW BEST stays.
 - **Check on the phone:** in Endless, the bar should be under the score from the start of a run; near the best it says how many points are left and glows; beating it should pop the bar, raise NEW BEST and wipe the sky to the next stage.
 - Tests: the three "7.5e chase your best" scenarios.
+
+## Mascot crumb (plan 7.5, sixth zazz idea)
+
+A sidekick on the board. Code is `js/mascot.js` (the SVG, `mascotStep` called from `frame()`, `mascotClear`/`mascotAct` called from `place()`), the `#mascot` CSS in `index.html`, `mascotPlace()` in `layout()` and `mascotInit()` in `main.js`. All modes.
+
+- **Character.** A cookie crumb with chocolate chips; the eyes and brows do the acting. Aimed at a tween: wry rather than cute (no blush, a smirk on a combo, a flat stare when a streak dies). Mood sheet: `design/mascot-moods-7.5f.png` in the project files.
+- **Where.** Feet on the top edge of the board frame at its left corner, never over gems or the HUD. Its size fits the gap above the board (28-46 px). It dims while the held piece is near it (DOM sits over the canvas).
+- **Moods.** idle (breathes, blinks, its pupils follow the held piece); clears by the 6.3 hierarchy: 1 line `nod`, 2+ lines `hop`, combo 3+ `smug`, a narrow escape `phew` (wipes its brow), a clean sweep or a won level `sweep` (star eyes and a flip); a drop that ends a streak of 3+ `flat` (eye-roll); `tight` while the pace is edge or recovery (Adventure: room below `ROOM_EDGE`): worried brows, a sweat drop; `faint` from "No moves" through the game-over card: X eyes, tips over onto the rim; a rescue or a new run stands it up. No sound of its own.
+- **Cost.** Plain DOM: faces are class swaps written only when the mood changes; motion is CSS / Web Animations on transform and opacity; the pupils are one attribute write per quantised step. At 4x CPU throttle, drag + three-line clears measured the same frame intervals with it on and off.
+- **Reduced motion.** Faces change; nothing moves.
+- **Switch.** `CFG.FX_MASCOT`, Settings → Look → Advanced "Mascot: a crumb that reacts to your game" (saved as `mascot`), also in Admin.
+- **Check on the phone:** the crumb should stand on the board's top-left corner; clear one line (nod), two (hop), three in a row (smirk), then miss (flat stare); fill the board until it sweats; run out of moves and it should faint. If it is too busy, turn it off in Settings, or shorten the `ms` holds in `MASCOT_ACT`.
+- Tests: the three "7.5f mascot" scenarios.

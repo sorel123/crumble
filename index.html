@@ -48,6 +48,63 @@
   @keyframes chaseHot{from{box-shadow:0 0 2px var(--best)}to{box-shadow:0 0 9px var(--best)}}
   @keyframes chaseWon{0%{transform:scale(1);opacity:1}25%{transform:scale(1.3);opacity:1}100%{transform:scale(1.5);opacity:0}}
   @keyframes chaseFade{to{opacity:0}}
+  /* (7.5f) the mascot crumb: js/mascot.js. Faces are class swaps; motion is transform/opacity only */
+  #mascot{position:absolute;z-index:1;pointer-events:none;transform-origin:50% 92%;transition:opacity .2s}
+  #mascot[hidden]{display:none}
+  #mascot.dim{opacity:.22}
+  #mascot .mb{width:100%;height:100%;transform-origin:50% 92%;will-change:transform}
+  #mascot svg{display:block;width:100%;height:100%;overflow:visible;transform-origin:50% 92%;animation:mBreath 3.4s ease-in-out infinite alternate}
+  #mascot .bd{fill:#D9A05B;stroke:#6E4220;stroke-width:1.5;stroke-linejoin:round}
+  #mascot .hl{fill:none;stroke:#F2CE92;stroke-width:1.6;stroke-linecap:round;opacity:.85}
+  #mascot .ch{fill:#5B3417}
+  #mascot .fe{fill:#6E4220}
+  #mascot .ad,#mascot .au,#mascot .ab{fill:none;stroke:#6E4220;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
+  #mascot .ey ellipse{fill:#fff;stroke:#6E4220;stroke-width:.8}
+  #mascot .ey,#mascot .bl,#mascot .pp{transform-box:fill-box;transform-origin:center;transition:transform .14s}
+  #mascot .pp{fill:#24150B;transition:none}
+  #mascot .ld path{fill:#D9A05B}
+  #mascot .ld .ln{fill:none;stroke:#6E4220;stroke-width:1.1;stroke-linecap:round}
+  #mascot .xe{fill:none;stroke:#24150B;stroke-width:1.8;stroke-linecap:round}
+  #mascot .se{fill:#FFD34D;stroke:#9C6B00;stroke-width:.6;stroke-linejoin:round}
+  #mascot .bl{fill:none;stroke:#3E230E;stroke-width:2;stroke-linecap:round}
+  #mascot .mo{fill:none;stroke:#3A2010;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  #mascot .m1,#mascot .m5{fill:#3A2010}
+  #mascot .sw{fill:#9AD8FF;stroke:#3C8DBD;stroke-width:.5;opacity:0}
+  #mascot .au,#mascot .ab,#mascot .ld,#mascot .xe,#mascot .se,#mascot .mo{display:none}
+  #mascot .m0{display:inline}
+  #mascot.nod .m0,#mascot.hop .m0,#mascot.sweep .m0,#mascot.smug .m0,#mascot.flat .m0,#mascot.phew .m0,#mascot.tight .m0,#mascot.faint .m0{display:none}
+  #mascot.nod .m1,#mascot.hop .m1,#mascot.sweep .m1{display:inline}
+  #mascot.hop .ad,#mascot.sweep .ad,#mascot.phew .ad{display:none}
+  #mascot.hop .au,#mascot.sweep .au{display:inline}
+  #mascot.phew .ab{display:inline}
+  #mascot.smug .ld,#mascot.flat .ld{display:inline}
+  #mascot.smug .m2{display:inline}
+  #mascot.flat .m3{display:inline}
+  #mascot.tight .m4{display:inline}
+  #mascot.phew .m5,#mascot.faint .m5{display:inline}
+  #mascot.faint .ey,#mascot.sweep .ey{display:none}
+  #mascot.faint .xe,#mascot.sweep .se{display:inline}
+  #mascot.nod .bl,#mascot.hop .bl,#mascot.sweep .bl,#mascot.phew .bl{transform:translateY(-1.6px)}
+  #mascot.smug .bL{transform:translateY(.9px) rotate(5deg)}
+  #mascot.smug .bR{transform:translateY(-2.2px) rotate(-8deg)}
+  #mascot.flat .bl{transform:translateY(1.5px)}
+  #mascot.tight .bL{transform:translateY(-.6px) rotate(-17deg)}
+  #mascot.tight .bR{transform:translateY(-.6px) rotate(17deg)}
+  #mascot.faint .bl{display:none}
+  #mascot.blink .ey{transform:scaleY(.1)}
+  #mascot.tight svg{animation:mShiver .14s linear infinite alternate}
+  #mascot.tight .sw{animation:mDrip 1.7s ease-in infinite}
+  #mascot.phew .sw{animation:mFlick .9s ease-out .25s 1 both}
+  #mascot.flat .pp{animation:mRoll 1.1s ease-in-out .25s 1 both}
+  #mascot.faint svg{animation:none}
+  #mascot.rm svg,#mascot.rm .sw,#mascot.rm .pp{animation:none}
+  #mascot.rm,#mascot.rm *{transition:none}
+  #mascot.rm.tight .sw,#mascot.rm.phew .sw{opacity:1}
+  @keyframes mBreath{from{transform:none}to{transform:scale(.985,1.035)}}
+  @keyframes mShiver{from{transform:translateX(-.5px)}to{transform:translateX(.5px)}}
+  @keyframes mDrip{0%{opacity:0;transform:none}20%{opacity:1}80%{opacity:1;transform:translateY(7px)}100%{opacity:0;transform:translateY(8px)}}
+  @keyframes mFlick{0%{opacity:1;transform:none}100%{opacity:0;transform:translate(6px,-5px)}}
+  @keyframes mRoll{0%{transform:none}30%{transform:translate(0,-1.8px)}55%{transform:translate(1.3px,-1.5px)}75%{transform:translate(-1.3px,-1.5px)}100%{transform:none}}
   .right{text-align:right;display:flex;gap:14px;align-items:flex-start}
   .best{font-size:20px;font-weight:700;line-height:1;margin-top:3px;color:var(--best)}
   #mute,#setBtn{pointer-events:auto;background:var(--btn);border:0;color:var(--fg);
@@ -282,6 +339,7 @@
         <label class="tog" id="glintTog"><span>Glints while dragging</span><input type="checkbox" id="glintOn"></label></div>
         <label class="tog"><span>Combo fire: the board burns on a streak</span><input type="checkbox" id="fireOn"></label>
         <label class="tog"><span>Chase your best: a bar to your best score</span><input type="checkbox" id="chaseOn"></label>
+        <label class="tog"><span>Mascot: a crumb that reacts to your game</span><input type="checkbox" id="mascotOn"></label>
         <p class="lbl section-lbl">World</p>
         <div class="skins" id="worldGrid"></div>
         <p class="lbl section-lbl">Skin</p>
@@ -388,6 +446,7 @@
 <script src="js/flow.js"></script>
 <script src="js/save.js"></script>
 <script src="js/modes.js"></script>
+<script src="js/mascot.js"></script>
 <script src="js/goals.js"></script>
 <script src="js/share.js"></script>
 <script src="js/ui.js"></script>

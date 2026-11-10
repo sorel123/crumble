@@ -770,7 +770,7 @@ function frame(now){
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
 
-  stepFlip(dt); stepJourney(dt);
+  stepFlip(dt); stepJourney(dt); mascotStep(now);   // (7.5f) the crumb: DOM, writes only on a change
   ambientBurst*=Math.pow(.88,dt);
   const aboost=1+ambientBurst*1.8+(bonus&&!reduce?0.6:0);   // a bonus keeps the sky's particles livelier
   if(jw) drawWipe(dt,aboost);                         // (7.5b) a journey stage coming in

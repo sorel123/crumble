@@ -2794,6 +2794,112 @@ test('7.5e chase your best: the bar counting up with the glow on fits the frame 
   assert.ok(p90 < 12, 'count-up frames stay cheap with the marker: p90 ' + p90.toFixed(2) + ' ms');
 });
 
+const mascotMood = (page, re) => page.waitForFunction(re => new RegExp(re).test(el('mascot').className) && !el('mascot').hidden, re.source, { timeout: 3000 })
+  .catch(async e => { throw new Error('mascot never showed ' + re + ', it is "' + await page.evaluate(() => el('mascot').className + '|' + state + '|' + pace.ph) + '"'); });
+const KEEP = '10000000';                                          // one gem left so a clear is not a sweep
+test('7.5f mascot: it sits on the board corner, clear of the gems and the HUD, and reacts to clears by size', async ({ page }) => {
+  assert.ok(await page.evaluate(() => el('mascot').hidden), 'not on the start card');
+  await play(page);
+  await dealt(page);
+  await mascotMood(page, /^idle\b/);
+  const g = await page.evaluate(() => {
+    const r = el('mascot').getBoundingClientRect(), hit = id => { const o = el(id).getBoundingClientRect(); return o.width > 0 && !(o.right <= r.left || o.left >= r.right || o.bottom <= r.top || o.top >= r.bottom); };
+    return { bottom: r.bottom, rim: by - 9, left: r.left, bx, w: r.width, hits: ['scoreVal', 'chase', 'modeTag', 'bestVal'].filter(hit) };
+  });
+  assert.ok(Math.abs(g.bottom - g.w * 4.5 / 48 - g.rim) < 3 && g.left >= g.bx && g.w >= 28 && g.w <= 46, 'feet on the frame top, inside the board width ' + JSON.stringify(g));
+  assert.deepEqual(g.hits, [], 'it covers nothing in the HUD');
+  const clear = async (rows, pre) => {
+    await dealt(page);
+    await page.evaluate(pre || (() => {}));
+    await setup(page, { rows, trayShapes: [0, 0, 0] });
+    await dragPiece(page, 0, 0, 0);
+  };
+  await page.evaluate(() => { combo = 0; });
+  await clear(['01111111', '00000000', KEEP, ...EMPTY.slice(3)], () => { combo = 0; });
+  await mascotMood(page, /^nod\b/);
+  await clear(['01111111', ...Array(6).fill('10000000'), '10000001'], () => { combo = 0; });
+  await mascotMood(page, /^hop\b/);
+  await clear(['01111111', '00000000', KEEP, ...EMPTY.slice(3)], () => { combo = 2; });
+  await mascotMood(page, /^smug\b/);
+  await dealt(page);
+  await setup(page, { rows: ['00000000', '00000000', KEEP, ...EMPTY.slice(3)], trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { combo = 4; });
+  await dragPiece(page, 0, 5, 5);
+  await mascotMood(page, /^flat\b/);
+  await clear(['01111111', ...EMPTY.slice(1)], () => { combo = 0; });
+  await mascotMood(page, /^sweep\b/);
+  await page.waitForFunction(() => /^(idle|tight)\b/.test(el('mascot').className), null, { timeout: 4000 });
+  // its eyes follow the held piece
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  const gg = await geometry(page);
+  await page.mouse.move(gg.trayCenters[0].x, gg.trayCenters[0].y); await page.mouse.down();
+  await page.mouse.move(gg.trayCenters[0].x + 150, gg.trayCenters[0].y - 40); await frames(page, 3);
+  const right = await page.evaluate(() => masc.look);
+  await page.mouse.move(10, gg.trayCenters[0].y - 40); await frames(page, 3);
+  const left = await page.evaluate(() => masc.look);
+  await page.mouse.move(gg.trayCenters[0].x, gg.trayCenters[0].y); await page.mouse.up();
+  assert.ok(parseFloat(right) > parseFloat(left), 'the pupils follow the piece: ' + right + ' vs ' + left);
+});
+
+test('7.5f mascot: it sweats when the board is tight, faints when it is stuck, a rescue stands it up; the switch (saved) hides it', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.evaluate(() => { pace.ph = 'edge'; });
+  await mascotMood(page, /^tight\b/);
+  await page.evaluate(() => { pace.ph = 'calm'; });
+  await mascotMood(page, /^idle\b/);
+  await page.evaluate(() => { mode = 'adventure'; roomNow = 0.1; });
+  await mascotMood(page, /^tight\b/);
+  await page.evaluate(() => { mode = 'endless'; roomNow = 1; score = 500; best = 400; stuck = true; });
+  await mascotMood(page, /^faint\b/);
+  await page.evaluate(() => { stuck = false; gameOver(); });
+  await mascotMood(page, /^faint\b/);
+  await page.click('#reviveBtn');
+  await mascotMood(page, /^(idle|tight)\b/);                   // the rescue tray is a recovery: it may still sweat
+  assert.equal(await page.evaluate(() => el('mascot').getAnimations().filter(a => a.playState !== 'finished' && a.effect.getComputedTiming().fill === 'forwards').length), 0, 'stood back up');
+  await page.click('#setBtn');
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#mascotOn'), true, 'on by default');
+  await page.click('#mascotOn');
+  await page.click('#setDone');
+  await frames(page, 2);
+  assert.ok(await page.evaluate(() => !CFG.FX_MASCOT && el('mascot').hidden && JSON.parse(localStorage.getItem('crumble.skins')).mascot === false), 'off: hidden, and saved');
+  await page.reload();
+  await page.waitForFunction(() => typeof CFG !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => CFG.FX_MASCOT), false, 'still off after a reload');
+  // reduced motion: the face changes, nothing moves
+  await page.evaluate(() => { CFG.FX_MASCOT = true; saveSkinSave(); });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
+  if (await page.evaluate(() => state) !== 'play') await play(page);
+  await dealt(page);
+  await setup(page, { rows: ['01111111', ...Array(6).fill('10000000'), '10000001'], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  await mascotMood(page, /^hop\b.*\brm\b/);
+  assert.equal(await page.evaluate(() => el('mascot').getAnimations({ subtree: true }).length), 0, 'reduced motion: no movement');
+});
+
+test('7.5f mascot: a drag and three-line clears with the crumb reacting fit the frame budget', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await watchFrames(page); await frameLog(page);
+  for (let k = 0; k < 3; k++) {
+    await dealt(page);
+    await setup(page, { rows: THREE_LINES, trayShapes: [4, 4, 4] });
+    const g = await geometry(page), s = await page.evaluate(() => ({ rows: tray[0].s.rows, cols: tray[0].s.cols }));
+    await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+    for (let i = 0; i < 16; i++) { const f = fingerFor(g, s, 3 - i * 0.2, 0.5 + 3 * Math.abs(Math.sin(i / 5))); await page.mouse.move(f.x, f.y); await frames(page, 1); }
+    await page.mouse.up();
+    await dragPiece(page, 0, 0, 0); await frames(page, 30);
+  }
+  const work = (await frameLog(page)).work.sort((a, b) => a - b);
+  const p90 = work[Math.floor(work.length * 0.9)];
+  console.log(`     (mascot drag + clears: ${work.length} frames, p90 ${p90.toFixed(2)} ms, max ${work[work.length - 1].toFixed(2)} ms)`);
+  assert.ok(p90 < 12, 'frames stay cheap with the crumb: p90 ' + p90.toFixed(2) + ' ms');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
