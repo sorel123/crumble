@@ -264,7 +264,7 @@ function openMap(){
   const n=list.querySelector('.next'); if(n) n.scrollIntoView({block:'center'});
 }
 el('modeTag').onclick=e=>{ e.stopPropagation(); openMenu(); };
-el('menuEndless').onclick=e=>{ e.stopPropagation(); playEndless(); };
+el('menuEndless').onclick=e=>{ e.stopPropagation(); homeCrumble(); playEndless(); };
 el('menuAdv').onclick=e=>{ e.stopPropagation(); openMap(); };
 el('menuClose').onclick=e=>{ e.stopPropagation(); closeMenu(); };
 el('mapBack').onclick=e=>{ e.stopPropagation(); openMenu(); };
