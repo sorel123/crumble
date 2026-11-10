@@ -218,7 +218,7 @@ function openSettings(){
 }
 el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };
 el('startSettings').onclick=e=>{ e.stopPropagation(); openSettings(); };
-el('setDone').onclick=e=>{ e.stopPropagation(); el('setPanel').hidden=true; paused=false; };
+el('setDone').onclick=e=>{ e.stopPropagation(); el('setPanel').hidden=true; if(!overlayOpen()) paused=false; };   // opened over the mode menu, the game still waits
 // The hesitation log (plan 3.4) for Jay on her phone, where the home-screen app has no URL bar for ?dev: five quick
 // taps on the note at the bottom of Settings turn it into the log's medians. Nothing changes for her otherwise.
 let hesTaps=[];
