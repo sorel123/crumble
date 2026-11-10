@@ -183,6 +183,7 @@ const CFG = {
   MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects
   MUSIC_PICK:     'shuffle', // (7.4) 'shuffle' or a MUSIC_TRACKS id (js/music.js); Off is the switch above
   MUSIC_VOL:      .5,         // 0..1; the music is quiet at .5 on purpose
+  MUSIC_ROTATE:   180,        // (8.5) Shuffle: seconds on one loop before it crossfades to another at the loop's end (0 = only on a new game)
   SND_PICKUP_VOL: 1,
   SND_PLACE_VOL:  1,
   PHONE_SPEAKER:  false,      // synth sounds only: cut the bass a phone speaker can't play (it just distorts)
