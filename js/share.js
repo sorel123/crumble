@@ -5,6 +5,8 @@
    files, the picture is saved instead. Shown on the game-over card for Endless and Daily runs only. */
 const SHARE_W=1080, SHARE_H=1350;
 const SHARE_FILE='crumble-score.png';
+const SHARE_URL='https://crumble.win';
+const SHARE_FOOTER='Can you beat it?  \u00B7  crumble.win';
 
 // the board as she left it (or a timelapse picture, pic): filled cells in a soft gold, empty ones as faint slots
 function drawShareBoard(g,x,y,size,pic){
@@ -45,7 +47,7 @@ function drawShareCard(d){
       g.beginPath(); g.moveTo(ax-7,ay-10); g.lineTo(ax+7,ay); g.lineTo(ax-7,ay+10); g.closePath(); g.fill(); }
   }
   g.font='600 44px system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
-  g.globalAlpha=.9; g.fillText("Can you beat it?",SHARE_W/2,SHARE_H-(strip?36:70)); g.globalAlpha=1;
+  g.globalAlpha=.9; g.fillText(SHARE_FOOTER,SHARE_W/2,SHARE_H-(strip?36:70)); g.globalAlpha=1;
   return cv;
 }
 
@@ -73,6 +75,13 @@ function shareStrip(){
 function shareSetup(){
   const can=(mode==='endless'||mode==='daily'||mode==='challenge')&&score>0;
   el('shareBtn').hidden=!can;
+  gcButtons();                                       // (1.1 F) 🏆 Leaderboards beside it, in the app while signed in
+}
+
+// the words that go with the picture: plain text and a plain URL, no markdown
+function shareText(){
+  return mode==='daily'?"Today's Daily: "+score+'. Same board for everyone: '+SHARE_URL
+                       :'My Crumble score: '+score+'. Can you beat it? '+SHARE_URL;
 }
 
 // the share sheet takes the picture when it can; otherwise (or if she closes the sheet with an error) it saves it
@@ -82,7 +91,7 @@ async function shareRun(){
   if(!blob) return 'failed';
   const file=new File([blob],SHARE_FILE,{type:'image/png'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file],title:'Crumble',text:'My Crumble score: '+score}); return 'shared'; }
+    try{ await navigator.share({files:[file],title:'Crumble',text:shareText()}); return 'shared'; }
     catch(e){ if(e&&e.name==='AbortError') return 'cancelled'; }
   }
   const url=URL.createObjectURL(blob), a=document.createElement('a');

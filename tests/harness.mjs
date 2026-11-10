@@ -47,6 +47,8 @@ export async function openGame(url, { seed = 1 } = {}) {
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.addInitScript(SEED_SCRIPT(seed));
+  // the scripted drags use a mouse but were written for a thumb's lift, so every load (reloads too) gives the mouse LIFT; the C2 test sets it back
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { CFG.MOUSE_LIFT = CFG.LIFT; }));
   await page.goto(url);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   return { browser, page, errors };
