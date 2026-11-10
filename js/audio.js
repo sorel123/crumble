@@ -121,6 +121,9 @@ document.addEventListener('visibilitychange',()=>{      // back from the backgro
 if(Native.on()){                                          // the app: game-style audio (mixes with other apps, follows the silent switch)
   try{ if(navigator.audioSession) navigator.audioSession.type='ambient'; }catch(e){}
   try{ Native.plugin('AppAudio')?.addListener('resume',()=>{ if(actx) audioRevive(); }); }catch(e){}   // interruption over, or back to the front
+  try{ Native.plugin('AppAudio')?.addListener('route',d=>{                // headphones in: play on silent too (AppAudio.swift picks the category)
+    if(navigator.audioSession) navigator.audioSession.type=d&&d.headphones?'playback':'ambient';
+  }); }catch(e){}
 }
 const jit=()=>1+(Math.random()*.06-.03);            // ±3% pitch per trigger — physical sounds only, never musical ones
 const hz=f=>clamp(f,20,12000);
