@@ -37,6 +37,7 @@ let praises=[],bursts=[],lineFlashes=[];
 let chunks=[],orbs=[],rings=[],dust=[];      // juice: block chunks, score orbs, landing rings, landing dust
 let rubble=[];                              // (7.5) crumble: the broken pieces of cleared gems, falling off the screen
 let scoreHold=0, bestBeaten=false, hitWait=0;           // score count-up waits for the first orb; NEW BEST fires once a run
+let chaseBest=0;                                        // (7.5e) the best she started this run with: the score marker's target
 let bonus=null, hudH=92;   // bonus = live bonus trays {left (trays still to play, this one included), extra (points the x2 added)}
 let tags=[], slams=[], bands=[], borderFlash=null;   // per-cell point tags, COMBO slams, COLOR GONE bands, board-border flash
 let paused=false;

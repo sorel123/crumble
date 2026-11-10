@@ -21,7 +21,8 @@ function snapshot(){
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     bonus:bonus?{left:bonus.left,extra:bonus.extra}:null,
-    jy:jJumps                                         // (7.5b) sweeps this run: the journey sky's extra stages
+    jy:jJumps,                                        // (7.5b) sweeps this run: the journey sky's extra stages
+    cb:chaseBest                                      // (7.5e) the best this run chases (the live `best` is rewritten mid-run by saveStats)
   };
 }
 const isInt=(v,a,b)=>Number.isInteger(v)&&v>=a&&v<=b;
@@ -47,6 +48,7 @@ function restore(o){
   goldenReplan(); goldenArrive=999;                  // the plan is not stored: it is worked out again from the board and the pieces left
   goldenNext=!!o.goldenNext; goldenCool=Math.max(0,o.goldenCool|0); trayHadSweep=!!o.trayHadSweep;
   trayCombo=o.trayCombo|0; starForced=!!o.starForced; starCool=isInt(o.starCool,0,1e3)?o.starCool:0; transformCool=Math.max(0,o.transformCool|0);
+  chaseBest=isInt(o.cb,0,1e9)?o.cb:best;            // (7.5e) older saves: the stored best
   jJumps=isInt(o.jy,0,99)?o.jy:0;                   // (7.5b) older saves: no jumps, the stage follows the score
   resetWorld(); transformCool=Math.max(0,o.transformCool|0);   // (resetWorld clears the cooldown)
   renderPips();

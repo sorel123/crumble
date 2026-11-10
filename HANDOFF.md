@@ -83,6 +83,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 - **Journey sky (7.5b, Endless and Daily)** — the sky travels with the score (dawn → space) and every clean sweep jumps a stage with a whole-sky wipe. On by default; Settings → Look → Advanced has the switch (off = her chosen world). See the 7.5b section at the end.
 - **Anticipation (7.5c)** — while she holds a piece, a line it could complete shivers and glints as she brings it near the landing, and a soft hum rises. See the 7.5c section at the end.
 - **Combo fire (7.5d)** — from combo 3 the board rim burns (hotter each step), the held piece sheds embers and the tray glows; a drop that does not clear snuffs it in a puff of smoke. Settings → Look → Advanced "Combo fire". See the 7.5d section at the end.
+- **Chase your best (7.5e)** — in Endless a slim bar under the score fills toward her best, "N to beat" from 75%, a glow from 90%; passing it raises NEW BEST and jumps the journey sky a stage. Settings → Look → Advanced "Chase your best". See the 7.5e section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
@@ -189,6 +190,7 @@ Top to bottom:
 | (7.5b) | Journey sky (Endless/Daily): the sky travels dawn, day, golden hour, night, aurora, space as the score climbs; a clean sweep jumps a stage; stage changes wipe down the whole sky. See the 7.5b section |
 | (7.5c) | Anticipation: a line the held piece can complete shivers and glints as the piece nears that landing, and a soft hum rises. See the 7.5c section |
 | (7.5d) | Combo fire: from combo 3 the rim burns hotter each step, the held piece sheds embers, the tray glows; a miss snuffs it in a puff. See the 7.5d section |
+| (7.5e) | Chase your best: a bar under the score fills toward her best; passing it raises NEW BEST and jumps the journey sky a stage. See the 7.5e section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1105,3 +1107,15 @@ A streak catches fire. Code is the "Combo fire (plan 7.5d)" block in `js/draw.js
 - **Cost.** One cached flame sprite per tier at full resolution, drawn only smaller and with image smoothing off (filtered blits were most of the cost in the 4x-throttled raster check); one stroke; embers capped at 36 (scaled by `perf.fx`). At 4x CPU throttle with raster included, combo 6 while dragging: p50 about +3 ms over the same build with the fire off (drag p90 ~47 vs ~45 ms).
 - **Check on the phone:** make three clears in a row; the rim should catch, then grow and whiten at 4 and 5, with sparks off the piece as you drag. Then drop a piece that clears nothing: the flames should go out in a puff with a soft breath. If it is too much, lower the heat curve in `fireTarget`, or turn it off in Settings.
 - Tests: the three "7.5d combo fire" scenarios.
+
+## Chase your best (plan 7.5, fifth zazz idea)
+
+A run has a visible target. Code is the "Chase your best (7.5e)" block in `js/modes.js` (`chaseSync`), the `#chase` element and its CSS in `index.html`, `chaseBest` (set in `start()`, saved with the run as `cb`) and one line in `place()` (`js/game.js`). Endless only.
+
+- **The marker.** A 76 px bar under the Score number fills as the shown score counts up toward `chaseBest`, the best she started this run with. From `CFG.CHASE_NEAR` (75%) "N to beat" shows beside it; from `CFG.CHASE_HOT` (90%) the bar glows, breathing. When the shown score passes it, the bar flashes white and pops away (~0.7 s). Hidden on her very first run (no best yet), in Daily and Adventure. A plain DOM element: it costs no canvas drawing and writes to the DOM only when what it shows changes (half-percent steps).
+- **Why `chaseBest` and not `best`.** `saveStats()` writes `max(best, score)` during an Endless run, so after a resume the stored best can already be this run's score. The target is saved with the run (`cb`); an older save chases the stored best.
+- **Passing it.** The existing NEW BEST banner, confetti and fanfare in `place()` are unchanged. With the switch on and a best of at least `CFG.CHASE_SKY_MIN` (500, the first journey stage) the journey sky also jumps one stage with the bright sweep wipe (`journeySweep()`, so it is saved in `jJumps` and waits for the banner like a sweep's). At space, or with the journey sky off, the banner carries it alone. Once a run.
+- **Reduced motion.** A steady glow, and the pass is a fade instead of the pop.
+- **Switch.** `CFG.FX_CHASE`, Settings → Look → Advanced "Chase your best: a bar to your best score" (saved as `chase`), also in Admin. Off: the bar hides at once and the sky does not jump; NEW BEST stays.
+- **Check on the phone:** in Endless, the bar should be under the score from the start of a run; near the best it says how many points are left and glows; beating it should pop the bar, raise NEW BEST and wipe the sky to the next stage.
+- Tests: the three "7.5e chase your best" scenarios.

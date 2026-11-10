@@ -130,6 +130,33 @@ function goalProgress(){
   return t==='lines'?lv.lines:t==='score'?score:t==='combo'?lv.combo:lv.swept?1:0;
 }
 // the HUD's right-hand box: Best in Endless, the goal in Adventure
+/* (7.5e) Chase your best. In Endless, a slim bar under the score fills as the shown score counts up toward the best she
+   started the run with (chaseBest). From CFG.CHASE_NEAR of it "N to beat" shows beside it; from CFG.CHASE_HOT the bar
+   glows. When the shown score passes it the bar flashes and pops away; place() has already raised the NEW BEST banner
+   and, with the journey sky on and a best of CFG.CHASE_SKY_MIN or more, jumped the sky a stage (journeySweep).
+   Plain DOM in the HUD: no canvas drawing, and it writes only when what it shows changes. Hidden on her very first run
+   (no best yet), in Daily and Adventure, and with Settings > Look > Advanced "Chase your best" off. */
+let chaseKey='', chaseT=0;
+function chaseSync(){
+  const box=el('chase'); if(!box) return;
+  const on=CFG.FX_CHASE&&mode==='endless'&&chaseBest>0;
+  const f=on?Math.min(1,shownScore/chaseBest):0, won=on&&shownScore>chaseBest;
+  const near=f>=CFG.CHASE_NEAR, hot=f>=CFG.CHASE_HOT, need=chaseBest+1-shownScore;
+  const q=Math.round(f*200)/200;                     // the bar moves in half-percent steps: a DOM write only when it shows a change
+  const key=!on?'off':won?'won':(q+'|'+(near?need:'')+'|'+(hot?1:0));
+  if(key===chaseKey) return;
+  const was=chaseKey; chaseKey=key; clearTimeout(chaseT);
+  if(key==='off'){ box.hidden=true; box.className=''; return; }
+  if(key==='won'){                                   // passed: a flash and a pop if she saw it happen, else simply gone
+    box.querySelector('.fill').style.transform='scaleX(1)';
+    if(was&&was!=='off'&&!box.hidden){ box.className='won'+(reduce?' rm':''); chaseT=setTimeout(()=>{ box.hidden=true; },reduce?400:750); }
+    else box.hidden=true;
+    return;
+  }
+  box.hidden=false; box.className=(near?'near':'')+(hot?' hot':'')+(reduce?' rm':'');
+  box.querySelector('.fill').style.transform='scaleX('+q+')';
+  box.querySelector('.to').textContent=near?need+' to beat':'';
+}
 function syncHud(){
   const adventure=mode==='adventure'&&lvl;
   let lbl='Best', val=best;
@@ -142,6 +169,7 @@ function syncHud(){
     else { lbl='Goal'; val='Empty it'; }
   }
   el('bestLbl').textContent=lbl; el('bestVal').textContent=val;
+  chaseSync();
   el('modeTag').textContent=adventure?'Level '+lvl.id+' ▾':mode==='daily'?'Daily ▾':'Endless ▾';
 }
 // place() calls this after every placement
