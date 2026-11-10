@@ -6,6 +6,10 @@
 // shared DOM lookup, used by every js/ file (defined here because this file loads first)
 function el(id){ return document.getElementById(id); }
 
+/* (8.0) Every point in the game is SCORE_SCALE times the old number, so a score reads as a big satisfying figure (a 40-point
+   clear is now 400). Score-valued constants below are written as old*SCORE_SCALE; migrateScale() (save.js) rescales saves once. */
+const SCORE_SCALE = 10;
+
 const CFG = {
   GRID: 8,
   DEV_MODE: new URLSearchParams(location.search).has('dev'), // Admin panel only when the URL has ?dev (also ignores saved panel overrides otherwise)
@@ -64,8 +68,8 @@ const CFG = {
   SWEEP_MIN: 6, SWEEP_MAX: 30,  // gem count range where a sweep is plausible
 
   // scoring
-  LINE_POINTS: 10, COMBO_STEP: 0.5,
-  SWEEP_BONUS: 300, SWEEP_PER_GEM: 25,
+  LINE_POINTS: 10*SCORE_SCALE, COMBO_STEP: 0.5,
+  SWEEP_BONUS: 300*SCORE_SCALE, SWEEP_PER_GEM: 25*SCORE_SCALE,
 
   // golden hand: a bonus tray that multiplies the points it earns
   GOLDEN_COMBO:    5,    // a combo this high (or higher) queues one for the next tray (so does a clean sweep)
@@ -76,7 +80,7 @@ const CFG = {
   GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
   MAX_RESCUES: 1,        // rescues one run gets: one, offered on the game-over card (plan 7.1; rescueAllowed is the single gate, the ad hook)
-  RESCUE_FLOOR: 300,     // offer a rescue only above this score...
+  RESCUE_FLOOR: 300*SCORE_SCALE,     // offer a rescue only above this score...
   RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
   // juice — the feel layer (all toggleable from the Admin panel)
@@ -100,7 +104,7 @@ const CFG = {
   FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
   FX_CELL_TAGS:   true,   // a little point value appears on every cleared cell
   FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
-  COLOR_GONE_BONUS: 60,   // points per colour wiped off the board by a clear ("COLOR GONE!")
+  COLOR_GONE_BONUS: 60*SCORE_SCALE,   // points per colour wiped off the board by a clear ("COLOR GONE!")
 
   // Bonus trays (plan 6.2, replaces the Blast Round). Clears fill a small meter; when it is full the next BONUS_TRAYS
   // trays pay x BONUS_MULT automatically. Dealing is untouched: the bonus only multiplies points.
@@ -114,7 +118,7 @@ const CFG = {
   STAR_CHANCE:   0.15,   // odds per eligible tray (the board qualifies, specialOk(), cooldown over)
   STAR_COOL:     8,      // trays after a star is dealt before the next may be
   STAR_COMBO:    6,      // a combo this high (or higher) guarantees one in the next eligible tray
-  STAR_PER_GEM:  14,     // points per gem cleared (x the combo factor); never less than the line formula
+  STAR_PER_GEM:  14*SCORE_SCALE,     // points per gem cleared (x the combo factor); never less than the line formula
   STAR_CHARGE:   8,      // frames the star charges before its beams fire (drop to empty board, charge included, stays under ~600 ms)
   STAR_STAGGER:  0.7,    // frames of delay per cell of distance for its cross to go white-hot
 
@@ -151,7 +155,7 @@ const CFG = {
   FX_CHASE:          true,   // (7.5e) Endless: a bar under the score fills toward her best ("N to beat" near the end); passing it jumps the journey sky a stage
   CHASE_NEAR:        .75,    // (7.5e) from this share of her best the "N to beat" shows
   CHASE_HOT:         .9,     // (7.5e) from this share the bar glows
-  CHASE_SKY_MIN:     500,    // (7.5e) a best below this beats with the banner only, so a tiny early best does not skip dawn
+  CHASE_SKY_MIN:     500*SCORE_SCALE,    // (7.5e) a best below this beats with the banner only, so a tiny early best does not skip dawn
   FX_MASCOT:         true,   // (7.5f) a cookie crumb on the board's top-left corner: nods/hops/smirks on clears, sweats when it is tight, faints on game over (js/mascot.js)
   FX_TIMELAPSE:      true,   // (7.5g) the run's boards are recorded (capped, in the run save) and replay on the game-over card (js/timelapse.js)
   FX_ANTICIPATION:   true,   // (7.5c) while she drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
@@ -163,7 +167,7 @@ const CFG = {
   SND_PICKUP:     'soft',     // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
   SND_PLACE:      'drop',     // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
   JOURNEY_SKY:    true,       // (7.5b) Endless/Daily: the sky travels dawn -> day -> golden hour -> night -> aurora -> space (Settings -> Look, Advanced)
-  JOURNEY_AT:     [0,500,1500,3000,6000,10000],   // score where each journey stage starts; every clean sweep also jumps one stage
+  JOURNEY_AT:     [0,500,1500,3000,6000,10000].map(n=>n*SCORE_SCALE),   // score where each journey stage starts; every clean sweep also jumps one stage
   JOURNEY_WAIT:   30,         // frames after a deal (or a sweep's confetti) before a stage change starts, so it never lands on a clear
   MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects
   MUSIC_PICK:     'shuffle', // (7.4) 'shuffle' or a MUSIC_TRACKS id (js/music.js); Off is the switch above

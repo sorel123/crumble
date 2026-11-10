@@ -22,7 +22,7 @@ const LEVEL_DEFS=[
 // par: pieces placed for 3 stars and for 2 stars (1 star is just clearing the level). 3 stars = the sim bot's 85th percentile, 2 stars =
 // 1.6x that (tools/adventure-sim.mjs prints the bot's numbers; levels 25 and 29 were retuned after the run and are estimates).
 const LEVEL_PAR=[[7,12],[12,20],[15,24],[19,31],[17,28],[22,36],[13,21],[31,50],[9,15],[6,10],[20,32],[40,64],[20,32],[57,92],[4,7],[47,76],[22,36],[48,77],[22,36],[6,10],[61,98],[47,76],[30,48],[67,108],[50,80],[6,10],[35,56],[84,135],[38,61],[117,188]];
-const LEVELS=LEVEL_DEFS.map(([type,n,fill],i)=>({id:i+1,ch:(i/6)|0,goal:{type,n},fill,par:LEVEL_PAR[i]||[99,99]}));
+const LEVELS=LEVEL_DEFS.map(([type,n,fill],i)=>({id:i+1,ch:(i/6)|0,goal:{type,n:type==='score'?n*SCORE_SCALE:n},fill,par:LEVEL_PAR[i]||[99,99]}));   // (8.0) a score goal is in boosted points
 const goalText=g=>g.type==='lines'?'Clear '+g.n+' lines':g.type==='score'?'Score '+g.n:g.type==='combo'?'Make a combo of '+g.n:'Clear the whole board';
 
 /* ── progress ── */
@@ -77,7 +77,7 @@ function recordDaily(key,sc,lines,again){        // again: the same run reaching
 }
 const dailyBest=()=>(daily.d[dk||dailyKey()]||{s:0}).s;
 const dailySeed=tag=>'crumble-daily-'+dk+'-'+tag;
-const fmtScore=n=>n>=10000?Math.round(n/1000)+'k':n>=1000?(n/1000).toFixed(1)+'k':String(n);
+const fmtScore=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=10000?Math.round(n/1000)+'k':n>=1000?(n/1000).toFixed(1)+'k':String(n);
 function dailyOver(){                                // the game-over card, for a Daily
   const r=recordDaily(dk,score,lv.lines,lv.rec); lv.rec=true;
   el('overEye').textContent='Daily · '+new Date(dk+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});

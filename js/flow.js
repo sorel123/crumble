@@ -15,8 +15,8 @@ async function gameOver(){
     const newSkins=checkUnlocks();
     el('overScore').textContent=score;
     el('overMsg').textContent=(newSkins.length?'New skin unlocked: '+newSkins.join(', ')+'! ':'')
-      +(score>=1500?'That is a serious run.'
-      :score>=600?'Good chains. Save the big shapes for open space.'
+      +(score>=1500*SCORE_SCALE?'That is a serious run.'
+      :score>=600*SCORE_SCALE?'Good chains. Save the big shapes for open space.'
       :'Clear rows early — do not let the board fill up.');
   }
   const btn=el('reviveBtn');

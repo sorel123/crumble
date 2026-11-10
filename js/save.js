@@ -118,6 +118,29 @@ function loadRun(){
   catch(e){ clearRun(); return false; }
 }
 
+/* ═══════ points boost migration (8.0) ═══════
+   Scores became SCORE_SCALE times bigger. Everything already saved in the old size is multiplied once; `crumble.scale`
+   remembers the scale the saves are in, so a reload never multiplies again (and a later scale change would only
+   apply the ratio). Touches: best + total score, the Daily history, and the score fields of a saved run in each mode.
+   A first install has nothing to scale and just records the scale. Adventure stars, lines and combos are not points. */
+const SCALE_STORE='crumble.scale';
+function migrateScale(){
+  try{
+    const prev=+localStorage.getItem(SCALE_STORE)||1;
+    if(prev===SCORE_SCALE) return;
+    const k=SCORE_SCALE/prev, up=n=>isInt(n,0,1e12)?Math.round(n*k):n;
+    const edit=(key,fn)=>{ const raw=localStorage.getItem(key); if(!raw) return; try{ const o=JSON.parse(raw); if(o&&typeof o==='object'){ fn(o); localStorage.setItem(key,JSON.stringify(o)); } }catch(e){} };
+    edit(STATS_STORE,o=>{ o.best=up(o.best); o.totalScore=up(o.totalScore); });
+    edit('crumble.daily',o=>{ if(o.d&&typeof o.d==='object') for(const d in o.d) if(o.d[d]) o.d[d].s=up(o.d[d].s); });
+    for(const m of ['endless','adventure','daily']) edit(runStore(m),o=>{
+      o.score=up(o.score); if('cb' in o) o.cb=up(o.cb);
+      if(o.golden) o.golden.pts=up(o.golden.pts);
+      if(o.bonus) o.bonus.extra=up(o.bonus.extra);
+    });
+    localStorage.setItem(SCALE_STORE,String(SCORE_SCALE));
+  }catch(e){}
+}
+
 /* ═══════ best score + lifetime stats — their own key, loaded before the unlock check ═══════ */
 const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,bonuses:0,starSeen:0,escapes:0};   // bonuses: bonus runs earned
 function saveStats(){

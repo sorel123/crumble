@@ -8,6 +8,8 @@ clip.
 
 Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, anticipation, combo fire, chase your best and the mascot crumb (7.5).
 
+**Points (8.0):** every point is `SCORE_SCALE` (10) times the old number. Score-valued constants and thresholds are written `old*SCORE_SCALE` (config.js, render.js skin unlocks, Adventure score goals in modes.js). `migrateScale()` (save.js) rescales best, totals, Daily history and a saved run once, tracked by `crumble.scale`. Tests that set a score think in boosted points. Leaderboards (Game Center) must use this scale.
+
 ---
 
 ## Workflow
