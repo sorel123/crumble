@@ -172,7 +172,7 @@ function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
-  const roomBefore=paced()?roomOf(packGrid(grid)):1;   // (6.3) how cramped the board was before this drop, for the narrow escape
+  const gridBefore=packGrid(grid), roomBefore=paced()?roomOf(gridBefore):1;   // (6.3) how cramped the board was before this drop, for the narrow escape
   const bump=CFG.FX_LAND_BUMP&&!reduce;
   if(!s.star) s.cells.forEach(([dr,dc])=>{ grid[r+dr][c+dc]={gi:t.gi,t:1,f:1,l:bump?1:0}; });   // f = a brief glint, l = the landing thump; a star leaves no gem
   if(bump){                                        // the thump: a ring spreads out from under the piece, dust kicks out sideways
@@ -323,6 +323,7 @@ function place(idx,r,c){
     if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
   }
 
+  if(paced()) waveAfterDrop(gridBefore,total,countFlat(packGrid(grid)),combo,roomBefore<CFG.ROOM_EDGE);   // (7.3) setups and closer triggers
   if(paced()) tension+=(1-roomOf(packGrid(grid))-tension)*0.5;   // (6.1) a display value now (the border glow): how cramped the board is, eased
   else tension=Math.min(1,tension+(1-mobility())*CFG.TENSION_DRIFT);
 
