@@ -3297,6 +3297,72 @@ test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle
   assert.ok(off > 45, `the switch off: every frame (${off}/s)`);
 });
 
+// ── Plan 1.1 C: drag feel on desktop and in the app ──
+
+test('C2 mouse lift: a mouse drag floats 0.15 cells above the cursor, a finger still 1 cell', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { CFG.MOUSE_LIFT = 0.15; });                 // the harness equals it to LIFT for its old scripts
+  await setup(page, { rows: EMPTY, trayShapes: [0, 3, 10] });
+  const g = await geometry(page), f = await fingers(page);
+  const x = g.trayCenters[0].x, y = g.by + g.cell * 12;
+  const gap = async () => { await frames(page, 14); const v = await dragView(page); return (y - (v.cy + v.rows * g.cell / 2)) / g.cell; };
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+  await page.mouse.move(x, y, { steps: 4 });
+  assert.ok(Math.abs(await gap() - 0.15) < 0.05, 'mouse lift'); await page.mouse.up(); await frames(page, 30);
+  await f.down(1, g.trayCenters[1].x, g.trayCenters[1].y); await f.move(1, x, y, 4);
+  assert.ok(Math.abs(await gap() - 1) < 0.05, 'touch lift'); await f.up(1);
+});
+
+test('C4 desktop keys: Escape and P open and close the pause card, only in a game', async ({ page }) => {
+  await page.keyboard.press('Escape');
+  assert.equal(await page.isHidden('#pauseCard'), true, 'nothing to pause on the start screen');
+  await play(page); await dealt(page);
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await page.evaluate(() => ({ paused, card: !el('pauseCard').hidden })), { paused: true, card: true });
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await page.evaluate(() => ({ paused, card: !el('pauseCard').hidden })), { paused: false, card: false });
+  await page.keyboard.press('p');
+  assert.equal(await page.evaluate(() => paused), true);
+  await page.keyboard.press('P');
+  assert.equal(await page.evaluate(() => paused), false);
+});
+
+test('C1 slot tick: selection haptics in the app, one per new landing cell, none on pickup or when the slot goes, 40 ms apart, off with the switch', async ({ page }) => {
+  await play(page); await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 3, 10] });
+  await page.evaluate(() => {
+    window.__sel = [];
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { Haptics: {
+      impact: () => Promise.resolve(), notification: () => Promise.resolve(),
+      selectionStart: () => { __sel.push('start'); return Promise.resolve(); },
+      selectionChanged: () => { __sel.push('tick'); return Promise.resolve(); },
+      selectionEnd: () => { __sel.push('end'); return Promise.resolve(); } } } };
+  });
+  const take = () => page.evaluate(() => __sel.splice(0));
+  const g = await geometry(page), s = { rows: 1, cols: 1 };
+  const at = (r, c) => fingerFor({ ...g, lift: 0.15 }, s, r, c);
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+  assert.deepEqual(await take(), ['start'], 'pickup: the selection session opens, no tick');
+  let p = at(3, 3); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), ['tick'], 'first landing cell: one tick');
+  await page.evaluate(() => new Promise(r => setTimeout(r, 60)));
+  p = at(3, 3.2); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), [], 'same cell: no tick');
+  p = at(3, 4); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), ['tick'], 'a different cell: a tick');
+  p = at(3, 5); await page.mouse.move(p.x, p.y);
+  assert.deepEqual(await take(), [], 'inside 40 ms: no second tick');
+  p = at(40, 3); await page.mouse.move(p.x, p.y); await page.evaluate(() => new Promise(r => setTimeout(r, 60)));
+  assert.deepEqual(await take(), [], 'slot gone: no tick');
+  await page.mouse.up();
+  assert.deepEqual(await take(), ['end'], 'release closes the session');
+  await page.evaluate(() => { CFG.HAPTICS = false; });
+  await dealt(page);
+  await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
+  p = at(2, 2); await page.mouse.move(p.x, p.y, { steps: 3 }); await page.mouse.up();
+  assert.deepEqual(await take(), [], 'Haptics off: silent');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
@@ -3315,3 +3381,4 @@ for (const { name, fn } of tests) {
 await server.close();
 console.log(failed ? `\n${failed} of ${tests.length} failed` : `\nall ${tests.length} passed`);
 process.exit(failed ? 1 : 0);
+
