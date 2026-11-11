@@ -2426,6 +2426,57 @@ test('Challenge: out of moves ends the round early and the score stands (no resc
   assert.deepEqual(await page.evaluate(() => [el('chalInfo').hidden, el('bestLbl').textContent, special('golden'), special('transform')]), [true, 'Best', true, true]);
 });
 
+test('Challenge link (E2): the deal packs into the link and back exactly; a damaged one is refused', async ({ page }) => {
+  const r = await page.evaluate(() => ['ln01', 'ln02', 'd2026-11-10'].map(seed => { const d = chMake(seed), p = chPack(d), u = chUnpack(p);
+    const marks = d.trays.map(t => ['CLOSER', 'SWEEP'].includes(t.l) ? t.l : 'DEAL');
+    return { len: p.length, same: JSON.stringify([d.open, d.trays.map(t => t.p), marks, d.med]) === JSON.stringify([u.open, u.trays.map(t => t.p), u.trays.map(t => t.l), u.med]),
+      bad: chUnpack(p.slice(0, 40)), junk: chUnpack('Azzzz'), other: chUnpack('B' + p.slice(1)) }; }));
+  for (const x of r) { assert.equal(x.same, true); assert.ok(x.len < 130, 'short enough for a message: ' + x.len); assert.deepEqual([x.bad, x.junk, x.other], [null, null, null]); }
+});
+
+test('Challenge link (E2): Share sends a crumble.win link; opening it shows "Beat N", plays the same deal, and tells her when she beats it', async ({ page, server }) => {
+  await chalStart(page, 'fr01');
+  await page.evaluate(() => { score = 2340; gameOver(); });
+  const sent = await page.evaluate(() => ({ text: shareText(), deal: JSON.stringify(chal.deal.trays.map(t => t.p)), med: chal.deal.med }));
+  const url = sent.text.match(/https:\/\/crumble\.win\/\S+/)[0];
+  assert.match(sent.text, /^I scored 2340 .*Can you beat it\? https:\/\/crumble\.win\/\?c=fr01&s=2340&d=A/);
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(server.url + url.slice('https://crumble.win/'.length));
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && !el('chalCard').hidden);
+  assert.deepEqual(await page.evaluate(() => ({ q: location.search, btn: el('chalFriend').textContent, today: el('chalToday').className })),
+    { q: '', btn: 'Beat 2,340Challenge #FR01 · a friend sent you this one', today: 'ghost' }, 'the card offers the friend\'s round; the address bar is tidied');
+  await page.evaluate(() => { CFG.PAYOFF_LINES = 9; chCache.clear(); });   // whatever this version would deal, the link's deal is played
+  await page.click('#chalFriend'); await page.waitForFunction(() => state === 'play' && mode === 'challenge'); await dealt(page);
+  const g = await page.evaluate(() => ({ deal: JSON.stringify(chal.deal.trays.map(t => t.p)), med: chal.deal.med, lbl: el('bestLbl').textContent, val: el('bestVal').textContent, beat: chal.beat }));
+  assert.deepEqual(g, { deal: sent.deal, med: sent.med, lbl: g.med[0] < 2340 ? '🥉 Bronze' : '🎯 Beat', val: (g.med[0] < 2340 ? g.med[0] : 2340).toLocaleString('en-US'), beat: 2340 });
+  const r = await page.evaluate(() => {
+    banners.length = 0; score = 2340;
+    const gr = empty(); for (let c = 0; c < 7; c++) gr[0][c] = { gi: 0, t: 1, f: 0, l: 0 }; gr[5][5] = { gi: 2, t: 1, f: 0, l: 0 }; grid = gr;
+    const dot = SHAPES.find(s => s.n === 1); tray = [{ s: dot, gi: 1 }, { s: dot, gi: 2 }, { s: dot, gi: 3 }]; place(0, 0, 7);
+    return { banners: banners.map(b => b.txt), beaten: chal.beaten };
+  });
+  assert.ok(r.banners.includes('YOU BEAT IT!') && r.beaten, r.banners.join());
+  await page.evaluate(() => { saveRun(); });
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell); await page.evaluate(() => { if (!el('menuCard').hidden) closeMenu(); });
+  assert.deepEqual(await page.evaluate(() => [chal.beat, chal.beaten]), [2340, true], 'the target survives a resume');
+  await page.evaluate(() => { gameOver(); });
+  assert.match(await page.textContent('#overMsg'), /^You beat their 2,340!/);
+  await page.click('#againBtn'); await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [chal.seed, chal.beat, chal.beaten, score]), ['fr01', 2340, false, 0], 'Retry keeps the target');
+});
+
+test('Challenge link (E2): a link without a readable deal works the deal out from the seed; a bad seed is ignored', async ({ page, server }) => {
+  const want = await page.evaluate(() => JSON.stringify(chMake('fr02').trays.map(t => t.p)));
+  await page.goto(server.url + '?c=fr02&s=900&d=Abroken');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && !el('chalCard').hidden);
+  await page.click('#chalFriend'); 
+  await page.waitForFunction(() => state === 'play' && mode === 'challenge');
+  assert.equal(await page.evaluate(() => JSON.stringify(chal.deal.trays.map(t => t.p))), want);
+  await page.goto(server.url + '?c=<script>&s=1');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => el('chalCard').hidden), true);
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tint the screen around the board, never a gem, and fade out', async ({ page }) => {

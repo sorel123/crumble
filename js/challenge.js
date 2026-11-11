@@ -24,6 +24,7 @@ let chal=null;           // the round in play: {seed, deal:{open, trays, med}, w
 let chGen=false;         // generating a deal: commitTray only records the hand (solver.js)
 let chSeed='';           // the seed the next start() deals
 let chDone=false;        // the twelfth tray has been played: the round is over, the end card is on its way
+let chBeat=0;            // (E2) the score a friend's link asks her to beat (0: none); the next start() takes it
 const chalRec={s:{},won:0,gold:0};
 const chCache=new Map(); // seed -> deal (with medals), so a retry starts at once
 
@@ -256,9 +257,9 @@ function chOpen(){
   const seed=chSeed||chToday(), deal=chDeal(seed);
   chResetDealer();
   grid=deal.open.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0}));
-  chal={seed,deal,won:0}; chDone=false;
+  chal={seed,deal,won:0,beat:chBeat,beaten:false}; chDone=false; chBeat=0;
   trayNo=1; chCommit(deal.trays[0]);
-  pushBanner('CHALLENGE',CH_TRAYS+' trays · '+MEDALS[0].icon+' '+deal.med[0].toLocaleString(),'#FFE9A8');
+  pushBanner('CHALLENGE',chal.beat?'Beat '+chal.beat.toLocaleString():CH_TRAYS+' trays · '+MEDALS[0].icon+' '+deal.med[0].toLocaleString(),'#FFE9A8');
 }
 function chCommit(T){
   commitTray(T.p.map(([si])=>si<0?STAR:SHAPES[si]),T.l);
@@ -283,6 +284,7 @@ function chDealNext(){
 // goalStep(), after every drop: a medal she has just reached
 function chStep(){
   if(!chal) return;
+  if(chal.beat&&!chal.beaten&&score>chal.beat){ chal.beaten=true; pushBanner('YOU BEAT IT!','their '+chal.beat.toLocaleString(),'#8FF7FF'); Sfx.fanfare(); }
   const m=chMedalOf(score,chal.deal.med);
   if(m>chal.won){
     chal.won=m; const M=MEDALS[m-1];
@@ -311,6 +313,7 @@ function chHud(){
 }
 function chHudRight(){                               // syncHud(): [label, value]
   const m=chMedalOf(score,chal.deal.med);
+  if(chal.beat&&score<=chal.beat&&(m>=3||chal.beat<=chal.deal.med[m])) return ['🎯 Beat',chal.beat.toLocaleString()];   // (E2) the friend's score, when it is the next thing to pass
   if(m>=3) return [MEDALS[2].icon+' Gold','Got it!'];
   return [MEDALS[m].icon+' '+MEDALS[m].name,chal.deal.med[m].toLocaleString()];
 }
@@ -348,7 +351,8 @@ function chalOver(){
   el('overScore').textContent=score;
   el('overMedals').hidden=false;
   el('overMedals').querySelectorAll('span').forEach((s,i)=>{ s.className=i<m?'won':''; s.querySelector('i').textContent=med[i].toLocaleString(); });
-  el('overMsg').textContent=(m<3?(med[m]-score).toLocaleString()+' more for '+MEDALS[m].name.toLowerCase()+'.':'The top medal. Nicely done!')
+  el('overMsg').textContent=(chal.beat?(score>chal.beat?'You beat their '+chal.beat.toLocaleString()+'! ':(chal.beat-score+1).toLocaleString()+' more to beat their '+chal.beat.toLocaleString()+'. '):'')
+    +(m<3?(med[m]-score).toLocaleString()+' more for '+MEDALS[m].name.toLowerCase()+'.':'The top medal. Nicely done!')
     +(prevB>score?' Your best here: '+prevB.toLocaleString()+'.':r.n>1&&score>prevB?' A new best here!':'');
   el('againBtn').textContent='Retry'; el('overMenuBtn').textContent='Home';
   el('chalNewBtn').hidden=false;
@@ -365,10 +369,11 @@ function chTileSub(){
 }
 function openChal(){
   pauseForMenu(); el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; el('goalsCard').hidden=true;
+  el('chalFriend').hidden=true; chFriend=null;
   const live=peekRun('challenge'), liveSeed=live&&live.ch&&live.ch.seed, today=chToday(), t=chalRec.s[today];
   el('chalCont').hidden=!liveSeed;
   if(liveSeed) el('chalCont').innerHTML='<b>Continue</b><span></span>', el('chalCont').lastChild.textContent=chLabel(liveSeed)+' · tray '+Math.min(live.trayNo,CH_TRAYS)+' of '+CH_TRAYS;
-  el('chalToday').className=liveSeed?'ghost':'cta';
+  el('chalToday').className=liveSeed?'ghost':'cta'; el('chalCont').className='cta';
   el('chalTodaySub').textContent=t&&t.n?(t.m?MEDALS[t.m-1].icon+' ':'')+'Best '+t.b.toLocaleString():'Same pieces for everyone today';
   el('chalTotals').textContent=chalRec.won?'Medals won on '+chalRec.won+(chalRec.won===1?' challenge':' challenges')+(chalRec.gold?' · 🥇 '+chalRec.gold:''):'Score high in 12 trays. Bronze, silver, gold.';
   el('chalCard').hidden=false;
@@ -391,10 +396,11 @@ function chReady(seed,btn,go){                      // go() now if the deal is c
   const b=btn.querySelector('b')||btn, was=b.textContent; b.textContent='Dealing…';
   setTimeout(()=>{ chDeal(seed); b.textContent=was; go(); },40);
 }
-function playChal(seed){
+function playChal(seed,fresh){                    // fresh: a friend's link always starts the round from the top
   leaveMode(); hideMenus(); mode='challenge'; lvl=null; saveMode();
   const o=peekRun('challenge');
-  if(!(o&&o.ch&&(seed===undefined||o.ch.seed===seed)&&loadRun())){ chSeed=seed||chToday(); start(); }   // today's, already under way: carry on
+  if(fresh||!(o&&o.ch&&(seed===undefined||o.ch.seed===seed)&&loadRun())){ chSeed=seed||chToday(); start(); }   // today's, already under way: carry on
+  chBeat=0;
   syncHud();
 }
 el('menuChal').onclick=e=>{ e.stopPropagation(); openChal(); };
@@ -403,4 +409,64 @@ el('chalCont').onclick=e=>{ e.stopPropagation(); homeCrumble(); playChal(); };
 el('chalToday').onclick=e=>{ e.stopPropagation(); const s=chToday(); chReady(s,e.currentTarget,()=>{ homeCrumble(); playChal(s); }); };
 el('chalNew').onclick=e=>{ e.stopPropagation(); const s=chFresh(); chReady(s,e.currentTarget,()=>{ homeCrumble(); playChal(s); }); };
 el('chalBack').onclick=e=>{ e.stopPropagation(); openMenu(); };
-el('chalNewBtn').onclick=e=>{ e.stopPropagation(); const s=chFresh(); chReady(s,e.currentTarget,()=>{ el('overCard').hidden=true; chSeed=s; start(); }); };
+el('chalNewBtn').onclick=e=>{ e.stopPropagation(); const s=chFresh(); chReady(s,e.currentTarget,()=>{ el('overCard').hidden=true; chSeed=s; chBeat=0; start(); }); };
+
+/* ═══════ friend links (1.1 task E2) ═══════
+   Share on a Challenge's end card sends https://crumble.win/?c=<seed>&s=<score>&d=<deal>. Opening it starts that
+   challenge with "Beat <score>" as a target next to the medals. The link carries the frozen deal itself (d, about 110
+   characters), not only the seed: a seed is dealt by the dealer's code, and a friend on an older or newer version would
+   otherwise get other pieces. A link without a readable d falls back to working the deal out from the seed. In the app
+   the link opens the web game (universal links are out of scope).
+   d = 'A' + base64url of: 64 board cells (3 bits: 0 empty, else gem+1), 36 pieces (6 bits shape, 63 = star; 3 bits
+   gem), 12 tray marks (2 bits: 0 plain, 1 closer, 2 sweep, which keep the tray's shimmer), 3 medal targets (24 bits
+   each, in tens of points). */
+const CH_LINK='https://crumble.win/', CH_MARKS=['DEAL','CLOSER','SWEEP'];
+function chPack(deal){
+  const bits=[]; const put=(v,n)=>{ for(let i=n-1;i>=0;i--) bits.push((v>>i)&1); };
+  for(const row of deal.open) for(const v of row) put(v+1,3);
+  for(const T of deal.trays) for(const [si,gi] of T.p){ put(si<0?63:si,6); put(gi,3); }
+  for(const T of deal.trays) put(Math.max(0,CH_MARKS.indexOf(T.l)),2);
+  for(const m of deal.med) put(Math.min(0xFFFFFF,Math.round(m/SCORE_SCALE)),24);
+  let bin=''; for(let i=0;i<bits.length;i+=8){ let b=0; for(let k=0;k<8;k++) b=(b<<1)|(bits[i+k]|0); bin+=String.fromCharCode(b); }
+  return 'A'+btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function chUnpack(d){
+  try{
+    if(typeof d!=='string'||d[0]!=='A'||d.length>200) return null;
+    const bin=atob(d.slice(1).replace(/-/g,'+').replace(/_/g,'/')), bits=[];
+    for(let i=0;i<bin.length;i++){ const b=bin.charCodeAt(i); for(let k=7;k>=0;k--) bits.push((b>>k)&1); }
+    let at=0; const get=n=>{ let v=0; for(let i=0;i<n;i++){ if(at>=bits.length) throw 0; v=(v<<1)|bits[at++]; } return v; };
+    const open=[]; for(let r=0;r<N;r++){ const row=[]; for(let c=0;c<N;c++) row.push(get(3)-1); open.push(row); }
+    const trays=[]; for(let t=0;t<CH_TRAYS;t++){ const p=[]; for(let k=0;k<3;k++){ const s=get(6), gi=get(3); p.push([s===63?-1:s,gi]); } trays.push({p,l:''}); }
+    for(const T of trays) T.l=CH_MARKS[get(2)]||'DEAL';
+    const med=[get(24)*SCORE_SCALE,get(24)*SCORE_SCALE,get(24)*SCORE_SCALE];
+    const deal={open,trays,med};
+    return validDeal(deal)&&med[0]<med[1]&&med[1]<med[2]?deal:null;
+  }catch(e){ return null; }
+}
+function chLinkFor(seed,sc,deal){ return CH_LINK+'?c='+encodeURIComponent(seed)+'&s='+(sc|0)+'&d='+chPack(deal); }
+// the link she arrived with, if any: {seed, beat, deal (null: work it out from the seed)}; the address bar is tidied
+function chReadLink(){
+  try{
+    const q=new URLSearchParams(location.search), seed=q.get('c');
+    if(!seed||!/^[\w-]{1,24}$/.test(seed)) return null;
+    const beat=Math.max(0,Math.min(1e9,parseInt(q.get('s'),10)||0)), deal=chUnpack(q.get('d'));
+    q.delete('c'); q.delete('s'); q.delete('d');
+    const rest=q.toString(); history.replaceState(null,'',location.pathname+(rest?'?'+rest:'')+location.hash);
+    return {seed,beat,deal};
+  }catch(e){ return null; }
+}
+let chFriend=null;                                    // the link's challenge, waiting on the card for her to play it
+function openFriend(link){
+  openChal();
+  chFriend=link;
+  el('chalFriend').hidden=false;
+  el('chalFriend').querySelector('b').textContent=link.beat?'Beat '+link.beat.toLocaleString():'Play it';
+  el('chalFriend').querySelector('span').textContent=chLabel(link.seed)+' · a friend sent you this one';
+  el('chalCont').className=el('chalToday').className='ghost';
+}
+el('chalFriend').onclick=e=>{
+  e.stopPropagation(); const f=chFriend; if(!f) return;
+  if(f.deal) chCache.set(f.seed,f.deal);
+  chReady(f.seed,e.currentTarget,()=>{ chBeat=f.beat; homeCrumble(); playChal(f.seed,true); chFriend=null; });
+};
