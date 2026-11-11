@@ -277,6 +277,7 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
   const pool=HUNT_POOL.slice();                     // Fisher-Yates always (not rshuffle's sort): a fixed count of rnd() calls on every engine, so the Daily deals alike
   for(let k=pool.length-1;k>0;k--){ const j=(rnd()*(k+1))|0; [pool[k],pool[j]]=[pool[j],pool[k]]; }
   let nodes=budget, best=null, bestSc=-Infinity;
+  const easeW=tideOn()?CFG.SWEEP_EASE_W:0, enough=4.5+easeW*0.75;   // (round 5) the ease term, under the tide only (Challenge keeps its deals); the search stops at a sweep that is also easy
   const path=[];
   for(const cv of covers){
     const cand=[];                                     // the moves that stay inside this cover
@@ -285,7 +286,7 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
     let liveAll=0; for(const i of cv.ids) liveAll|=1<<i;
     const dfs=(lo,hi,live,llo,lhi,depth)=>{
       for(const c of cand){
-        if(nodes<=0||bestSc>=4.5) return;
+        if(nodes<=0||bestSc>=enough) return;
         const m=c.m;
         if((m.lo&~llo)||(m.hi&~lhi)||(lo&m.lo)||(hi&m.hi)) continue;
         nodes--;
@@ -293,10 +294,10 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
         path.push({s:c.s,lines});
         if(!nlo&&!nhi){                                // a sweep: score it (every drop clears = 1 each; a dot costs a little)
           let sc=path.reduce((a,p)=>a+(p.lines?1:0)-(p.s.n===1?0.4:0),0)+(3-path.length)*0.5;
-          if(sc>bestSc-2){                             // (1.1) a sweep her quick play finds by itself (predictPlay) beats a cleverer one
+          if(sc+easeW>bestSc-2){                             // (1.1) a sweep her quick play finds by itself (predictPlay) beats a cleverer one
             const h=path.map(p=>p.s); while(h.length<3) h.push(SHAPES[1+(path.length%4)]);
             const pp=predictPlay(lo0,hi0,h); if(pp&&!(pp[0]|pp[1])) sc+=2;
-            sc+=CFG.SWEEP_EASE_W*sweepEase(lo0,hi0,h);   // (round 5) a sweep a person finds whichever way she plays it
+            if(easeW) sc+=easeW*sweepEase(lo0,hi0,h);   // (round 5) a sweep a person finds whichever way she plays it
             if(sc>bestSc){ bestSc=sc; best=path.map(p=>p.s); }
           }
         }
@@ -309,13 +310,13 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
       }
     };
     dfs(lo0,hi0,liveAll,cv.ulo,cv.uhi,0);
-    if(bestSc>=4.5||nodes<=0) break;
+    if(bestSc>=enough||nodes<=0) break;
     yield;
   }
   if(!best) return null;
   const pad=SHAPES[1+(best.length%4)];                // the same small filler the legibility check above played
   while(best.length<3) best.push(pad);
-  if(CFG.SWEEP_EASE_HUNT>0&&sweepEase(lo0,hi0,best)<CFG.SWEEP_EASE_HUNT) return null;   // (round 5) a sweep most people would miss is not dealt as one
+  if(easeW&&CFG.SWEEP_EASE_HUNT>0&&sweepEase(lo0,hi0,best)<CFG.SWEEP_EASE_HUNT) return null;   // (round 5) a sweep most people would miss is not dealt as one
   for(let k=2;k>0;k--){ const j=(rnd()*(k+1))|0; [best[k],best[j]]=[best[j],best[k]]; }
   return best;
 }
@@ -445,7 +446,7 @@ function* runHandSteps(a0){
     if(keys.length&&rnd()<0.6) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];
     const pp=predictPlay(lo0,hi0,hand);
     if(pp){
-      if(!(pp[0]|pp[1])&&sweepEase(lo0,hi0,hand)>=CFG.SWEEP_EASE) return {hand,sweep:true};      // her quick play sweeps it already (round 5: and most ways a person plays it do)
+      if(!(pp[0]|pp[1])){ if(!tideOn()||sweepEase(lo0,hi0,hand)>=CFG.SWEEP_EASE) return {hand,sweep:true}; if(i%8===7) yield; continue; }   // her quick play sweeps it already (round 5: and most ways a person plays it do; a sweep most would miss is not dealt at all)
       tried.push({hand,lo:pp[0],hi:pp[1],g:sweepGap(pp[0],pp[1]),d:sweepDist(pp[0],pp[1])});
     }
     if(i%8===7) yield;
