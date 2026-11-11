@@ -31,6 +31,8 @@
 // big4Per5 (fewest 4+ pieces in any five trays), and the difficulty guards gamesEnded, p10 (10th percentile game length), edgeHoldsPerGame.
 // Plan 8.2 (more clearing hands) adds traysPer3Lines (trays per tray in which the bot cleared 3+ lines in all), jackpotsPerGame
 // (behind-the-scenes jackpot trays) and traysPerBigHand (trays per jackpot, golden, closer or planned-sweep tray).
+// 1.1 A (sweep chase) adds sweepHands (trays dealt with the sweep shimmer: a closer or planned sweep), traysPerSweepHand,
+// sweepHandsConverted (share of those the bot swept), chases (two-tray set-up hands), sweepsAll / traysPerSweep (every clean sweep).
 import { serve, openGame, play } from '../tests/harness.mjs';
 
 const args = process.argv.slice(2), kv = args.filter(a => a.includes('=')), pos = args.filter(a => !a.includes('='));
@@ -128,7 +130,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     const obvN = tray.filter(t => { if (!t) return false; for (let r = 0; r <= N - t.s.rows; r++) for (let c = 0; c <= N - t.s.cols; c++) if (canPlace(t.s, r, c, grid) && obviousAt(t.s, r, c, grid)) return true; return false; }).length, obv = obvN > 0;
     const possible = SHAPES.some(s => { for (let r = 0; r <= N - s.rows; r++) for (let c = 0; c <= N - s.cols; c++) if (canPlace(s, r, c, grid) && obviousAt(s, r, c, grid)) return true; return false; });
     const offers2 = (() => { const [lo, hi] = packBits(packGrid(grid)); return tray.some(t => t && !t.s.star && placeMasks(t.s).some(m => !(lo & m.lo) && !(hi & m.hi) && applyBits(lo, hi, t.s, m) >= 2)); })();
-    cur = { offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
+    cur = { sweepHand: closerTray, offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
     trays.push(cur);
     if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
@@ -150,7 +152,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   const pct = (a, f) => a.length ? Math.round(100 * a.filter(f).length / a.length) : NaN;
   const buckets = [0.15, 0.30, 0.45, 0.60].map(f => {
     const b = trays.filter(t => Math.abs(t.fill - f) <= 0.05);
-    return { fill: Math.round(f * 100) + '%', trays: b.length, obviousAtDeal: pct(b, t => t.obv), boardAllows: pct(b, t => t.possible), twoPlus: pct(b, t => t.obvN >= 2), allThree: pct(b, t => t.obvN === 3), clearPerTray: pct(b, t => t.cleared), clearsPerTray: mean(b, t => t.clears) };
+    return { fill: Math.round(f * 100) + '%', trays: b.length, obviousAtDeal: pct(b, t => t.obv), boardAllows: pct(b, t => t.possible), twoPlus: pct(b, t => t.obvN >= 2), allThree: pct(b, t => t.obvN === 3), clearPerTray: pct(b, t => t.cleared), clearsPerTray: mean(b, t => t.clears), sweepHands: b.filter(t => t.sweepHand).length, swept: b.filter(t => t.sweepHand && t.sweeps).length };
   });
   const sorted = costs.slice().sort((a, b) => a - b);
   // (6.1) per game: length, relief moments and the trays between them; the last game is cut off, so it is left out
@@ -179,7 +181,10 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     traysPerBigHand: +(trays.length / Math.max(1, trays.filter(t => /JACKPOT|GOLDEN|CLOSER|SWEEP/.test(t.tier)).length)).toFixed(1),
     closersPerGame: mean(perGame, a => a.filter(t => t.tier === 'CLOSER').length), payoffsPerGame: mean(perGame, a => a.filter(t => t.tier === 'PAYOFF').length),
     traysBetweenPayoffs: (() => { const g = []; perGame.forEach(a => { let last = -1; a.forEach((t, i) => { if (/PAYOFF|CLOSER|SWEEP|GOLDEN/.test(t.tier) || (t.ph === 'relief' && t.phN === 1)) { if (last >= 0) g.push(i - last); last = i; } }); }); return median(g); })(),
-    closerTries: waveStats.closerTries,
+    closerTries: waveStats.closerTries, chases: waveStats.chases, chaseHits: trays.filter((t, i) => i && trays[i - 1].tier === 'SETUP' && t.sweepHand).length,
+    sweepHands: trays.filter(t => t.sweepHand).length, traysPerSweepHand: +(trays.length / Math.max(1, trays.filter(t => t.sweepHand).length)).toFixed(1),
+    sweepHandsConverted: pct(trays.filter(t => t.sweepHand), t => t.sweeps > 0) + '%',
+    sweepsAll: trays.reduce((x, t) => x + t.sweeps, 0), traysPerSweep: +(trays.length / Math.max(1, trays.reduce((x, t) => x + t.sweeps, 0))).toFixed(1),
     setupsMade: waveStats.setups, setupsPaid: Math.round(100 * waveStats.dealt / Math.max(1, waveStats.setups - waveStats.closed)) + '%', setupsPerTray: +(waveStats.setups / trays.length).toFixed(2),
     gamesEnded: games, p10: lens.length ? lens[Math.floor((lens.length - 1) * 0.1)] : 0, edgeShare: phases.edge || '0%', edgeHoldsPerGame: mean(perGame, a => a.filter(t => t.ph === 'edge' && t.phN === 1).length),
     big4Per5: (() => { let lo = 99; for (let i = 4; i < trays.length; i++) { let n = 0; for (let j = i - 4; j <= i; j++) n += trays[j].big4; lo = Math.min(lo, n); } return lo; })(),
@@ -194,6 +199,6 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
 }, [TRAYS, BOT, RESCUE]);
 console.log(JSON.stringify({ bot: BOT, rescue: RESCUE, overrides: OVR, ...out, buckets: undefined, pace6: undefined }));
 console.log('pace (6.1):', JSON.stringify(out.pace6));
-console.log('fill  trays  obvious@deal  board-allows  2+obvious  all-3  clear/tray  clears/tray');
-for (const b of out.buckets) console.log([b.fill, b.trays, b.obviousAtDeal + '%', b.boardAllows + '%', b.twoPlus + '%', b.allThree + '%', b.clearPerTray + '%', b.clearsPerTray].map(String).map(x => x.padEnd(12)).join(''));
+console.log('fill  trays  obvious@deal  board-allows  2+obvious  all-3  clear/tray  clears/tray  sweep-hands  swept');
+for (const b of out.buckets) console.log([b.fill, b.trays, b.obviousAtDeal + '%', b.boardAllows + '%', b.twoPlus + '%', b.allThree + '%', b.clearPerTray + '%', b.clearsPerTray, b.sweepHands, b.swept].map(String).map(x => x.padEnd(12)).join(''));
 await browser.close(); await srv.close();

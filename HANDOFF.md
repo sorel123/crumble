@@ -203,6 +203,7 @@ Top to bottom:
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
 | (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
 | (8.3) | Front menu showpiece: the start card and the mode menu share one look (gem logo in her skin, the crumb, the journey sky travelling behind, a 2x2 of mode tiles). See the 8.3 section |
+| (1.1 A) | Sweep chase: a sweep hunt for closers and small calm boards (the usual closer shimmer, no new cue), a two-tray chase and an aim term (both off). See the 1.1 A section |
 | (1.1 E1) | Challenge mode: 12 trays from a frozen, seeded deal (the real dealer dealt to the casual bot), bronze/silver/gold targets from bot runs, Today's and New challenge, its own run, results and goal rung. Settings left the tile grid for a slim button. See the Challenge section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
@@ -1178,6 +1179,45 @@ Measured with `tools/bot-sim.mjs` (casual bot, 4 seeds x 4000 trays, both runs w
 Missed target: a multi-line clear every 4 trays (got about 1 in 5). A single drop that clears two lines needs two nearly full lines
 with their gaps lined up, and the casual bot's flush play rarely leaves that: payoffs are limited by the board, not the clock (a 2-3
 tray clock dealt no more of them). Levers if Jay still wants more: `BUILD_UP` higher, or setups (`SETUP_CHANCE` 1) which also lengthen games.
+
+## Sweep chase (1.1 task A)
+
+Brief: a clean sweep is the best moment and almost never happens; make it come about every 25-40 trays and be visible. What shipped,
+Endless and Daily only (Adventure untouched):
+
+- **Sweep hunt** (`sweepHuntSteps`, solver.js). The closer's main search, replacing 7.3's `sweepSeqSteps` (the exact-tiling
+  `planSweepSteps` stays as the fallback). Lists covers (1-4 rows/columns holding every gem, at most `SWEEP_HUNT_CELLS` 22 empty cells,
+  tightest `SWEEP_HUNT_COVERS` 16), then searches three drops deep using only cells of cover lines not yet cleared, with clears applied
+  between drops. Prefers hands where every drop clears and no dots; `SWEEP_HUNT_NODES` 4000 cap; one cover per sliced step. The hand is
+  shuffled so the tray order never gives the drop order away. `sweepGap(lo,hi)` is the cheap "how close to a sweep" (fewest empty
+  cells in any cover, 99 = none).
+- **Between closers**: any ordinary tray (nothing due, not edge/recovery, free of specials, `closerCool` and `sweepCool` done) whose
+  board has a cover runs the hunt; a sweep found is dealt as a closer (label `CLOSER`, shimmer, cooldown).
+- **Two-tray chase** (`chaseSteps`, `CHASE_*`, `chaseNext`/`chaseCool` saved with the run): an earned closer that finds no sweep on a
+  board of `CHASE_GEMS` or fewer deals a set-up hand (label `SETUP`) whose tidiest or emptiest play leaves a sweepable board; the next
+  tray hunts once on the board she made. **Off by default (`CHASE_TRIES` 0)**: 40-80 set-ups per 4000 trays, the casual bot reached the
+  sweepable board 0-15 times, no measurable rise in sweeps, deal p95 about +2 ms. Admin slider to try it.
+- **Aim** (`SWEEP_AIM`, `AIM_GEMS`, `AIM_TRIES`): ordinary hands lean toward boards close to a sweep. **Off**: it is help on honest
+  trays, so it waits for the Endless pacing decision. At 1 (with the chase): sweep hands 1 per 120-210 trays, games longer.
+- **No new cue.** A "Sweep is on" pill was built and taken out: Jay wants the sweep to be something she spots herself
+  (2026-11-10). Sweep hands keep the 7.3 closer shimmer, unchanged.
+
+Measured (`tools/bot-sim.mjs`, casual bot, 12000 trays, seeds 1 and 2, main and branch run side by side; new columns `sweepHands`,
+`sweepHandsConverted`, `sweepsAll`, `traysPerSweep`, `chases`, `chaseHits`, and sweep hands / swept per fill bucket):
+
+| | main | this |
+|---|---|---|
+| sweep hands offered (shimmer trays) | 35, 27 | 36, 43 |
+| converted by the bot | 26%, 26% | 33%, 23% |
+| clean sweeps (all) | 16, 12 | 17, 14 |
+| deal cost median / p95 (ms) | 1.3 / 11.1, 11.5 | 1.1 / 9.8, 9.5 |
+| median trays per game | 189, 158 | 212, 200 |
+| games ended / 10th percentile game | 44, 52 / 52, 37 | 31, 44 / 84, 57 |
+
+Missed target, by a lot (a sweep hand every 25-40 trays). The search is not the limit: logging every deal, only about 1 board in 200
+admits any three-piece sweep. Sweep hands appear only at the 15% and 30% fill buckets (about 7-22 gems); none at 45%+, and the casual
+board sits near 36% full. More sweeps need the board steered small (aim, the chase), which is a pacing decision. Game length looks a
+little longer (fewer games ended on both seeds) but medians at this scale are still too noisy to call against the 25% guard.
 
 ## Blocks that crumble (plan 7.5, first zazz idea)
 
