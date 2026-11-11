@@ -17,7 +17,7 @@ function snapshot(){
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     bonusMeter, specialEnd,
     pace:{...pace},
-    wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0,jn:jack.n,ja:jack.at},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
+    wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,chaseNext:chaseNext?1:0,chaseCool,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0,jn:jack.n,ja:jack.at},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'||mode==='challenge'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     ch:mode==='challenge'&&chal?{seed:chal.seed,deal:chal.deal,won:chal.won,beat:chal.beat||0,bt:chal.beaten?1:0}:null,   // (E1) the round's seed and its whole frozen deal
@@ -62,7 +62,7 @@ function restore(o){
   pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
   resetWave(); const w=o.wave;                       // (7.3) older saves have none: a fresh wave
   if(w&&isInt(w.n,0,1e6)&&isInt(w.at,1,99)&&Array.isArray(w.setups)&&isInt(w.closerCool,0,99)&&isInt(w.dryN,0,1e6)&&Array.isArray(w.bigHist)){
-    wave={n:w.n,at:w.at,due:!!w.due}; closerNext=!!w.closerNext; closerCool=w.closerCool; dryN=w.dryN; closerTray=!!w.closerTray; trayClear=!!w.trayClear;
+    wave={n:w.n,at:w.at,due:!!w.due}; closerNext=!!w.closerNext; chaseNext=!!w.chaseNext; chaseCool=Math.min(Math.max(w.chaseCool|0,0),99); closerCool=w.closerCool; dryN=w.dryN; closerTray=!!w.closerTray; trayClear=!!w.trayClear;
     if(isInt(w.jn,0,1e6)&&isInt(w.ja,1,99)) jack={n:w.jn,at:w.ja};   // (8.2) the jackpot clock; older saves start a fresh one
     bigHist=w.bigHist.filter(v=>isInt(v,0,3)).slice(-4);
     setups=w.setups.filter(u=>u&&isInt(u.k,0,SETUP_RECTS.length-1)&&isInt(u.r,0,N-1)&&isInt(u.c,0,N-1)&&isInt(u.age,0,99)).slice(0,3)

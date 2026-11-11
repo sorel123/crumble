@@ -56,7 +56,7 @@ function applyBits(lo,hi,s,m){               // returns lines cleared; new board
 const countFlat=a=>{ let n=0; for(let i=0;i<a.length;i++) if(a[i]) n++; return n; };
 
 function evalHand(a0,shapes,budget){
-  const res={ok:false,lines:0,sweep:false,cleared:0,rough:999};
+  const res={ok:false,lines:0,sweep:false,cleared:0,rough:999,flo:undefined,fhi:undefined,glo:undefined,ghi:undefined};
   const base=countFlat(a0)+shapes.reduce((n,s)=>n+(s.star?0:s.n),0);   // a star adds no gem to the board
   const [lo0,hi0]=packBits(a0);
   const pm=shapes.map(placeMasks);
@@ -65,7 +65,7 @@ function evalHand(a0,shapes,budget){
     if(b<=0||res.sweep) return;
     if(i===3){
       res.ok=true; if(acc>res.lines) res.lines=acc;
-      const cl=base-pop32(lo)-pop32(hi); if(cl>res.cleared) res.cleared=cl;
+      const cl=base-pop32(lo)-pop32(hi); if(cl>res.cleared){ res.cleared=cl; res.glo=lo; res.ghi=hi; }   // (1.1 A) and the emptiest
       const rg=roughBits(lo,hi); if(rg<res.rough){ res.rough=rg; res.flo=lo; res.fhi=hi; }   // (8.2) the tidiest board it can leave
       return;
     }
@@ -221,29 +221,113 @@ function* planSweepSteps(a,maxT=15,exact=false){   // maxT: most empty cells the
   return null;
 }
 
-/* (7.3) the sequential sweep planner, for closers: up to three drops that each complete a line (clears applied between
-   them, like evalHand) and leave the board empty. Finds the sweeps the exact-tiling planner above cannot, where a line
-   cleared by the first piece makes room for the next. The last drop is enumerated outright; the search yields after
-   each first drop so a deal can be sliced over frames. Returns a three-piece hand (padded with a filler) or null. */
-const SEQ_POOL=SHAPES.filter(s=>s.n>=2);
-function* sweepSeqSteps(a){
-  const n=countFlat(a); if(n<CFG.SWEEP_MIN||n>CFG.SWEEP_MAX) return null;
-  const [lo0,hi0]=packBits(a), pool=rshuffle(SEQ_POOL.slice());
-  const moves=(lo,hi)=>{ const out=[];
-    for(const s of pool) for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(l) out.push({s,lo:_lo,hi:_hi}); }
-    return out; };
-  const finish=(lo,hi)=>{ for(const s of pool) for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; if(applyBits(lo,hi,s,m)&&!_lo&&!_hi) return s; } return null; };
-  const pad=h=>{ while(h.length<3) h.push(SHAPES[1+((rnd()*4)|0)]); return h; };
-  const first=moves(lo0,hi0);
-  for(const m1 of first) if(!m1.lo&&!m1.hi) return pad([m1.s]);
-  for(const m1 of first){
-    const s2=finish(m1.lo,m1.hi); if(s2) return pad([m1.s,s2]);
-    for(const m2 of moves(m1.lo,m1.hi)){ const s3=finish(m2.lo,m2.hi); if(s3) return [m1.s,m2.s,s3]; }
+/* (1.1 A) The sweep hunt: the closer's main search. The planner above needs a lucky shape of board (an exact tiling of one
+   greedy cover; 7.3 also had a sequential planner that needed a line cleared by every drop, which this replaces); this one
+   asks the plain question: is there a hand of three whose best order of drops ends on an empty board? Drops may clear lines along the way and the pieces need not fill the
+   cover exactly (a cell freed by an early clear can be filled again).
+   How it stays cheap: every gem must go in some line the hand completes, so it first lists covers, sets of up to four
+   rows and columns that hold every gem and whose empty cells three pieces could fill (SWEEP_HUNT_CELLS), smallest first.
+   Within a cover every cell a piece fills must be cleared again, so a drop may only use cells of the cover's lines not
+   yet cleared ("live"); a clear takes its lines out of the live set, and a gem left outside it ends that branch. That
+   leaves a few dozen moves per cover, searched three deep. Each cover is one step (the deal yields between them), the
+   whole hunt is capped at `budget` nodes. Prefers hands where every drop clears something (legible, drop by drop) and
+   no single dots; a perfect one ends the hunt. Sweeps that need five or more lines cleared are out of its reach (rare with
+   three pieces). Returns the hand shuffled (the tray order never gives the drop order away), padded with small fillers if
+   the sweep takes fewer than three, or null. lo0/hi0: the packed board. Measured on the casual bot: only about 1 board in
+   200 at deal time admits any three-piece sweep, so the search is not what limits sweeps; the board is. */
+const HUNT_POOL=SHAPES.filter(s=>!s.star);
+const LINE_SETS=[];                                  // every set of 1-4 of the 16 lines, as id lists, fewest lines first
+(function(){ const rec=(from,ids)=>{ if(ids.length) LINE_SETS.push(ids.slice()); if(ids.length===4) return; for(let i=from;i<16;i++){ ids.push(i); rec(i+1,ids); ids.pop(); } }; rec(0,[]); LINE_SETS.sort((x,y)=>x.length-y.length); })();
+function liveOf(ids,live){ let lo=0,hi=0; for(const i of ids) if(live&(1<<i)){ lo|=LINE_MASKS[i*2]; hi|=LINE_MASKS[i*2+1]; } return [lo,hi]; }
+const SET_LO=new Int32Array(LINE_SETS.length), SET_HI=new Int32Array(LINE_SETS.length);
+LINE_SETS.forEach((ids,k)=>{ [SET_LO[k],SET_HI[k]]=liveOf(ids,0xFFFF); });
+/* how close a board is to a sweep: the fewest empty cells in any cover of up to four lines (99: none). Cheap (a few
+   thousand mask tests), so the chase can ask it of every candidate. */
+function sweepGap(lo,hi){
+  let best=99;
+  for(let k=0;k<SET_LO.length;k++){
+    const L=SET_LO[k], H=SET_HI[k];
+    if((lo&~L)||(hi&~H)) continue;
+    const e=pop32(L&~lo)+pop32(H&~hi); if(e<best) best=e;
+  }
+  return best;
+}
+function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
+  const n=pop32(lo0)+pop32(hi0); if(!n||n>CFG.SWEEP_MAX) return null;
+  const covers=[];
+  for(let k=0;k<LINE_SETS.length;k++){
+    const ids=LINE_SETS[k], ulo=SET_LO[k], uhi=SET_HI[k];
+    if((lo0&~ulo)||(hi0&~uhi)) continue;
+    const empty=pop32(ulo&~lo0)+pop32(uhi&~hi0);
+    if(empty&&empty<=CFG.SWEEP_HUNT_CELLS) covers.push({ids,ulo,uhi,empty});
+  }
+  covers.sort((x,y)=>x.empty-y.empty||x.ids.length-y.ids.length);
+  if(covers.length>CFG.SWEEP_HUNT_COVERS) covers.length=CFG.SWEEP_HUNT_COVERS;   // the tightest few: a loose cover rarely sweeps and each costs a move list
+  const pool=HUNT_POOL.slice();                     // Fisher-Yates always (not rshuffle's sort): a fixed count of rnd() calls on every engine, so the Daily deals alike
+  for(let k=pool.length-1;k>0;k--){ const j=(rnd()*(k+1))|0; [pool[k],pool[j]]=[pool[j],pool[k]]; }
+  let nodes=budget, best=null, bestSc=-Infinity;
+  const path=[];
+  for(const cv of covers){
+    const cand=[];                                     // the moves that stay inside this cover
+    for(const s of pool) for(const m of placeMasks(s)) if(!(m.lo&~cv.ulo)&&!(m.hi&~cv.uhi)) cand.push({s,m});
+    const all=(1<<16)-1;
+    let liveAll=0; for(const i of cv.ids) liveAll|=1<<i;
+    const dfs=(lo,hi,live,llo,lhi,depth)=>{
+      for(const c of cand){
+        if(nodes<=0||bestSc>=2.5) return;
+        const m=c.m;
+        if((m.lo&~llo)||(m.hi&~lhi)||(lo&m.lo)||(hi&m.hi)) continue;
+        nodes--;
+        const full=lineIds(lo|m.lo,hi|m.hi), lines=applyBits(lo,hi,c.s,m), nlo=_lo, nhi=_hi;
+        path.push({s:c.s,lines});
+        if(!nlo&&!nhi){                                // a sweep: score it (every drop clears = 1 each; a dot costs a little)
+          const sc=path.reduce((a,p)=>a+(p.lines?1:0)-(p.s.n===1?0.4:0),0)+(3-path.length)*0.5;
+          if(sc>bestSc){ bestSc=sc; best=path.map(p=>p.s); }
+        }
+        else if(depth<2){
+          const nl=lines?live&~full&all:live;
+          let L=llo,H=lhi; if(lines) [L,H]=liveOf(cv.ids,nl);
+          if(!(nlo&~L)&&!(nhi&~H)) dfs(nlo,nhi,nl,L,H,depth+1);   // every gem left still sits in a line that can clear
+        }
+        path.pop();
+      }
+    };
+    dfs(lo0,hi0,liveAll,cv.ulo,cv.uhi,0);
+    if(bestSc>=2.5||nodes<=0) break;
     yield;
   }
+  if(!best) return null;
+  while(best.length<3) best.push(SHAPES[1+((rnd()*4)|0)]);
+  for(let k=2;k>0;k--){ const j=(rnd()*(k+1))|0; [best[k],best[j]]=[best[j],best[k]]; }
+  return best;
+}
+function* closerSteps(a){
+  const [lo,hi]=packBits(a);
+  return (yield* sweepHuntSteps(lo,hi)) || (yield* planSweepSteps(a,CFG.CLOSER_TARGET,true));   // (1.1 A) the hunt replaces 7.3's sweepSeqSteps (it finds every sweep that one did, within four lines)
+}
+/* (1.1 A) the two-tray chase, for an earned closer that finds no sweep on a small board (CHASE_GEMS). Of CHASE_TRIES candidate
+   hands (most carrying a piece that clears a line now), deal one that can leave a board a three-piece sweep exists for (its
+   tidiest play or its emptiest, both from evalHand; the closest to a sweep by sweepGap are hunted), and the next tray hunts
+   again on the board she actually made. null if none turns up.
+   OFF by default (CHASE_TRIES 0): on the casual bot (4000 trays, seeds 1-3) it dealt 40-80 set-up hands, but the bot reached
+   the sweepable board only 0-15 times, so sweeps did not measurably rise while the deal cost p95 rose about 2 ms. Kept for
+   tuning (Admin slider) and for the Endless pacing work, where steering the board is decided. */
+function* chaseSteps(a0,density){
+  const tried=[], [lo0,hi0]=packBits(a0), keys=SHAPES.filter(s=>!s.star&&bestDrop(lo0,hi0,s)>=1);   // pieces that clear a line now: the way to a small board
+  for(let i=0;i<CFG.CHASE_TRIES;i++){
+    const hand=makeHand(density);
+    if(keys.length&&rnd()<0.7) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];
+    const ev=evalHand(a0,hand,CFG.CHASE_EVAL);
+    if(ev.ok&&!ev.sweep) for(const [lo,hi] of [[ev.flo,ev.fhi],[ev.glo,ev.ghi]]){
+      if(lo===undefined||!(lo|hi)) continue;
+      const g=sweepGap(lo,hi); if(g<=CFG.SWEEP_HUNT_CELLS) tried.push({hand,lo,hi,g});
+    }
+    yield;
+  }
+  tried.sort((x,y)=>x.g-y.g);
+  for(const t of tried.slice(0,3)){ if(yield* sweepHuntSteps(t.lo,t.hi,CFG.CHASE_NODES)) return t.hand; }
   return null;
 }
-function* closerSteps(a){ return (yield* planSweepSteps(a,CFG.CLOSER_TARGET,true)) || (yield* sweepSeqSteps(a)); }
 /* ── hand selection ─────────────────────────────────────────── */
 const stackable=s=>s.n===s.rows*s.cols && s.n<=6;   // bars and small rectangles
 /* partners: for each piece, the shapes that sit against it to form a
@@ -354,11 +438,11 @@ const SETUP_RECTS=[[2,2],[2,3],[3,2],[1,3],[3,1],[1,4],[4,1],[3,3]].map(([h,w])=
 const BUILD_SET=new Set(SETUP_RECTS.filter(s=>s.n>=3&&s.n<=6));                          // the squaring-off pieces fed before a payoff
 const PAYOFF_SET=SHAPES.filter(s=>s.n>=4&&s.n===s.rows*s.cols);                             // big blocks: 2x2, 2x3, 3x2, 3x3, bars of 4 and 5
 const BIG_SHAPES=SHAPES.filter(s=>s.n>=4);
-const waveStats={setups:0,dealt:0,missed:0,closed:0,closerTries:0};   // setups made / setup pieces dealt, this session only (the bot sim reads them)
-let wave={n:0,at:5,due:false}, jack={n:0,at:10}, setups=[], closerNext=false, closerCool=0, dryN=0, bigHist=[], closerTray=false, trayClear=false;
+const waveStats={setups:0,dealt:0,missed:0,closed:0,closerTries:0,chases:0};   // setups made / setup pieces dealt, this session only (the bot sim reads them)
+let wave={n:0,at:5,due:false}, jack={n:0,at:10}, setups=[], closerNext=false, chaseNext=false, chaseNow=false, chaseCool=0, closerCool=0, dryN=0, bigHist=[], closerTray=false, trayClear=false;
 const waveAt=()=>CFG.WAVE_MIN+((rnd()*(CFG.WAVE_MAX-CFG.WAVE_MIN+1))|0);
 const jackAt=()=>CFG.JACKPOT_MIN+((rnd()*(CFG.JACKPOT_MAX-CFG.JACKPOT_MIN+1))|0);
-function resetWave(){ wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
+function resetWave(){ wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; chaseNext=false; chaseNow=false; chaseCool=0; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
 /* every empty exact rectangle of SETUP_RECTS on the board whose filling completes a line, with at least SETUP_WALLED of
    the cells around it filled or wall. Returned as {k: index in SETUP_RECTS, r, c, lo, hi}. */
 function findHoles(lo,hi){
@@ -411,6 +495,8 @@ function waveTick(){
   jack.n+=1+(trayClear?0:CFG.JACKPOT_DRY);              // (8.2) a dry tray runs the jackpot clock forward
   dryN=trayClear?0:dryN+1; trayClear=false;
   closerCool=Math.max(0,closerCool-1);
+  chaseNow=chaseNext; chaseNext=false;                 // (1.1 A) this tray is the second of a chase (its one try)
+  chaseCool=Math.max(0,chaseCool-1);
   wave.n++;
   if(dryN>=CFG.DRY_TRAYS) wave.due=true;
   if(wave.n>=wave.at) wave.due=true;
@@ -419,6 +505,7 @@ function waveTier(tier,specialsFree){
   if(!paced()) return null;
   if(tier==='edge'||tier==='recovery') return null;
   if(tier==='sweep'||tier==='jackpot'&&pace.ph==='relief'){ jackDone(); return null; }   // relief is the payoff (and the jackpot)
+  if(chaseNow&&specialsFree){ closerNext=false; return 'closer'; }   // (1.1 A) the second tray of a chase
   if(closerNext&&closerCool<=0&&specialsFree){ closerNext=false; return 'closer'; }
   if(jack.n>=jack.at) return 'jackpot';                 // (8.2) a behind-the-scenes jackpot; if the board has none it falls back to a payoff
   return wave.due?'payoff':null;
@@ -515,6 +602,9 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
   const guided = !puzzle && tier!=='honest' && tier!=='edge' && tier!=='recovery';
   const [blo,bhi]=packBits(a0);
   const buildUp=tier==='honest'&&paced()&&CFG.BUILD_UP>0&&trayNo>CFG.EARLY_TRAYS&&wave.n>=wave.at-1;   // (8.2) the tray before a payoff, or a payoff the board could not give yet (the opening trays keep their own light deal)
+  // (1.1 A) aiming at a sweep: off cooldown on a small calm or building board, ordinary hands lean toward ones that leave the
+  // board closer to a sweep (sweepGap of the tidiest or emptiest board the hand can leave), so the chase has boards to work with
+  const aim=paced()&&!puzzle&&CFG.SWEEP_AIM>0&&(tier==='honest'||tier==='solvable')&&closerCool<=0&&sweepCool<=0&&trayNo>CFG.EARLY_TRAYS&&countFlat(a0)<=CFG.AIM_GEMS;
   let bestHand=null,bestEv=null,bestScore=-Infinity,bestRough=999;
   for(let i=0;i<candidates;i++){
     const hand=makeHand(density);
@@ -531,9 +621,10 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
     if(ev.ok&&guided) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
     if(ev.ok&&guided) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
+    if(ev.ok&&aim&&!ev.sweep){ let g=99; if(ev.flo!==undefined) g=sweepGap(ev.flo,ev.fhi); if(ev.glo!==undefined) g=Math.min(g,sweepGap(ev.glo,ev.ghi)); sc-=CFG.SWEEP_AIM*Math.min(g,30); }
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
     if(tier==='edge'){ if(sc>0) break; }
-    else if(tier==='honest'){ if(bestEv&&bestEv.ok&&i>=(buildUp?CFG.BUILD_TRIES:CFG.HONEST_TRIES)-1) break; }
+    else if(tier==='honest'){ if(bestEv&&bestEv.ok&&i>=(aim?CFG.AIM_TRIES:buildUp?CFG.BUILD_TRIES:CFG.HONEST_TRIES)-1) break; }
     else if(tier==='recovery'){ if(ev.ok && i>=7 && ev.lines>=want && ev.immPieces<=1) break; }
     else if(ev.ok && i>=7 && ev.lines>=want && ev.rough<=bestRough && (puzzle||!CFG.GUIDE||ev.obvPieces>0)) break;
     if(ev.ok && ev.rough<bestRough) bestRough=ev.rough;
@@ -594,6 +685,8 @@ function starBest(g=grid){
 }
 const starAt=(r,c,g=grid)=>g[r].reduce((a,v)=>a+(v?1:0),0)+g.reduce((a,row)=>a+(row[c]?1:0),0);   // gems a star dropped on (r,c) would clear
 function genTray(){ runSteps(dealSteps()); }
+function dealCloser(h){ commitTray(h,'CLOSER'); specialEnd=trayNo; closerCool=CFG.CLOSER_COOL; sweepCool=CFG.SWEEP_COOLDOWN; jackDone(); waveDealt(h); }
+function dealSetup(h){ commitTray(h,'SETUP'); chaseNext=true; waveStats.chases++; waveDealt(h); }
 function* dealSteps(){
   trayNo++;
   if(mode==='challenge'&&!chGen){ chDealNext(); return; }   // (E1) a Challenge plays its frozen deal (challenge.js); generating it runs the real dealer below
@@ -622,17 +715,30 @@ function* dealSteps(){
     const h=yield* planSweepSteps(a0);
     if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; return; }
   }
+  let hunted=false;
   if(tier==='sweep'){
     const h=paced()?yield* closerSteps(a0):yield* planSweepSteps(a0);
     if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; if(!paced()) tension=0.5; waveDealt(h); return; }
-    tier='jackpot';
+    tier='jackpot'; hunted=true;                         // (1.1 A) this board was just hunted: the between-closers path skips it
   }
   if(wt==='closer'){                                    // (7.3) an earned closer: a planned sweep, the tray shimmers
     waveStats.closerTries++;
     const h=yield* closerSteps(a0);
-    if(h){ commitTray(h,'CLOSER'); specialEnd=trayNo; closerCool=CFG.CLOSER_COOL; sweepCool=CFG.SWEEP_COOLDOWN; jackDone(); waveDealt(h); return; }
+    if(h){ dealCloser(h); return; }
+    if(!chaseNow&&chaseCool<=0&&countFlat(a0)<=CFG.CHASE_GEMS){   // (1.1 A) no sweep yet: a set-up hand that can leave one, and the closer comes next tray
+      const c=yield* chaseSteps(a0,density);
+      if(c){ dealSetup(c); return; }
+      chaseCool=CFG.CHASE_COOL;                         // none on this board: a closer left on the hook does not search again every tray
+    }
     wave.due=true; wt='closein';                        // no sweep on this board yet: a payoff that clears the most it can
     if(countFlat(a0)<=CFG.CLOSER_GEMS) closerNext=true;   // a small board stays on the hook: the closer tries again next tray
+  }
+  // (1.1 A) between closers: whenever the board is small enough, off cooldown and free of specials, a board that can be swept
+  // gets its sweep hand (closer rules: shimmer, cooldown). Only the hunt, which costs next to nothing on a board with no cover;
+  // the dearer set-up chase stays with the earned closers above.
+  if(paced()&&!wt&&!hunted&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&closerCool<=0&&sweepCool<=0&&!chaseNow&&countFlat(a0)<=CFG.SWEEP_MAX){
+    const [lo,hi]=packBits(a0);
+    if(sweepGap(lo,hi)<=CFG.SWEEP_HUNT_CELLS){ const h=yield* sweepHuntSteps(lo,hi); if(h){ dealCloser(h); return; } }
   }
   if(wt==='jackpot'){                                   // (8.2) three pieces, 3+ lines; else the payoff below (the jackpot stays due)
     const h=yield* jackpotSteps(a0,density);

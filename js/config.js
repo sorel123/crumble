@@ -50,6 +50,19 @@ const CFG = {
   CLOSER_COMBO:   3,     // ...so does reaching this combo (and getting out of an edge hold)
   CLOSER_TARGET:  20,    // most empty cells a closer's three pieces may fill
   CLOSER_COOL:    5,     // trays after a closer before the next
+  SWEEP_HUNT_CELLS: 22,  // (1.1 A) the sweep hunt: most empty cells in a cover (the rows/columns a sweep completes)
+  SWEEP_HUNT_NODES: 4000,//   search cap per hunt
+  SWEEP_HUNT_COVERS: 16, //   most covers tried per hunt (tightest first)
+  CHASE_GEMS:     26,    // (1.1 A) two-tray chase: no sweep on a board of this many gems or fewer deals a set-up hand toward one
+  CHASE_TRIES:    0,     //   candidate set-up hands looked at (0 = off: measured too small a gain for its cost; see chaseSteps)
+  CHASE_NODES:    1500,  //   hunt cap per candidate
+  CHASE_COOL:     5,     //   trays after a chase that found nothing before the next search
+  CHASE_EVAL:     1200,  //   solver budget per candidate (only the boards it can leave are wanted)
+  SWEEP_AIM:      0,     // (1.1 A) off cooldown, ordinary hands lean toward boards close to a sweep: score per empty cell of the gap (0 = off).
+                         //   Off: it is help on honest trays, so it belongs to the Endless pacing decision. Measured at 1 (with the chase on):
+                         //   sweep hands 1 per 120-210 trays instead of 1 per 190-220, games longer; at 4 games got much shorter (boards worse).
+  AIM_GEMS:       30,    //   ...on boards of this many gems or fewer
+  AIM_TRIES:      6,     //   ...and an honest tray looks at this many candidates, not HONEST_TRIES
   DRY_TRAYS:      4,     // trays with no clear that make a payoff tray due now (lines, never a sweep; 8.2: was 6)
   JACKPOT_MIN:    8,     // (8.2) a jackpot hand, behind the scenes (no banner, no multiplier): all three pieces clear JACKPOT_LINES+
   JACKPOT_MAX:    12,    //   lines in sequence (or a planned sweep), due every JACKPOT_MIN..MAX trays; it waits while the board is on the edge
