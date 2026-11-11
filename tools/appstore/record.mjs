@@ -13,6 +13,7 @@ const ctx = await browser.newContext({ viewport: { width: 443, height: 960 }, de
 const page = await ctx.newPage();
 page.on('pageerror', e => console.log('ERR', String(e)));
 await page.addInitScript(SEED); await page.addInitScript(CLOCK);
+await page.addInitScript(() => { try { localStorage.setItem('crumble.guide', '1'); } catch (e) {} });   // a returning player: no guided first game
 await page.goto(srv.url);
 await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
 await page.evaluate(() => document.fonts.ready);

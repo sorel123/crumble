@@ -73,6 +73,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
   colour, 37 shapes (`RAW`).
 - Hand solver + tension wave (below) — every tray is fully playable in some order.
 - **Obvious moves (3.4):** the dealer prefers hands where one or two pieces have an *obvious* clear (a line already 5-7/8 full whose gap is one plain run the piece drops into), and where the hand's smallest piece of 2+ cells has room (`OBVIOUS`, `OBVIOUS_MAX`, `ALT`; see Hand solver). Measured with `tools/bot-sim.mjs`.
+- **Guided first game (1.1 D):** a brand-new player's first three trays are hand-built lessons (fill a row, plan two moves, empty the board), then an ordinary light opening. See the 1.1 D section at the end.
 - **Relaxed opening (3.1):** a new game does not start empty. `seedOpening()` (`solver.js`, called by `start()`) lays a seeded pattern, one or two nearly-full lines each missing a 2-4 cell gap, and deals a first tray the solver has verified: one piece completes a line in a single drop, and all three pieces are playable. So every game begins with an obvious clear (a test checks 100 seeded games). Plan 6.0: 2-4 gems are scattered outside the seeded lines, so that first clear leaves blocks; about 1 in 8 openings (`CFG.OPENING_SWEEP_CHANCE`) keep the board bare and can sweep. No special (golden hand, star, transformation, bonus) appears in trays 1-5 (`CFG.SPECIAL_FROM_TRAY`, 6).
 - **Calm by default (2.3):** a clear below combo `BIG_COMBO` (3) is a squash, a point value on each cell and one praise word. COMBO slam, score orbs, COLOR GONE (band and bonus), fireworks, punch zoom and the combo edge glow start at combo 3. They stay individual toggles.
 - **Specials, one switch each (4.5):** `CFG.SPECIALS = {bonus:true, star:true, golden:true, transform:true}`; `special(name)` reads it (the old `SPECIALS` master and `*_ENABLED` keys are gone). Each comes back on once it is rebuilt to be a real highlight: **the Blast Round was replaced by automatic bonus trays (6.2)**, **the star gem is back (4.5b)**, **the golden hand is back (4.5c)**; **transformations are back as achievements (4.5d)**. Admin (`?dev`) has a toggle per special. The shared rules live in `specialOk()` (`game.js`): never in trays 1-5, at most one live (`specialLive()`), never two in a row (`specialEnd`, the tray one last ended in; the next tray carries none). Later 4.5 PRs should gate on it.
@@ -129,6 +130,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 | `js/home.js` | the front menu's showpiece: gem logo, crumb, travelling sky (8.3) |
 | `js/goals.js` | Goals card, unlock progress, play streak (4.2) |
 | `js/modes.js` | Adventure levels, goals, map, mode menu, saved progress (4.1) |
+| `js/guide.js` | the guided first game: three lesson boards, the hint, off-script exit (1.1 D) |
 | `js/challenge.js` | Challenge mode (1.1 E1): frozen deal from a seed, medal bots, HUD, end card, results |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
@@ -201,6 +203,7 @@ Top to bottom:
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
 | (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
 | (8.3) | Front menu showpiece: the start card and the mode menu share one look (gem logo in her skin, the crumb, the journey sky travelling behind, a 2x2 of mode tiles). See the 8.3 section |
+| (1.1 E2) | Challenge links: Share on a Challenge sends crumble.win/?c=seed&s=score&d=deal; opening it offers "Beat N" on the Challenge card and plays that exact deal. See the Challenge section |
 | (1.1 A) | Sweep chase: a sweep hunt for closers and small calm boards (the usual closer shimmer, no new cue), a two-tray chase and an aim term (both off). See the 1.1 A section |
 | (1.1 run) | Sweep run: on a low calm board up to 3 trays of big readable pieces steer toward a sweep (`predictPlay`, `RUN_*`); `BOT=square` in bot-sim. See the Sweep run section |
 | (1.1 E1) | Challenge mode: 12 trays from a frozen, seeded deal (the real dealer dealt to the casual bot), bronze/silver/gold targets from bot runs, Today's and New challenge, its own run, results and goal rung. Settings left the tile grid for a slim button. See the Challenge section |
@@ -1356,6 +1359,32 @@ The start card (launch with no saved run) and the mode menu (Home after a game, 
 - Tests: the three "front menu (8.3)" scenarios.
 - Tests: the two "front menu (8.3)" scenarios.
 
+## Guided first game (1.1, task D)
+
+`js/guide.js`. A brand-new player (Endless, `stats.games === 0` before this game is counted, no best, `crumble.guide` not
+set) opens on three hand-built boards instead of `seedOpening()`, then ordinary dealing.
+- **Lessons** (`GUIDE_LESSONS`, drawn as 8 strings: `X` gem, `a`/`b`/`c` the target gaps): 1 "Fill a row" (a row with a
+  3-wide gap; the tray holds only the 1x3), 2 "Plan two moves" (two columns with a 4-tall gap; two squares, the first
+  sets up the second, which clears both), 3 "Empty the board!" (three rows, each with a gap for one piece; 1x4, square,
+  1x3: every drop clears something, any order, the last sweeps; the tray shimmers like a closer). One board throughout
+  (Jay: nothing of hers may crumble away between lessons): a tray holds only the lesson's pieces, and the next lesson
+  only adds gems, popping in, around what is there (`guideFits`: none in its gaps). Lessons 1 and 2 add a few loose
+  gems so their clears are not sweeps; each lies in a row lesson 3 completes. Each line is a banner (`pushBanner`).
+  Between lessons `dealLater()` waits `CFG.GUIDE_WAIT` (20) frames. After lesson 3: "You've got it!" and
+  `seedOpening('light')` as tray 1, score kept.
+- **Off-script:** `dealSteps()` asks `guideDeal()` first. A lesson tray that ended without its lesson (no line, fewer
+  than two lines, no sweep) ends the guide quietly: no line, the ordinary dealer deals from her board as tray 1.
+- **Hint:** after `CFG.GUIDE_HINT_MS` (6 s) with no pickup, the first open gap that a tray piece fits pulses as a ghost
+  of that piece (`guideDraw`, empty cells only; registered in `fxBusy`). A pickup or drop restarts the clock. A gap
+  already cleared, or one no piece fits, is never hinted. No arrows, nothing forced.
+- **Specials off:** trays 1-3 carry none anyway; `triggerTransform` returns while a guide runs (the guided sweep does not
+  unlock Rainbow); `guideEnd()` drops a queued golden hand, star, bonus meter and resets the dealer's phase and wave.
+- **Saved:** the lesson is in the snapshot (`gd: {n, ln, sw, dn}`), so a force-quit resumes mid-guide. `crumble.guide` =
+  '1' when the guide ends (done or off-script) and when any game ends (`gameOver`). Daily and Adventure never show it.
+  `CFG.GUIDE` false turns it off.
+- **Tests:** `tests/harness.mjs` marks every test page as a returning player (`crumble.guide`); a guide test sets
+  `sessionStorage['crumble.test.fresh']`, clears storage and reloads. `tools/appstore/record.mjs` skips it too.
+
 ## crumble.win and App Store assets (release prep)
 
 - **Pages for the store listing:** `privacy/` and `support/` (styled by `site.css`) are plain pages for the App Store
@@ -1410,7 +1439,22 @@ A short round with a finish: 12 trays (36 pieces), no timer, the fourth mode til
   medal) and `gold`, each counted once per seed. Goals: one family, "Win a challenge medal" / 5 / 15.
 - **Rules.** No rescue (`rescueAllowed`), no chase bar, no golden hand, no transformation. Bonus trays and the star
   work as anywhere. The pause card's New game reads Restart (same seed). Share makes the picture with the round's name
-  and medal (E2 adds the link).
+  and medal; E2 adds the link (below).
 - Also in this PR: `#chase[hidden]` now really hides (the empty chase track showed under the score in Daily, Adventure
   and a first run), and the timelapse clamps a frame stamped before its start (it could read picture -1 and throw).
 - Tests: the nine "Challenge:" scenarios. `chKeep`/`chPut` save and put back every dealer global around `chMake`, so a prefetch never disturbs a paused run.
+
+### Friend links (1.1 task E2)
+
+- **Share text** on a Challenge's end card: "I scored N 🥈 on a Crumble Challenge. Same 12 trays for you. Can you beat
+  it? https://crumble.win/?c=<seed>&s=<score>&d=<deal>" (`shareText`, `chLinkFor`).
+- **The deal rides in the link** (`chPack`/`chUnpack`, about 110 characters, version letter `A`): board, 36 pieces,
+  the closer/sweep marks and the three medal targets. A seed alone is dealt by the dealer's code, so a friend on another
+  version (or after task A's dealer change) would get other pieces; with the deal in the link both play the same round
+  with the same medals. A link whose `d` does not read falls back to `chDeal(seed)`.
+- **Opening a link** (`chReadLink` in main.js boot): the query is removed from the address bar, the Challenge card
+  opens with a "Beat N" button on top (`#chalFriend`, `openFriend`). Playing it starts the round from the top with
+  `chal.beat`; the HUD shows "🎯 Beat N" while that is the next target below the next medal, passing it raises
+  "YOU BEAT IT!", and the end card leads with "You beat their N!" or "N more to beat their N". Retry and Restart keep
+  the target; the run saves it (`ch.beat`, `ch.bt`). In the app the link opens the web game.
+- Tests: the three "Challenge link (E2)" scenarios.

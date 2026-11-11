@@ -218,5 +218,10 @@ const CFG = {
   FRAME_FULL_MS:  2500,  // full speed for this long after any touch (and after a deal, a score or the run's state changes)
   FRAME_DOZE_MS:  20000, // then 30 frames a second; after this long with no touch, 15
 
+  // (1.1 D) the guided first game: a brand-new player's first three trays are hand-built lessons (js/guide.js)
+  GUIDE:          true,  // off = a new player opens like everyone else
+  GUIDE_HINT_MS:  6000,  // a lesson's target cells pulse after this long with no piece picked up
+  GUIDE_WAIT:     20,    // frames between a lesson's last drop and the next board (the clear plays out first)
+
   SHOW_TENSION: false    // debug readout; off for the player (Admin can turn it on)
 };

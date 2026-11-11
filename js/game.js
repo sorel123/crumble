@@ -37,7 +37,7 @@ function canGoLive(id){
     && !golden && !tray.some(t=>t&&t.s.star) && (id==='starfield'||trayNo>specialEnd+1);   // a star's own clear is its parent: it may follow it
 }
 function triggerTransform(id){
-  if(!special('transform') || !ACHIEVE[id]) return;
+  if(!special('transform') || !ACHIEVE[id] || guide) return;   // (1.1 D) specials stay off in the guided first game
   const first=!discoveredWorlds.has(id), live=canGoLive(id), name=TRANSFORMS[id].name;
   if(first){
     discoveredWorlds.add(id); newLook=true; syncLookDot(); saveSkinSave(); renderWorlds();
@@ -381,6 +381,7 @@ function place(idx,r,c){
   stats.placed++; stats.lines+=total; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
   playedToday(); checkGoals();                       // (4.2) the day counts, a reached goal gets its banner
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
+  guideDrop(total,swept);                            // (1.1 D) the guided first game counts its lesson
   if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
 const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
@@ -399,7 +400,7 @@ function checkStuck(){
    Now the deal waits one frame, then runs in slices of DEAL_SLICE_MS at the end of each frame until it
    is done (a few frames; the same search as dealing it in one go). Pickups wait for it. */
 let dealing=null;                                     // {it: dealSteps() generator, wait: frames before it starts}
-function dealLater(){ if(!dealing) dealing={it:dealSteps(),wait:1}; }
+function dealLater(){ if(!dealing) dealing={it:dealSteps(),wait:guide?CFG.GUIDE_WAIT:1}; }   // (1.1 D) a lesson's clear plays out before the next board
 function stepDeal(){
   if(!dealing) return;
   if(dealing.wait>0){ dealing.wait--; return; }
@@ -447,7 +448,7 @@ function startDrag(id,x,y,pt){
   const s0=tray[i].s;
   drag={i,id,x,y,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(s0)/cell,
         slot:null,snapK:0,sx:0,sy:0,lift:pt==='mouse'?CFG.MOUSE_LIFT:CFG.LIFT,tick:0};                 // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
-  updateSlot(); hesPick(); hapSelect('start');
+  updateSlot(); hesPick(); guideTouch(); hapSelect('start');
   drag.tick=1;                                        // from here on, a new landing cell ticks
   Sfx.pickup(); if(tray[i]&&tray[i].s.star) Sfx.starPick();
 }

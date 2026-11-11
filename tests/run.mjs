@@ -2426,6 +2426,57 @@ test('Challenge: out of moves ends the round early and the score stands (no resc
   assert.deepEqual(await page.evaluate(() => [el('chalInfo').hidden, el('bestLbl').textContent, special('golden'), special('transform')]), [true, 'Best', true, true]);
 });
 
+test('Challenge link (E2): the deal packs into the link and back exactly; a damaged one is refused', async ({ page }) => {
+  const r = await page.evaluate(() => ['ln01', 'ln02', 'd2026-11-10'].map(seed => { const d = chMake(seed), p = chPack(d), u = chUnpack(p);
+    const marks = d.trays.map(t => ['CLOSER', 'SWEEP'].includes(t.l) ? t.l : 'DEAL');
+    return { len: p.length, same: JSON.stringify([d.open, d.trays.map(t => t.p), marks, d.med]) === JSON.stringify([u.open, u.trays.map(t => t.p), u.trays.map(t => t.l), u.med]),
+      bad: chUnpack(p.slice(0, 40)), junk: chUnpack('Azzzz'), other: chUnpack('B' + p.slice(1)) }; }));
+  for (const x of r) { assert.equal(x.same, true); assert.ok(x.len < 130, 'short enough for a message: ' + x.len); assert.deepEqual([x.bad, x.junk, x.other], [null, null, null]); }
+});
+
+test('Challenge link (E2): Share sends a crumble.win link; opening it shows "Beat N", plays the same deal, and tells her when she beats it', async ({ page, server }) => {
+  await chalStart(page, 'fr01');
+  await page.evaluate(() => { score = 2340; gameOver(); });
+  const sent = await page.evaluate(() => ({ text: shareText(), deal: JSON.stringify(chal.deal.trays.map(t => t.p)), med: chal.deal.med }));
+  const url = sent.text.match(/https:\/\/crumble\.win\/\S+/)[0];
+  assert.match(sent.text, /^I scored 2340 .*Can you beat it\? https:\/\/crumble\.win\/\?c=fr01&s=2340&d=A/);
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(server.url + url.slice('https://crumble.win/'.length));
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && !el('chalCard').hidden);
+  assert.deepEqual(await page.evaluate(() => ({ q: location.search, btn: el('chalFriend').textContent, today: el('chalToday').className })),
+    { q: '', btn: 'Beat 2,340Challenge #FR01 · a friend sent you this one', today: 'ghost' }, 'the card offers the friend\'s round; the address bar is tidied');
+  await page.evaluate(() => { CFG.PAYOFF_LINES = 9; chCache.clear(); });   // whatever this version would deal, the link's deal is played
+  await page.click('#chalFriend'); await page.waitForFunction(() => state === 'play' && mode === 'challenge'); await dealt(page);
+  const g = await page.evaluate(() => ({ deal: JSON.stringify(chal.deal.trays.map(t => t.p)), med: chal.deal.med, lbl: el('bestLbl').textContent, val: el('bestVal').textContent, beat: chal.beat }));
+  assert.deepEqual(g, { deal: sent.deal, med: sent.med, lbl: g.med[0] < 2340 ? '🥉 Bronze' : '🎯 Beat', val: (g.med[0] < 2340 ? g.med[0] : 2340).toLocaleString('en-US'), beat: 2340 });
+  const r = await page.evaluate(() => {
+    banners.length = 0; score = 2340;
+    const gr = empty(); for (let c = 0; c < 7; c++) gr[0][c] = { gi: 0, t: 1, f: 0, l: 0 }; gr[5][5] = { gi: 2, t: 1, f: 0, l: 0 }; grid = gr;
+    const dot = SHAPES.find(s => s.n === 1); tray = [{ s: dot, gi: 1 }, { s: dot, gi: 2 }, { s: dot, gi: 3 }]; place(0, 0, 7);
+    return { banners: banners.map(b => b.txt), beaten: chal.beaten };
+  });
+  assert.ok(r.banners.includes('YOU BEAT IT!') && r.beaten, r.banners.join());
+  await page.evaluate(() => { saveRun(); });
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell); await page.evaluate(() => { if (!el('menuCard').hidden) closeMenu(); });
+  assert.deepEqual(await page.evaluate(() => [chal.beat, chal.beaten]), [2340, true], 'the target survives a resume');
+  await page.evaluate(() => { gameOver(); });
+  assert.match(await page.textContent('#overMsg'), /^You beat their 2,340!/);
+  await page.click('#againBtn'); await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [chal.seed, chal.beat, chal.beaten, score]), ['fr01', 2340, false, 0], 'Retry keeps the target');
+});
+
+test('Challenge link (E2): a link without a readable deal works the deal out from the seed; a bad seed is ignored', async ({ page, server }) => {
+  const want = await page.evaluate(() => JSON.stringify(chMake('fr02').trays.map(t => t.p)));
+  await page.goto(server.url + '?c=fr02&s=900&d=Abroken');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && !el('chalCard').hidden);
+  await page.click('#chalFriend'); 
+  await page.waitForFunction(() => state === 'play' && mode === 'challenge');
+  assert.equal(await page.evaluate(() => JSON.stringify(chal.deal.trays.map(t => t.p))), want);
+  await page.goto(server.url + '?c=<script>&s=1');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => el('chalCard').hidden), true);
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tint the screen around the board, never a gem, and fade out', async ({ page }) => {
@@ -3592,6 +3643,136 @@ test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle
   await page.waitForTimeout(100);
   const off = await rate(500);
   assert.ok(off > 45, `the switch off: every frame (${off}/s)`);
+});
+
+// (1.1 D) the guided first game. A fresh player: the test marks the tab, empties storage and reloads (harness.mjs skips
+// the guide for every other test).
+const freshPlayer = async page => {
+  await page.evaluate(() => { sessionStorage.setItem('crumble.test.fresh', '1'); localStorage.clear(); });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
+};
+const guideView = page => page.evaluate(() => ({ n: guide && guide.n, ln: guide && guide.ln, tier: lastTier, trayNo,
+  tray: tray.map(t => (t ? SHAPES.indexOf(t.s) : null)), rows: grid.map(r => r.map(v => (v ? 'X' : '.')).join('')),
+  seen: localStorage.getItem('crumble.guide'), score }));
+const lessonRows = (page, n) => page.evaluate(n => GUIDE_LESSONS[n - 1].board.map(r => r.replace(/[abc]/g, '.')), n);
+// what is on the board once lesson n is laid over what the last one left (gems only ever pop in, nothing of hers goes)
+const overlay = (rows, add) => rows.map((r, i) => [...r].map((v, j) => (v === 'X' || add[i][j] === 'X' ? 'X' : '.')).join(''));
+
+test('guided first game (1.1 D): a fresh player gets three lessons in order, a sweep, then an ordinary light opening with her score', async ({ page, errors }) => {
+  await freshPlayer(page);
+  await play(page);
+  let v = await guideView(page);
+  assert.equal(v.n, 1); assert.equal(v.tier, 'GUIDE'); assert.equal(v.seen, null, 'not marked while it runs');
+  assert.deepEqual(v.rows, await lessonRows(page, 1));
+  assert.deepEqual(v.tray, [null, 3, null], 'only the 1x3 that fills the row');
+  assert.ok(await page.evaluate(() => banners.some(b => b.txt === 'Fill a row')), 'one short line in the banner style');
+  // lesson 1: the 1x3 fills the row; the small pieces go anywhere
+  await dragPiece(page, 1, 5, 2);
+  assert.equal((await snap(page)).rows[5], '00000000', 'the row cleared');
+  const left1 = (await guideView(page)).rows;
+  await dealt(page);
+  assert.equal(await page.evaluate(() => stats.sweeps), 0, 'lesson 1 keeps a few loose gems: filling the row is no sweep');
+  v = await guideView(page);
+  assert.equal(v.n, 2, 'lesson 2'); assert.deepEqual(v.rows, overlay(left1, await lessonRows(page, 2)), 'the loose gems stay, the lesson pops in around them');
+  assert.deepEqual(v.tray, [9, null, 9]);
+  // lesson 2: the first square sets up the second, which clears both columns
+  await dragPiece(page, 0, 2, 3);
+  assert.equal((await guideView(page)).ln, 0);
+  await dragPiece(page, 2, 4, 3);
+  assert.equal((await guideView(page)).ln, 2, 'two lines at once');
+  const left2 = (await guideView(page)).rows;
+  await dealt(page);
+  v = await guideView(page);
+  assert.equal(v.n, 3); assert.deepEqual(v.rows, overlay(left2, await lessonRows(page, 3))); assert.deepEqual(v.rows, await lessonRows(page, 3), 'every loose gem lies in a row the sweep completes'); assert.deepEqual(v.tray, [5, 9, 3]);
+  assert.ok(await page.evaluate(() => closerTray), 'the sweep lesson shimmers like a closer');
+  // lesson 3: every drop clears something, the last one sweeps
+  await dragPiece(page, 0, 3, 0); await dragPiece(page, 1, 6, 0); await dragPiece(page, 2, 1, 5);
+  const swept = await page.evaluate(() => ({ empty: grid.flat().every(v => !v), sweeps: stats.sweeps, transform, rainbow: discoveredWorlds.has('rainbow') }));
+  assert.ok(swept.empty && swept.sweeps === 1, 'a clean sweep');
+  assert.equal(swept.transform, null); assert.equal(swept.rainbow, false, 'specials stay off: the sweep starts no transformation');
+  const scoreBefore = (await guideView(page)).score;
+  await dealt(page);
+  v = await guideView(page);
+  const o = await page.evaluate(() => ({ kind: openingKind, gn: goldenNext, bonusMeter, star: starForced, banners: banners.map(b => b.txt), filled: grid.flat().filter(Boolean).length }));
+  assert.equal(v.n, null, 'the guide is over'); assert.equal(v.tier, 'OPENING'); assert.equal(o.kind, 'light'); assert.equal(v.trayNo, 1);
+  assert.ok(o.filled >= 3 && o.filled <= 8, 'a light opening');
+  assert.ok(o.banners.includes("You've got it!"));
+  assert.equal(v.score, scoreBefore, 'her score stays'); assert.ok(v.score > 0);
+  assert.equal(v.seen, '1', 'never again');
+  assert.deepEqual([o.gn, o.bonusMeter, o.star], [false, 0, false], 'nothing the guide queued leaks into ordinary dealing');
+  // and never again: the next game opens like everyone else's
+  await page.evaluate(() => start());
+  assert.equal((await guideView(page)).tier, 'OPENING');
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
+});
+
+test('guided first game (1.1 D): a returning player, an old save without the flag, Daily and Adventure never get it', async ({ page }) => {
+  await play(page);
+  assert.notEqual((await guideView(page)).tier, 'GUIDE', 'a returning player (the flag is set)');
+  await freshPlayer(page);
+  await page.evaluate(() => { localStorage.setItem('crumble.stats', JSON.stringify({ v: 1, best: 500, games: 4 })); });
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  await play(page);
+  assert.notEqual((await guideView(page)).tier, 'GUIDE', 'a 1.0 player with games played and a best');
+  await freshPlayer(page);
+  const r = await page.evaluate(() => { mode = 'daily'; start(); const d = lastTier; mode = 'adventure'; lvl = LEVELS[0]; stats.games = 0; start(); return { d, a: lastTier, g: guide }; });
+  assert.notEqual(r.d, 'GUIDE'); assert.notEqual(r.a, 'GUIDE'); assert.equal(r.g, null);
+  await freshPlayer(page);
+  assert.equal(await page.evaluate(() => { CFG.GUIDE = false; start(); return lastTier; }), 'OPENING', 'the switch turns it off');
+});
+
+test('guided first game (1.1 D): off-script ends it quietly, the ordinary dealer takes over from her board, and it never comes back', async ({ page }) => {
+  await freshPlayer(page);
+  await play(page);
+  await dragPiece(page, 1, 0, 0);                                                    // the 1x3 not in the gap: no row filled
+  await dealt(page);
+  const v = await guideView(page);
+  assert.equal(v.n, null); assert.notEqual(v.tier, 'GUIDE'); assert.equal(v.trayNo, 1, 'ordinary dealing starts at tray 1 (specials still wait for tray 6)');
+  assert.equal(v.rows[5], 'XX...XXX', 'her board stays as it is');
+  assert.ok(await page.evaluate(() => !banners.some(b => /got it/.test(b.txt))), 'no line: it ends quietly');
+  assert.equal(v.seen, '1');
+  await page.reload(); await toGame(page);
+  await page.evaluate(() => { clearRun(); stats.games = 0; best = 0; start(); });
+  assert.notEqual((await guideView(page)).tier, 'GUIDE', 'the flag holds even with no games counted');
+});
+
+test('guided first game (1.1 D): a force-quit mid-guide resumes the same lesson; a game ending marks it seen', async ({ page }) => {
+  await freshPlayer(page);
+  await play(page);
+  await dragPiece(page, 1, 5, 2);
+  await dealt(page);
+  await dragPiece(page, 0, 2, 3);                                                    // lesson 2, one square in
+  const before = await guideView(page);
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => state === 'play');
+  const after = await guideView(page);
+  assert.deepEqual({ ...after }, { ...before }, 'the same lesson, board, tray and count');
+  await dragPiece(page, 2, 4, 3);
+  await dealt(page);
+  assert.equal((await guideView(page)).n, 3, 'and it carries on');
+  await page.evaluate(() => { stuck = true; gameOver(); });
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.guide')), '1', 'any game ending marks it seen');
+});
+
+test('guided first game (1.1 D): the hint is a ghost pulse on the target cells after a pause, gone on pickup, never an arrow', async ({ page, errors }) => {
+  await freshPlayer(page);
+  await play(page);
+  await page.evaluate(() => { CFG.GUIDE_HINT_MS = 300; guideIdleT = performance.now(); });
+  assert.equal(await page.evaluate(() => guideHintOn()), false, 'nothing at first');
+  await page.waitForTimeout(450);
+  const t = await page.evaluate(() => ({ on: guideHintOn(), tg: guideTarget(), busy: fxBusy() }));
+  assert.ok(t.on && t.busy, 'on after the pause, drawn at full frame rate');
+  assert.deepEqual(t.tg.cells, [[5, 2], [5, 3], [5, 4]], 'the gap of the row');
+  await frames(page, 4);
+  const g = await geometry(page);
+  await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
+  assert.equal(await page.evaluate(() => guideHintOn()), false, 'a pickup hides it');
+  await page.mouse.up();
+  // a gap no piece in the tray can fill is never hinted
+  await page.evaluate(() => { tray = [{ s: SHAPES[5], gi: 0 }, null, null]; });
+  assert.equal(await page.evaluate(() => guideTarget()), null);
+  assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), []);
 });
 
 // ── Plan 1.1 C: drag feel on desktop and in the app ──
