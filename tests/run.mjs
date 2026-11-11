@@ -3100,6 +3100,7 @@ const streak = async (page, n) => {
 const fireRead = page => page.evaluate(() => ({ combo, k: fire.k, flare: fire.flare, tier: fire.tier, embers: fire.embers.length, smoke: fire.smoke.length }));
 
 test('7.5d combo fire: lights at combo 3, hotter each step, the held piece sheds embers, a miss snuffs it in a puff', async ({ page }) => {
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });   // one miss ends the streak here (round 6's carrying combo has its own test)
   await play(page);
   await page.evaluate(() => { window.__sfx = []; const s = Sfx.snuff; Sfx.snuff = (...a) => { __sfx.push('snuff'); s(...a); }; });
   await streak(page, 2);
@@ -3143,6 +3144,7 @@ test('7.5d combo fire: lights at combo 3, hotter each step, the held piece sheds
 });
 
 test('7.5d combo fire: never over a gem, off with its switch (saved), steady under reduced motion, a bonus owns the rim', async ({ page }) => {
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });   // one miss ends the streak here (round 6's carrying combo has its own test)
   await play(page);
   const gemPx = async () => { await page.evaluate(() => { grid[4][4] = { gi: 2, t: 1, f: 0, l: 0 }; grid[0][3] = { gi: 2, t: 1, f: 0, l: 0 }; shake = 0; punchT = 0; }); await frames(page, 2); return page.evaluate(() => {
     const g = (x, y) => { const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data; return [d[0], d[1], d[2]]; };
@@ -3186,6 +3188,7 @@ test('7.5d combo fire: never over a gem, off with its switch (saved), steady und
   await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
   if (await page.evaluate(() => state) !== 'play') await play(page);
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });
   await streak(page, 4); await frames(page, 30);
   const r = await fireRead(page);
   assert.ok(r.k > 0.4 && r.embers === 0, 'reduced motion: it burns, but no sparks fly ' + JSON.stringify(r));
@@ -3308,6 +3311,7 @@ const mascotMood = (page, re) => page.waitForFunction(re => new RegExp(re).test(
 const KEEP = '10000000';                                          // one gem left so a clear is not a sweep
 test('7.5f mascot: it sits on the board corner, clear of the gems and the HUD, and reacts to clears by size', async ({ page }) => {
   assert.ok(await page.evaluate(() => el('mascot').hidden), 'not on the start card');
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });   // one miss ends the streak here (round 6's carrying combo has its own test)
   await play(page);
   await dealt(page);
   await mascotMood(page, /^idle\b/);
@@ -3965,6 +3969,22 @@ test('matched trays (round 4): EASY trays often bring two or three of one piece,
   assert.ok(r.matched >= r.dealt * 0.2, 'matched trays: ' + r.matched + ' of ' + r.dealt);
   assert.ok((r.nonRect || 0) <= r.dealt * 0.1, 'EASY deals rectangles and bars: ' + r.nonRect + ' other pieces in ' + r.dealt + ' trays');
   assert.ok(r.follow >= r.followTries * 0.9, 'a ready line gets its piece: ' + r.follow + ' of ' + r.followTries);
+});
+
+test('carrying combo (round 6): in Endless the combo survives drops that clear nothing until COMBO_GRACE of them in a row; Challenge keeps the 1.0 combo', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const o = {}; mode = 'endless';
+    combo = 4; comboMiss = 0;
+    const dot = SHAPES.find(s => s.n === 1);
+    o.endless = [];
+    for (let k = 0; k < CFG.COMBO_GRACE; k++) { grid = empty(); tray = [{ s: dot, gi: 0 }, null, null]; place(0, k, k); o.endless.push(combo); }
+    mode = 'challenge'; combo = 4; comboMiss = 0; grid = empty(); tray = [{ s: dot, gi: 0 }, null, null]; place(0, 3, 3); o.challenge = combo;
+    mode = 'endless';
+    return o; });
+  assert.deepEqual(r.endless.slice(0, -1), Array(r.endless.length - 1).fill(4), 'the streak carries over misses: ' + r.endless.join(','));
+  assert.equal(r.endless[r.endless.length - 1], 0, 'and ends on the last one allowed');
+  assert.equal(r.challenge, 0, 'Challenge: a miss ends it');
 });
 
 test('big solves (round 3): after a LEAN stretch, a board of nearly-done lines gets keys that clear several at once, and small pieces come one a tray unless it clears the board', async ({ page }) => {

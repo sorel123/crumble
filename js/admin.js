@@ -4,6 +4,7 @@
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
   ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
+  ['COMBO_CARRY','Combo carries across trays (round 6)'],
   ['EASY_RECT','Coaster: easy stretches deal rectangles and bars only (round 5)'],
   ['FX_CLOSER_GLOW','Closer shimmer on the tray (7.3)'],
   ['SPECIALS.bonus','Special: Bonus trays (x2)'],
@@ -86,6 +87,12 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['BIG_READY','Coaster: big solve nearly-done lines',1,8,1],
   ['BIG_FIRST','Coaster: big solve trays after lean',0,6,1],
   ['BIG_READY_CELLS','Coaster: nearly-done cells of 8',4,7,1],
+  ['COMBO_GRACE','Combo: drops without a clear that end it',1,6,1],
+  ['CROWD_ROOM','Coaster: crowded below this room (comeback keys)',0,1,0.05],
+  ['CROWD_GEMS','Coaster: crowded at this many gems',10,64,1],
+  ['CROWD_TWO','Coaster: two comeback keys odds',0,1,0.05],
+  ['CROWD_KEY','Coaster: comeback key pull',0,60,1],
+  ['CHAIN_BUILD','Coaster: matching pieces after a board clear',0,1,0.05],
   ['OPEN_BUILD','Coaster: build-off opening odds',0,1,0.05],
   ['SWEEP_EASE','Coaster: board-clear ease needed (run)',0,1,0.05],
   ['SWEEP_EASE_W','Coaster: board-clear ease pull (hunt)',0,10,0.5],
