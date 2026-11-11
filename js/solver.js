@@ -163,7 +163,7 @@ function targetCells(a,cov){
 // can be spread over frames like the candidate search below (an awkward target can take several ms)
 function tileExact(T){ return runSteps(tileExactSteps(T)); }
 function* tileExactSteps(T){
-  const pool=SHAPES.slice().sort(()=>rnd()-0.5);
+  const pool=rshuffle(SHAPES.slice());
   const out=[], at=[];                         // at: where each tile goes (plan 7.3 checks the drop orders with it)
   function rec(rem,only){                     // only: the shape to try first (the top level, one shape per step)
     if(rem.size===0) return true;
@@ -228,7 +228,7 @@ function* planSweepSteps(a,maxT=15,exact=false){   // maxT: most empty cells the
 const SEQ_POOL=SHAPES.filter(s=>s.n>=2);
 function* sweepSeqSteps(a){
   const n=countFlat(a); if(n<CFG.SWEEP_MIN||n>CFG.SWEEP_MAX) return null;
-  const [lo0,hi0]=packBits(a), pool=SEQ_POOL.slice().sort(()=>rnd()-0.5);
+  const [lo0,hi0]=packBits(a), pool=rshuffle(SEQ_POOL.slice());
   const moves=(lo,hi)=>{ const out=[];
     for(const s of pool) for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(l) out.push({s,lo:_lo,hi:_hi}); }
     return out; };
@@ -597,6 +597,7 @@ function genTray(){ runSteps(dealSteps()); }
 function* dealSteps(){
   if(guide&&guideDeal()) return;                       // (1.1 D) the guided first game deals its own lessons
   trayNo++;
+  if(mode==='challenge'&&!chGen){ chDealNext(); return; }   // (E1) a Challenge plays its frozen deal (challenge.js); generating it runs the real dealer below
   if(mode==='daily') rndSrc=mulberry(hashStr(dailySeed(trayNo)));   // (4.1b) every tray of the Daily is dealt from the date's stream, so two phones see the same dice
   if(bonusDue()) startBonus();                         // (6.2) a full meter: this tray and the next two pay x2; dealing below is unchanged
   const specialsOk=trayNo>=CFG.SPECIAL_FROM_TRAY;      // trays 1-5 never carry a special
@@ -706,7 +707,7 @@ function seedOpening(force){                               // force: 'light' aft
     const rect=SHAPES.find(s=>s.n===gap*rowsN&&(vert?s.rows===gap&&s.cols===rowsN:s.cols===gap&&s.rows===rowsN)&&s.rows*s.cols===s.n);
     const key=rect&&rowsN>1?rect:bar(gap);
     if(!key) continue;
-    const hand=[key,weightedShape(0.2),weightedShape(0.2)].sort(()=>rnd()-0.5);
+    const hand=rshuffle([key,weightedShape(0.2),weightedShape(0.2)]);
     const a0=packGrid(g), ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     if(!ev.ok||ev.imm<1) continue;
     grid=g; trayNo=1; commitTray(hand,'OPENING'); return;
@@ -768,6 +769,7 @@ function praise(lines,combo){
 }
 function commitTray(shapes,label,plan){
   tray=shapes.map(s=>({s,gi:s.star?STAR_GI:plan?GOLD:(rnd()*NCOLOR)|0}));
+  if(chGen){ lastTier=label; carry=shapes.filter(x=>!stackable(x)); return; }   // (E1) generating a Challenge deal: only what the dealer reads back
   golden=plan?{want:plan,got:{lines:0,sweep:false},pts:0}:null;
   if(plan){
     goldenCool=CFG.GOLDEN_COOLDOWN;

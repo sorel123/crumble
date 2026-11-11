@@ -131,6 +131,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 | `js/goals.js` | Goals card, unlock progress, play streak (4.2) |
 | `js/modes.js` | Adventure levels, goals, map, mode menu, saved progress (4.1) |
 | `js/guide.js` | the guided first game: three lesson boards, the hint, off-script exit (1.1 D) |
+| `js/challenge.js` | Challenge mode (1.1 E1): frozen deal from a seed, medal bots, HUD, end card, results |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
 | `js/main.js` | boot |
@@ -202,6 +203,7 @@ Top to bottom:
 | (7.5f) | Mascot crumb: a crumb on the board's corner reacts to clears (sized by the 6.3 hierarchy), sweats when it is tight, faints on game over. See the 7.5f section |
 | (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
 | (8.3) | Front menu showpiece: the start card and the mode menu share one look (gem logo in her skin, the crumb, the journey sky travelling behind, a 2x2 of mode tiles). See the 8.3 section |
+| (1.1 E1) | Challenge mode: 12 trays from a frozen, seeded deal (the real dealer dealt to the casual bot), bronze/silver/gold targets from bot runs, Today's and New challenge, its own run, results and goal rung. Settings left the tile grid for a slim button. See the Challenge section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
 Details for each, oldest first:
@@ -1320,3 +1322,46 @@ set) opens on three hand-built boards instead of `seedOpening()`, then ordinary 
   frame); seed 5 with 45 drops gives combo 6 and a clean sweep. `dailyshot.mjs` shoots the Daily calendar. `compose.mjs
   spec.json outdir` adds captions at 1320x2868. The video is the frames through ffmpeg at 886x1920, 30 fps, with a CC0
   music loop.
+
+## Challenge mode (1.1 task E1)
+
+A short round with a finish: 12 trays (36 pieces), no timer, the fourth mode tile. Code is `js/challenge.js`; the card is
+`#chalCard`, the HUD line `#chalInfo`, the end card's medals `#overMedals` and its `#chalNewBtn`.
+
+- **Frozen deal.** `chMake(seed)` runs the real dealer (`seedOpening`, then `dealSteps` eleven times) with `rndSrc` seeded
+  from the seed and `mode='challenge'` (golden hands and transformations off via `special()`), dealing to the casual bot
+  of `tools/bot-sim.mjs` (`chCasual`, no noise; the planner steps in only if the casual bot sees no move). Each bot drop
+  is reported to the dealer as `place()` would (`waveAfterDrop`, `specialEnd` for a star, `starForced`), so setups,
+  payoffs, jackpots and closers happen as they would for that player. The hands are written down as
+  `{open, trays:[{p:[[shape index or -1 for the star, gem]x3], l:label}], med}` and never react to her play.
+  `commitTray` only records the hand while `chGen` is on. In play, `dealSteps` hands over to `chDealNext()`, which
+  commits the next frozen hand (the label keeps the closer shimmer), starts a bonus if one is due, and after tray 12
+  ends the round (`chDone`, a "ROUND DONE" banner, then `gameOver()` -> `chalOver()`).
+- **Same on every phone.** `sort(()=>rnd()-0.5)` gives different results on different engines, so the dealer's three
+  random sorts go through `rshuffle()` (shapes.js): Fisher-Yates while `fairDeal` is on (only while a Challenge deal is
+  generated), the old random sort otherwise, so Endless, Daily and Adventure deal exactly as before. A test runs the
+  generator under a different sort algorithm and checks the deal is identical. The deal still depends on the dealer's
+  code and `CFG`: a dealer change changes what a seed deals in new rounds (a round in progress keeps its saved deal).
+- **Medals.** `chMedals()`: bots play the frozen deal with `chDrop()`, a pure copy of `place()`'s scoring (piece cells,
+  lines squared with the combo step, the star's per-gem floor, COLOR GONE on a loud clear, the sweep bonus, x2 bonus
+  trays with the same meter and timing rules). Bronze = median of 24 casual runs with a little inattention
+  (`CH_CASUAL_EPS`: misses the obvious clear, shuffles the piece order, takes one of the three most flush spots),
+  silver = their 85th percentile, gold = the second best of the casual bot's own line and three planner runs
+  (`chPlanner`: a beam search over the tray scored on points + room). Each at least 20% (`CH_STEP`) above the last,
+  rounded to 50. A test checks a round played in the real game scores exactly what `chRun` says.
+  Why not the brief's "0.85 x strong bot": a planner that only sees its own tray does not out-score the casual line
+  the deal was dealt to, so 0.85 x planner landed below silver on most seeds.
+- **Cost.** Making a deal and its medals takes about 70-300 ms in desktop Chromium (x4 CPU throttle: 0.3-0.75 s).
+  The Challenge card works out today's deal and the next new one while it is open (`chPrefetch`); a button whose deal
+  is not ready says "Dealing..." first. `chCache` keeps the last 8, so Retry is instant.
+- **Seeds.** Today's is `d` + the local date (`chToday`), New challenge a random 6-letter seed. Labels: "Today's
+  challenge", "Challenge #K3X9QA".
+- **Saved.** The run in `crumble.run.chal`, with its whole deal (`ch` in the snapshot), so resuming never re-deals.
+  Results in `crumble.chal`: per seed best score, best medal, plays (last 60 seeds), plus `won` (challenges with a
+  medal) and `gold`, each counted once per seed. Goals: one family, "Win a challenge medal" / 5 / 15.
+- **Rules.** No rescue (`rescueAllowed`), no chase bar, no golden hand, no transformation. Bonus trays and the star
+  work as anywhere. The pause card's New game reads Restart (same seed). Share makes the picture with the round's name
+  and medal (E2 adds the link).
+- Also in this PR: `#chase[hidden]` now really hides (the empty chase track showed under the score in Daily, Adventure
+  and a first run), and the timelapse clamps a frame stamped before its start (it could read picture -1 and throw).
+- Tests: the nine "Challenge:" scenarios. `chKeep`/`chPut` save and put back every dealer global around `chMake`, so a prefetch never disturbs a paused run.

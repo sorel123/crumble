@@ -49,6 +49,8 @@ export async function openGame(url, { seed = 1 } = {}) {
   await page.addInitScript(SEED_SCRIPT(seed));
   // (1.1 D) tests play as a returning player: the guided first game is skipped unless a test asks for a fresh player
   await page.addInitScript(() => { try { if (!sessionStorage.getItem('crumble.test.fresh')) localStorage.setItem('crumble.guide', '1'); } catch (e) {} });
+  // the scripted drags use a mouse but were written for a thumb's lift, so every load (reloads too) gives the mouse LIFT; the C2 test sets it back
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { CFG.MOUSE_LIFT = CFG.LIFT; }));
   await page.goto(url);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   return { browser, page, errors };

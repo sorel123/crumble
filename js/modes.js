@@ -7,7 +7,7 @@
    switching never loses a game. Progress lives in `crumble.adv`, plain data meant to be extended:
      {v:1, lv:{ "7":{s:2, p:14, n:3, f:1} }}    s best stars (0-3), p fewest pieces, n times cleared, f failed tries */
 const MODE_STORE='crumble.mode', ADV_STORE='crumble.adv', DAILY_STORE='crumble.daily';
-const runStore=m=>m==='adventure'?'crumble.run.adv':m==='daily'?'crumble.run.daily':'crumble.run';
+const runStore=m=>m==='adventure'?'crumble.run.adv':m==='daily'?'crumble.run.daily':m==='challenge'?'crumble.run.chal':'crumble.run';
 const CHAPTERS=['First steps','Warming up','Getting good','Tricky boards','Crumble master'];
 // [goal type, goal n, gems already on the board]: fill 0 opens like Endless (a nearly full line and a first move that clears it,
 // which is also a clean sweep, so a score level always has a scatter instead);
@@ -47,8 +47,8 @@ const starsFor=(L,pieces)=>pieces<=L.par[0]?3:pieces<=L.par[1]?2:1;
 const starStr=n=>'★'.repeat(n)+'☆'.repeat(3-n);
 
 function loadModes(){
-  try{ const m=localStorage.getItem(MODE_STORE); if(m==='adventure'||m==='daily') mode=m; }catch(e){}
-  loadAdv(); loadDaily();
+  try{ const m=localStorage.getItem(MODE_STORE); if(m==='adventure'||m==='daily'||m==='challenge') mode=m; }catch(e){}
+  loadAdv(); loadDaily(); loadChal();
 }
 const saveMode=()=>{ try{ localStorage.setItem(MODE_STORE,mode); }catch(e){} };
 
@@ -119,6 +119,7 @@ function levelBoard(L){
 function openBoard(fresh){                          // fresh: a brand-new player's first game opens on the guide (1.1 D)
   lv={lines:0,pieces:0,combo:0,swept:false}; rndSrc=null;
   if(mode==='daily'){ dk=dailyKey(); rndSrc=mulberry(hashStr(dailySeed('open'))); seedOpening(); rndSrc=null; return; }
+  if(mode==='challenge'){ chOpen(); return; }          // (E1) the round's frozen deal (challenge.js)
   if(mode==='adventure'&&lvl&&lvl.fill>0){ grid=levelBoard(lvl); trayNo=0; genTray(); }
   else if(fresh) guideLay(1);
   else seedOpening();
@@ -167,6 +168,7 @@ function syncHud(){
   const adventure=mode==='adventure'&&lvl;
   let lbl='Best', val=best;
   if(mode==='daily'){ lbl='Today'; val=dailyBest(); }
+  if(mode==='challenge'&&chal) [lbl,val]=chHudRight();   // (E1) the next medal and its target
   if(adventure){
     const g=lvl.goal, p=Math.min(goalProgress(),g.n);
     if(g.type==='lines'){ lbl='Lines'; val=p+'/'+g.n; }
@@ -175,11 +177,12 @@ function syncHud(){
     else { lbl='Goal'; val='Empty it'; }
   }
   el('bestLbl').textContent=lbl; el('bestVal').textContent=val; hudFit();
-  chaseSync();
+  chaseSync(); chHud();
 }
 // place() calls this after every placement
 function goalStep(total,swept){
   if(mode==='daily'&&state==='play'){ lv.pieces++; lv.lines+=total; return; }
+  if(mode==='challenge'&&state==='play'){ lv.pieces++; lv.lines+=total; chStep(); syncHud(); return; }
   if(mode!=='adventure'||!lvl||state!=='play') return;
   lv.pieces++; lv.lines+=total; lv.combo=Math.max(lv.combo,combo); if(swept) lv.swept=true;
   syncHud();
@@ -215,12 +218,13 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard'].some(id=>!el(id).hidden); }
-function pauseForMenu(){ if(state==='play'){ paused=true; drag=null; shake=0; hesVoid(); } }
-function hideMenus(){ el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; paused=false; }
+function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard','chalCard','devPanel'].some(id=>!el(id).hidden); }
+function pauseForMenu(){ if(state==='play'){ paused=true; hapSelect('end'); drag=null; shake=0; hesVoid(); } }
+function hideMenus(){ el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('chalCard').hidden=true; el('winCard').hidden=true; paused=false; }
 function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
 function openMenu(){
-  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('goalsCard').hidden=true;
+  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('goalsCard').hidden=true; el('chalCard').hidden=true;
+  el('menuChalSub').textContent=chTileSub();
   const today=daily.d[dailyKey()], liveD=peekRun('daily');
   el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'New board today';
   el('menuAdvSub').textContent=advStars()?'Level '+nextLevel().id+' · ★ '+advStars():'Goal levels, no timer';
@@ -247,7 +251,7 @@ function playLevel(id){
   syncHud();
 }
 function openMap(){
-  pauseForMenu(); el('menuCard').hidden=true; el('winCard').hidden=true; el('dailyCard').hidden=true;
+  pauseForMenu(); el('menuCard').hidden=true; el('winCard').hidden=true; el('dailyCard').hidden=true; el('chalCard').hidden=true;
   const list=el('mapList'); list.textContent='';
   const nxt=nextLevel().id, live=peekRun('adventure'), liveId=live&&live.lv?live.lv.id:0;
   el('mapStars').textContent='★ '+advStars()+' / '+LEVELS.length*3;
@@ -271,17 +275,24 @@ function openMap(){
 }
 /* ── (8.4) pause: Resume, Home (the run is saved), or New game (tap twice) ── */
 let pauseNewT=0;
-function pauseNewReset(){ clearTimeout(pauseNewT); const b=el('pauseNew'); b.textContent='New game'; b.classList.remove('confirm'); }
+function pauseNewReset(){ clearTimeout(pauseNewT); const b=el('pauseNew'); b.textContent=b.dataset.lbl||'New game'; b.classList.remove('confirm'); }
 function openPause(){
   if(state!=='play'||overlayOpen()) return;
   pauseForMenu(); pauseNewReset();
   const adventure=mode==='adventure'&&lvl;
-  el('pauseEye').textContent='Paused · '+(adventure?'Level '+lvl.id:mode==='daily'?'Daily':'Endless');
+  el('pauseEye').textContent='Paused · '+(adventure?'Level '+lvl.id:mode==='daily'?'Daily':mode==='challenge'&&chal?chLabel(chal.seed):'Endless');
   el('pauseScore').textContent=score.toLocaleString('en-US');
-  el('pauseMsg').textContent=adventure?goalText(lvl.goal)+'. Your game is saved.':'Your game is saved.';
+  el('pauseMsg').textContent=adventure?goalText(lvl.goal)+'. Your game is saved.':mode==='challenge'&&chal?'Tray '+Math.min(trayNo,CH_TRAYS)+' of '+CH_TRAYS+'. Your game is saved.':'Your game is saved.';
+  el('pauseNew').dataset.lbl=mode==='challenge'?'Restart':'New game'; pauseNewReset();
   el('pauseCard').hidden=false;
 }
 function closePause(){ pauseNewReset(); el('pauseCard').hidden=true; if(!overlayOpen()) paused=false; }
+addEventListener('keydown',e=>{                          // (C4) desktop: Escape or P opens and closes the pause card
+  if(e.ctrlKey||e.metaKey||e.altKey||e.repeat) return;
+  const k=e.key; if(k!=='Escape'&&k!=='p'&&k!=='P') return;
+  if(!el('pauseCard').hidden){ closePause(); return; }
+  if(state==='play'&&!overlayOpen()) openPause();
+});
 el('pauseBtn').onclick=e=>{ e.stopPropagation(); openPause(); };
 el('pauseResume').onclick=e=>{ e.stopPropagation(); closePause(); };
 el('pauseHome').onclick=e=>{ e.stopPropagation(); pauseNewReset(); el('pauseCard').hidden=true; saveRun(); openMenu(); };
@@ -309,7 +320,7 @@ function playDaily(){
   syncHud();
 }
 function openDaily(month){
-  pauseForMenu(); el('menuCard').hidden=true; el('mapCard').hidden=true; el('winCard').hidden=true;
+  pauseForMenu(); el('menuCard').hidden=true; el('mapCard').hidden=true; el('winCard').hidden=true; el('chalCard').hidden=true;
   const now=new Date(), key=dailyKey(now), today=daily.d[key], live=peekRun('daily');
   if(!month){ calY=now.getFullYear(); calM=now.getMonth(); }
   const inProg=live&&live.dk===key;

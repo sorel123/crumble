@@ -61,7 +61,7 @@ function endTransform(){
 /* ═══════ the specials (plan 4.5) ═══════
    One switch each in CFG.SPECIALS. Rules shared by all of them: never in trays 1-5, at most one live at a time,
    and never two in a row (the tray right after one ends carries none). specialOk() is that gate. */
-const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name]);
+const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name])&&!(mode==='challenge'&&(name==='golden'||name==='transform'));   // (E1) a Challenge's deal is frozen: no golden hands or transformations
 const specialLive=()=>!!(bonus||transform||golden||tray.some(t=>t&&t.s.star));
 const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>specialEnd+1;
 
@@ -388,6 +388,7 @@ const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
 // Stuck (plan 7.1): no tray piece fits. The pieces dim and "No moves" shows while the last drop lands; after 700 ms
 // the run ends (the timer re-checks, so a piece that fits by then keeps it going). The game-over card has the one rescue.
 function checkStuck(){
+  if(chDone) return;                                 // (E1) a finished Challenge round is not stuck: its end card is on the way
   stuck=!anyFits();
   syncActions();
   if(stuck) setTimeout(()=>{ if(!dealing&&!anyFits()) gameOver(); },700);
@@ -437,23 +438,24 @@ let pendingPress=null;                                // a press that came while
 function onDown(e){
   if(state!=='play'||paused||drag) return;   // one drag at a time (a second finger can't pick up another piece)
   if(e.target&&e.target.closest&&e.target.closest('button')) return;
-  if(dealing){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY}; return; }   // taken the moment the new tray appears (stepPending)
-  startDrag(e.pointerId,e.clientX,e.clientY);
+  if(dealing){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY,pt:e.pointerType}; return; }   // taken the moment the new tray appears (stepPending)
+  startDrag(e.pointerId,e.clientX,e.clientY,e.pointerType);
 }
-function startDrag(id,x,y){
+function startDrag(id,x,y,pt){
   ac();
   const i=pickAt(x,y);
   if(i<0) return;
   const s0=tray[i].s;
   drag={i,id,x,y,g:(CFG.FX_PICKUP_GROW&&!reduce)?0:1,s0:trayFit(s0)/cell,
-        slot:null,snapK:0,sx:0,sy:0};                 // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
-  updateSlot(); hesPick(); guideTouch();
+        slot:null,snapK:0,sx:0,sy:0,lift:pt==='mouse'?CFG.MOUSE_LIFT:CFG.LIFT,tick:0};                 // snapK: 0 floating .. 1 seated; sx/sy: the seat being eased into
+  updateSlot(); hesPick(); guideTouch(); hapSelect('start');
+  drag.tick=1;                                        // from here on, a new landing cell ticks
   Sfx.pickup(); if(tray[i]&&tray[i].s.star) Sfx.starPick();
 }
 function stepPending(){                               // called each frame: the deal finished and her finger is still down
   if(!pendingPress||dealing||drag) return;
   const p=pendingPress; pendingPress=null;
-  if(state==='play'&&!paused) startDrag(p.id,p.x,p.y);
+  if(state==='play'&&!paused) startDrag(p.id,p.x,p.y,p.pt);
 }
 function onMove(e){
   if(pendingPress&&e.pointerId===pendingPress.id){ pendingPress.x=e.clientX; pendingPress.y=e.clientY; }
@@ -470,13 +472,13 @@ function onUp(e){
     if(drag.slot) place(drag.i,drag.slot.r,drag.slot.c);
     else sendBack();
   }
-  drag=null;
+  hapSelect('end'); drag=null;
 }
 function onCancel(e){
   if(pendingPress&&e.pointerId===pendingPress.id) pendingPress=null;                                 // iOS took the touch away (a system gesture): the piece goes home
   if(!drag||e.pointerId!==drag.id) return;
   if(tray[drag.i]) sendBack();
-  drag=null;
+  hapSelect('end'); drag=null;
 }
 function sendBack(){
   const s=tray[drag.i].s, R=slotRect(drag.i), p=drawnPos(), ts=trayFit(s);
@@ -489,7 +491,7 @@ function sendBack(){
 // with the pickup grow (drag.g) — that is the only motion between the finger and the floating piece.
 function floatPos(){
   const s=tray[drag.i].s;
-  return {x:drag.x, y:drag.y-cell*CFG.LIFT*easeOutCubic(drag.g)-s.rows*cell/2};
+  return {x:drag.x, y:drag.y-cell*drag.lift*easeOutCubic(drag.g)-s.rows*cell/2};
 }
 // Where the piece is drawn: the float, or the seat, blended by snapK (the seat/unseat ease).
 function drawnPos(){
@@ -509,12 +511,14 @@ function updateSlot(){
     }
   const cur=drag.slot;                                 // hysteresis: the slot it's in holds until it is clearly out of reach or clearly not the nearest
   if(cur && canPlace(s,cur.r,cur.c,grid) && cheb(cur.r,cur.c)<=reach+CFG.MAGNET_HOLD && (!best || eu(cur.r,cur.c)<=bd+CFG.MAGNET_HOLD)) return;
+  const moved=best&&(!cur||cur.r!==best.r||cur.c!==best.c);
   drag.slot=best;
+  if(moved&&drag.tick) hapSelect('tick');             // a different legal cell under the piece: one light tick (never on pickup, never when it becomes none)
 }
 addEventListener('pointerdown',onDown,{passive:true});
 addEventListener('pointermove',onMove,{passive:true});
 addEventListener('pointerup',onUp,{passive:true});
 addEventListener('pointercancel',onCancel,{passive:true});
 document.addEventListener('visibilitychange',()=>{      // backgrounded mid-drag: iOS may never send the cancel
-  if(document.visibilityState==='hidden'&&drag){ if(tray[drag.i]) sendBack(); drag=null; }
+  if(document.visibilityState==='hidden'&&drag){ if(tray[drag.i]) sendBack(); hapSelect('end'); drag=null; }
 });
