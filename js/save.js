@@ -17,6 +17,7 @@ function snapshot(){
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
     bonusMeter, specialEnd,
     pace:{...pace},
+    td:{st:tide.st,n:tide.n,len:tide.len},          // (1.1 G) the coaster's stretch
     wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,chaseNext:chaseNext?1:0,chaseCool,sr:sweepRun?sweepRun.n:-1,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0,jn:jack.n,ja:jack.at},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'||mode==='challenge'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
@@ -70,6 +71,7 @@ function restore(o){
     setups=w.setups.filter(u=>u&&isInt(u.k,0,SETUP_RECTS.length-1)&&isInt(u.r,0,N-1)&&isInt(u.c,0,N-1)&&isInt(u.age,0,99)).slice(0,3)
       .filter(u=>u.r+SETUP_RECTS[u.k].rows<=N&&u.c+SETUP_RECTS[u.k].cols<=N).map(u=>({k:u.k,r:u.r,c:u.c,age:u.age,dealt:!!u.dealt}));
   }
+  const td=o.td; if(td&&(td.st==='easy'||td.st==='lean')&&isInt(td.n,0,99)&&isInt(td.len,0,99)) tide={st:td.st,n:td.n,len:td.len};   // (1.1 G) older saves: a fresh EASY stretch (resetWave)
   roomNow=roomOf(packGrid(grid)); resetPressure(true);
   const b=o.bonus;                                  // a live bonus carries on with the trays it had left (the sky is back at once)
   if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){

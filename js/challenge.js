@@ -198,12 +198,12 @@ function chResetDealer(){
 function chKeep(){
   return {mode,lvl,grid,tray,trayNo,combo,carry,pace,roomNow,tension,sweepCool,specialEnd,wave,jack,setups,closerNext,closerCool,dryN,
     bigHist,closerTray,trayClear,golden,goldenNext,goldenCool,trayHadSweep,trayCombo,starForced,starCool,transform,transformCool,
-    bonus,bonusMeter,lastTier,rndSrc,openingKind,ws:{...waveStats}};
+    bonus,bonusMeter,lastTier,rndSrc,openingKind,tide,sweepRun,chaseNext,chaseNow,chaseCool,ws:{...waveStats}};   // (1.1 G) tide: the Endless stretch, which resetWave() clears
 }
 function chPut(k){
   ({mode,lvl,grid,tray,trayNo,combo,carry,pace,roomNow,tension,sweepCool,specialEnd,wave,jack,setups,closerNext,closerCool,dryN,
     bigHist,closerTray,trayClear,golden,goldenNext,goldenCool,trayHadSweep,trayCombo,starForced,starCool,transform,transformCool,
-    bonus,bonusMeter,lastTier,rndSrc,openingKind}=k);
+    bonus,bonusMeter,lastTier,rndSrc,openingKind,tide,sweepRun,chaseNext,chaseNow,chaseCool}=k);
   Object.assign(waveStats,k.ws);
 }
 function chMake(seed){

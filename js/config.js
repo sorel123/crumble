@@ -79,6 +79,25 @@ const CFG = {
   BIG_FLOOR:      5,     // pieces of 4+ cells across any five trays, kept where they fit
   FX_CLOSER_GLOW: true,  // the shimmer behind a closer tray
 
+  // (1.1 G) coaster dealing, Endless and Daily: the tide deals EASY stretches (big pieces that fit, lines everywhere) and
+  // LEAN ones (awkward pieces, few free clears), and every tray has a solution; see solver.js "Coaster dealing". Challenge,
+  // Adventure and the guided first game do not use it. Nothing on screen shows the stretch.
+  TIDE:           true,  // off = the 1.0 dealer (payoff waves, jackpots, setups, gifts) for Endless and Daily too
+  TIDE_EASY_MIN:  10,    // an EASY stretch lasts this many trays at least...
+  TIDE_EASY_MAX:  18,    //   ...and at most (rolled per stretch)
+  TIDE_LEAN_MIN:  8,     // a LEAN stretch, the same
+  TIDE_LEAN_MAX:  14,
+  TIDE_SMALL:     0.4,   // weight on pieces of 3 cells or fewer, both stretches (lower = bigger pieces overall)
+  TIDE_FIT:       0.6,   // EASY: how much a piece's fit to the board (lines its best drop clears, how flush it sits) raises its odds
+  EASY_BIG:       2.5,   // EASY: score per cell of the hand (higher = bigger pieces win more of the search)
+  EASY_ROOM:      15,    // EASY: score for the room left by her likely play (0..1 room), so big pieces come where they leave space
+  EASY_TRIES:     24,    // candidate hands an EASY tray looks at
+  LEAN_TRIES:     16,    // candidate hands a LEAN tray looks at
+  LEAN_LINES:     1,     // a LEAN tray offers at most about this many lines (unless it is a rescue)
+  LEAN_DRY:       2,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
+  LEAN_ROOM:      0.45,  //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
+  SOUND_ROOM:     0.12,  // a piece's sound spot may cost at most this much room (0..1) when it clears nothing
+
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
   TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped
