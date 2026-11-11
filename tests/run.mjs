@@ -786,7 +786,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
       bonus = k % 3 === 2 ? { left: 2, extra: 0 } : null;
       const run = stepwise => {
         grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9; pace = { ...pace0 }; starCool = 0; specialEnd = -99; tray = [null, null, null];
-        tide = { st: k % 2 ? 'lean' : 'easy', n: 1 + (k % 3), len: 9 }; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
+        tide = { st: k % 2 ? 'lean' : 'easy', n: 1 + (k % 3), len: 9 }; sweepRun = null; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
         goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
         if (stepwise) { const it = dealSteps(); while (!it.next().done) performance.now(); } else genTray();   // stepwise: one candidate per call, as frames would
         return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier;
@@ -2792,6 +2792,7 @@ test('7.3 the wave state is saved with the run and survives a resume', async ({ 
 
 test('1.1 A sweep hunt: finds sweeps that need a clear mid-way or no exact tiling; a small calm board off cooldown gets one, on cooldown it does not', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.EASY_RUN_GEMS = 0; });   // (1.1 G round 2) EASY hunts with no cooldown; this tests the cooldown
   const r = await page.evaluate('(() => {' + B73 + `
     const o = {};
     const sweeps = h => !!h && evalHand(packGrid(grid), h, 3000000).sweep;
@@ -2818,6 +2819,7 @@ test('1.1 A sweep hunt: finds sweeps that need a clear mid-way or no exact tilin
 
 test('1.1 A two-tray chase: a closer on a small board with no sweep gets a set-up hand that can leave one, the next tray hunts once, and it survives a resume', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.TIDE = false; });   // (1.1 G) the 1.0 dealer's chase
   const r = await page.evaluate('(() => {' + B73 + `
     CFG.CHASE_TRIES = 8; CFG.RUN_TRAYS = 0;                                                            // off by default (measured gain too small for its cost); the mechanism still works
     const o = {}, rows = ['00000000','00000000','00000000','00000000','11110000','11111100','11000011','00000011'];

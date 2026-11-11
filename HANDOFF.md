@@ -1498,3 +1498,17 @@ that can fail is your placement." Study: project memory `blockblast-recording-st
 - Admin: a toggle "Coaster dealing" and sliders for every number above ("Coaster: ...").
 - Tests: the three "coaster (1.1 G)" / "the deal never fails" scenarios. Older dealer tests (6.1 phases, 7.3) turn
   `CFG.TIDE` off: they test the 1.0 dealer, which Challenge still uses.
+
+### Round 2: a bigger swing (2026-11-11)
+
+Jay played the first version to about 90k and never cleared the board: "we need more roller coaster, but also some wins".
+The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 trays vs ~185) and easy and lean felt alike.
+- **EASY is a cash-in.** Its hands score the gems they can clear (`EASY_CASH`), a hand her quick play sweeps with
+  (`EASY_SWEEP`), minus the gems left on the board her quick play leaves (`EASY_LOW`), and late in the stretch the distance
+  to a sweep (`EASY_STEER`). In EASY the sweep run starts on boards of up to `EASY_RUN_GEMS` (28) gems and lasts up to
+  `EASY_RUN_TRAYS` (5), and neither it nor the sweep hunt waits for a cooldown. Casual bot: about one clean sweep per 55
+  trays (3x 1.0), a sweep hand about every 25.
+- **LEAN is "hard, then you see it".** A LEAN candidate often carries a 4-6 cell piece with no spot yet
+  (`LEAN_PUZZLE_TRY`), scored up when evalHand proves a clear makes room for it (`LEAN_PUZZLE`); such a piece is exempt from
+  the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 3, `LEAN_ROOM` 0.3.
+- Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.

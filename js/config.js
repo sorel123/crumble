@@ -91,11 +91,19 @@ const CFG = {
   TIDE_FIT:       0.6,   // EASY: how much a piece's fit to the board (lines its best drop clears, how flush it sits) raises its odds
   EASY_BIG:       2.5,   // EASY: score per cell of the hand (higher = bigger pieces win more of the search)
   EASY_ROOM:      15,    // EASY: score for the room left by her likely play (0..1 room), so big pieces come where they leave space
+  EASY_CASH:      2,     // (round 2) EASY: score per gem the hand can clear (a cash-in tray)
+  EASY_SWEEP:     60,    //   ...a hand her quick play would sweep with
+  EASY_STEER:     3,     //   ...late in the stretch, minus this per cell of distance to a sweep on the board she will leave
+  EASY_LOW:       2,     //   ...minus this per gem left on the board her quick play leaves (EASY drives the board down)
+  EASY_RUN_GEMS:  28,    // (round 2) in EASY the sweep run starts on boards this low (0 = as in calm), and neither it nor the sweep hunt waits for a cooldown
+  EASY_RUN_TRAYS: 5,     //   ...and an EASY sweep run lasts up to this many trays
+  LEAN_PUZZLE:    25,    // (round 2) LEAN: score for a tray where a piece only fits after another clears (hard, then you see it)
+  LEAN_PUZZLE_TRY: 0.35, //   ...odds a LEAN candidate carries such a piece
   EASY_TRIES:     24,    // candidate hands an EASY tray looks at
   LEAN_TRIES:     16,    // candidate hands a LEAN tray looks at
   LEAN_LINES:     1,     // a LEAN tray offers at most about this many lines (unless it is a rescue)
-  LEAN_DRY:       2,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
-  LEAN_ROOM:      0.45,  //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
+  LEAN_DRY:       3,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
+  LEAN_ROOM:      0.3,   //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
   SOUND_ROOM:     0.12,  // a piece's sound spot may cost at most this much room (0..1) when it clears nothing
 
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
