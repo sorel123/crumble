@@ -4,6 +4,7 @@
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
   ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
+  ['EASY_RECT','Coaster: easy stretches deal rectangles and bars only (round 5)'],
   ['FX_CLOSER_GLOW','Closer shimmer on the tray (7.3)'],
   ['SPECIALS.bonus','Special: Bonus trays (x2)'],
   ['SPECIALS.star','Special: Star Gem'],
@@ -86,6 +87,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['BIG_FIRST','Coaster: big solve trays after lean',0,6,1],
   ['BIG_READY_CELLS','Coaster: nearly-done cells of 8',4,7,1],
   ['OPEN_BUILD','Coaster: build-off opening odds',0,1,0.05],
+  ['SWEEP_EASE','Coaster: board-clear ease needed (run)',0,1,0.05],
+  ['SWEEP_EASE_W','Coaster: board-clear ease pull (hunt)',0,10,0.5],
   ['MATCH','Coaster: matched tray pull',0,60,1],
   ['MATCH_TRY','Coaster: matched tray odds',0,1,0.05],
   ['FOLLOW','Coaster: follow-through pull',0,80,5],

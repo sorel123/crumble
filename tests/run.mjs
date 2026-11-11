@@ -3931,9 +3931,12 @@ test('build-off opening (round 4): Endless opens on an empty board with three of
       if (openingKind === 'build' && countFlat(packGrid(grid)) === 0 && h[0] === h[1] && h[1] === h[2] && OPEN_BUILD.includes(h[0])) o.build++;
       else o.bad.push(openingKind);
     }
-    rndSrc = null; CFG.OPEN_BUILD = orig;
+    CFG.OPEN_BUILD = orig; o.kinds = {};   // (round 5) the others are usable: a seeded band to finish, never the loose 'light' or 'busy' boards
+    for (let seed = 1; seed <= 20; seed++) { rndSrc = mulberry(seed); seedOpening(); o.kinds[openingKind] = (o.kinds[openingKind] || 0) + 1; }
+    rndSrc = null;
     return o; });
   assert.equal(r.build, r.n, 'every opening is the build-off one when OPEN_BUILD is 1: ' + r.bad.join(','));
+  assert.deepEqual(Object.keys(r.kinds).filter(k => k !== 'build' && k !== 'gift'), [], 'openings are build-off or a band to finish: ' + JSON.stringify(r.kinds));
 });
 
 test('matched trays (round 4): EASY trays often bring two or three of one piece, and a tray finishes a line when the board has one ready', async ({ page }) => {
@@ -3954,11 +3957,13 @@ test('matched trays (round 4): EASY trays often bring two or three of one piece,
       o.tiers = (o.tiers || '') + lastTier + ' '; if (!/EASY/.test(lastTier)) continue;
       const h = tray.map(t => t.s); o.dealt++;
       if (h.some(s => !s.star && s.n >= 3 && h.filter(x => x === s).length >= 2)) o.matched++;
+      o.nonRect = (o.nonRect || 0) + h.filter(s => !s.star && s.n !== s.rows * s.cols && bestDrop(lo, hi, s) < 1).length;   // (round 5) EASY: rectangles and bars (a key that clears a line may be any shape)
       if (SHAPES.some(s => s.n >= 4 && bestDrop(lo, hi, s) >= 1)) { o.followTries++; if (h.some(s => !s.star && bestDrop(lo, hi, s) >= 1)) o.follow++; }
     }
     rndSrc = null; CFG.EASY_RUN_GEMS = eg; return o; })()`);
   assert.ok(r.dealt >= 12, 'EASY trays dealt: ' + r.dealt + ' ' + r.tiers);
   assert.ok(r.matched >= r.dealt * 0.2, 'matched trays: ' + r.matched + ' of ' + r.dealt);
+  assert.ok((r.nonRect || 0) <= r.dealt * 0.1, 'EASY deals rectangles and bars: ' + r.nonRect + ' other pieces in ' + r.dealt + ' trays');
   assert.ok(r.follow >= r.followTries * 0.9, 'a ready line gets its piece: ' + r.follow + ' of ' + r.followTries);
 });
 
