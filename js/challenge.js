@@ -332,6 +332,7 @@ function saveChal(){
   const keys=Object.keys(chalRec.s);
   if(keys.length>CH_KEEP){ keys.sort((a,b)=>chalRec.s[a].t-chalRec.s[b].t).slice(0,keys.length-CH_KEEP).forEach(k=>{ delete chalRec.s[k]; }); }
   try{ localStorage.setItem(CHAL_STORE,JSON.stringify({v:1,s:chalRec.s,won:chalRec.won,gold:chalRec.gold})); }catch(e){}
+  cloudDirty();                                     // (1.1 F) the iCloud backup follows
 }
 function recordChal(seed,sc,med){
   const r=chalRec.s[seed]||(chalRec.s[seed]={b:0,m:0,n:0,t:0}), m=chMedalOf(sc,med), prevB=r.b, prevM=r.m;

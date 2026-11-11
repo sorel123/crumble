@@ -3619,6 +3619,61 @@ test('1.1 F Leaderboards: hidden on the web, shown in the app only while signed 
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
 });
 
+test('1.1 F iCloud backup: nothing on the web; in the app the cloud copy merges in (max, union, best), writes are throttled, a failed read writes nothing', async ({ page, errors }) => {
+  await play(page); await dealt(page);
+  assert.equal(await page.evaluate(() => { cloudStart(); cloudDirty(); return CLOUD.ready || !!CLOUD.timer; }), false, 'web: no store, nothing scheduled');
+  const today = await page.evaluate(() => dailyKey());
+  await page.evaluate(today => {                                    // this phone: a little progress
+    best = 3000; stats.lines = 40; stats.games = 7; goals.done.add('lines:25'); goals.days = 3;
+    goals.streak = { cur: 2, best: 2, last: addDays(today, -1) };
+    adv.lv[1] = { s: 2, p: 14, n: 1, f: 0 }; daily.d['2026-11-01'] = { s: 900, l: 9, n: 1 };
+    const cloud = { v: 1, sc: SCORE_SCALE, best: 5000, stats: { lines: 30, games: 12, sweeps: 2 },
+      goals: { done: ['games:10', 'lines:25'], days: 5, streak: { cur: 4, best: 6, last: addDays(today, -2) } },
+      unlocked: ['candy'], disc: [], adv: { 1: { s: 3, p: 11, n: 2, f: 0 }, 2: { s: 1, p: 20, n: 1, f: 0 } },
+      daily: { '2026-11-01': { s: 700, l: 12, n: 2 }, '2026-11-02': { s: 400, l: 4, n: 1 } },
+      chal: { s: { 'd-2026-11-09': { b: 5200, m: 2, n: 3, t: 1 } }, won: 1, gold: 0 } };
+    window.__kv = { progress: JSON.stringify(cloud) }; window.__sets = 0; window.__fail = false;
+    let fire = null;
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { CloudStore: {
+      get: o => __fail ? Promise.reject(new Error('offline')) : Promise.resolve({ value: __kv[o.key] ?? null }),
+      set: o => { __sets++; __kv[o.key] = o.value; return Promise.resolve({ saved: true }); },
+      addListener: (n, f) => { fire = f; } } } };
+    window.__cloudFire = () => fire({ reason: 0, keys: ['progress'] });
+    CLOUD.WAIT = 200;
+  }, today);
+  await page.evaluate(() => cloudStart());
+  await page.waitForFunction(() => CLOUD.ready && __sets === 1);
+  const m = await page.evaluate(() => ({ best, lines: stats.lines, games: stats.games, sweeps: stats.sweeps,
+    done: [...goals.done].sort(), days: goals.days, streak: goals.streak, candy: unlocked.has('candy'),
+    a1: adv.lv[1], a2: adv.lv[2], d1: daily.d['2026-11-01'], d2: daily.d['2026-11-02'],
+    ch: chalRec.s['d-2026-11-09'], won: chalRec.won,
+    stored: JSON.parse(localStorage.getItem('crumble.stats')).best, cloud: JSON.parse(__kv.progress) }));
+  assert.equal(m.best, 5000, 'best: the bigger one');
+  assert.deepEqual([m.lines, m.games, m.sweeps], [40, 12, 2], 'stats: each by max');
+  assert.ok(m.done.includes('games:10') && m.done.includes('lines:25'), 'goals: union (plus rungs the merged stats now reach)');
+  assert.equal(m.days, 5);
+  assert.deepEqual([m.streak.cur, m.streak.best], [5, 6], 'streak: played the day after the other phone\'s last day, so the run joins up (4 + 1); the best is kept');
+  assert.ok(m.candy, 'unlocked skins: union');
+  assert.deepEqual(m.a1, { s: 3, p: 11, n: 2, f: 0 }, 'a level: most stars, fewest pieces');
+  assert.equal(m.a2.s, 1, 'a level only the cloud had');
+  assert.deepEqual(m.d1, { s: 900, l: 12, n: 2 }, 'a Daily day: best of each');
+  assert.equal(m.d2.s, 400);
+  assert.ok(m.ch && m.ch.b === 5200 && m.ch.m === 2 && m.won === 1, 'Challenge results come over too');
+  assert.equal(m.stored, 5000, 'stored on this phone too');
+  assert.equal(m.cloud.stats.lines, 40, 'and this phone\'s extra progress went back up');
+  await page.evaluate(() => { stats.lines++; saveStats(); stats.lines++; saveStats(); saveGoals(); saveAdv(); });
+  assert.equal(await page.evaluate(() => __sets), 1, 'not at once');
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => __sets), 2, 'one write for a burst of saves');
+  assert.equal(await page.evaluate(() => JSON.parse(__kv.progress).stats.lines), 42);
+  await page.evaluate(() => { const o = JSON.parse(__kv.progress); o.best = 9000; __kv.progress = JSON.stringify(o); __cloudFire(); });
+  await page.waitForFunction(() => best === 9000);                  // another phone wrote: picked up
+  await page.evaluate(() => { __fail = true; stats.lines++; saveStats(); });
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => JSON.parse(__kv.progress).stats.lines), 42, 'a failed read writes nothing');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
 test('8.5 frame pacing: every frame while touched, 30 then 15 a second when idle, 5 under the pause card', async ({ page }) => {
   await play(page); await dealt(page);
   const rate = ms => page.evaluate(ms => new Promise(res => { const l0 = last; let n = 0, p = last;
