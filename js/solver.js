@@ -834,8 +834,8 @@ function* tideHandSteps(a0,st,withStar){
       for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(!l) continue; const v=crowded?(l*N-s.n)/N+roomBits(_lo,_hi):l+roomBits(_lo,_hi); if(v>best) best=v; }   // (round 6) crowded: the key that takes away the most (cleared cells less its own), like Block Blast's bars into one-cell gaps
       ranked.push({s,v:best}); });
     ranked.sort((x,y)=>y.v-x.v);
-    const awkKeys=!easy&&crowded?ranked.filter(x=>awkward(x.s)):[];                     // (round 6) LEAN's comeback keys are its awkward ones, when the board has any
-    fixers=(awkKeys.length?awkKeys:ranked).slice(0,4).map(x=>x.s);
+    const pref=!crowded?[]:easy?(CFG.EASY_RECT?ranked.filter(x=>isRect(x.s)):[]):ranked.filter(x=>awkward(x.s));   // (round 6) comeback keys keep the stretch's character: EASY's rectangles and bars, LEAN's awkward ones, when the board has any
+    fixers=(pref.length?pref:ranked).slice(0,4).map(x=>x.s);
     if(fixers.length) waveStats.rescues++;
   }
   // (round 4) a tray she can read: two or three of one piece (a rectangle, bar or big L that fits), so the tray says "build this"
@@ -853,7 +853,7 @@ function* tideHandSteps(a0,st,withStar){
     if(big&&keys.length) for(let j=0;j<3;j++){ if(rnd()<0.85){ const pool=multi.length&&rnd()<0.5?multi:keys; hand[j]=pool[(rnd()*pool.length)|0]; } }   // big solve: a tray of keys, each finishing a different line if it can
     else if(easy&&keys.length&&rnd()<0.8){ const pool=multi.length&&rnd()<0.6?multi:keys, j=(rnd()*3)|0; hand[j]=pool[(rnd()*pool.length)|0]; if(rnd()<0.4) hand[(j+1)%3]=keys[(rnd()*keys.length)|0]; }
     if(twins.length&&!big&&rnd()<CFG.MATCH_TRY){ const t=twins[(rnd()*twins.length)|0]; hand[0]=hand[1]=t; if(rnd()<0.5||!keys.length) hand[2]=t; else hand[2]=keys[(rnd()*keys.length)|0]; }
-    if(fixers.length){ const j=(rnd()*3)|0; hand[j]=fixers[i%fixers.length]; if(crowded&&rnd()<CFG.CROWD_TWO) hand[(j+1)%3]=fixers[(i+1+((rnd()*3)|0))%fixers.length]; }   // (round 6) often two keys on a crowded board
+    if(fixers.length&&!big){ const j=(rnd()*3)|0; hand[j]=fixers[i%fixers.length]; if(crowded&&rnd()<CFG.CROWD_TWO) hand[(j+1)%3]=fixers[(i+1+((rnd()*3)|0))%fixers.length]; }   // (round 6) often two keys on a crowded board
     else if(!easy&&later.length&&rnd()<CFG.LEAN_PUZZLE_TRY) hand[(rnd()*3)|0]=later[(rnd()*later.length)|0];   // a big piece with no spot yet: room has to be made for it
     if(withStar) hand[(rnd()*3)|0]=STAR;
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
@@ -1028,11 +1028,12 @@ function* dealSteps(){
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
-  // (round 6) the chain: right after a board clear Block Blast deals big matching pieces (three 1x5s, three 2x2s, 3x3s) that
+  // (round 6) the chain: right after a board clear Block Blast deals big matching pieces (three 1x5s, three 2x2s, 2x3s) that
   // rebuild whole rows, so the next clear comes quickly; the sweep run takes it from there
-  if(tideOn()&&CFG.CHAIN_BUILD>0&&trayNo>1&&!countFlat(a0)&&freeOfSpecials&&rnd()<CFG.CHAIN_BUILD){
-    const p=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0], h=[p,p,p];
-    if(rnd()<0.4){ const q=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0]; h[2]=q; }
+  if(tideOn()&&CFG.CHAIN_BUILD>0&&!wt&&trayNo>1&&!countFlat(a0)&&freeOfSpecials&&rnd()<CFG.CHAIN_BUILD){   // (an earned closer or chase keeps its tray)
+    const pool=CFG.EASY_RECT&&tideNow==='easy'?OPEN_BUILD.filter(isRect):OPEN_BUILD;
+    const p=pool[(rnd()*pool.length)|0], h=[p,p,p];
+    if(rnd()<0.4){ const q=pool[(rnd()*pool.length)|0]; h[2]=q; }
     commitTray(h,'CHAIN'); waveDealt(h); return;
   }
   const wantStar=!wt && tier!=='edge' && tier!=='recovery' && special('star') && specialOk() && starCool<=0 && starBest(grid).n>=CFG.STAR_MIN && (starForced || rnd()<CFG.STAR_CHANCE);
