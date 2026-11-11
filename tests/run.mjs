@@ -3919,6 +3919,31 @@ test('the deal never fails (1.1 G): on awkward boards every tray plays out in fu
   assert.ok(r.guard, 'ensureWay turns an unplayable hand into a playable one');
 });
 
+test('big solves (round 3): after a LEAN stretch, a board of nearly-done lines gets keys that clear several at once, and small pieces come one a tray unless it clears the board', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = { lines: [], small: 0, dealt: 0, ready: 0 };
+    const boards = [
+      ['11111100','11111100','11111100','00000000','00000000','00000000','00000000','00000000'],   // three rows short of a 2-wide gap
+      ['11011111','11011111','11011111','11011111','00000000','00000000','00000000','00000000'],   // four rows with one hole in a column
+      ['11110000','11110000','11110000','11110000','11110000','00000000','00000000','00000000'],   // a block: rows half done
+    ];
+    let seed = 7;
+    for (const b of boards) for (let k = 0; k < 6; k++) {
+      W73(); resetTide(); tide = { st: 'easy', n: 0, len: 12 }; closerCool = 99; sweepCool = 99; dryN = 0;
+      const a0 = B73(b), [lo, hi] = packBits(a0); o.ready = Math.max(o.ready, readyLines(lo, hi));
+      rndSrc = mulberry(seed++); tray = [null, null, null]; genTray(); o.dealt++;
+      const hand = tray.map(t => t.s);
+      o.lines.push(evalHand(a0, hand, 400000).lines);
+      if (hand.filter(s => !s.star && s.n <= 3).length > 1 && !/CLOSER|SWEEP/.test(lastTier)) { o.small++; o.why = (o.why || '') + lastTier + ' '; }
+    }
+    rndSrc = null; return o; })()`);
+  assert.ok(r.ready >= 3, 'the boards have nearly-done lines');
+  const big = r.lines.filter(n => n >= 3).length;
+  assert.ok(big >= r.dealt * 0.6, 'most trays can clear 3+ lines at once: ' + r.lines.join(','));
+  assert.ok(r.small <= 1, 'small pieces come one a tray (a board clear may use more): ' + r.why + r.small + ' of ' + r.dealt + ' trays had two');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
