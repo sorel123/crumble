@@ -3921,7 +3921,7 @@ test('the deal never fails (1.1 G): on awkward boards every tray plays out in fu
   assert.ok(r.guard, 'ensureWay turns an unplayable hand into a playable one');
 });
 
-test('build-off opening (round 4): Endless opens on an empty board with three of one piece; Challenge keeps its seeded opening', async ({ page }) => {
+test('build-off opening (round 4): Endless opens on an empty board with three of one piece', async ({ page }) => {
   await play(page);
   const r = await page.evaluate(() => {
     const o = { build: 0, n: 0, bad: [] }, orig = CFG.OPEN_BUILD; CFG.OPEN_BUILD = 1;
