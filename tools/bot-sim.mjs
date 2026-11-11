@@ -154,7 +154,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     const tideSt = typeof tideOn === 'function' && tideOn() ? tide.st : 'flat';
     const fit = { st: tideSt, avail: full ? full.lines : 0, solvable: full ? full.ok : true, awk: shp.filter(awkK).length,
       sizes: shp.filter(s => !s.star).map(s => s.n), multiPieces: shp.filter(s => !s.star && bestDrop(glo, ghi, s) >= 2).length,
-      clearable: shp.some(s => !s.star && bestDrop(glo, ghi, s) >= 1), roomAtDeal: roomOf(a0),
+      puzzle: shp.some(s => !s.star && !placeMasks(s).some(m => !(glo & m.lo) && !(ghi & m.hi))), clearable: shp.some(s => !s.star && bestDrop(glo, ghi, s) >= 1), roomAtDeal: roomOf(a0),
       sound: typeof soundBits === 'function' ? shp.every(s => soundBits(glo, ghi, s, roomOf(a0))) : null };
     cur = { ...fit, sweepHand: closerTray, offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
     trays.push(cur);
@@ -219,7 +219,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   const fitOf = a => { const ps = a.flatMap(t => t.sizes); return { trays: a.length, meanPiece: +(ps.reduce((x, y) => x + y, 0) / Math.max(1, ps.length)).toFixed(2),
     small3: pct(ps, n => n <= 3) + '%', ones: pct(ps, n => n === 1) + '%', tray4plus: pct(a, t => t.avail >= 4) + '%', tray2plus: pct(a, t => t.avail >= 2) + '%',
     piece2plus: Math.round(100 * a.reduce((x, t) => x + t.multiPieces, 0) / Math.max(1, ps.length)) + '%', awkPerTray: mean(a, t => t.awk),
-    linesAvail: mean(a, t => t.avail), clearedPerTray: mean(a, t => t.lines) }; };
+    linesAvail: mean(a, t => t.avail), clearedPerTray: mean(a, t => t.lines), puzzle: pct(a, t => t.puzzle) + '%', sweeps: a.reduce((x, t) => x + t.sweeps, 0) }; };
   const leanSet = [], soundT = trays.filter(t => t.sound !== null);
   trays.forEach((t, i) => { if (t.st !== 'lean') return; const n1 = trays[i + 1], n2 = trays[i + 2];
     if (!n1 || n1.game !== t.game) return; const need = !t.cleared || n1.roomAtDeal < CFG.ROOM_OK; if (!need) return;
@@ -234,7 +234,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     lostIn: (() => { const o = {}; perGame.forEach(a => { const t = a[a.length - 1], k = t.st + '/' + t.ph; o[k] = (o[k] || 0) + 1; }); return o; })(),
     lostAfterLeanTrays: (() => { const r = []; perGame.forEach(a => { let k = 0; for (let i = a.length - 1; i >= 0 && a[i].st === 'lean'; i--) k++; if (k) r.push(k); }); return r.sort((x, y) => x - y); })(),
   };
-  const series = g0.map(t => ({ st: t.st, ph: t.ph, avail: t.avail, awk: t.awk, tier: t.tier, cleared: t.lines }));
+  const series = g0.map(t => ({ st: t.st, ph: t.ph, avail: t.avail, awk: t.awk, tier: t.tier, cleared: t.lines, sw: t.sweeps }));
   return { g1, series, pace6,
     trays: trays.length, games, goldens, goldensPerGame: +(goldens / (games + 1)).toFixed(2), traysPerGame: Math.round(trays.length / (games + 1)), buckets,
     obviousAtDealAll: pct(trays, t => t.obv), boardAllowsAll: pct(trays, t => t.possible), clearPerTrayAll: pct(trays, t => t.cleared), allThreeAll: pct(trays, t => t.obvN === 3), clearsPerTrayAll: mean(trays, t => t.clears),
