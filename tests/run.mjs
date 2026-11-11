@@ -483,7 +483,7 @@ test('7.5 crumble: each gem breaks into four pieces of itself, the line cracks a
   const multi = await watch();
   assert.ok(multi.most > one.most * 2, `three lines break more (${multi.most} vs ${one.most})`);
   assert.ok(multi.dustMax > 24 && multi.specks > 0, `with a pale puff per gem and specks (${multi.dustMax} dust)`);
-  assert.ok(multi.low > multi.H, `the pieces fall off the bottom of the screen (${multi.low.toFixed(0)} > ${multi.H})`);
+  assert.ok(multi.frames < 45, `(speed) an everyday multi-line clear is quick too: gone in ~400 ms, not a fall off the screen (${multi.frames} frames)`);
   assert.equal(multi.left, 0, 'and are gone');
   // the order: over the board's gems, under the tray
   const order = await page.evaluate(() => new Promise(res => {
@@ -867,7 +867,7 @@ test('the hesitation log times the first drop of each tray, skips restored trays
   // on her phone there is no URL bar: five quick taps on the Settings note show the same numbers
   await openSet(page);
   for (let k = 0; k < 5; k++) await page.click('#setNote');
-  assert.match(await page.textContent('#setNote'), /^Last 2 trays \(2 kept\): first pickup [\d.]+s, pickup to drop [\d.]+s, first drop clears \d+%$/);
+  assert.match(await page.textContent('#setNote'), /^Last 2 trays \(2 kept\): first pickup [\d.]+s, pickup to drop [\d.]+s, first drop clears \d+%( · Drag: \d+ fps, \d+% late frames, worst \d+ ms \(\d+ frames\))?$/);
   await closeSet(page);
   await page.goto(server.url + '?dev');
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
