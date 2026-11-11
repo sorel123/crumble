@@ -80,6 +80,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['CLOSER_COMBO','Closer: combo',2,8,1],
   ['CLOSER_TARGET','Closer: sweep cells at most',10,27,1],
   ['CLOSER_COOL','Closer: cooldown (trays)',0,15,1],
+  ['RUN_TRAYS','Sweep run: trays dealt toward a sweep (0 = off)',0,5,1],
+  ['RUN_GEMS','Sweep run: starts at gems at most',8,30,1],
   ['CHASE_TRIES','Sweep chase: set-up hands tried (0 = off)',0,16,1],
   ['SWEEP_AIM','Sweep aim: lean toward sweepable boards (0 = off)',0,4,1],
   ['DRY_TRAYS','Dry spell: trays to a payoff',2,12,1],

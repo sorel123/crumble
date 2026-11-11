@@ -58,6 +58,12 @@ const CFG = {
   CHASE_NODES:    1500,  //   hunt cap per candidate
   CHASE_COOL:     5,     //   trays after a chase that found nothing before the next search
   CHASE_EVAL:     1200,  //   solver budget per candidate (only the boards it can leave are wanted)
+  RUN_TRAYS:      3,     // (1.1) the sweep run: most trays dealt toward a sweep on a low calm board (0 = off; see runHandSteps)
+  RUN_GEMS:       20,    //   ...starts on a board of this many gems or fewer
+  RUN_SLACK:      4,     //   ...and ends if the board grows past RUN_GEMS + this
+  RUN_TRIES:      48,    //   candidate hands per run tray (each played out the quick way, predictPlay)
+  RUN_HUNTS:      8,     //   ...of which the closest to a sweep are hunted
+  RUN_COOL:       6,     //   trays after a run (paid or not) before the next run or closer
   SWEEP_AIM:      0,     // (1.1 A) off cooldown, ordinary hands lean toward boards close to a sweep: score per empty cell of the gap (0 = off).
                          //   Off: it is help on honest trays, so it belongs to the Endless pacing decision. Measured at 1 (with the chase on):
                          //   sweep hands 1 per 120-210 trays instead of 1 per 190-220, games longer; at 4 games got much shorter (boards worse).
