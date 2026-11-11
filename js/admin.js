@@ -83,6 +83,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['EASY_RUN_TRAYS','Coaster: easy sweep run trays',0,8,1],
   ['BIG_SOLVE','Coaster: big solve pull',0,40,1],
   ['BIG_READY','Coaster: big solve nearly-done lines',1,8,1],
+  ['BIG_FIRST','Coaster: big solve trays after lean',0,6,1],
+  ['BIG_READY_CELLS','Coaster: nearly-done cells of 8',4,7,1],
   ['SMALL_CAP','Coaster: penalty per extra small piece',0,80,5],
   ['LEAN_PUZZLE','Coaster: lean puzzle trays',0,80,1],
   ['EASY_TRIES','Coaster: easy hands looked at',1,48,1],
