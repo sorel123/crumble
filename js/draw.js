@@ -30,8 +30,21 @@ function goldGlow(cx,cy,r,now,ph,rgb='255,206,72'){
   g.addColorStop(0,`rgba(${rgb},${0.3+0.32*pulse})`); g.addColorStop(1,`rgba(${rgb},0)`);
   ctx.fillStyle=g; ctx.fillRect(cx-r,cy-r,r*2,r*2);
 }
-// a lifted piece's drop shadow, rendered with shadowBlur once into its own canvas
+// a lifted piece's drop shadow, rendered with shadowBlur once into its own canvas. (speed) shadowBlur is slow on iOS and
+// used to run on the pickup's first frame, a hitch right as her thumb lands; now each shape's shadow is kept (per board
+// size) and the tray's are made ahead, one per idle frame after a deal (warmShadows), so a pickup draws a cached one.
+const shadowCache=new Map();
 function pieceShadow(s){
+  const key=s.cells.map(c=>c.join('.')).join('|')+'@'+cell+'x'+dpr;
+  let v=shadowCache.get(key);
+  if(!v){ if(shadowCache.size>80) shadowCache.clear(); v=makeShadow(s); shadowCache.set(key,v); }
+  return v;
+}
+function warmShadows(){                              // frame(): at most one new shadow a frame, never during a drag
+  if(drag) return;
+  for(const t of tray) if(t){ const key=t.s.cells.map(c=>c.join('.')).join('|')+'@'+cell+'x'+dpr; if(!shadowCache.has(key)){ pieceShadow(t.s); return; } }
+}
+function makeShadow(s){
   const pad=24, w=s.cols*cell+pad*2, h=s.rows*cell+pad*2, cv=document.createElement('canvas');
   cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
   const x=cv.getContext('2d'); x.scale(dpr,dpr);
@@ -466,7 +479,10 @@ function stepConfetti(dt){
    star (more pop, a pale dust puff and a few specks per gem), 3 combo BIG_COMBO+ (more kick away from the piece),
    4 clean sweep (the most). Every quarter counts against the particle budget (fxLive): when it is short a gem breaks
    in two halves, or falls whole, or (budget spent) just goes. */
-const CRUMBLE_CRACK=4, RUBBLE_G=0.6, RUBBLE_POP=[0,.7,1.3,1.7,2.1], RUBBLE_KICK=[0,.3,.9,1.6,2], RUBBLE_LIFE=[0,34,56,60,66], RUBBLE_FADE=[0,12,10,10,10];
+// (speed) Block Blast's line is gone in ~100 ms; ours lingered 570 ms (one line) to 1 s, so the board looked busy after
+// every move. The everyday clear (tiers 1-2) now cracks in 2 frames and its pieces are gone in ~270-400 ms; the big
+// moments (tier 3 combo, tier 4 sweep) keep their long fall. Was CRACK 4, LIFE [0,34,56,..], FADE [0,12,10,..].
+const CRUMBLE_CRACK=2, RUBBLE_G=0.6, RUBBLE_POP=[0,.7,1.3,1.7,2.1], RUBBLE_KICK=[0,.3,.9,1.6,2], RUBBLE_LIFE=[0,16,24,60,66], RUBBLE_FADE=[0,8,9,10,10];
 const RUBBLE_CUTS={4:[[0,0,.5,.5],[.5,0,.5,.5],[0,.5,.5,.5],[.5,.5,.5,.5]],2:null,1:[[0,0,1,1]]};
 function crack(s,x,y,k){                             // two zigzags through the gem, drawn in as k goes 0 -> 1: the lines it breaks along
   if(!s.ck){
@@ -529,13 +545,19 @@ function drawRubble(dt){
    over about a second, so a slow moment sheds sparkle instead of frames. With ?dev a corner readout shows the
    slowest frame of the last two seconds, how many frames have run long (tap it to reset), the time the game's
    own code took in the last frame, and the particle budget. */
-const perf={gaps:new Float32Array(120),gi:0,over:0,work:0,fx:1,hud:null};
+const perf={gaps:new Float32Array(120),gi:0,over:0,work:0,fx:1,hud:null,dg:new Float32Array(600),di:0};
+function dragPerf(){                                 // (speed) the last 600 frames drawn while a piece was held: rate, share late, worst
+  const g=[...perf.dg].filter(v=>v>0); if(!g.length) return null;
+  const s=g.slice().sort((a,b)=>a-b), med=s[s.length>>1], late=g.filter(v=>v>med*1.5).length;
+  return {fps:Math.round(1000/med),late:Math.round(late*100/g.length),worst:Math.round(s[s.length-1]),n:g.length};
+}
 const fxLive=()=>goldRain.length+bursts.length+shards.length+sparkles.length+dust.length+chunks.length+confetti.length+rubble.length;
 function fxRoom(){ return Math.round(CFG.PARTICLE_CAP*perf.fx)-fxLive(); }
 function perfFrame(gap){
   if(!(gap>0&&gap<250)) return;                     // the first frame, or back from the background: not a frame she saw
   perf.gaps[perf.gi]=gap; perf.gi=(perf.gi+1)%perf.gaps.length;
   if(gap>CFG.FRAME_BUDGET_MS) perf.over++;
+  if(drag){ perf.dg[perf.di]=gap; perf.di=(perf.di+1)%perf.dg.length; }   // (speed) frames while a piece is held: Settings' five-tap note reports them
   let base=Infinity; for(const g of perf.gaps) if(g>0&&g<base) base=g;   // the device's own frame interval (33 ms in Low Power Mode)
   if(gap>Math.max(CFG.FRAME_BUDGET_MS,base*1.5)) perf.fx=Math.max(0.3,perf.fx-0.15);   // a frame late for this device
   else perf.fx=Math.min(1,perf.fx+0.01);
@@ -752,13 +774,27 @@ function antCell(r,c,now){
    drift, the tray's bob, the fire rim); 15 after CFG.FRAME_DOZE_MS with no touch; 5 under the pause card or Settings (the
    game is frozen there, the few frames only pick up a new look); 30 on the front menu. dt still measures real time, so
    nothing moves slower, it only moves in bigger steps. Paced frames are not counted by perfFrame (they are not late). */
+/* (speed) The new tray pops in: each piece grows from its slot's centre with a small overshoot, in TRAY_POP frames,
+   the slots a frame apart (~120 ms in all), so a fresh hand reads as arriving instead of blinking on. Any slot that
+   gets a new piece (a deal, a new run, a resumed one) pops; a piece sent back keeps its object and does not.
+   Picking one up mid-pop is fine: the drag draws it at full size. Reduced motion: no pop. */
+const TRAY_POP=6;
+let trayLast=[null,null,null], trayPopT=[1,1,1];
+function stepTrayPop(dt){
+  for(let i=0;i<3;i++){
+    if(tray[i]!==trayLast[i]){ if(tray[i]&&!reduce) trayPopT[i]=-i*1.2/TRAY_POP; trayLast[i]=tray[i]; }
+    if(trayPopT[i]<1) trayPopT[i]=Math.min(1,trayPopT[i]+dt/TRAY_POP);
+  }
+}
+const trayPopK=i=>trayPopT[i]>=1?1:trayPopT[i]<=0?0:easeOutBack(trayPopT[i]);
+const trayPopping=()=>trayPopT[0]<1||trayPopT[1]<1||trayPopT[2]<1;
 let lastInput=0, paceSig='', paceFull=true;
 ['pointerdown','pointermove','pointerup','keydown'].forEach(t=>addEventListener(t,()=>{ lastInput=performance.now(); },{passive:true,capture:true}));
 function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
     ||slams.length||bursts.length||praises.length||banners.length||goldRain.length||orbs.length||rings.length||dust.length
-    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn());
+    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn()||trayPopping());
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
@@ -789,8 +825,8 @@ function frame(now){
   if(goldenArrive<999) goldenArrive+=dt;
   sweepFxT=Math.max(0,sweepFxT-dt/48);
   if(bestBeaten && shownScore>best){ best=shownScore; const bv=el('bestVal'); bv.textContent=best; if(!bv.classList.contains('bump')){ bv.classList.add('bump'); setTimeout(()=>bv.classList.remove('bump'),140); } }
-  if(shownScore!==score && now>=scoreHold){         // quick count-up (held until the first score orb lands): ~30% of the gap a frame, at least 1
-    shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*0.09*dt))):score;
+  if(shownScore!==score && now>=scoreHold){         // quick count-up (held until the first score orb lands): SCORE_COUNT of the gap a frame (~300 ms), at least 1
+    shownScore=shownScore<score?Math.min(score,shownScore+Math.max(1,Math.ceil((score-shownScore)*Math.min(1,CFG.SCORE_COUNT*dt)))):score;
     el('scoreVal').textContent=shownScore; hudFit(); chaseSync();
   }
   if(hitWait<=0) punchT=Math.max(0,punchT-dt/22);
@@ -868,7 +904,7 @@ function frame(now){
   drawTrayBand();                                    // (6.6) in the board layer, so nothing that flies over the tray (chunks, shards) is ever dimmed by it
   drawGoldPlan(now,!!(drag&&tray[drag.i]));           // (4.5c) before the held piece's preview, so the preview wins where they overlap
 
-  if(drag&&tray[drag.i]){ drag.g=Math.min(1,drag.g+dt*0.2); updateSlot(); }   // the pickup lift moves the piece without a pointer event
+  if(drag&&tray[drag.i]){ drag.g=Math.min(1,drag.g+dt*CFG.PICKUP_GROW); updateSlot(); }   // the pickup lift moves the piece without a pointer event
   const gh=drag&&tray[drag.i]&&drag.slot?{r:drag.slot.r,c:drag.slot.c,s:tray[drag.i].s}:null;   // the one landing answer (see updateSlot)
   if(gh){
     let L;
@@ -1119,13 +1155,15 @@ function frame(now){
   }
   if(guide) guideDraw(now);                          // (1.1 D) the guided first game's ghost pulse, on empty cells only
   drawRubble(dt);                                    // (7.5) the broken pieces: over the board and its gems, under the tray and the held piece
+  stepTrayPop(dt);
   for(let i=0;i<3;i++){
     const t=tray[i]; if(!t) continue;
     if(drag&&drag.i===i) continue;
     if(ret&&ret.i===i) continue;
     const R=slotRect(i),s=t.s;
     const bob=reduce?0:Math.sin(now*0.0022+i*2.1)*cell*0.045;
-    const tc=trayFit(s), ox=R.x+(R.w-s.cols*tc)/2, oy=R.y+(R.h-s.rows*tc)/2+bob;
+    const pk=trayPopK(i); if(pk<=0.02) continue;      // (speed) a new piece pops in, whole, from its slot's centre
+    const tc=trayFit(s)*pk, ox=R.x+(R.w-s.cols*tc)/2, oy=R.y+(R.h-s.rows*tc)/2+bob;
     const gold=t.gi===GOLD;
     if(gold) goldGlow(ox+s.cols*tc/2,oy+s.rows*tc/2,Math.max(s.cols,s.rows)*tc*0.95+tc*0.6,now,i);
     if(s.star) goldGlow(ox+tc/2,oy+tc/2,tc*1.5,now,i,'235,225,255');
@@ -1192,7 +1230,7 @@ function frame(now){
   }
 
   for(let i=pops.length-1;i>=0;i--){
-    const p=pops[i]; p.t+=dt*0.026;
+    const p=pops[i]; p.t+=dt*(p.lines>1||p.combo>1?0.026:0.042);   // (speed) a plain one-line +points is gone in ~400 ms, not 640
     if(p.t<0) continue;
     if(p.t>=1){ pops.splice(i,1); continue; }
     const sc=0.3+0.7*easeOutBack(Math.min(1,p.t*4));            // slams in, then drifts up and fades
@@ -1262,7 +1300,7 @@ function frame(now){
   }
   ctx.globalAlpha=1;
   for(let i=praises.length-1;i>=0;i--){            // the praise word: pops in, holds, lifts away
-    const p=praises[i]; p.t+=dt*0.024;
+    const p=praises[i]; p.t+=dt*(p.tier?0.024:0.04);   // (speed) the everyday word (tier 0) is gone in ~420 ms, not 700
     if(p.t>=1){ praises.splice(i,1); continue; }
     const pin=Math.min(1,p.t/0.2), out=p.t>0.72?(p.t-0.72)/0.28:0;
     const size=Math.round(Math.min(W*0.13,cell*1.1)*(p.tier?1+0.1*(p.tier-1):0.8)), tw=textW(p.word,size);
@@ -1306,6 +1344,7 @@ function frame(now){
   if(CFG.FX_SWEEP_FX) stepConfetti(dt);
   stepOrbs(now,dt);
   stepDeal(); stepPending();                                        // the next tray, a slice at a time, after this frame's drawing
+  if(!dealing) warmShadows();
   perf.work=performance.now()-t0;
   perfHud(now);
 }
