@@ -155,7 +155,7 @@ const CFG = {
   ALT:            0.5,    // plan 3.4: score per legal spot (up to 8) for the hand's smallest piece of 2+ cells: room to put the awkward one
   CLEAR_STYLE:    'crumble', // (7.5) 'crumble': a crack ripples along the line from the piece and each gem breaks into four pieces of itself that fall off the screen; 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
-  CRUMBLE_STAGGER:0.75,   // (7.5) crumble only: frames between one gem's crack and the next along the line, out from the placed piece (~12 ms)
+  CRUMBLE_STAGGER:0.4,    // (7.5) crumble only: frames between one gem's crack and the next along the line, out from the placed piece (~7 ms; was 0.75)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
   FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
   FX_CELL_TAGS:   true,   // a little point value appears on every cleared cell
@@ -186,6 +186,8 @@ const CFG = {
 
   MOUSE_LIFT:    0.15,   // (C2) the lift for a mouse drag (a cursor is a point, not a thumb); touch and pen use LIFT
   SLOT_TICK_MS:  40,     // (C1) at most one selection tick this often as the landing cell changes (app only)
+  PICKUP_GROW:   0.5,    // (speed) share of the pickup grow + lift per frame: 0.5 = 2 frames (~33 ms). Was 0.2 (5 frames), the piece trailed the thumb
+  SCORE_COUNT:   0.25,   // (speed) share of the gap the score counts up each frame: done in ~300 ms. Was 0.09 (~1 s)
   LIFT:          1.0,    // cells between the finger and the bottom edge of the dragged piece (same gap for every piece height)
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
   TIER_SOLVABLE: 0.0,    // (Adventure; Endless and Daily use the 6.1 phases) tension above this deals 'solvable' hands (2+ lines); at 0 there are no 'honest' hands — every tray can clear
@@ -239,7 +241,8 @@ const CFG = {
   // frame budget (plan 2.2): the phone should never show a frame over FRAME_BUDGET_MS during a clear
   FRAME_BUDGET_MS: 20,   // a frame slower than this counts as long (the ?dev overlay counts them) and shrinks the particle budget
   PARTICLE_CAP:   260,   // most effect particles alive at once (fireworks, specks, dust, confetti); scaled down while frames run long
-  DEAL_SLICE_MS:  4,     // ms of tray dealing per frame after a drop (the deal is spread over frames, never inside the clear's first one)
+  DEAL_SLICE_MS:  12,    // ms of tray dealing per frame after a drop (never inside the clear's first one). (speed) Was 4: a deal is ~2 ms (9 ms on a
+                         // hard tray), so 12 finishes almost every deal in one frame; 4 ms slices tied to slow frames left the tray empty for 150-800 ms
   // (8.5) frame pacing, for battery and heat: full speed only while something moves fast (see frameGap in draw.js)
   FRAME_PACING:   true,  // off = redraw the whole screen every frame, as before
   FRAME_FULL_MS:  2500,  // full speed for this long after any touch (and after a deal, a score or the run's state changes)

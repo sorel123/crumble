@@ -228,7 +228,9 @@ el('setNote').onclick=e=>{
   const now=performance.now(); hesTaps=hesTaps.filter(t=>now-t<3000); hesTaps.push(now);
   if(hesTaps.length<5) return;
   hesTaps=[]; const h=hesSummary(), sec=ms=>(ms/1000).toFixed(1)+'s';
-  el('setNote').textContent=h.n?`Last ${h.n} trays (${h.total} kept): first pickup ${sec(h.pick)}, pickup to drop ${sec(h.place)}, first drop clears ${h.clr}%`:'No hesitation samples yet';
+  const d=dragPerf();                                 // (speed) how smoothly a held piece was drawn on this phone
+  el('setNote').textContent=(h.n?`Last ${h.n} trays (${h.total} kept): first pickup ${sec(h.pick)}, pickup to drop ${sec(h.place)}, first drop clears ${h.clr}%`:'No hesitation samples yet')
+    +(d?` · Drag: ${d.fps} fps, ${d.late}% late frames, worst ${d.worst} ms (${d.n} frames)`:'');
 };
 el('startBtn').onclick=e=>{e.stopPropagation();ac();homeCrumble();mode='endless';lvl=null;saveMode();start();};   // (8.3) the logo crumbles as the game starts
 el('againBtn').onclick=e=>{e.stopPropagation();el('overCard').hidden=true;start();};
