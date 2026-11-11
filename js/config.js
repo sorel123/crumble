@@ -101,6 +101,11 @@ const CFG = {
   BIG_READY: 3,          //   ...nearly-done lines it takes
   BIG_FIRST: 2,          //   ...the first this many EASY trays of a stretch skip the sweep run for it
   BIG_READY_CELLS: 5,    //   ...cells of 8 a line needs to count as nearly done
+  SWEEP_EASE_K: 8,       // (round 5) plays a sweep hand is tried with, varied like a person (sweepEase); 0 = off
+  SWEEP_EASE: 0.5,       //   ...share of them that must sweep for a run hand to count as a sweep
+  SWEEP_EASE_W: 4,       //   ...the sweep hunt's score for a hand every such play sweeps
+  SWEEP_EASE_HUNT: 0,    //   ...a hunted sweep hand is only dealt if this share of those plays sweep (0 = always)
+  EASY_RECT: true,       // (round 5) EASY stretches deal rectangles and bars only: boards stay blocky, so big clears and board clears line up for a person
   OPEN_BUILD: 0.7,       // (round 4) odds an Endless or Daily game opens on an empty board with three of one piece (rectangle, bar or big L) to build off
   MATCH: 25,             // (round 4) EASY score for a tray of three alike (60% of it for two alike): a tray she reads as one plan
   MATCH_TRY: 0.35,       //   ...odds an EASY candidate is built that way

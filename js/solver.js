@@ -277,6 +277,7 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
   const pool=HUNT_POOL.slice();                     // Fisher-Yates always (not rshuffle's sort): a fixed count of rnd() calls on every engine, so the Daily deals alike
   for(let k=pool.length-1;k>0;k--){ const j=(rnd()*(k+1))|0; [pool[k],pool[j]]=[pool[j],pool[k]]; }
   let nodes=budget, best=null, bestSc=-Infinity;
+  const easeW=tideOn()?CFG.SWEEP_EASE_W:0, enough=4.5+easeW*0.75;   // (round 5) the ease term, under the tide only (Challenge keeps its deals); the search stops at a sweep that is also easy
   const path=[];
   for(const cv of covers){
     const cand=[];                                     // the moves that stay inside this cover
@@ -285,7 +286,7 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
     let liveAll=0; for(const i of cv.ids) liveAll|=1<<i;
     const dfs=(lo,hi,live,llo,lhi,depth)=>{
       for(const c of cand){
-        if(nodes<=0||bestSc>=4.5) return;
+        if(nodes<=0||bestSc>=enough) return;
         const m=c.m;
         if((m.lo&~llo)||(m.hi&~lhi)||(lo&m.lo)||(hi&m.hi)) continue;
         nodes--;
@@ -293,9 +294,10 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
         path.push({s:c.s,lines});
         if(!nlo&&!nhi){                                // a sweep: score it (every drop clears = 1 each; a dot costs a little)
           let sc=path.reduce((a,p)=>a+(p.lines?1:0)-(p.s.n===1?0.4:0),0)+(3-path.length)*0.5;
-          if(sc>bestSc-2){                             // (1.1) a sweep her quick play finds by itself (predictPlay) beats a cleverer one
+          if(sc+easeW>bestSc-2){                             // (1.1) a sweep her quick play finds by itself (predictPlay) beats a cleverer one
             const h=path.map(p=>p.s); while(h.length<3) h.push(SHAPES[1+(path.length%4)]);
             const pp=predictPlay(lo0,hi0,h); if(pp&&!(pp[0]|pp[1])) sc+=2;
+            if(easeW) sc+=easeW*sweepEase(lo0,hi0,h);   // (round 5) a sweep a person finds whichever way she plays it
             if(sc>bestSc){ bestSc=sc; best=path.map(p=>p.s); }
           }
         }
@@ -308,12 +310,13 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
       }
     };
     dfs(lo0,hi0,liveAll,cv.ulo,cv.uhi,0);
-    if(bestSc>=4.5||nodes<=0) break;
+    if(bestSc>=enough||nodes<=0) break;
     yield;
   }
   if(!best) return null;
   const pad=SHAPES[1+(best.length%4)];                // the same small filler the legibility check above played
   while(best.length<3) best.push(pad);
+  if(easeW&&CFG.SWEEP_EASE_HUNT>0&&sweepEase(lo0,hi0,best)<CFG.SWEEP_EASE_HUNT) return null;   // (round 5) a sweep most people would miss is not dealt as one
   for(let k=2;k>0;k--){ const j=(rnd()*(k+1))|0; [best[k],best[j]]=[best[j],best[k]]; }
   return best;
 }
@@ -397,14 +400,53 @@ function predictPlay(lo,hi,hand){
   }
   return [lo,hi];
 }
+/* (round 5) how easily a person finds the sweep in a hand: of SWEEP_EASE_K plays that vary like a person (any piece first,
+   a snug spot but not always the snuggest, an obvious clear taken most of the time), the share that empties the board.
+   Its own dice, seeded from the board and the hand, so the dealer's stream (and the Daily) is untouched. */
+function sweepEase(lo0,hi0,hand){
+  const K=CFG.SWEEP_EASE_K; if(!K) return 1;
+  let sw=0, st=(lo0^Math.imul(hi0,0x9E3779B1)^hand.reduce((a,s)=>Math.imul(a,31)+SHAPES.indexOf(s),7))>>>0;
+  const r=()=>{ st=(st+0x6D2B79F5)>>>0; let t=st; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; };
+  for(let k=0;k<K;k++){
+    let lo=lo0, hi=hi0; const left=hand.filter(s=>!s.star); let ok=true;
+    while(left.length){
+      let pick=-1, pm=null;
+      const ob=obviousLines(lo,hi);
+      if(ob.length&&r()<0.8){ let best=0;
+        for(let q=0;q<left.length;q++) for(const m of placeMasks(left[q])){
+          if((lo&m.lo)||(hi&m.hi)) continue;
+          const alo=lo|m.lo, ahi=hi|m.hi; let n=0;
+          for(let j=0;j<ob.length;j+=2) if((alo&ob[j])===ob[j]&&(ahi&ob[j+1])===ob[j+1]) n++;
+          if(n>best){ best=n; pick=q; pm=m; }
+        } }
+      if(pick<0){
+        const q=(r()*left.length)|0, s=left[q], spots=[];
+        for(const m of placeMasks(s)){
+          if((lo&m.lo)||(hi&m.hi)) continue;
+          let f=0; for(const [dr,dc] of s.cells){ const i=(m.r+dr)*8+m.c+dc; for(const j of NB[i]) if(j<0) f++; else if(!bitAt(m.lo,m.hi,j)&&bitAt(lo,hi,j)) f++; }
+          let l=0; { applyBits(lo,hi,s,m); l=pop32(lo|m.lo)+pop32(hi|m.hi)-pop32(_lo)-pop32(_hi); }   // cells a drop clears count as snug too
+          spots.push([f+l,m]);
+        }
+        if(!spots.length){ ok=false; break; }
+        spots.sort((a,b)=>b[0]-a[0]); const top=spots.filter(x=>x[0]>=spots[0][0]-1);
+        pick=q; pm=top[(r()*Math.min(3,top.length))|0][1];
+      }
+      applyBits(lo,hi,left[pick],pm); lo=_lo; hi=_hi; left.splice(pick,1);
+      if(!lo&&!hi) break;
+    }
+    if(ok&&!lo&&!hi) sw++;
+  }
+  return sw/K;
+}
+const RUN_RECTS=RUN_POOL.filter(s=>s.n===s.rows*s.cols);   // (round 5) an EASY run's pool
 function* runHandSteps(a0){
   const [lo0,hi0]=packBits(a0), keys=RUN_POOL.filter(s=>bestDrop(lo0,hi0,s)>=1); let tried=[];
   for(let i=0;i<CFG.RUN_TRIES;i++){
-    const hand=[0,1,2].map(()=>RUN_POOL[(rnd()*RUN_POOL.length)|0]);
+    const pool=CFG.EASY_RECT&&tideOn()&&tide.st==='easy'?RUN_RECTS:RUN_POOL, hand=[0,1,2].map(()=>pool[(rnd()*pool.length)|0]);
     if(keys.length&&rnd()<0.6) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];
     const pp=predictPlay(lo0,hi0,hand);
     if(pp){
-      if(!(pp[0]|pp[1])) return {hand,sweep:true};      // her quick play sweeps it already
+      if(!(pp[0]|pp[1])){ if(!tideOn()||sweepEase(lo0,hi0,hand)>=CFG.SWEEP_EASE) return {hand,sweep:true}; if(i%8===7) yield; continue; }   // her quick play sweeps it already (round 5: and most ways a person plays it do; a sweep most would miss is not dealt at all)
       tried.push({hand,lo:pp[0],hi:pp[1],g:sweepGap(pp[0],pp[1]),d:sweepDist(pp[0],pp[1])});
     }
     if(i%8===7) yield;
@@ -717,6 +759,7 @@ const awkward=s=>!s.star&&!isRect(s)&&!isBigL(s);
 // base weights per stretch, by kind and size (TIDE_SMALL scales every piece of 3 cells or fewer, the 1-cell piece rarest of all)
 function tideBase(s,st){
   let w;
+  if(st==='easy'&&CFG.EASY_RECT&&!isRect(s)) return 0;   // (round 5) EASY deals rectangles and bars only: boards stay blocky, so big clears and board clears line up for a person
   if(st==='easy') w=isRect(s)?({1:.04,2:.12,3:.4,4:1.1,5:1.4,6:1.8,9:1.8})[s.n]:isBigL(s)?.8:s.n===3?.15:.1;
   else w=isRect(s)?({1:.03,2:.1,3:.25,4:.45,5:.35,6:.35,9:.25})[s.n]:isBigL(s)?1.1:s.n===3?.2:1;
   return s.n<=3?w*CFG.TIDE_SMALL:w;
@@ -791,7 +834,7 @@ function* tideHandSteps(a0,st,withStar){
     if(fixers.length) waveStats.rescues++;
   }
   // (round 4) a tray she can read: two or three of one piece (a rectangle, bar or big L that fits), so the tray says "build this"
-  const twins=easy?SHAPES.filter((s,i)=>fit[i]&&s.n>=3&&(isRect(s)||isBigL(s))):[];
+  const twins=easy?SHAPES.filter((s,i)=>fit[i]&&s.n>=3&&(isRect(s)||!CFG.EASY_RECT&&isBigL(s))):[];
   const later=easy?[]:SHAPES.filter((s,i)=>!fit[i]&&s.n>=4&&s.n<=6);               // (round 2) LEAN puzzle pieces: big ones that do not fit until a line clears
   yield;                                              // the tables above cost a slice of their own
   const tries=easy?(big?CFG.EASY_TRIES*2:CFG.EASY_TRIES):CFG.LEAN_TRIES;
@@ -1072,6 +1115,8 @@ function seedOpening(force){                               // force: 'light' aft
   }
   const u=rnd();                                           // plan 7.2: a weighted roll, so most games open calm
   let kind=force||(u<CFG.OPENING_LIGHT?'light':u<CFG.OPENING_LIGHT+CFG.OPENING_GIFT?'gift':'busy');
+  const usable=!force&&tideOn()&&CFG.OPEN_BUILD>0;           // (round 5) under the tide the other openings are usable ones: a seeded band to finish, no loose gems
+  if(usable) kind='gift';
   if(kind==='light'){                                      // 3-8 loose gems, at most 3 to a row or column: nothing is near complete
     for(let attempt=0;attempt<200;attempt++){
       const g=empty(), nLoose=3+((rnd()*6)|0), rowN=new Array(N).fill(0), colN=new Array(N).fill(0);
@@ -1093,7 +1138,7 @@ function seedOpening(force){                               // force: 'light' aft
     const gap=rowsN===2?2+((rnd()*2)|0):2+((rnd()*3)|0);    // a 2-line gap is 2-3 wide: it takes one rectangle
     const gs=(rnd()*(N-gap+1))|0, l0=(rnd()*(N-rowsN+1))|0;
     // gift: one obvious clear, and a sweep about a third of the time (no scattered gems); busy: the 6.0 opening
-    const scatter=kind==='gift' ? rnd()>=0.35 : rnd()>=CFG.OPENING_SWEEP_CHANCE;
+    const scatter=kind==='gift' ? rnd()>=0.35&&!usable : rnd()>=CFG.OPENING_SWEEP_CHANCE;
     const nScatter=kind==='gift' ? 1 : 2+((rnd()*3)|0);
     for(let k=0;k<rowsN;k++) for(let j=0;j<N;j++){
       if(j>=gs&&j<gs+gap) continue;

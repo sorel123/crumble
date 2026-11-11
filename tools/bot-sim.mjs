@@ -75,6 +75,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     }
     return k;
   };
+  let hs = 12345; const hr = () => { hs = (hs + 0x6D2B79F5) >>> 0; let t = hs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };   // BOT=human's own dice (never the dealer's)
   const choose = () => {                    // [trayIdx, r, c, obvious] or null
     let ob = null, obL = 0;                 // (7.3) of the obvious drops, the one that clears the most lines: a big gap a big block drops into is what she sees first
     for (let i = 0; i < 3; i++) {
@@ -86,7 +87,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
           if (n > obL) { obL = n; ob = [i, r, c, true]; }
         }
     }
-    if (ob) return ob;
+    if (ob && (BOT !== 'human' || hr() < 0.85)) return ob;   // (round 5) BOT=human misses some obvious clears
     if (BOT === 'square') {                 // (1.1 sweep run) a player who sees a square-off: a piece that fills a notch exactly, or
       let sq = null, sqN = 0;               // whose bounding box it fills up with gems already there (an L into a corner); the biggest one
       for (let i = 0; i < 3; i++) {
@@ -101,6 +102,17 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
         }
       }
       if (sq) return sq;
+    }
+    if (BOT === 'human') {                  // (round 5) a person: any piece first, a snug spot, not always the snuggest (up to three spots within one of the snuggest)
+      const order = [0, 1, 2].filter(i => tray[i]).sort(() => hr() - 0.5);
+      for (const i of order) {
+        const s = tray[i].s, c3 = [];
+        for (let r = 0; r <= N - s.rows; r++) for (let c = 0; c <= N - s.cols; c++) if (canPlace(s, r, c, grid)) c3.push([flush(s, r, c, grid), r, c]);
+        if (!c3.length) continue;
+        c3.sort((a, b) => b[0] - a[0]); const top = c3.filter(x => x[0] >= c3[0][0] - 1), p = top[(hr() * Math.min(3, top.length)) | 0];
+        return [i, p[1], p[2], false];
+      }
+      return ob;
     }
     const order = [0, 1, 2].filter(i => tray[i]).sort((a, b) => tray[b].s.n - tray[a].s.n);
     for (const i of order) {
@@ -160,6 +172,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     trays.push(cur);
     if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
+  let swing = 0, nearClear = 0;   // (round 5) placements that drop the board by 12+ gems (Block Blast's big swings), and those leaving 9 or fewer
   newTray();
   while (trays.length < TRAYS) {
     let m = BOT === 'strong' ? strong() : choose();
@@ -167,7 +180,9 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     if (!m) { games++; start(); finishDeal(); newTray(); continue; }
     const before = stats.lines, sw0 = stats.sweeps;
     if (cur.firstObv === null) cur.firstObv = m[3];
+    const g0n = countFlat(packGrid(grid));
     place(m[0], m[1], m[2]);
+    { const g1n = countFlat(packGrid(grid)); if (g0n - g1n >= 12) { swing++; if (g1n <= 9) nearClear++; } }
     { const k = { goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool }; clearRunFx(); ({ goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool } = k); }   // drop the effects, keep the specials' bookkeeping
     if (stats.lines > before) { cur.lines += stats.lines - before; cur.cleared = true; cur.clears++; if (stats.lines - before >= 2) cur.multi++; }
     if (stats.sweeps > sw0) cur.sweeps++;
@@ -230,6 +245,8 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     overall: fitOf(trays), easy: fitOf(trays.filter(t => t.st === 'easy')), lean: fitOf(trays.filter(t => t.st === 'lean')),
     bigEasy: (() => { const b = trays.filter(t => t.st === 'easy' && t.ready >= CFG.BIG_READY && /^EASY/.test(t.tier)); return { n: b.length, avail: mean(b, t => t.avail), bot: mean(b, t => t.lines), bot3: pct(b, t => t.lines >= 3) + '%' }; })(),
     readyAtDeal: (() => { const o = {}; trays.forEach(t => { const k = Math.min(t.ready, 6); o[k] = (o[k] || 0) + 1; }); return o; })(),
+    swings: { perTray: +(swing / Math.max(1, trays.length)).toFixed(3), nearClearPerTray: +(nearClear / Math.max(1, trays.length)).toFixed(3) },
+    lowBoards: { le12: pct(trays, t => t.fill * 64 <= 12) + '%', le20: pct(trays, t => t.fill * 64 <= 20) + '%', sweepHands: trays.filter(t => t.sweepHand).length, sweptOfThem: trays.filter(t => t.sweepHand && t.sweeps).length, runTrays: trays.filter(t => /^RUN/.test(t.tier)).length },
     opening: (() => { const o = perGame.filter(g => g.length >= 4).map(g => g.slice(0, 4).reduce((x, t) => x + t.lines, 0)); return { games: o.length, lines4: mean(o, x => x), anyClear: pct(o, x => x > 0) + '%' }; })(),
     unsolvableTrays: trays.filter(t => !t.solvable).length, guarded: waveStats.guarded || 0, bigSolveTrays: waveStats.bigSolves || 0, guardBy: waveStats.guardBy || {}, rescues: waveStats.rescues || 0,
     soundAll: soundT.length ? pct(soundT, t => t.sound) + '%' : 'n/a', soundLean: soundT.length ? pct(soundT.filter(t => t.st === 'lean'), t => t.sound) + '%' : 'n/a',

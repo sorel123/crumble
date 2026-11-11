@@ -1513,6 +1513,25 @@ The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 tr
   the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 3, `LEAN_ROOM` 0.3.
 - Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.
 
+### Round 5: board clears a person actually gets (2026-11-11)
+
+Jay after round 4: 1-2 board clears in 20 minutes on the web, "easily doable by the bots but for a human I wasn't getting
+that block blast experience"; openings "just useable ones would be better".
+- **BOT=human** in tools/bot-sim.mjs: takes an obvious clear 85% of the time, otherwise any piece first into one of up to
+  three snug spots. It reproduces Jay's experience (one board clear per 150-200 trays) where the casual bot, which the dealer
+  models exactly in predictPlay, got one per 40. New sim lines: `swings` (placements dropping the board 12+ gems; near-clears
+  leaving 9 or fewer) and `lowBoards`.
+- Block Blast target, counted from the 2nd recording's contact sheets (one frame per 2 s, ~275 trays): 3 board clears,
+  ~10 near-clears, ~57 drops of 12+ gems in 25 minutes.
+- **`sweepEase`**: of `SWEEP_EASE_K` (8) person-like plays of a hand (own dice, seeded from board and hand, so the dealer's
+  stream and the Daily are untouched), the share that sweeps. Run trays count as sweeps only at `SWEEP_EASE` (0.5); the
+  sweep hunt scores `SWEEP_EASE_W` (4) times it. `SWEEP_EASE_HUNT` (0, off) can refuse a hard hunted sweep (no gain in the sim).
+- **`EASY_RECT`**: EASY stretches and their sweep runs deal rectangles and bars only (keys that clear a line may be any
+  shape). The single biggest lever: boards stay blocky, so clears line up.
+- **Usable openings**: under the tide, the non build-off openings are 'gift' bands with no loose gems (no 'light'/'busy').
+- Human bot, 4000 trays x2: board clears ~1 per 180 to ~1 per 82, near-clears 1 per 90 to 1 per 42, 12+ drops 1 per 12 to
+  1 per 9.5. Per 275 trays that is ~3.3 board clears and ~6.6 near-clears (Block Blast: 3 and ~10). 0 unsolvable trays.
+
 ### Round 4: trays you can read and build on (2026-11-11)
 
 Jay after round 3: "block blast gives you something to build off... there's always a goal... my clean planning was rewarded,
