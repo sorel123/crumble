@@ -147,7 +147,16 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     const obvN = tray.filter(t => { if (!t) return false; for (let r = 0; r <= N - t.s.rows; r++) for (let c = 0; c <= N - t.s.cols; c++) if (canPlace(t.s, r, c, grid) && obviousAt(t.s, r, c, grid)) return true; return false; }).length, obv = obvN > 0;
     const possible = SHAPES.some(s => { for (let r = 0; r <= N - s.rows; r++) for (let c = 0; c <= N - s.cols; c++) if (canPlace(s, r, c, grid) && obviousAt(s, r, c, grid)) return true; return false; });
     const offers2 = (() => { const [lo, hi] = packBits(packGrid(grid)); return tray.some(t => t && !t.s.star && placeMasks(t.s).some(m => !(lo & m.lo) && !(hi & m.hi) && applyBits(lo, hi, t.s, m) >= 2)); })();
-    cur = { sweepHand: closerTray, offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
+    // (1.1 G) the fit numbers and the coaster: what the tray is as dealt, from the board it was dealt on
+    const a0 = packGrid(grid), [glo, ghi] = packBits(a0), shp = tray.filter(Boolean).map(t => t.s);
+    const awkK = s => !s.star && s.n !== s.rows * s.cols && s.n !== 5;     // S, Z, T, L, J, hooks (the 5-cell corners count as big L's)
+    const full = shp.length === 3 ? evalHand(a0, shp, 200000) : null;
+    const tideSt = typeof tideOn === 'function' && tideOn() ? tide.st : 'flat';
+    const fit = { st: tideSt, avail: full ? full.lines : 0, solvable: full ? full.ok : true, awk: shp.filter(awkK).length,
+      sizes: shp.filter(s => !s.star).map(s => s.n), multiPieces: shp.filter(s => !s.star && bestDrop(glo, ghi, s) >= 2).length,
+      clearable: shp.some(s => !s.star && bestDrop(glo, ghi, s) >= 1), roomAtDeal: roomOf(a0),
+      sound: typeof soundBits === 'function' ? shp.every(s => soundBits(glo, ghi, s, roomOf(a0))) : null };
+    cur = { ...fit, sweepHand: closerTray, offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
     trays.push(cur);
     if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
@@ -206,7 +215,27 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     gamesEnded: games, p10: lens.length ? lens[Math.floor((lens.length - 1) * 0.1)] : 0, edgeShare: phases.edge || '0%', edgeHoldsPerGame: mean(perGame, a => a.filter(t => t.ph === 'edge' && t.phN === 1).length),
     big4Per5: (() => { let lo = 99; for (let i = 4; i < trays.length; i++) { let n = 0; for (let j = i - 4; j <= i; j++) n += trays[j].big4; lo = Math.min(lo, n); } return lo; })(),
   };
-  return { pace6,
+  // (1.1 G) fit numbers, overall and by stretch; the invariant; lean set-ups resolved within two trays; one game's series
+  const fitOf = a => { const ps = a.flatMap(t => t.sizes); return { trays: a.length, meanPiece: +(ps.reduce((x, y) => x + y, 0) / Math.max(1, ps.length)).toFixed(2),
+    small3: pct(ps, n => n <= 3) + '%', ones: pct(ps, n => n === 1) + '%', tray4plus: pct(a, t => t.avail >= 4) + '%', tray2plus: pct(a, t => t.avail >= 2) + '%',
+    piece2plus: Math.round(100 * a.reduce((x, t) => x + t.multiPieces, 0) / Math.max(1, ps.length)) + '%', awkPerTray: mean(a, t => t.awk),
+    linesAvail: mean(a, t => t.avail), clearedPerTray: mean(a, t => t.lines) }; };
+  const leanSet = [], soundT = trays.filter(t => t.sound !== null);
+  trays.forEach((t, i) => { if (t.st !== 'lean') return; const n1 = trays[i + 1], n2 = trays[i + 2];
+    if (!n1 || n1.game !== t.game) return; const need = !t.cleared || n1.roomAtDeal < CFG.ROOM_OK; if (!need) return;
+    leanSet.push(n1.clearable || (n2 && n2.game === t.game && n2.clearable)); });
+  const g0 = perGame.find(a => a.length >= 60) || perGame[0] || trays;
+  const g1 = {
+    overall: fitOf(trays), easy: fitOf(trays.filter(t => t.st === 'easy')), lean: fitOf(trays.filter(t => t.st === 'lean')),
+    unsolvableTrays: trays.filter(t => !t.solvable).length, guarded: waveStats.guarded || 0, guardBy: waveStats.guardBy || {}, rescues: waveStats.rescues || 0,
+    soundAll: soundT.length ? pct(soundT, t => t.sound) + '%' : 'n/a', soundLean: soundT.length ? pct(soundT.filter(t => t.st === 'lean'), t => t.sound) + '%' : 'n/a',
+    leanSetups: leanSet.length, leanResolvedIn2: pct(leanSet, x => x) + '%',
+    games: { gamesEnded: games, p10: q(0.1), median: q(0.5), p90: q(0.9) },
+    lostIn: (() => { const o = {}; perGame.forEach(a => { const t = a[a.length - 1], k = t.st + '/' + t.ph; o[k] = (o[k] || 0) + 1; }); return o; })(),
+    lostAfterLeanTrays: (() => { const r = []; perGame.forEach(a => { let k = 0; for (let i = a.length - 1; i >= 0 && a[i].st === 'lean'; i--) k++; if (k) r.push(k); }); return r.sort((x, y) => x - y); })(),
+  };
+  const series = g0.map(t => ({ st: t.st, ph: t.ph, avail: t.avail, awk: t.awk, tier: t.tier, cleared: t.lines }));
+  return { g1, series, pace6,
     trays: trays.length, games, goldens, goldensPerGame: +(goldens / (games + 1)).toFixed(2), traysPerGame: Math.round(trays.length / (games + 1)), buckets,
     obviousAtDealAll: pct(trays, t => t.obv), boardAllowsAll: pct(trays, t => t.possible), clearPerTrayAll: pct(trays, t => t.cleared), allThreeAll: pct(trays, t => t.obvN === 3), clearsPerTrayAll: mean(trays, t => t.clears),
     medianFill: Math.round(100 * median(trays.map(t => t.fill))),
@@ -214,8 +243,10 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     dealMs: { median: +median(costs).toFixed(2), p95: +(sorted[Math.floor(sorted.length * 0.95)] || 0).toFixed(2), max: +(sorted[sorted.length - 1] || 0).toFixed(2) },
   };
 }, [TRAYS, BOT, RESCUE]);
-console.log(JSON.stringify({ bot: BOT, rescue: RESCUE, overrides: OVR, ...out, buckets: undefined, pace6: undefined }));
+console.log(JSON.stringify({ bot: BOT, rescue: RESCUE, overrides: OVR, ...out, buckets: undefined, pace6: undefined, g1: undefined, series: undefined }));
 console.log('pace (6.1):', JSON.stringify(out.pace6));
+console.log('coaster (1.1 G):', JSON.stringify(out.g1));
+if (process.env.SERIES) (await import('node:fs')).writeFileSync(process.env.SERIES, JSON.stringify(out.series));
 console.log('fill  trays  obvious@deal  board-allows  2+obvious  all-3  clear/tray  clears/tray  sweep-hands  swept');
 for (const b of out.buckets) console.log([b.fill, b.trays, b.obviousAtDeal + '%', b.boardAllows + '%', b.twoPlus + '%', b.allThree + '%', b.clearPerTray + '%', b.clearsPerTray, b.sweepHands, b.swept].map(String).map(x => x.padEnd(12)).join(''));
 await browser.close(); await srv.close();

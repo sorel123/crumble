@@ -92,6 +92,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
 - **Stuck (plan 7.1):** when no tray piece fits, the pieces dim and "No moves" shows while the last drop lands; 700 ms later the run ends (`checkStuck()`). The game-over card carries the one rescue.
+- **Coaster dealing (1.1 G, Endless and Daily):** the dealer runs in stretches, EASY (big rectangles and bars that fit, lines everywhere) and LEAN (S, Z, T, hooks; few free clears; the board climbs), and every tray it deals has a solution. Challenge keeps the 1.0 dealer. See the 1.1 G section at the end.
 - **Pressure and recovery (6.1, Endless and Daily):** the dealer reads the *room* left on the board (`roomOf()`), not how full it is, and moves through phases: calm and building deal honest hands (no help), a cramped board is held on the edge for 2-3 trays, then a recovery hand she has to spot, and getting out earns guided relief trays. Losses are real now. See the 6.1 section at the end. Adventure keeps the old tension wave.
 - **Rescues** — on game over (if the run is worth saving): one per run (`MAX_RESCUES`). `rescueAllowed()` is the single gate, so an ad can gate it later. A rescue deals a recovery hand
   (Endless/Daily; Adventure still gets the sweep/jackpot hand from `genRescue`) — she still has to find the play.
@@ -1458,3 +1459,42 @@ A short round with a finish: 12 trays (36 pieces), no timer, the fourth mode til
   "YOU BEAT IT!", and the end card leads with "You beat their N!" or "N more to beat their N". Retry and Restart keep
   the target; the run saves it (`ch.beat`, `ch.bt`). In the app the link opens the web game.
 - Tests: the three "Challenge link (E2)" scenarios.
+
+## Coaster dealing (1.1 task G)
+
+Jay, after playing Block Blast: it "gives you a bunch of easy but then drops it and brings some harder but then it brings it
+back. Like a coaster", and "you always have a solution, we're never gonna deal you something that will fail. The only thing
+that can fail is your placement." Study: project memory `blockblast-recording-study`, /mnt/project-files/plan-1.1/blockblast-study/.
+
+- **The tide** (`tide`, `tideStep`, solver.js "Coaster dealing"): a stretch state that does not read the board. EASY lasts
+  `TIDE_EASY_MIN..MAX` trays (10-18), LEAN `TIDE_LEAN_MIN..MAX` (8-14), rolled per stretch; a run starts EASY. Getting
+  out of the edge (relief) during LEAN starts a fresh EASY stretch. Nothing on screen shows it. Saved with the run (`td`).
+  The 6.1 room phases still run underneath: edge and recovery trays are dealt as before (but must now be solvable).
+- **EASY** (`tideHandSteps`): pieces drawn from big rectangles, bars and big L's (`tideBase`), each weighted up by how
+  well it fits this board (`fitTable`: the lines its best drop clears, how flush its best spot sits); most candidates carry
+  a "key", a 4+ piece that clears a line now (often a multi-line one; a setup hole's exact piece is one). Scored on lines
+  available, easy drops, size (`EASY_BIG`) and the room her likely play leaves (`EASY_ROOM`), at most one awkward piece.
+  Closers, the sweep hunt and the sweep run work in EASY only (an earned closer waits out a LEAN stretch).
+- **LEAN**: mostly awkward pieces, scored to offer few lines (`LEAN_LINES`) and few free drops; tidiness counts less, so
+  the board climbs. The awkward piece's partner from the last tray still comes (`PAIR_CHANCE`, 4+ cells only).
+- **The rule, at every deal and in both stretches, from the board she left (nothing is queued):** (a) the three pieces play
+  out in full in some order (`evalHand` ok); (b) each piece has a sound spot of its own (`soundBits`: a drop that clears,
+  or one that seals no hole and costs at most `SOUND_ROOM` room); (c) the board her quick play is likely to leave
+  (`predictPlay`) still has a way on (`wayOut`: roomy, or a piece of 2+ cells clears a line there). The quiet rescue: in
+  LEAN, after `LEAN_DRY` trays with no clear or on a board with less room than `LEAN_ROOM` (she made a mess), the tray
+  carries the piece that fixes it best (most lines, then most room). `ensureWay()` is the last guard on every tide tray,
+  edge tray and the rescue's last resort: an unsolvable hand becomes a solvable one (smaller pieces, dots last).
+- **What the 1.0 help became under the tide:** the payoff wave, jackpot clock, build-up, setups' piece offers,
+  noTedium/BIG_FLOOR, the calm gift, BUILD_BIAS and the GUIDE/OBVIOUS terms of pickHandSteps are not used in Endless and
+  Daily (EASY is how payoffs happen; its score carries the old guide terms). They stay in the code because **Challenge
+  generates its frozen deals with the 1.0 dealer** (`tideOn()` is false in a Challenge): a seed must deal the same 12
+  trays in every version, or "Today's challenge" would differ between the app and the web game. A test pins two seeds'
+  deals; do not change that path. `CFG.TIDE` off gives the 1.0 dealer back for Endless and Daily too.
+- **Daily:** the app on 1.0 and the 1.1 web game deal different Daily boards until the app updates.
+- **Measured** with `tools/bot-sim.mjs` (new "coaster (1.1 G)" line: mean piece, small pieces, trays worth 2+/4+ lines,
+  pieces clearing 2+ lines, awkward per tray, overall and by stretch; unsolvable trays at the deal, ensureWay fallbacks by
+  stretch, rescues, sound spots, LEAN set-ups resolved within two trays, game lengths and where games end; `SERIES=file`
+  writes one game's per-tray series for a chart). Numbers are in the PR.
+- Admin: a toggle "Coaster dealing" and sliders for every number above ("Coaster: ...").
+- Tests: the three "coaster (1.1 G)" / "the deal never fails" scenarios. Older dealer tests (6.1 phases, 7.3) turn
+  `CFG.TIDE` off: they test the 1.0 dealer, which Challenge still uses.

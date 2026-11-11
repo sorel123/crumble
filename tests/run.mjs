@@ -786,7 +786,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
       bonus = k % 3 === 2 ? { left: 2, extra: 0 } : null;
       const run = stepwise => {
         grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9; pace = { ...pace0 }; starCool = 0; specialEnd = -99; tray = [null, null, null];
-        wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
+        tide = { st: k % 2 ? 'lean' : 'easy', n: 1 + (k % 3), len: 9 }; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
         goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
         if (stepwise) { const it = dealSteps(); while (!it.next().done) performance.now(); } else genTray();   // stepwise: one candidate per call, as frames would
         return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier;
@@ -1411,7 +1411,7 @@ test('dealing is untouched by a live bonus: the same board and dice deal the sam
     CFG.SPECIALS.star = CFG.SPECIALS.golden = false;                // (those two only roll dice while no bonus is live, which would shift the stream)
     for (let k = 0; k < 8; k++) {
       grid = grid.map(r => r.map(() => (keep() < 0.3 ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
-      const run = b => { bonus = b; trayNo = 10; tension = k / 7; carry = []; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; specialEnd = -99; golden = null; goldenNext = false; starForced = false; Math.random = seeded(50 + k); genTray(); bonus = null; return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier; };
+      const run = b => { bonus = b; trayNo = 10; tension = k / 7; carry = []; tide = { st: k % 2 ? 'lean' : 'easy', n: 1, len: 9 }; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; pace = { ph: 'calm', n: 0, hold: 0, len: 0 }; specialEnd = -99; golden = null; goldenNext = false; starForced = false; Math.random = seeded(50 + k); genTray(); bonus = null; return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier; };
       out.push([run(null), run({ left: 2, extra: 0 })]);
     }
     Math.random = keep; Object.assign(CFG.SPECIALS, was); return out;
@@ -2114,6 +2114,7 @@ test('room (6.1): empty is 1, a riddled board has less room than a fuller tidy o
 
 test('phases (6.1): calm, building, an edge held 2-3 trays, recovery at most twice, relief earned by getting out', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.TIDE = false; });   // (1.1 G) the 1.0 dealer, which Challenge still deals with
   const r = await page.evaluate(([cramp, half, speck]) => {
     const deal = rows => { eval(rows); tray = [null, null, null]; genTray(); return pace.ph + ':' + lastTier; };
     CFG.SPECIALS.golden = CFG.SPECIALS.star = CFG.SPECIALS.bonus = false; trayNo = 10;
@@ -2676,6 +2677,7 @@ const B73 = `const B73 = rows => { grid = rows.map(r => [...r].map(ch => (ch ===
 
 test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, then never again for that setup', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.TIDE = false; });   // (1.1 G) the 1.0 dealer, which Challenge still deals with
   const r = await page.evaluate('(() => {' + B73 + `
     W73();
     // rows 6-7 full but columns 2-3; above the gap, row 5 is open at columns 2-4: a ragged gap, not yet squared off
@@ -2730,6 +2732,7 @@ test('7.3 no tedium: never three small pieces while a big one fits; the 4+ floor
 
 test('7.3 payoff: a big block that clears 2+ lines at once when the board offers one, nothing forced when it does not', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.TIDE = false; });   // (1.1 G) the 1.0 dealer, which Challenge still deals with
   const r = await page.evaluate('(() => {' + B73 + `
     W73();
     const twoRows = B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']);
@@ -2751,6 +2754,7 @@ test('7.3 payoff: a big block that clears 2+ lines at once when the board offers
 
 test('7.3 closers: earned triggers deal a planned sweep with the shimmer, count as a special, and give way to a golden hand', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.TIDE = false; });   // (1.1 G) the 1.0 dealer, which Challenge still deals with
   const r = await page.evaluate('(() => {' + B73 + `
     const rows = ['00000000','00000000','00000000','00000000','00000000','00000000','00111111','11111000'];
     const o = {};
@@ -3410,6 +3414,7 @@ const tlPlace = async (page, r, c) => {                   // one drop of a singl
 
 test('8.2 jackpot hand: due on its own clock, three pieces worth 3+ lines, a dry tray runs it forward, and it survives a resume', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.TIDE = false; });   // (1.1 G) the 1.0 dealer, which Challenge still deals with
   const r = await page.evaluate('(() => {' + B73 + `
     W73(); const o = {};
     const rows = ['00000000','00000000','00000000','00000000','11111100','11111100','11111100','11111100'];
@@ -3839,6 +3844,77 @@ test('C1 slot tick: selection haptics in the app, one per new landing cell, none
   await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
   p = at(2, 2); await page.mouse.move(p.x, p.y, { steps: 3 }); await page.mouse.up();
   assert.deepEqual(await take(), [], 'Haptics off: silent');
+});
+
+// ---- coaster dealing (1.1 G) ----
+test('coaster (1.1 G): Challenge keeps the 1.0 dealer, so a seed deals exactly what it dealt before the tide', async ({ page }) => {
+  // generated on main before 1.1 G; if this changes, every shared challenge link and today's challenge change with it
+  const packs = await page.evaluate(() => ['frozen1', 'd2026-11-11'].map(s => chPack(chMake(s))));
+  assert.deepEqual(packs, ['AAYAgAAAAAAAAAAAIGoAAAAAAIAAAAAAAkYiDAogTEXcZLZJBIgTb5ShVEEgfoVEDVcYSYo1jpbWBoGoRSklAaAAAAAAAFeAAG4AAISA',
+    'ADAYAAAAAAAAAAAAAAAAAAAIAAAAAAAAAKgxGIqViaPZbWUbEkdUorHRjgL6XpFEBqCRUjUMJcKEIZEjdWCrJrdAAAAAAGkAAH5AAJdA']);
+});
+
+test('coaster (1.1 G): EASY and LEAN stretches take turns with rolled lengths, saved with the run; Challenge and Adventure stay off it', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = { seq: '', awk: { easy: [], lean: [] }, small: 0, pieces: 0 };
+    W73(); resetTide(); closerCool = 99; sweepCool = 99; rndSrc = mulberry(7);
+    // a calm, scattered board of 26 gems: no sweep on it, room enough to stay out of the edge
+    const board = ['11000011','10000001','00011000','00100100','10000001','00011000','11000011','10011001'];
+    for (let k = 0; k < 90; k++) { B73(board); tray = [null, null, null]; dryN = 0; genTray(); closerCool = 99; sweepCool = 99;
+      o.seq += tide.st === 'easy' ? 'E' : 'L'; o.awk[tide.st].push(tray.filter(t => awkward(t.s)).length);
+      for (const t of tray) { o.pieces++; if (t.s.n <= 3) o.small++; } }
+    o.labels = lastTier; rndSrc = null;
+    const snap = JSON.parse(JSON.stringify(snapshot())); const t0 = JSON.stringify(tide); resetTide(); restore(snap); o.saved = JSON.stringify(tide) === t0;
+    o.on = tideOn(); mode = 'adventure'; o.adv = tideOn(); mode = 'challenge'; o.ch = tideOn(); mode = 'endless'; CFG.TIDE = false; o.off = tideOn(); CFG.TIDE = true;
+    return o; })()`);
+  const runs = r.seq.match(/E+|L+/g);
+  assert.equal(r.seq[0], 'E', 'a run starts EASY: ' + r.seq);
+  assert.ok(runs.length >= 6, 'stretches take turns: ' + r.seq);
+  for (const run of runs.slice(1, -1)) {
+    if (run[0] === 'E') assert.ok(run.length >= 10 && run.length <= 18, 'EASY lasts 10-18 trays: ' + r.seq);
+    else assert.ok(run.length >= 8 && run.length <= 14, 'LEAN lasts 8-14 trays: ' + r.seq);
+  }
+  const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+  assert.ok(avg(r.awk.easy) <= 1 && avg(r.awk.lean) >= 1.8, 'EASY is mostly rectangles and bars, LEAN mostly awkward: ' + avg(r.awk.easy).toFixed(2) + ' / ' + avg(r.awk.lean).toFixed(2));
+  assert.ok(r.small / r.pieces <= 0.2, 'few pieces of 3 cells or fewer: ' + r.small + '/' + r.pieces);
+  assert.ok(r.saved, 'the stretch survives a resume');
+  assert.ok(r.on && !r.adv && !r.ch && !r.off, 'Endless only here; Adventure, Challenge and the switch keep the old dealer');
+});
+
+test('the deal never fails (1.1 G): on awkward boards every tray plays out in full, pieces have sound spots, a mess gets its fix', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = { bad: [], unsound: 0, dealt: 0, fixed: 0, fixTries: 0 };
+    const boards = [
+      ['10101010','01010101','10101010','01010101','00000000','00000000','00000000','00000000'],   // checkered: nothing big fits up top
+      ['11111110','11111101','11111011','11110111','00000000','00000000','00000000','00000000'],   // a staircase of single holes
+      ['11011011','10110110','01101101','11011011','10110110','01101101','00000000','00000000'],   // ragged and tight
+      ['11111111','11111110','11111100','11111000','11110000','11100000','11000000','10000000'],   // half full, one slope
+      ['11101110','11101110','11101110','00000000','11101110','11101110','11101110','00000000'],   // posts
+      ['11111011','11110011','11111011','11111111','11011111','10011111','11011111','11111111'],   // nearly full: the edge
+    ];
+    let seed = 1;
+    for (const b of boards) for (const st of ['easy', 'lean']) for (let k = 0; k < 6; k++) {
+      W73(); resetTide(); tide = { st, n: 1, len: 99 }; closerCool = 99; sweepCool = 99; dryN = k % 3;
+      const a0 = B73(b); rndSrc = mulberry(seed++); tray = [null, null, null]; genTray();
+      const hand = tray.map(t => t.s); o.dealt++;
+      if (!evalHand(a0, hand, 400000).ok) o.bad.push(b.join('/') + ' ' + st + ' ' + lastTier + ' ' + hand.map(s => SHAPES.indexOf(s)).join(','));
+      const [lo, hi] = packBits(a0), rm = roomBits(lo, hi);
+      if (/EASY|LEAN/.test(lastTier) && !hand.every(s => soundBits(lo, hi, s, rm))) o.unsound++;
+      // a LEAN tray on a board she has made a mess of (tight, or dry for LEAN_DRY trays) carries a piece that clears a line
+      if (st === 'lean' && /LEAN/.test(lastTier) && (rm < CFG.LEAN_ROOM || dryN >= CFG.LEAN_DRY) && SHAPES.some(s => s.n >= 2 && bestDrop(lo, hi, s) >= 1)) {
+        o.fixTries++; if (hand.some(s => !s.star && bestDrop(lo, hi, s) >= 1)) o.fixed++; }
+    }
+    rndSrc = null;
+    // the last guard: a hand that cannot be played becomes one that can
+    const a1 = B73(boards[5]), nine = SHAPES.find(s => s.n === 9);
+    const g = ensureWay(a1, [nine, nine, nine]); o.guard = evalHand(a1, g, 400000).ok;
+    return o; })()`);
+  assert.deepEqual(r.bad, [], 'every tray dealt has a solution');
+  assert.ok(r.unsound <= r.dealt * 0.1, 'pieces have a sound spot: ' + r.unsound + ' of ' + r.dealt + ' trays without');
+  assert.ok(r.fixTries > 0 && r.fixed === r.fixTries, 'a messy LEAN board gets a piece that clears: ' + r.fixed + '/' + r.fixTries);
+  assert.ok(r.guard, 'ensureWay turns an unplayable hand into a playable one');
 });
 
 for (const { name, fn } of tests) {

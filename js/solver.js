@@ -526,11 +526,11 @@ const SETUP_RECTS=[[2,2],[2,3],[3,2],[1,3],[3,1],[1,4],[4,1],[3,3]].map(([h,w])=
 const BUILD_SET=new Set(SETUP_RECTS.filter(s=>s.n>=3&&s.n<=6));                          // the squaring-off pieces fed before a payoff
 const PAYOFF_SET=SHAPES.filter(s=>s.n>=4&&s.n===s.rows*s.cols);                             // big blocks: 2x2, 2x3, 3x2, 3x3, bars of 4 and 5
 const BIG_SHAPES=SHAPES.filter(s=>s.n>=4);
-const waveStats={setups:0,dealt:0,missed:0,closed:0,closerTries:0,chases:0,runs:0,runSwept:0};   // setups made / setup pieces dealt, this session only (the bot sim reads them)
+const waveStats={setups:0,dealt:0,missed:0,closed:0,closerTries:0,chases:0,runs:0,runSwept:0,guarded:0,guardBy:{},rescues:0};   // setups made / setup pieces dealt, this session only (the bot sim reads them)
 let wave={n:0,at:5,due:false}, jack={n:0,at:10}, setups=[], closerNext=false, chaseNext=false, chaseNow=false, chaseCool=0, closerCool=0, dryN=0, bigHist=[], closerTray=false, trayClear=false;
 const waveAt=()=>CFG.WAVE_MIN+((rnd()*(CFG.WAVE_MAX-CFG.WAVE_MIN+1))|0);
 const jackAt=()=>CFG.JACKPOT_MIN+((rnd()*(CFG.JACKPOT_MAX-CFG.JACKPOT_MIN+1))|0);
-function resetWave(){ wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; chaseNext=false; chaseNow=false; chaseCool=0; sweepRun=null; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
+function resetWave(){ resetTide(); wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; chaseNext=false; chaseNow=false; chaseCool=0; sweepRun=null; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
 /* every empty exact rectangle of SETUP_RECTS on the board whose filling completes a line, with at least SETUP_WALLED of
    the cells around it filled or wall. Returned as {k: index in SETUP_RECTS, r, c, lo, hi}. */
 function findHoles(lo,hi){
@@ -678,6 +678,162 @@ function noTedium(a0,hand,tier){
   return hand;
 }
 function waveDealt(hand){ bigHist.push(hand.filter(s=>s.n>=4).length); while(bigHist.length>4) bigHist.shift(); }
+/* ═══ Coaster dealing (1.1 G, Endless and Daily) ═══
+   Block Blast deals in stretches: a run of easy trays (big rectangles and bars that fit the board, lines everywhere),
+   then a lean run (S, Z, T, hooks, small L's; few free clears; the board climbs), then easy again. The tide is that
+   stretch state. It does not read the board: EASY lasts TIDE_EASY_MIN..MAX trays, LEAN TIDE_LEAN_MIN..MAX, lengths
+   rolled per stretch, a run starts EASY. Nothing on screen shows it. The 6.1 edge, recovery and relief still apply
+   on top (a relief starts a fresh EASY stretch).
+   Jay's rule, checked at EVERY deal and in both stretches: the tray always has a solution. From the board she left
+   (nothing is planned ahead or queued) the tray is only dealt if (a) some order and placement fits all three pieces
+   (evalHand), (b) each piece on its own has a sound spot, one that clears a line or makes no sealed hole and costs
+   little room (soundBits), and (c) the board her quick play is likely to leave (predictPlay) still has a way on:
+   it is roomy, or some piece the dealer can deal next clears a line there (wayOut). If she made a mess anyway, the
+   next tray is chosen fresh for that board, and in LEAN, once the board has gone LEAN_DRY trays without a clear (or
+   is tight and dry for one), the tray carries a piece that clears a line (the quiet rescue). Only her placement
+   can lose a run. ensureWay() is the last guard: a hand that is not solvable is replaced by one that is.
+   What the older help became under the tide (Challenge still deals with all of it, so its frozen seeds stay):
+   the payoff wave, jackpot clock, build-up, setups' piece offers, noTedium/BIG_FLOOR, the calm gift and BUILD_BIAS
+   are not used: EASY is how payoffs happen now (its hands are scored on lines, big drops and fit), and a setup's
+   exact piece is one of the "keys" EASY reaches for. Closers, the sweep hunt and the sweep run stay, in EASY only
+   (an earned closer waits out a LEAN stretch). GUIDE/OBVIOUS terms live on in EASY's score; LEAN has none. */
+const tideOn=()=>CFG.TIDE&&paced()&&mode!=='challenge';
+let tide={st:'easy',n:0,len:0};                       // the stretch: 'easy' | 'lean', trays dealt in it, its rolled length
+const tideLen=st=>st==='easy'?CFG.TIDE_EASY_MIN+((rnd()*(CFG.TIDE_EASY_MAX-CFG.TIDE_EASY_MIN+1))|0):CFG.TIDE_LEAN_MIN+((rnd()*(CFG.TIDE_LEAN_MAX-CFG.TIDE_LEAN_MIN+1))|0);
+function tideSet(st){ tide={st,n:0,len:tideLen(st)}; }
+function resetTide(){ tide={st:'easy',n:0,len:0}; }   // the first stretch's length is rolled at its first tray (no rnd() here: Challenge seeds stay as dealt)
+function tideStep(){                                  // the stretch for the tray being dealt
+  if(!tide.len) tide.len=tideLen(tide.st);
+  if(pace.ph==='relief'&&pace.n===1&&tide.st==='lean') tideSet('easy');   // getting out of the edge in LEAN ends the stretch (in EASY it just carries on)
+  else if(tide.n>=tide.len) tideSet(tide.st==='easy'?'lean':'easy');
+  tide.n++;
+  return tide.st;
+}
+// piece kinds: rectangles and bars; the five-cell corners (big L's into corners); everything else is awkward (S, Z, T, L, J, hooks)
+const isRect=s=>s.n===s.rows*s.cols;
+const isBigL=s=>s.n===5&&!isRect(s);
+const awkward=s=>!s.star&&!isRect(s)&&!isBigL(s);
+// base weights per stretch, by kind and size (TIDE_SMALL scales every piece of 3 cells or fewer, the 1-cell piece rarest of all)
+function tideBase(s,st){
+  let w;
+  if(st==='easy') w=isRect(s)?({1:.04,2:.12,3:.4,4:1.1,5:1.4,6:1.8,9:1.8})[s.n]:isBigL(s)?.8:s.n===3?.15:.1;
+  else w=isRect(s)?({1:.03,2:.1,3:.25,4:.45,5:.35,6:.35,9:.25})[s.n]:isBigL(s)?1.1:s.n===3?.2:1;
+  return s.n<=3?w*CFG.TIDE_SMALL:w;
+}
+/* how well each shape fits this board's contours: its best drop's lines and its most flush spot (share of its outline
+   against gems or the wall). 0 = no spot at all. One pass over every shape's spots, per deal. */
+function fitTable(lo,hi){
+  return SHAPES.map(s=>{
+    let lines=0, flush=0, any=false, per=0;
+    for(const [dr,dc] of s.cells) for(const [a,b] of [[-1,0],[1,0],[0,-1],[0,1]]) if(!s.cells.some(([x,y])=>x===dr+a&&y===dc+b)) per++;
+    for(const m of placeMasks(s)){
+      if((lo&m.lo)||(hi&m.hi)) continue;
+      any=true;
+      const l=applyBits(lo,hi,s,m); if(l>lines) lines=l;
+      let f=0;
+      for(const [dr,dc] of s.cells){ const i=(m.r+dr)*8+m.c+dc; for(const j of NB[i]) if(j<0) f++; else if(!bitAt(m.lo,m.hi,j)&&bitAt(lo,hi,j)) f++; }
+      if(f/per>flush) flush=f/per;
+    }
+    return any?{lines,flush}:null;
+  });
+}
+function tidePick(ws){ let r=rnd()*ws.reduce((x,y)=>x+y,0); for(let i=0;i<ws.length;i++){ if(!ws[i]) continue; r-=ws[i]; if(r<=0) return SHAPES[i]; } for(let i=ws.length-1;i>=0;i--) if(ws[i]>0) return SHAPES[i]; return SHAPES[0]; }
+/* (b) a sound spot for one piece: a drop that clears a line, or one that seals no empty cell in (no hole with all four
+   sides filled or wall) and costs at most SOUND_ROOM of the room. */
+function sealedNear(lo,hi,m,s){
+  for(const [dr,dc] of s.cells){ const i=(m.r+dr)*8+m.c+dc;
+    for(const j of NB[i]){ if(j<0||bitAt(lo,hi,j)) continue; let shut=true; for(const k of NB[j]) if(k>=0&&!bitAt(lo,hi,k)){ shut=false; break; } if(shut) return true; } }
+  return false;
+}
+function soundBits(lo,hi,s,room0){
+  if(s.star) return true;
+  let fallback=false;
+  for(const m of placeMasks(s)){
+    if((lo&m.lo)||(hi&m.hi)) continue;
+    if(applyBits(lo,hi,s,m)) return true;
+    const nlo=_lo, nhi=_hi;
+    if(sealedNear(nlo,nhi,m,s)) continue;
+    fallback=true;
+    if(room0===undefined||roomBits(nlo,nhi)>=room0-CFG.SOUND_ROOM) return true;
+  }
+  return false;
+}
+/* (c) a way on from the board she is likely to leave: still roomy, or a piece of 2+ cells clears a line there */
+function wayOut(lo,hi){
+  if(roomBits(lo,hi)>=CFG.ROOM_OK) return true;
+  for(const s of SHAPES) if(s.n>=2&&bestDrop(lo,hi,s)>=1) return true;
+  return false;
+}
+/* the stretch's hand: a candidate search like pickHandSteps, its pieces drawn from the stretch's weights times how well
+   each fits this board (a shape with no spot is never drawn), scored for the stretch, and checked (a)-(c) above. */
+function* tideHandSteps(a0,st,withStar){
+  const [lo,hi]=packBits(a0), room0=roomNow, fit=fitTable(lo,hi), easy=st==='easy';
+  const ws=SHAPES.map((s,i)=>{ const f=fit[i]; if(!f) return 0;
+    const b=tideBase(s,st); return easy?b*(1+CFG.TIDE_FIT*(Math.min(f.lines,3)+f.flush*f.flush)):b; });
+  let keys=easy?SHAPES.filter((s,i)=>fit[i]&&fit[i].lines>=1&&s.n>=4):[];             // EASY: big pieces that clear a line right now (a setup's exact piece is one)
+  if(easy&&!keys.length) keys=SHAPES.filter((s,i)=>fit[i]&&fit[i].lines>=1&&s.n>=2);
+  const multi=keys.filter(s=>fit[SHAPES.indexOf(s)].lines>=2);
+  // LEAN's quiet rescue: dry for LEAN_DRY trays, or on a board tighter than LEAN_ROOM, a piece that clears a line comes, the best of them first
+  const rescue=!easy&&(dryN>=CFG.LEAN_DRY||room0<CFG.LEAN_ROOM);
+  let fixers=[];
+  if(rescue){
+    const ranked=[];
+    SHAPES.forEach((s,i)=>{ if(!fit[i]||!fit[i].lines||s.n<2) return; let best=-1;
+      for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(!l) continue; const v=l+roomBits(_lo,_hi); if(v>best) best=v; }
+      ranked.push({s,v:best}); });
+    fixers=ranked.sort((x,y)=>y.v-x.v).slice(0,4).map(x=>x.s);
+    if(fixers.length) waveStats.rescues++;
+  }
+  yield;                                              // the tables above cost a slice of their own
+  const tries=easy?CFG.EASY_TRIES:CFG.LEAN_TRIES;
+  let bestHand=null, bestSc=-Infinity;
+  for(let i=0;i<tries;i++){
+    const hand=[tidePick(ws),tidePick(ws),tidePick(ws)];
+    if(!easy&&carry.length&&rnd()<CFG.PAIR_CHANCE){                                      // LEAN keeps the partner piece: awkward shapes that sit together
+      const ps=(PARTNERS.get(carry[(rnd()*carry.length)|0])||[]).filter(s=>s.n>=4&&fit[SHAPES.indexOf(s)]);
+      if(ps.length) hand[(rnd()*3)|0]=ps[(rnd()*ps.length)|0];
+    }
+    if(easy&&keys.length&&rnd()<0.8){ const pool=multi.length&&rnd()<0.6?multi:keys, j=(rnd()*3)|0; hand[j]=pool[(rnd()*pool.length)|0]; if(rnd()<0.4) hand[(j+1)%3]=keys[(rnd()*keys.length)|0]; }
+    if(fixers.length) hand[(rnd()*3)|0]=fixers[i%fixers.length];
+    if(withStar) hand[(rnd()*3)|0]=STAR;
+    const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
+    let sc;
+    if(!ev.ok) sc=-1000+ev.lines;
+    else {
+      const sound=hand.every(s=>soundBits(lo,hi,s,room0));
+      const pp=ev.sweep?[0,0]:predictPlay(lo,hi,hand), left=pp||[ev.flo,ev.fhi];
+      const way=left[0]===undefined||wayOut(left[0],left[1]);
+      const awk=hand.filter(awkward).length, size=hand.reduce((a,s)=>a+(s.star?0:s.n),0);
+      sc=(sound?0:-60)+(way?0:-40)+(pp?0:easy?-60:-25);                                   // pp null: her quick play gets stuck (fair in LEAN, not what EASY is)
+      if(easy&&left[0]!==undefined) sc+=CFG.EASY_ROOM*roomBits(left[0],left[1]);   // EASY keeps the board she will leave open
+      if(easy) sc+=(ev.sweep?40:0)+Math.min(ev.lines,6)*14+ev.imm*6+ev.immPieces*5+Math.min(ev.obvPieces,2)*4+size*CFG.EASY_BIG-CFG.TIDY*ev.rough*0.5-(awk>1?30*(awk-1):0);
+      else sc+=awk*4+size*0.8-CFG.TIDY*ev.rough*(rescue?1:0.5)-(rescue?Math.max(0,ev.lines-CFG.LEAN_LINES-1)*12:Math.max(0,ev.lines-CFG.LEAN_LINES)*25+Math.max(0,ev.immPieces-1)*10);
+    }
+    if(sc>bestSc){ bestSc=sc; bestHand=hand; }
+    if(i>=5&&bestSc>=(easy?80:8)) break;
+    yield;
+  }
+  return bestHand;
+}
+/* the last guard of the rule: if a hand cannot be played in full from this board (any order, any spots), deal one that
+   can: candidate hands of pieces that fit, smaller and smaller, then dots. Returns the hand it keeps. */
+function ensureWay(a0,hand,why='rescue'){ return runSteps(ensureWaySteps(a0,hand,why)); }
+function* ensureWaySteps(a0,hand,why){
+  if(evalHand(a0,hand,CFG.NODE_BUDGET*4).ok) return hand;
+  waveStats.guarded++; waveStats.guardBy[why]=(waveStats.guardBy[why]||0)+1;   // (the bot sim reports these by stretch)
+  const [lo,hi]=packBits(a0), fit=SHAPES.filter(s=>fitsBits(lo,hi,s));
+  for(let cap=9;cap>=1;cap--){
+    const pool=fit.filter(s=>s.n<=cap); if(!pool.length) continue;
+    for(let i=0;i<24;i++){
+      const h=hand.map(s=>s.star||(s.n<=cap&&fitsBits(lo,hi,s))?s:pool[(rnd()*pool.length)|0]);
+      if(i>=8||h.every((s,k)=>s===hand[k])) h[(rnd()*3)|0]=pool[(rnd()*pool.length)|0];   // never re-test the hand that failed
+      if(i%8===7) yield;
+      if(evalHand(a0,h,CFG.NODE_BUDGET*4).ok) return h;
+    }
+    yield;
+  }
+  return [SHAPES[0],SHAPES[0],SHAPES[0]];
+}
 /* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
 // The tray deal runs as a generator that yields after every candidate hand, so a deal can be
 // spread over a few frames (dealLater) instead of landing in the frame a clear starts. Same
@@ -701,7 +857,7 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
     let sc;
     if(tier==='edge'){                                // Block Blast-honest: no piece is dead on arrival; the order and the space are hers
       const fit=hand.filter(s=>fitsBits(blo,bhi,s)).length;
-      sc=fit===3?10:-200+fit;
+      sc=fit===3?(tideOn()&&!ev.ok?-50:10):-200+fit;                 // (1.1 G) under the tide an edge tray must also play out in full (Jay: the deal never fails)
     }
     else if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough+(buildUp?CFG.BUILD_UP*payoffRoom(ev.flo,ev.fhi):0);   // any playable hand, prefer the tidiest of a few (8.2: before a payoff, one that leaves a multi-line gap)
@@ -792,7 +948,10 @@ function* dealSteps(){
 
   waveTick();                                           // (7.3) setups age, the dry spell and the wave clock count
   const freeOfSpecials=specialsOk&&!goldenNext&&!golden&&trayNo>specialEnd+1;   // (7.3) a closer never shares a tray with a star or golden hand, nor follows a special (bonus trays and looks only change points and colours, so they allow one)
-  let wt=waveTier(tier,freeOfSpecials);                 // 'closer' | 'payoff' | null
+  const tideNow=tideOn()&&tier!=='edge'&&tier!=='recovery'?tideStep():null;   // (1.1 G) 'easy' | 'lean' (null: edge, recovery, or no tide)
+  if(tideNow) tier=tideNow;                             // the stretch replaces calm/building/relief's tiers (relief started a fresh EASY one)
+  // 'closer' | 'payoff' | 'jackpot' | null; under the tide only an earned closer, in EASY (LEAN keeps it waiting)
+  let wt=tideOn()?(tideNow==='easy'&&freeOfSpecials&&(chaseNow||closerNext&&closerCool<=0)?(closerNext=false,'closer'):null):waveTier(tier,freeOfSpecials);
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
@@ -812,7 +971,7 @@ function* dealSteps(){
   }
   // (1.1) the sweep run (see runHandSteps): start or continue it on a low calm board, or end it
   if(paced()&&mode!=='challenge'&&CFG.RUN_TRAYS>0){
-    const n=countFlat(a0), ok=!hunted&&runPhase()&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&n>0;
+    const n=countFlat(a0), ok=!hunted&&runPhase()&&tideNow!=='lean'&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&n>0;
     if(sweepRun&&(!ok||n>CFG.RUN_GEMS+CFG.RUN_SLACK||sweepRun.n>=CFG.RUN_TRAYS)) endRun();
     else if(!sweepRun&&ok&&n<=CFG.RUN_GEMS&&closerCool<=0&&sweepCool<=0&&trayNo>CFG.EARLY_TRAYS) sweepRun={n:0};
     if(sweepRun){
@@ -841,7 +1000,7 @@ function* dealSteps(){
   // (1.1 A) between closers: whenever the board is small enough, off cooldown and free of specials, a board that can be swept
   // gets its sweep hand (closer rules: shimmer, cooldown). Only the hunt, which costs next to nothing on a board with no cover;
   // the dearer set-up chase stays with the earned closers above.
-  if(paced()&&!wt&&!hunted&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&closerCool<=0&&sweepCool<=0&&!chaseNow&&countFlat(a0)<=CFG.SWEEP_MAX){
+  if(paced()&&!wt&&!hunted&&tideNow!=='lean'&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&closerCool<=0&&sweepCool<=0&&!chaseNow&&countFlat(a0)<=CFG.SWEEP_MAX){
     const [lo,hi]=packBits(a0);
     if(sweepGap(lo,hi)<=CFG.SWEEP_HUNT_CELLS){ const h=yield* sweepHuntSteps(lo,hi); if(h){ dealCloser(h); return; } }
   }
@@ -856,8 +1015,13 @@ function* dealSteps(){
 
   }
 
-  let {hand}=yield* pickHandSteps(a0,paced()&&pace.ph==='building'?density*CFG.BUILD_BIAS:density,tier,wantStar);
-  hand=offerSetup(a0,noTedium(a0,hand,tier),tier);     // (7.3) never three small pieces while a big one fits; the setup's piece, sometimes
+  let hand;
+  if(tideNow) hand=yield* ensureWaySteps(a0,yield* tideHandSteps(a0,tideNow,wantStar),tideNow);   // (1.1 G) the stretch's hand, and the rule's last guard
+  else if(tideOn()) hand=yield* ensureWaySteps(a0,(yield* pickHandSteps(a0,density,tier,wantStar)).hand,tier);   // edge and recovery under the tide: as before, but always solvable
+  else {
+    ({hand}=yield* pickHandSteps(a0,paced()&&pace.ph==='building'?density*CFG.BUILD_BIAS:density,tier,wantStar));
+    hand=offerSetup(a0,noTedium(a0,hand,tier),tier);     // (7.3) never three small pieces while a big one fits; the setup's piece, sometimes
+  }
   waveDealt(hand);
   if(hand.includes(STAR)){ starForced=false; starCool=CFG.STAR_COOL; }
   commitTray(hand,tier.toUpperCase()+(hand.includes(STAR)?'+STAR':''));
@@ -943,7 +1107,7 @@ function genRescue(){
     if(sc>bestScore){ bestScore=sc; bestHand=hand; }
     if(ev.ok && ev.lines>=2) break;
   }
-  commitTray(bestHand,'RESCUE');
+  commitTray(tideOn()?ensureWay(a0,bestHand):bestHand,'RESCUE');   // (1.1 G) under the tide even the rescue's last resort has a solution
 }
 function pushBanner(txt,sub,col,k){   // queued: one on screen at a time, the next starts as this one fades (frame); k>1 runs it faster
   banners.push({t:0,txt,sub,col:col||'#FFD45C',k:k||1});

@@ -3,6 +3,7 @@
 /* ═══════ developer panel ═══════
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
+  ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
   ['FX_CLOSER_GLOW','Closer shimmer on the tray (7.3)'],
   ['SPECIALS.bonus','Special: Bonus trays (x2)'],
   ['SPECIALS.star','Special: Star Gem'],
@@ -61,6 +62,20 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['TRANSFORM_COOLDOWN','Transform cooldown (trays)',0,15,1],
   ['TRANSFORM_COMBO','Volcano: combo needed',3,9,1],
   ['TRANSFORM_STAR_GEMS','Starfield: star gems needed',9,15,1],
+  ['TIDE_EASY_MIN','Coaster: easy stretch min (trays)',2,30,1],
+  ['TIDE_EASY_MAX','Coaster: easy stretch max (trays)',2,30,1],
+  ['TIDE_LEAN_MIN','Coaster: lean stretch min (trays)',0,30,1],
+  ['TIDE_LEAN_MAX','Coaster: lean stretch max (trays)',0,30,1],
+  ['TIDE_SMALL','Coaster: small-piece weight',0,2,0.05],
+  ['TIDE_FIT','Coaster: easy fit pull',0,3,0.1],
+  ['LEAN_LINES','Coaster: lean lines at most',0,6,1],
+  ['LEAN_DRY','Coaster: lean dry trays to a rescue',1,6,1],
+  ['LEAN_ROOM','Coaster: lean rescue below room',0,1,0.01],
+  ['SOUND_ROOM','Coaster: room a sound spot may cost',0,0.5,0.01],
+  ['EASY_BIG','Coaster: easy pull to big hands',0,6,0.1],
+  ['EASY_ROOM','Coaster: easy keeps room',0,100,1],
+  ['EASY_TRIES','Coaster: easy hands looked at',1,48,1],
+  ['LEAN_TRIES','Coaster: lean hands looked at',1,48,1],
   ['ROOM_OK','Pace: calm at room above',0,1,0.01],
   ['ROOM_EDGE','Pace: edge at room below',0,1,0.01],
   ['EDGE_HOLD_MIN','Pace: edge hold min (trays)',0,6,1],
