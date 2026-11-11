@@ -202,6 +202,7 @@ Top to bottom:
 | (7.5g) | Timelapse: the run's boards are recorded with the save (capped) and replay on the game-over card; the share picture shows four of them. See the 7.5g section |
 | (8.3) | Front menu showpiece: the start card and the mode menu share one look (gem logo in her skin, the crumb, the journey sky travelling behind, a 2x2 of mode tiles). See the 8.3 section |
 | (1.1 A) | Sweep chase: a sweep hunt for closers and small calm boards (the usual closer shimmer, no new cue), a two-tray chase and an aim term (both off). See the 1.1 A section |
+| (1.1 run) | Sweep run: on a low calm board up to 3 trays of big readable pieces steer toward a sweep (`predictPlay`, `RUN_*`); `BOT=square` in bot-sim. See the Sweep run section |
 | (1.1 E1) | Challenge mode: 12 trays from a frozen, seeded deal (the real dealer dealt to the casual bot), bronze/silver/gold targets from bot runs, Today's and New challenge, its own run, results and goal rung. Settings left the tile grid for a slim button. See the Challenge section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 
@@ -1216,6 +1217,42 @@ Missed target, by a lot (a sweep hand every 25-40 trays). The search is not the 
 admits any three-piece sweep. Sweep hands appear only at the 15% and 30% fill buckets (about 7-22 gems); none at 45%+, and the casual
 board sits near 36% full. More sweeps need the board steered small (aim, the chase), which is a pacing decision. Game length looks a
 little longer (fewer games ended on both seeds) but medians at this scale are still too noisy to call against the 25% guard.
+
+## Sweep run (1.1, Jay's steering)
+
+Jay (2026-11-10): "you could steer it when it gets low with bigger parts ... put a L shape to square it off then add a 3x3 and 2x2
+and it sweeps it". Endless and Daily only (not Adventure, not a Challenge, whose seeds stay as dealt). Nothing on screen marks it.
+
+- **When**: a calm or relief tray, not edge/recovery, free of specials, `closerCool` and `sweepCool` done, past the opening trays,
+  board of `RUN_GEMS` (20) gems or fewer. The run lasts at most `RUN_TRAYS` (3) trays; a board grown past `RUN_GEMS`+`RUN_SLACK`
+  (24), a phase change or a special ends it. `RUN_COOL` (6) trays of cooldown after a run, whether it paid or not. Saved with the run
+  (`wave.sr`). Runs before the closer and payoff/jackpot logic in `dealSteps`.
+- **Each run tray**: hunt first (`sweepHuntSteps`); a sweep is dealt as a closer (shimmer as before) and ends the run. Else
+  `runHandSteps`: `RUN_TRIES` (48) hands from `RUN_POOL` (bars, rectangles, corners and L's of 3+ cells; no S, Z, T, dots or
+  dominoes), most carrying a piece that clears a line now. Each is played out the way a quick player would (`predictPlay`: an
+  obvious clear first, else the biggest piece where it sits most flush), and the board that leaves is scored. The `RUN_HUNTS` (8)
+  closest by `sweepGap` are hunted; one that leaves a sweepable board is dealt (label `RUN·SET`), else the hand whose board is
+  closest by `sweepDist` (`RUN`). If she plays differently, the next tray just reads the board she made.
+- **Legible sweeps**: the hunt now prefers a sweep that `predictPlay` finds by itself (+2 in its score).
+- `tools/bot-sim.mjs BOT=square`: the casual bot, but after an obvious clear it takes a square-off first (a piece that fills a
+  notch exactly, or fills its own bounding box with gems already there). It loses faster than the casual bot on main too.
+
+Measured (12000 trays, seeds 1 and 2, main and branch side by side):
+
+| | main casual | run casual | main square | run square |
+|---|---|---|---|---|
+| clean sweeps | 13, 12 | 65, 56 | 14, 19 | 39, 45 |
+| trays per sweep | 923, 1000 | 185, 214 | 857, 632 | 308, 267 |
+| sweep hands offered | 37, 26 | 167, 165 | 43, 44 | 93, 104 |
+| games ended | 47, 35 | 41, 29 | 109, 85 | 104, 84 |
+| 10th percentile game | 50, 15 | 46, 71 | 19, 23 | 23, 27 |
+| median game | 223, 183 | 211, 337 | 63, 108 | 83, 104 |
+| deal p95 (ms) | 11.3, 11.8 | 11.6, 11.7 | 11.1, 11.2 | 10.8, 8.3* |
+
+(*run alone; the others shared the CPU.) By fill bucket (casual, seed 1) sweep hands at 15% fill went 13 to 42 and at 30% 10 to 57;
+still none at 45%+. Targets: casual 2x main met (about 4.5x); the square-off bot's "a sweep every 60-100 trays" missed (about 1 in
+270-310): `predictPlay` models the casual player, so a square-off player leaves a different board and the run's set-up misses.
+Games run a little longer (fewer ended on three of four runs).
 
 ## Blocks that crumble (plan 7.5, first zazz idea)
 

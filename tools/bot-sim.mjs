@@ -18,6 +18,8 @@
 // its own copy of the rule so the same bot measures the dealer before and after it learned the rule.
 //
 // Plan 6.1 (pressure and recovery) adds:
+//   BOT=square     (1.1) the casual bot, but after an obvious clear it first takes a square-off: a piece that fills a notch
+//                  exactly (every side flush) or fills its own bounding box up with gems already there (an L into a corner).
 //   BOT=strong     a strong bot instead: it searches the tray (every piece, every spot, a beam of the best 10 boards
 //                  per step, scored on the room left, roomBits) and plays the first move of the best sequence.
 //   RESCUE=1       use rescues when stuck (the game's own rule: one rescue per run, on the game-over card).
@@ -85,6 +87,21 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
         }
     }
     if (ob) return ob;
+    if (BOT === 'square') {                 // (1.1 sweep run) a player who sees a square-off: a piece that fills a notch exactly, or
+      let sq = null, sqN = 0;               // whose bounding box it fills up with gems already there (an L into a corner); the biggest one
+      for (let i = 0; i < 3; i++) {
+        const t = tray[i]; if (!t || t.s.star || t.s.n <= sqN) continue;
+        for (let r = 0; r <= N - t.s.rows; r++) for (let c = 0; c <= N - t.s.cols; c++) {
+          if (!canPlace(t.s, r, c, grid)) continue;
+          const own = (rr, cc) => t.s.cells.some(([dr, dc]) => r + dr === rr && c + dc === cc);
+          let per = 0; for (const [dr, dc] of t.s.cells) for (const [a, b] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) if (!t.s.cells.some(([x, y]) => x === dr + a && y === dc + b)) per++;
+          let box = t.s.n < t.s.rows * t.s.cols;
+          for (let rr = r; box && rr < r + t.s.rows; rr++) for (let cc = c; cc < c + t.s.cols; cc++) if (!grid[rr][cc] && !own(rr, cc)) { box = false; break; }
+          if (box || flush(t.s, r, c, grid) === per) { sq = [i, r, c, false]; sqN = t.s.n; break; }
+        }
+      }
+      if (sq) return sq;
+    }
     const order = [0, 1, 2].filter(i => tray[i]).sort((a, b) => tray[b].s.n - tray[a].s.n);
     for (const i of order) {
       const s = tray[i].s; let best = null, bk = -1;
@@ -181,7 +198,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     traysPerBigHand: +(trays.length / Math.max(1, trays.filter(t => /JACKPOT|GOLDEN|CLOSER|SWEEP/.test(t.tier)).length)).toFixed(1),
     closersPerGame: mean(perGame, a => a.filter(t => t.tier === 'CLOSER').length), payoffsPerGame: mean(perGame, a => a.filter(t => t.tier === 'PAYOFF').length),
     traysBetweenPayoffs: (() => { const g = []; perGame.forEach(a => { let last = -1; a.forEach((t, i) => { if (/PAYOFF|CLOSER|SWEEP|GOLDEN/.test(t.tier) || (t.ph === 'relief' && t.phN === 1)) { if (last >= 0) g.push(i - last); last = i; } }); }); return median(g); })(),
-    closerTries: waveStats.closerTries, chases: waveStats.chases, chaseHits: trays.filter((t, i) => i && trays[i - 1].tier === 'SETUP' && t.sweepHand).length,
+    closerTries: waveStats.closerTries, chases: waveStats.chases, runs: waveStats.runs, runSwept: waveStats.runSwept, runTrays: trays.filter(t => /^RUN/.test(t.tier)).length, chaseHits: trays.filter((t, i) => i && trays[i - 1].tier === 'SETUP' && t.sweepHand).length,
     sweepHands: trays.filter(t => t.sweepHand).length, traysPerSweepHand: +(trays.length / Math.max(1, trays.filter(t => t.sweepHand).length)).toFixed(1),
     sweepHandsConverted: pct(trays.filter(t => t.sweepHand), t => t.sweeps > 0) + '%',
     sweepsAll: trays.reduce((x, t) => x + t.sweeps, 0), traysPerSweep: +(trays.length / Math.max(1, trays.reduce((x, t) => x + t.sweeps, 0))).toFixed(1),

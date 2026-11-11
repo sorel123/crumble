@@ -2687,7 +2687,7 @@ test('7.3 payoff: a big block that clears 2+ lines at once when the board offers
     const bam = h && h.some(s => s.n >= 4 && placeMasks(s).some(m => !(lo & m.lo) && !(hi & m.hi) && applyBits(lo, hi, s, m) >= 2));
     const none = runSteps(payoffSteps(B73(Array(8).fill('00000000')), 0.2));
     // dealt by the clock: due now, the tray is a PAYOFF
-    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']); wave.at = 1; genTray();
+    W73(); B73(['00000000','00000000','00000000','00000000','00000000','00000000','11100111','11100111']); wave.at = 1; closerCool = 9; genTray();   // (1.1) cooldown keeps the sweep run off this small board
     const dealtTier = lastTier, after = wave.n;
     // an empty board offers no payoff: a build tray, and the clock stays due for the next one
     W73(); B73(Array(8).fill('00000000')); wave.at = 1; genTray();
@@ -2764,7 +2764,7 @@ test('1.1 A sweep hunt: finds sweeps that need a clear mid-way or no exact tilin
 test('1.1 A two-tray chase: a closer on a small board with no sweep gets a set-up hand that can leave one, the next tray hunts once, and it survives a resume', async ({ page }) => {
   await play(page);
   const r = await page.evaluate('(() => {' + B73 + `
-    CFG.CHASE_TRIES = 8;                                                            // off by default (measured gain too small for its cost); the mechanism still works
+    CFG.CHASE_TRIES = 8; CFG.RUN_TRAYS = 0;                                                            // off by default (measured gain too small for its cost); the mechanism still works
     const o = {}, rows = ['00000000','00000000','00000000','00000000','11110000','11111100','11000011','00000011'];
     W73(); sweepCool = 0; B73(rows); const a = packGrid(grid);
     { const [lo, hi] = packBits(a); o.none = runSteps(sweepHuntSteps(lo, hi)); }
@@ -2779,6 +2779,36 @@ test('1.1 A two-tray chase: a closer on a small board with no sweep gets a set-u
   assert.equal(r.none, null, 'this board has no three-piece sweep');
   assert.ok(r.found, 'a set-up hand is dealt'); assert.ok(r.next && r.saved, 'the chase is remembered across a resume');
   assert.ok(!r.after, 'one try only');
+});
+
+test('1.1 sweep run: a low calm board gets big readable pieces toward a sweep, ends when the board grows, cools down, survives a resume', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = {};
+    // predictPlay: an obvious clear goes first
+    B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11111000']);
+    { const [lo, hi] = packBits(packGrid(grid)); const bar = SHAPES.find(s => s.rows === 1 && s.cols === 3 && s.n === 3), sq = SHAPES.find(s => s.rows === 2 && s.cols === 2 && s.n === 4);
+      const pp = predictPlay(lo, hi, [sq, bar, sq]); o.predict = !!pp && pop32(pp[0]) + pop32(pp[1]) === 8; }   // the bar clears row 7, the two squares stay
+    o.pool = RUN_POOL.every(s => s.n >= 3) && [19, 20, 21, 22, 23, 24, 25, 26].every(i => !RUN_POOL.includes(SHAPES[i])) && [9, 10, 15, 27].every(i => RUN_POOL.includes(SHAPES[i]));   // no S, Z, T; squares and L's in
+    // a scattered low board with no sweep on it: a run starts and deals from the run pool
+    const low = ['10000000','00000000','00100000','00000000','00000100','00000000','01000000','00000010'];
+    let started = false;
+    for (let k = 0; k < 10 && !started; k++) { W73(); sweepCool = 0; sweepRun = null; B73(low); wave.at = 9; jack.at = 99; rndSrc = mulberry(700 + k); genTray(); started = /^RUN|CLOSER/.test(lastTier); }
+    rndSrc = null;
+    o.tier = lastTier; o.inPool = lastTier === 'CLOSER' || tray.every(t => RUN_POOL.includes(t.s)); o.run = sweepRun && sweepRun.n;
+    const snap = JSON.parse(JSON.stringify(snapshot())); const n0 = sweepRun ? sweepRun.n : -1; sweepRun = null; restore(snap); o.saved = (sweepRun ? sweepRun.n : -1) === n0;
+    // the board grows past RUN_GEMS + RUN_SLACK: the run ends and the cooldown starts
+    sweepRun = { n: 1 }; closerCool = 0; B73(['11111110','11111100','11110000','11100000','00000000','00000000','00000000','00000000']); tray = [null, null, null]; genTray();
+    o.ended = sweepRun === null && closerCool >= CFG.RUN_COOL - 1 && !/^RUN/.test(lastTier);
+    // off with RUN_TRAYS 0
+    W73(); sweepCool = 0; sweepRun = null; B73(low); wave.at = 9; jack.at = 99; CFG.RUN_TRAYS = 0; genTray(); o.off = !/^RUN/.test(lastTier) && sweepRun === null; CFG.RUN_TRAYS = 3;
+    return o; })()`);
+  assert.ok(r.predict, 'predictPlay takes the obvious clear first');
+  assert.ok(r.pool, 'the run pool holds only big readable pieces');
+  assert.ok(/^RUN|CLOSER/.test(r.tier), 'a run starts on a low calm board: ' + r.tier); assert.ok(r.inPool);
+  assert.ok(r.saved, 'the run survives a resume');
+  assert.ok(r.ended, 'a grown board ends the run, with the cooldown');
+  assert.ok(r.off, 'RUN_TRAYS 0 turns it off');
 });
 
 test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, saved with the run; Adventure and the switch keep her world', async ({ page }) => {
