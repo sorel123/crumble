@@ -392,6 +392,7 @@ function predictPlay(lo,hi,hand){
     }
     if(pick<0) return null;
     applyBits(lo,hi,left[pick],pm); lo=_lo; hi=_hi;
+    if(!lo&&!hi) return [0,0];                         // swept: that is the moment (the pieces left go on an empty board)
     left.splice(pick,1);
   }
   return [lo,hi];
@@ -815,11 +816,12 @@ function* dealSteps(){
     else if(!sweepRun&&ok&&n<=CFG.RUN_GEMS&&closerCool<=0&&sweepCool<=0&&trayNo>CFG.EARLY_TRAYS) sweepRun={n:0};
     if(sweepRun){
       const [lo,hi]=packBits(a0);
-      const h=sweepGap(lo,hi)<=CFG.SWEEP_HUNT_CELLS?yield* sweepHuntSteps(lo,hi):null;
+      const h=wt==='closer'?yield* closerSteps(a0):sweepGap(lo,hi)<=CFG.SWEEP_HUNT_CELLS?yield* sweepHuntSteps(lo,hi):null;   // an earned closer keeps its exact-tiling fallback
       if(h){ waveStats.runSwept++; sweepRun=null; dealCloser(h); closerCool=Math.max(closerCool,CFG.RUN_COOL); return; }
       const r=yield* runHandSteps(a0);
       if(r&&r.sweep){ waveStats.runSwept++; sweepRun=null; dealCloser(r.hand); closerCool=Math.max(closerCool,CFG.RUN_COOL); return; }
-      if(r){ if(!sweepRun.n) waveStats.runs++; sweepRun.n++; commitTray(r.hand,r.set?'RUN·SET':'RUN'); waveDealt(r.hand); return; }
+      if(r){ if(wt==='closer') closerNext=true;          // an earned closer the run could not pay yet stays on the hook
+        if(!sweepRun.n) waveStats.runs++; sweepRun.n++; commitTray(r.hand,r.set?'RUN·SET':'RUN'); waveDealt(r.hand); return; }
       endRun();
     }
   }

@@ -2786,9 +2786,11 @@ test('1.1 sweep run: a low calm board gets big readable pieces toward a sweep, e
   const r = await page.evaluate('(() => {' + B73 + `
     const o = {};
     // predictPlay: an obvious clear goes first
-    B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11111000']);
+    B73(['10000000','00000000','00000000','00000000','00000000','00000000','00000000','11111000']);
     { const [lo, hi] = packBits(packGrid(grid)); const bar = SHAPES.find(s => s.rows === 1 && s.cols === 3 && s.n === 3), sq = SHAPES.find(s => s.rows === 2 && s.cols === 2 && s.n === 4);
-      const pp = predictPlay(lo, hi, [sq, bar, sq]); o.predict = !!pp && pop32(pp[0]) + pop32(pp[1]) === 8; }   // the bar clears row 7, the two squares stay
+      const pp = predictPlay(lo, hi, [sq, bar, sq]); o.predict = !!pp && pop32(pp[0]) + pop32(pp[1]) === 9;   // the bar clears row 7, the two squares and the corner gem stay
+      B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11111000']); const [l2, h2] = packBits(packGrid(grid));
+      const p2 = predictPlay(l2, h2, [sq, bar, sq]); o.predictSweep = !!p2 && !(p2[0] | p2[1]); }   // a sweep before the last piece counts as the sweep
     o.pool = RUN_POOL.every(s => s.n >= 3) && [19, 20, 21, 22, 23, 24, 25, 26].every(i => !RUN_POOL.includes(SHAPES[i])) && [9, 10, 15, 27].every(i => RUN_POOL.includes(SHAPES[i]));   // no S, Z, T; squares and L's in
     // a scattered low board with no sweep on it: a run starts and deals from the run pool
     const low = ['10000000','00000000','00100000','00000000','00000100','00000000','01000000','00000010'];
@@ -2803,7 +2805,7 @@ test('1.1 sweep run: a low calm board gets big readable pieces toward a sweep, e
     // off with RUN_TRAYS 0
     W73(); sweepCool = 0; sweepRun = null; B73(low); wave.at = 9; jack.at = 99; CFG.RUN_TRAYS = 0; genTray(); o.off = !/^RUN/.test(lastTier) && sweepRun === null; CFG.RUN_TRAYS = 3;
     return o; })()`);
-  assert.ok(r.predict, 'predictPlay takes the obvious clear first');
+  assert.ok(r.predict, 'predictPlay takes the obvious clear first'); assert.ok(r.predictSweep, 'an early sweep is the sweep');
   assert.ok(r.pool, 'the run pool holds only big readable pieces');
   assert.ok(/^RUN|CLOSER/.test(r.tier), 'a run starts on a low calm board: ' + r.tier); assert.ok(r.inPool);
   assert.ok(r.saved, 'the run survives a resume');
