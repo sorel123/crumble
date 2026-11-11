@@ -89,6 +89,7 @@ test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, E
 });
 
 test('Play starts a run: the seeded opening board, three playable pieces', async ({ page }) => {
+  await page.evaluate(() => { CFG.OPEN_BUILD = 0; });   // the 3.1-7.2 openings (round 4's build-off opening has its own test)
   await play(page);
   const s = await snap(page);
   assert.ok(s.filled > 0 && s.filled < 20, 'the opening pattern is on the board (plan 3.1), not a full board');
@@ -522,7 +523,7 @@ test('7.5 crumble: squash and burst stay in Admin; an old saved Admin tuning doe
 
 test('the opening: 100 seeded new games each clear a line within the first three placements', async ({ page }) => {
   const r = await page.evaluate(async () => {
-    const out = [];
+    const out = []; CFG.OPEN_BUILD = 0;   // the 3.1-7.2 openings (round 4's build-off opening has its own test)
     const orig = Math.random;
     for (let seed = 1; seed <= 100; seed++) {
       let a = seed * 2654435761 >>> 0;                    // a fresh mulberry32 stream per game
@@ -562,6 +563,7 @@ test('the opening: 100 seeded new games each clear a line within the first three
 });
 
 test('the opening clear really works through the UI: drag the clearing piece, the line goes', async ({ page }) => {
+  await page.evaluate(() => { CFG.OPEN_BUILD = 0; });
   await play(page);
   const found = await page.evaluate(() => {
     const a0 = packGrid(grid);
@@ -3917,6 +3919,47 @@ test('the deal never fails (1.1 G): on awkward boards every tray plays out in fu
   assert.ok(r.unsound <= r.dealt * 0.1, 'pieces have a sound spot: ' + r.unsound + ' of ' + r.dealt + ' trays without');
   assert.ok(r.fixTries > 0 && r.fixed === r.fixTries, 'a messy LEAN board gets a piece that clears: ' + r.fixed + '/' + r.fixTries);
   assert.ok(r.guard, 'ensureWay turns an unplayable hand into a playable one');
+});
+
+test('build-off opening (round 4): Endless opens on an empty board with three of one piece; Challenge keeps its seeded opening', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const o = { build: 0, n: 0, bad: [] }, orig = CFG.OPEN_BUILD; CFG.OPEN_BUILD = 1;
+    for (let seed = 1; seed <= 20; seed++) {
+      rndSrc = mulberry(seed); seedOpening(); o.n++;
+      const h = tray.map(t => t.s);
+      if (openingKind === 'build' && countFlat(packGrid(grid)) === 0 && h[0] === h[1] && h[1] === h[2] && OPEN_BUILD.includes(h[0])) o.build++;
+      else o.bad.push(openingKind);
+    }
+    rndSrc = null; CFG.OPEN_BUILD = orig;
+    return o; });
+  assert.equal(r.build, r.n, 'every opening is the build-off one when OPEN_BUILD is 1: ' + r.bad.join(','));
+});
+
+test('matched trays (round 4): EASY trays often bring two or three of one piece, and a tray finishes a line when the board has one ready', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = { dealt: 0, matched: 0, follow: 0, followTries: 0 }, eg = CFG.EASY_RUN_GEMS; CFG.EASY_RUN_GEMS = 0;   // no sweep run or hunt: the plain EASY tray
+    const boards = [
+      ['11111100','11111100','00000000','00000000','00000000','00000000','00000000','00000000'],
+      ['11000000','11000000','11000000','11000000','11000000','11000000','00000000','00000000'],
+      ['11111111','11111111','11111000','00000000','00000000','00000000','00000000','00000000'],
+      ['10000001','10000001','00000000','00000000','00000000','00000000','10000001','10000001'],
+    ];
+    let seed = 3;
+    for (const b of boards) for (let k = 0; k < 8; k++) {
+      W73(); resetTide(); tide = { st: 'easy', n: 5, len: 12 }; closerCool = 99; sweepCool = 99; dryN = 0; sweepRun = null;
+      const a0 = B73(b), [lo, hi] = packBits(a0);
+      rndSrc = mulberry(seed++); tray = [null, null, null]; genTray();
+      o.tiers = (o.tiers || '') + lastTier + ' '; if (!/EASY/.test(lastTier)) continue;
+      const h = tray.map(t => t.s); o.dealt++;
+      if (h.some(s => !s.star && s.n >= 3 && h.filter(x => x === s).length >= 2)) o.matched++;
+      if (SHAPES.some(s => s.n >= 4 && bestDrop(lo, hi, s) >= 1)) { o.followTries++; if (h.some(s => !s.star && bestDrop(lo, hi, s) >= 1)) o.follow++; }
+    }
+    rndSrc = null; CFG.EASY_RUN_GEMS = eg; return o; })()`);
+  assert.ok(r.dealt >= 12, 'EASY trays dealt: ' + r.dealt + ' ' + r.tiers);
+  assert.ok(r.matched >= r.dealt * 0.2, 'matched trays: ' + r.matched + ' of ' + r.dealt);
+  assert.ok(r.follow >= r.followTries * 0.9, 'a ready line gets its piece: ' + r.follow + ' of ' + r.followTries);
 });
 
 test('big solves (round 3): after a LEAN stretch, a board of nearly-done lines gets keys that clear several at once, and small pieces come one a tray unless it clears the board', async ({ page }) => {

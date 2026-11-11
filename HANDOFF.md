@@ -1513,6 +1513,19 @@ The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 tr
   the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 3, `LEAN_ROOM` 0.3.
 - Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.
 
+### Round 4: trays you can read and build on (2026-11-11)
+
+Jay after round 3: "block blast gives you something to build off... there's always a goal... my clean planning was rewarded,
+or even my bad planning can be salvaged". Block Blast's game opening (first recording, game 2): an empty board and three of
+the same corner piece that make one block, then flush pieces, then the bars that clear it.
+- **Build-off opening.** With the tide on (Endless, Daily; never Challenge), `OPEN_BUILD` (0.7) of games open on an empty
+  board with three of one piece from `OPEN_BUILD` (rectangles and bars of 4-6 cells, the 5-cell big L's). `openingKind` 'build'.
+- **Matched trays.** `MATCH_TRY` (0.35) of EASY candidates are two or three of one fitting rectangle, bar or big L (the third
+  a key half the time), scored `MATCH` (25; 60% for two alike).
+- **Follow-through.** An EASY hand with no piece that clears right now loses `FOLLOW` (40) when the board has such a piece.
+- Sim (casual bot, 6000 trays): trays with two or three alike 15% to 22% (EASY 17% to 25-27%); board clears about 1 per 30-40
+  trays (was ~1 per 65-95 on the same seeds); games median 94-156 (noisy).
+
 ### Round 3: big solves, fewer onsy-twosies (2026-11-11)
 
 From Jay's second Block Blast recording (played normally, 25 min, 12k to 127k): it lets rows and columns pile up nearly

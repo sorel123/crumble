@@ -101,6 +101,10 @@ const CFG = {
   BIG_READY: 3,          //   ...nearly-done lines it takes
   BIG_FIRST: 2,          //   ...the first this many EASY trays of a stretch skip the sweep run for it
   BIG_READY_CELLS: 5,    //   ...cells of 8 a line needs to count as nearly done
+  OPEN_BUILD: 0.7,       // (round 4) odds an Endless or Daily game opens on an empty board with three of one piece (rectangle, bar or big L) to build off
+  MATCH: 25,             // (round 4) EASY score for a tray of three alike (60% of it for two alike): a tray she reads as one plan
+  MATCH_TRY: 0.35,       //   ...odds an EASY candidate is built that way
+  FOLLOW: 40,            // (round 4) EASY penalty for a tray with no piece that clears right now, when the board has one
   SMALL_CAP: 30,         // (round 3) EASY penalty per small piece (3 cells or fewer) past the first in a tray, unless the tray clears the board; any value above 0 also keeps sweep-run trays to one small piece
   LEAN_PUZZLE:    25,    // (round 2) LEAN: score for a tray where a piece only fits after another clears (hard, then you see it)
   LEAN_PUZZLE_TRY: 0.35, //   ...odds a LEAN candidate carries such a piece
