@@ -790,6 +790,8 @@ function* tideHandSteps(a0,st,withStar){
     fixers=ranked.sort((x,y)=>y.v-x.v).slice(0,4).map(x=>x.s);
     if(fixers.length) waveStats.rescues++;
   }
+  // (round 4) a tray she can read: two or three of one piece (a rectangle, bar or big L that fits), so the tray says "build this"
+  const twins=easy?SHAPES.filter((s,i)=>fit[i]&&s.n>=3&&(isRect(s)||isBigL(s))):[];
   const later=easy?[]:SHAPES.filter((s,i)=>!fit[i]&&s.n>=4&&s.n<=6);               // (round 2) LEAN puzzle pieces: big ones that do not fit until a line clears
   yield;                                              // the tables above cost a slice of their own
   const tries=easy?(big?CFG.EASY_TRIES*2:CFG.EASY_TRIES):CFG.LEAN_TRIES;
@@ -802,6 +804,7 @@ function* tideHandSteps(a0,st,withStar){
     }
     if(big&&keys.length) for(let j=0;j<3;j++){ if(rnd()<0.85){ const pool=multi.length&&rnd()<0.5?multi:keys; hand[j]=pool[(rnd()*pool.length)|0]; } }   // big solve: a tray of keys, each finishing a different line if it can
     else if(easy&&keys.length&&rnd()<0.8){ const pool=multi.length&&rnd()<0.6?multi:keys, j=(rnd()*3)|0; hand[j]=pool[(rnd()*pool.length)|0]; if(rnd()<0.4) hand[(j+1)%3]=keys[(rnd()*keys.length)|0]; }
+    if(twins.length&&!big&&rnd()<CFG.MATCH_TRY){ const t=twins[(rnd()*twins.length)|0]; hand[0]=hand[1]=t; if(rnd()<0.5||!keys.length) hand[2]=t; else hand[2]=keys[(rnd()*keys.length)|0]; }
     if(fixers.length) hand[(rnd()*3)|0]=fixers[i%fixers.length];
     else if(!easy&&later.length&&rnd()<CFG.LEAN_PUZZLE_TRY) hand[(rnd()*3)|0]=later[(rnd()*later.length)|0];   // a big piece with no spot yet: room has to be made for it
     if(withStar) hand[(rnd()*3)|0]=STAR;
@@ -824,6 +827,9 @@ function* tideHandSteps(a0,st,withStar){
       const smallN=hand.filter(s=>!s.star&&s.n<=3).length;                          // (round 3) no onsy-twosies: one small piece a tray, more only to finish a board clear
       if(easy&&smallN>1&&!(pp&&!(pp[0]|pp[1]))&&!ev.sweep) sc-=CFG.SMALL_CAP*(smallN-1);
       if(big) sc+=CFG.BIG_SOLVE*Math.max(0,Math.min(ev.lines,8)-2)+(pp?CFG.BIG_SOLVE*0.5*Math.max(0,8*roomBits(pp[0],pp[1])-4):0);   // the most lines at once, and the board it leaves open
+      if(easy){ const same=hand.filter(s=>!s.star&&s.n>=3&&hand.filter(x=>x===s).length>=2).length;   // (round 4) twins or triplets: a tray that reads as one plan
+        sc+=same>=3?CFG.MATCH:same>=2?CFG.MATCH*0.6:0;
+        if(keys.length&&!ev.immPieces) sc-=CFG.FOLLOW; }                               // (round 4) follow-through: something she started gets finished this tray
       if(easy) sc+=(ev.sweep?40:0)+Math.min(ev.lines,6)*14+ev.imm*6+ev.immPieces*5+Math.min(ev.obvPieces,2)*4+size*CFG.EASY_BIG-CFG.TIDY*ev.rough*0.5-(awk>1?30*(awk-1):0);
       else sc+=(waits&&!rescue?CFG.LEAN_PUZZLE:0)+awk*4+size*0.8-CFG.TIDY*ev.rough*(rescue?1:0.5)-(rescue?Math.max(0,ev.lines-CFG.LEAN_LINES-1)*12:Math.max(0,ev.lines-CFG.LEAN_LINES)*25+Math.max(0,ev.immPieces-1)*10);
     }
@@ -1056,7 +1062,14 @@ function* dealSteps(){
    instead of emptying the board (no clean-sweep bonus on move one). About 1 in 8 keep the board bare, so a
    sweep is still possible sometimes, never always. */
 let openingKind='busy';   // plan 7.2: which kind of opening the last game was dealt (light, gift or busy)
+// (round 4) Block Blast's opening: an empty board and three of one piece, which placed together make one solid block to build off;
+// the EASY trays after it bring the pieces that sit flush against it and the ones that finish its lines
+const OPEN_BUILD=SHAPES.filter(s=>!s.star&&(s.n===s.rows*s.cols&&s.n>=4&&s.n<=6||isBigL(s)));
 function seedOpening(force){                               // force: 'light' after the guided first game (1.1 D)
+  if(!force&&tideOn()&&CFG.OPEN_BUILD>0&&rnd()<CFG.OPEN_BUILD){
+    const p=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0];
+    grid=empty(); trayNo=1; openingKind='build'; commitTray([p,p,p],'OPENING'); return;
+  }
   const u=rnd();                                           // plan 7.2: a weighted roll, so most games open calm
   let kind=force||(u<CFG.OPENING_LIGHT?'light':u<CFG.OPENING_LIGHT+CFG.OPENING_GIFT?'gift':'busy');
   if(kind==='light'){                                      // 3-8 loose gems, at most 3 to a row or column: nothing is near complete
