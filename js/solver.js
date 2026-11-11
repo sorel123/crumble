@@ -398,7 +398,7 @@ function predictPlay(lo,hi,hand){
   return [lo,hi];
 }
 function* runHandSteps(a0){
-  const [lo0,hi0]=packBits(a0), keys=RUN_POOL.filter(s=>bestDrop(lo0,hi0,s)>=1), tried=[];
+  const [lo0,hi0]=packBits(a0), keys=RUN_POOL.filter(s=>bestDrop(lo0,hi0,s)>=1); let tried=[];
   for(let i=0;i<CFG.RUN_TRIES;i++){
     const hand=[0,1,2].map(()=>RUN_POOL[(rnd()*RUN_POOL.length)|0]);
     if(keys.length&&rnd()<0.6) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];
@@ -410,6 +410,7 @@ function* runHandSteps(a0){
     if(i%8===7) yield;
   }
   if(!tried.length) return null;
+  if(CFG.SMALL_CAP>0){ const few=tried.filter(t=>t.hand.filter(s=>s.n<=3).length<=1); if(few.length) tried=few; }   // (round 3) no onsy-twosies: a run tray carries one small piece at most (a sweep above may use more)
   tried.sort((x,y)=>x.g-y.g||x.d-y.d);
   for(const t of tried.slice(0,CFG.RUN_HUNTS)){ if(t.g>CFG.SWEEP_HUNT_CELLS) break; if(yield* sweepHuntSteps(t.lo,t.hi,CFG.CHASE_NODES)) return {hand:t.hand,set:true}; }
   tried.sort((x,y)=>x.d-y.d);
@@ -766,8 +767,13 @@ function wayOut(lo,hi){
 }
 /* the stretch's hand: a candidate search like pickHandSteps, its pieces drawn from the stretch's weights times how well
    each fits this board (a shape with no spot is never drawn), scored for the stretch, and checked (a)-(c) above. */
+// (round 3) lines that are nearly done: 5 to 7 of 8 cells filled. Block Blast lets these pile up, then deals the keys that finish several at once
+function readyLines(lo,hi){ let n=0; for(let i=0;i<16;i++){ const k=pop32(lo&LINE_MASKS[i*2])+pop32(hi&LINE_MASKS[i*2+1]); if(k>=CFG.BIG_READY_CELLS&&k<N) n++; } return n; }
 function* tideHandSteps(a0,st,withStar){
   const [lo,hi]=packBits(a0), room0=roomNow, fit=fitTable(lo,hi), easy=st==='easy';
+  // (round 3) a big-solve tray: in EASY, when enough lines are nearly done (the board a LEAN stretch leaves), hunt the hand that finishes the most at once
+  const big=easy&&CFG.BIG_SOLVE>0&&readyLines(lo,hi)>=CFG.BIG_READY;
+  if(big) waveStats.bigSolves=(waveStats.bigSolves||0)+1;
   const ws=SHAPES.map((s,i)=>{ const f=fit[i]; if(!f) return 0;
     const b=tideBase(s,st); return easy?b*(1+CFG.TIDE_FIT*(Math.min(f.lines,3)+f.flush*f.flush)):b; });
   let keys=easy?SHAPES.filter((s,i)=>fit[i]&&fit[i].lines>=1&&s.n>=4):[];             // EASY: big pieces that clear a line right now (a setup's exact piece is one)
@@ -786,7 +792,7 @@ function* tideHandSteps(a0,st,withStar){
   }
   const later=easy?[]:SHAPES.filter((s,i)=>!fit[i]&&s.n>=4&&s.n<=6);               // (round 2) LEAN puzzle pieces: big ones that do not fit until a line clears
   yield;                                              // the tables above cost a slice of their own
-  const tries=easy?CFG.EASY_TRIES:CFG.LEAN_TRIES;
+  const tries=easy?(big?CFG.EASY_TRIES*2:CFG.EASY_TRIES):CFG.LEAN_TRIES;
   let bestHand=null, bestSc=-Infinity;
   for(let i=0;i<tries;i++){
     const hand=[tidePick(ws),tidePick(ws),tidePick(ws)];
@@ -794,7 +800,8 @@ function* tideHandSteps(a0,st,withStar){
       const ps=(PARTNERS.get(carry[(rnd()*carry.length)|0])||[]).filter(s=>s.n>=4&&fit[SHAPES.indexOf(s)]);
       if(ps.length) hand[(rnd()*3)|0]=ps[(rnd()*ps.length)|0];
     }
-    if(easy&&keys.length&&rnd()<0.8){ const pool=multi.length&&rnd()<0.6?multi:keys, j=(rnd()*3)|0; hand[j]=pool[(rnd()*pool.length)|0]; if(rnd()<0.4) hand[(j+1)%3]=keys[(rnd()*keys.length)|0]; }
+    if(big&&keys.length) for(let j=0;j<3;j++){ if(rnd()<0.85){ const pool=multi.length&&rnd()<0.5?multi:keys; hand[j]=pool[(rnd()*pool.length)|0]; } }   // big solve: a tray of keys, each finishing a different line if it can
+    else if(easy&&keys.length&&rnd()<0.8){ const pool=multi.length&&rnd()<0.6?multi:keys, j=(rnd()*3)|0; hand[j]=pool[(rnd()*pool.length)|0]; if(rnd()<0.4) hand[(j+1)%3]=keys[(rnd()*keys.length)|0]; }
     if(fixers.length) hand[(rnd()*3)|0]=fixers[i%fixers.length];
     else if(!easy&&later.length&&rnd()<CFG.LEAN_PUZZLE_TRY) hand[(rnd()*3)|0]=later[(rnd()*later.length)|0];   // a big piece with no spot yet: room has to be made for it
     if(withStar) hand[(rnd()*3)|0]=STAR;
@@ -814,11 +821,14 @@ function* tideHandSteps(a0,st,withStar){
         sc+=ev.cleared*CFG.EASY_CASH+(swept?CFG.EASY_SWEEP:0)-(pp&&!swept?CFG.EASY_LOW*(pop32(pp[0])+pop32(pp[1])):0);   // the board she will leave: the fewer gems the better
         if(late&&!swept&&left[0]!==undefined) sc-=CFG.EASY_STEER*Math.min(sweepDist(left[0],left[1]),40);
       }
+      const smallN=hand.filter(s=>!s.star&&s.n<=3).length;                          // (round 3) no onsy-twosies: one small piece a tray, more only to finish a board clear
+      if(easy&&smallN>1&&!(pp&&!(pp[0]|pp[1]))&&!ev.sweep) sc-=CFG.SMALL_CAP*(smallN-1);
+      if(big) sc+=CFG.BIG_SOLVE*Math.max(0,Math.min(ev.lines,8)-2)+(pp?CFG.BIG_SOLVE*0.5*Math.max(0,8*roomBits(pp[0],pp[1])-4):0);   // the most lines at once, and the board it leaves open
       if(easy) sc+=(ev.sweep?40:0)+Math.min(ev.lines,6)*14+ev.imm*6+ev.immPieces*5+Math.min(ev.obvPieces,2)*4+size*CFG.EASY_BIG-CFG.TIDY*ev.rough*0.5-(awk>1?30*(awk-1):0);
       else sc+=(waits&&!rescue?CFG.LEAN_PUZZLE:0)+awk*4+size*0.8-CFG.TIDY*ev.rough*(rescue?1:0.5)-(rescue?Math.max(0,ev.lines-CFG.LEAN_LINES-1)*12:Math.max(0,ev.lines-CFG.LEAN_LINES)*25+Math.max(0,ev.immPieces-1)*10);
     }
     if(sc>bestSc){ bestSc=sc; bestHand=hand; }
-    if(i>=5&&bestSc>=(easy?80:8)) break;
+    if(i>=(big?12:5)&&bestSc>=(big?80+CFG.BIG_SOLVE*2:easy?80:8)) break;
     yield;
   }
   return bestHand;
@@ -977,9 +987,11 @@ function* dealSteps(){
     if(h){ commitTray(h,'SWEEP'); sweepCool=CFG.SWEEP_COOLDOWN; if(!paced()) tension=0.5; waveDealt(h); return; }
     tier='jackpot'; hunted=true;                         // (1.1 A) this board was just hunted: the between-closers path skips it
   }
+  // (round 3) the first EASY trays after a LEAN stretch, on a board of nearly-done lines, are the big solve: the sweep run waits for them
+  const payBig=tideNow==='easy'&&tide.n<=CFG.BIG_FIRST&&CFG.BIG_SOLVE>0&&(()=>{ const [l,h]=packBits(a0); return readyLines(l,h)>=CFG.BIG_READY; })();
   // (1.1) the sweep run (see runHandSteps): start or continue it on a low calm board, or end it
   if(paced()&&mode!=='challenge'&&CFG.RUN_TRAYS>0){
-    const n=countFlat(a0), ok=!hunted&&(tideNow==='easy'?pace.ph!=='edge':runPhase())&&tideNow!=='lean'&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&n>0;
+    const n=countFlat(a0), ok=!hunted&&!payBig&&(tideNow==='easy'?pace.ph!=='edge':runPhase())&&tideNow!=='lean'&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&n>0;
     const easyRun=tideNow==='easy'&&CFG.EASY_RUN_GEMS>0;      // (round 2) EASY chases board clears harder: bigger boards, no cooldown, longer runs
     const runGems=easyRun?Math.max(CFG.RUN_GEMS,CFG.EASY_RUN_GEMS):CFG.RUN_GEMS, runTrays=easyRun?Math.max(CFG.RUN_TRAYS,CFG.EASY_RUN_TRAYS):CFG.RUN_TRAYS;
     if(sweepRun&&(!ok||n>runGems+CFG.RUN_SLACK||sweepRun.n>=runTrays)) endRun();

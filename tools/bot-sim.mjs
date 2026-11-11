@@ -154,7 +154,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     const tideSt = typeof tideOn === 'function' && tideOn() ? tide.st : 'flat';
     const fit = { st: tideSt, avail: full ? full.lines : 0, solvable: full ? full.ok : true, awk: shp.filter(awkK).length,
       sizes: shp.filter(s => !s.star).map(s => s.n), multiPieces: shp.filter(s => !s.star && bestDrop(glo, ghi, s) >= 2).length,
-      puzzle: shp.some(s => !s.star && !placeMasks(s).some(m => !(glo & m.lo) && !(ghi & m.hi))), clearable: shp.some(s => !s.star && bestDrop(glo, ghi, s) >= 1), roomAtDeal: roomOf(a0),
+      puzzle: shp.some(s => !s.star && !placeMasks(s).some(m => !(glo & m.lo) && !(ghi & m.hi))), clearable: shp.some(s => !s.star && bestDrop(glo, ghi, s) >= 1), roomAtDeal: roomOf(a0), ready: typeof readyLines === 'function' ? readyLines(glo, ghi) : 0,
       sound: typeof soundBits === 'function' ? shp.every(s => soundBits(glo, ghi, s, roomOf(a0))) : null };
     cur = { ...fit, sweepHand: closerTray, offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
     trays.push(cur);
@@ -219,7 +219,8 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   const fitOf = a => { const ps = a.flatMap(t => t.sizes); return { trays: a.length, meanPiece: +(ps.reduce((x, y) => x + y, 0) / Math.max(1, ps.length)).toFixed(2),
     small3: pct(ps, n => n <= 3) + '%', ones: pct(ps, n => n === 1) + '%', tray4plus: pct(a, t => t.avail >= 4) + '%', tray2plus: pct(a, t => t.avail >= 2) + '%',
     piece2plus: Math.round(100 * a.reduce((x, t) => x + t.multiPieces, 0) / Math.max(1, ps.length)) + '%', awkPerTray: mean(a, t => t.awk),
-    linesAvail: mean(a, t => t.avail), clearedPerTray: mean(a, t => t.lines), puzzle: pct(a, t => t.puzzle) + '%', sweeps: a.reduce((x, t) => x + t.sweeps, 0) }; };
+    linesAvail: mean(a, t => t.avail), clearedPerTray: mean(a, t => t.lines), puzzle: pct(a, t => t.puzzle) + '%', sweeps: a.reduce((x, t) => x + t.sweeps, 0),
+    bot3plus: pct(a, t => t.lines >= 3) + '%', bot4plus: pct(a, t => t.lines >= 4) + '%', bigSolve: pct(a, t => t.fill >= 0.4 && t.lines >= 3) + '%', twoSmall: pct(a, t => t.sizes.filter(n => n <= 3).length >= 2) + '%' }; };   // (round 3) big solves: 3+ lines from a crowded board; trays with 2+ small pieces
   const leanSet = [], soundT = trays.filter(t => t.sound !== null);
   trays.forEach((t, i) => { if (t.st !== 'lean') return; const n1 = trays[i + 1], n2 = trays[i + 2];
     if (!n1 || n1.game !== t.game) return; const need = !t.cleared || n1.roomAtDeal < CFG.ROOM_OK; if (!need) return;
@@ -227,7 +228,9 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   const g0 = perGame.find(a => a.length >= 60) || perGame[0] || trays;
   const g1 = {
     overall: fitOf(trays), easy: fitOf(trays.filter(t => t.st === 'easy')), lean: fitOf(trays.filter(t => t.st === 'lean')),
-    unsolvableTrays: trays.filter(t => !t.solvable).length, guarded: waveStats.guarded || 0, guardBy: waveStats.guardBy || {}, rescues: waveStats.rescues || 0,
+    bigEasy: (() => { const b = trays.filter(t => t.st === 'easy' && t.ready >= CFG.BIG_READY && /^EASY/.test(t.tier)); return { n: b.length, avail: mean(b, t => t.avail), bot: mean(b, t => t.lines), bot3: pct(b, t => t.lines >= 3) + '%' }; })(),
+    readyAtDeal: (() => { const o = {}; trays.forEach(t => { const k = Math.min(t.ready, 6); o[k] = (o[k] || 0) + 1; }); return o; })(),
+    unsolvableTrays: trays.filter(t => !t.solvable).length, guarded: waveStats.guarded || 0, bigSolveTrays: waveStats.bigSolves || 0, guardBy: waveStats.guardBy || {}, rescues: waveStats.rescues || 0,
     soundAll: soundT.length ? pct(soundT, t => t.sound) + '%' : 'n/a', soundLean: soundT.length ? pct(soundT.filter(t => t.st === 'lean'), t => t.sound) + '%' : 'n/a',
     leanSetups: leanSet.length, leanResolvedIn2: pct(leanSet, x => x) + '%',
     games: { gamesEnded: games, p10: q(0.1), median: q(0.5), p90: q(0.9) },

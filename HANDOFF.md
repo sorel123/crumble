@@ -1512,3 +1512,17 @@ The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 tr
   (`LEAN_PUZZLE_TRY`), scored up when evalHand proves a clear makes room for it (`LEAN_PUZZLE`); such a piece is exempt from
   the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 3, `LEAN_ROOM` 0.3.
 - Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.
+
+### Round 3: big solves, fewer onsy-twosies (2026-11-11)
+
+From Jay's second Block Blast recording (played normally, 25 min, 12k to 127k): it lets rows and columns pile up nearly
+done, then one tray of exact keys clears 4-6 lines at once; bars match the gap length; 1-3 cell pieces are rare.
+- **Big-solve trays.** In EASY, on a board with `BIG_READY` (3) lines of `BIG_READY_CELLS`+ (5 of 8) cells (`readyLines`),
+  `tideHandSteps` seeds all three pieces from the line keys, searches twice as many hands and scores `BIG_SOLVE` per line
+  past 2. The first `BIG_FIRST` (2) EASY trays of a stretch on such a board skip the sweep run for it (the payoff for a LEAN stretch).
+  Casual bot on those trays: ~3.1 lines available, 2.3 cleared, 3+ lines on ~38%.
+- **One small piece a tray.** EASY hands lose `SMALL_CAP` per piece of 3 cells or fewer past the first, and run trays keep
+  hands with at most one, unless the tray clears the board (closers and sweep hunts still use dots).
+  Trays with 2+ small pieces 18% to 5%, small pieces 22% to 15%, mean piece 4.18 to 4.3.
+- Tried and dropped: favouring LEAN hands that leave multi-line gaps (`payoffRoom`); no change in the sim. Board clears look a
+  little rarer (casual ~1 per 65 trays vs ~1 per 52, the sweep count is noisy across seeds).

@@ -96,7 +96,12 @@ const CFG = {
   EASY_STEER:     3,     //   ...late in the stretch, minus this per cell of distance to a sweep on the board she will leave
   EASY_LOW:       2,     //   ...minus this per gem left on the board her quick play leaves (EASY drives the board down)
   EASY_RUN_GEMS:  28,    // (round 2) in EASY the sweep run starts on boards this low (0 = as in calm), and neither it nor the sweep hunt waits for a cooldown
-  EASY_RUN_TRAYS: 5,     //   ...and an EASY sweep run lasts up to this many trays
+  EASY_RUN_TRAYS: 5,
+  BIG_SOLVE: 18,         // (round 3) an EASY tray on a board with BIG_READY nearly-done lines hunts the hand that clears the most lines at once (points per line past 2; 0 = off)
+  BIG_READY: 3,          //   ...nearly-done lines it takes
+  BIG_FIRST: 2,          //   ...the first this many EASY trays of a stretch skip the sweep run for it
+  BIG_READY_CELLS: 5,    //   ...cells of 8 a line needs to count as nearly done
+  SMALL_CAP: 30,         // (round 3) EASY penalty per small piece (3 cells or fewer) past the first in a tray, unless the tray clears the board     //   ...and an EASY sweep run lasts up to this many trays
   LEAN_PUZZLE:    25,    // (round 2) LEAN: score for a tray where a piece only fits after another clears (hard, then you see it)
   LEAN_PUZZLE_TRY: 0.35, //   ...odds a LEAN candidate carries such a piece
   EASY_TRIES:     24,    // candidate hands an EASY tray looks at
