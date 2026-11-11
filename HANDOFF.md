@@ -1513,6 +1513,25 @@ The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 tr
   the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 3, `LEAN_ROOM` 0.3.
 - Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.
 
+### Round 6: back from the brink, chains, the carrying combo (2026-11-11)
+
+Jay after round 5: "it still goes off the rails... once it's off you have to really fight to bring it back"; asked to study
+how Block Blast "comes back from the brink" and its "multi chained solves" in three new recordings (sheets and NOTES.md in
+/mnt/project-files/plan-1.1/blockblast-study/rec3-5-2026-11-11/). Every stuck stretch there ends the same way: the next tray
+holds a piece that exactly finishes a nearly full row or column (often a 1x4/1x5 into a one-cell-high gap). After a board
+clear it deals big matching pieces that rebuild rows (about 14 board clears in 8.7 minutes in v3).
+- **Comeback keys.** A board under `CROWD_ROOM` (0.36) room or with `CROWD_GEMS` (34) gems is crowded: in either stretch the
+  rescue's fixers seed the hand (two of them `CROWD_TWO` of the time), ranked by cells taken away (cleared less the piece's
+  own) plus room, LEAN's awkward ones first; a hand scores `CROWD_KEY` per piece that clears now (up to two) and loses 3x it
+  with none. This trades game length against board clears per tray (person-like bot): 0.42 gave games 2x longer but a
+  quarter fewer clears per tray; 0.3 gave +15% length and about the same clears. 0.36 sits between.
+- **Chain.** `CHAIN_BUILD` (0.8): the tray after a board clear is three of one OPEN_BUILD piece (sometimes two and another),
+  label CHAIN.
+- **Carrying combo** (task H, Jay said yes): Endless and Daily (`comboCarries()`: not Challenge, Adventure or the guide) keep
+  the combo through drops that clear nothing until `COMBO_GRACE` (3) in a row; scoring is unchanged (LINE_POINTS x lines^2 x
+  (1 + (combo-1) x COMBO_STEP)), so points grow with the streak, uncapped. `comboMiss` resets on any clear, new game,
+  rescue and resume. The 7.5d fire / 7.5f mascot tests set COMBO_CARRY=false to test the snuff.
+
 ### Round 5: board clears a person actually gets (2026-11-11)
 
 Jay after round 4: 1-2 board clears in 20 minutes on the web, "easily doable by the bots but for a human I wasn't getting

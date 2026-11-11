@@ -106,6 +106,11 @@ const CFG = {
   SWEEP_EASE_W: 4,       //   ...the sweep hunt's score for a hand every such play sweeps
   SWEEP_EASE_HUNT: 0,    //   ...a hunted sweep hand is only dealt if this share of those plays sweep (0 = always)
   EASY_RECT: true,       // (round 5) EASY stretches deal rectangles and bars only: boards stay blocky, so big clears and board clears line up for a person
+  CROWD_ROOM: 0.36,      // (round 6) a board tighter than this (roomBits) or with CROWD_GEMS gems is crowded: every tray brings a piece that finishes a line (0 = off)
+  CROWD_GEMS: 34,        //   ...gems that count as crowded whatever the room
+  CROWD_TWO: 0.5,        //   ...odds a crowded-board candidate carries two such keys
+  CROWD_KEY: 20,         //   ...score per key piece (up to two), and three times it off for a tray with none
+  CHAIN_BUILD: 0.8,      // (round 6) odds the tray after a board clear is big matching pieces that rebuild rows (Block Blast's chain of clears)
   OPEN_BUILD: 0.7,       // (round 4) odds an Endless or Daily game opens on an empty board with three of one piece (rectangle, bar or big L) to build off
   MATCH: 25,             // (round 4) EASY score for a tray of three alike (60% of it for two alike): a tray she reads as one plan
   MATCH_TRY: 0.35,       //   ...odds an EASY candidate is built that way
@@ -139,6 +144,8 @@ const CFG = {
 
   // scoring
   LINE_POINTS: 10*SCORE_SCALE, COMBO_STEP: 0.5,
+  COMBO_CARRY: true,     // (round 6) Endless and Daily: the combo survives drops that clear nothing while she clears again within COMBO_GRACE drops (Block Blast's streak)
+  COMBO_GRACE: 3,        //   ...drops in a row without a clear that end the streak
   SWEEP_BONUS: 300*SCORE_SCALE, SWEEP_PER_GEM: 25*SCORE_SCALE,
 
   // golden hand: a bonus tray that multiplies the points it earns

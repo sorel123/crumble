@@ -36,6 +36,9 @@ function canGoLive(id){
   return id!=='goldvault' && !bonus && !transform && transformCool<=0 && trayNo>=CFG.SPECIAL_FROM_TRAY
     && !golden && !tray.some(t=>t&&t.s.star) && (id==='starfield'||trayNo>specialEnd+1);   // a star's own clear is its parent: it may follow it
 }
+// (round 6) the carrying combo: Endless and Daily only (Adventure goals and Challenge scores keep the 1.0 combo)
+let comboMiss=0;
+const comboCarries=()=>CFG.COMBO_CARRY&&paced()&&mode!=='challenge'&&!guide;
 function triggerTransform(id){
   if(!special('transform') || !ACHIEVE[id] || guide) return;   // (1.1 D) specials stay off in the guided first game
   const first=!discoveredWorlds.has(id), live=canGoLive(id), name=TRANSFORMS[id].name;
@@ -215,7 +218,7 @@ function place(idx,r,c){
     if(CFG.FX_PUNCH_ZOOM && !reduce && loud && total>=2) punchT=1;
     hitWait=reduce?0:s.star?starMs:CFG.CLEAR_BLINK;                 // shake + punch hold until the blink turns into the pop
     
-    combo++; trayCombo=Math.max(trayCombo,combo);
+    combo++; comboMiss=0; trayCombo=Math.max(trayCombo,combo);
     fireCombo();                                   // (7.5d) the streak catches fire from BIG_COMBO
     chargeBonus(total,combo);                      // every clear fills the bonus meter
     if(special('star') && combo>=CFG.STAR_COMBO) starForced=true;
@@ -326,9 +329,11 @@ function place(idx,r,c){
     if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
     mascotClear(total,combo,swept,escaped);          // (7.5f) the crumb reacts, sized like the clear
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
+  } else if(comboCarries()&&combo>0&&++comboMiss<CFG.COMBO_GRACE){
+    // (round 6) Block Blast's streak: the combo carries over drops that clear nothing, as long as she clears again within COMBO_GRACE drops
   } else {
     if(combo>=CFG.BIG_COMBO){ fireSnuff(); mascotAct('flat'); }   // (7.5d) the streak is over: the flames go out in a puff; (7.5f) the crumb gives it a flat stare
-    combo=0;
+    combo=0; comboMiss=0;
     if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
   }
 
