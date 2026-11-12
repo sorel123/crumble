@@ -84,9 +84,9 @@ const CFG = {
   // Adventure and the guided first game do not use it. Nothing on screen shows the stretch.
   TIDE:           true,  // off = the 1.0 dealer (payoff waves, jackpots, setups, gifts) for Endless and Daily too
   TIDE_EASY_MIN:  10,    // an EASY stretch lasts this many trays at least...
-  TIDE_EASY_MAX:  18,    //   ...and at most (rolled per stretch)
-  TIDE_LEAN_MIN:  8,     // a LEAN stretch, the same
-  TIDE_LEAN_MAX:  14,
+  TIDE_EASY_MAX:  12,    //   ...and at most (rolled per stretch)
+  TIDE_LEAN_MIN:  6,     // a LEAN stretch, the same
+  TIDE_LEAN_MAX:  10,
   TIDE_SMALL:     0.4,   // weight on pieces of 3 cells or fewer, both stretches (lower = bigger pieces overall)
   TIDE_FIT:       0.6,   // EASY: how much a piece's fit to the board (lines its best drop clears, how flush it sits) raises its odds
   EASY_BIG:       2.5,   // EASY: score per cell of the hand (higher = bigger pieces win more of the search)
@@ -106,7 +106,7 @@ const CFG = {
   SWEEP_EASE_W: 4,       //   ...the sweep hunt's score for a hand every such play sweeps
   SWEEP_EASE_HUNT: 0,    //   ...a hunted sweep hand is only dealt if this share of those plays sweep (0 = always)
   EASY_RECT: true,       // (round 5) EASY stretches deal rectangles and bars only: boards stay blocky, so big clears and board clears line up for a person
-  CROWD_ROOM: 0.36,      // (round 6) a board tighter than this (roomBits) or with CROWD_GEMS gems is crowded: every tray brings a piece that finishes a line (0 = off)
+  CROWD_ROOM: 0.45,      // (round 6) a board tighter than this (roomBits) or with CROWD_GEMS gems is crowded: every tray brings a piece that finishes a line (0 = off)
   CROWD_GEMS: 34,        //   ...gems that count as crowded whatever the room
   CROWD_TWO: 0.5,        //   ...odds a crowded-board candidate carries two such keys
   CROWD_KEY: 20,         //   ...score per key piece (up to two), and three times it off for a tray with none
