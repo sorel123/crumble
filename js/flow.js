@@ -36,7 +36,7 @@ async function rescue(){
   rescuesUsed++; stuck=false;
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
   Sfx.rescue();
-  combo=0; goldenNext=false; cancelDeal(); genRescue();
+  combo=0; comboMiss=0; goldenNext=false; cancelDeal(); genRescue();
   if(paced()){ paceSet('recovery'); pace.n=CFG.RECOVERY_TRIES; } else tension=0.5;   // (6.1) the rescue tray is her last recovery try: clear out and relief follows, miss and it is the edge again
   el('overCard').hidden=true; tlStop(); state='play';
   syncActions(); saveRun();
@@ -45,7 +45,7 @@ async function rescue(){
 function clearRunFx(){
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false; starCool=0; transform=null; transformCool=0;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
-  praises=[];bursts=[];lineFlashes=[];
+  praises=[];bursts=[];lineFlashes=[];stamps=[];bannerWait=0;sweepShow=null;
   chunks=[];rubble=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
   bonus=null; bonusTag=null; clearTimeout(bonusTagT);
   tags=[]; slams=[]; bands=[]; borderFlash=null;
@@ -55,7 +55,7 @@ function clearRunFx(){
 function start(){
   const fresh=guideFresh();                         // (1.1 D) asked before this game is counted
   layout();
-  grid=empty(); score=0; combo=0; rescuesUsed=0; pace={ph:'calm',n:0,hold:0,len:0}; roomNow=1; resetPressure(false); tension=0; sweepCool=0; trayNo=0; carry=[]; bonusMeter=0; specialEnd=-99; resetWave();
+  grid=empty(); score=0; combo=0; comboMiss=0; rescuesUsed=0; pace={ph:'calm',n:0,hold:0,len:0}; roomNow=1; resetPressure(false); tension=0; sweepCool=0; trayNo=0; carry=[]; bonusMeter=0; specialEnd=-99; resetWave();
   clearRunFx(); stats.games++; musicNewRun();
   if(chal&&mode==='challenge'&&chSeed===chal.seed&&!chBeat) chBeat=chal.beat||0;   // (E2) Retry and Restart keep a friend's target
   chal=null; chDone=false;

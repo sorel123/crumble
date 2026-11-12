@@ -1489,7 +1489,7 @@ back. Like a coaster", and "you always have a solution, we're never gonna deal y
 that can fail is your placement." Study: project memory `blockblast-recording-study`, /mnt/project-files/plan-1.1/blockblast-study/.
 
 - **The tide** (`tide`, `tideStep`, solver.js "Coaster dealing"): a stretch state that does not read the board. EASY lasts
-  `TIDE_EASY_MIN..MAX` trays (10-18), LEAN `TIDE_LEAN_MIN..MAX` (8-14), rolled per stretch; a run starts EASY. Getting
+  `TIDE_EASY_MIN..MAX` trays (6-12), LEAN `TIDE_LEAN_MIN..MAX` (4-8), rolled per stretch; a run starts EASY. Getting
   out of the edge (relief) during LEAN starts a fresh EASY stretch. Nothing on screen shows it. Saved with the run (`td`).
   The 6.1 room phases still run underneath: edge and recovery trays are dealt as before (but must now be solvable).
 - **EASY** (`tideHandSteps`): pieces drawn from big rectangles, bars and big L's (`tideBase`), each weighted up by how
@@ -1520,3 +1520,89 @@ that can fail is your placement." Study: project memory `blockblast-recording-st
 - Admin: a toggle "Coaster dealing" and sliders for every number above ("Coaster: ...").
 - Tests: the three "coaster (1.1 G)" / "the deal never fails" scenarios. Older dealer tests (6.1 phases, 7.3) turn
   `CFG.TIDE` off: they test the 1.0 dealer, which Challenge still uses.
+
+### Round 2: a bigger swing (2026-11-11)
+
+Jay played the first version to about 90k and never cleared the board: "we need more roller coaster, but also some wins".
+The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 trays vs ~185) and easy and lean felt alike.
+- **EASY is a cash-in.** Its hands score the gems they can clear (`EASY_CASH`), a hand her quick play sweeps with
+  (`EASY_SWEEP`), minus the gems left on the board her quick play leaves (`EASY_LOW`), and late in the stretch the distance
+  to a sweep (`EASY_STEER`). In EASY the sweep run starts on boards of up to `EASY_RUN_GEMS` (28) gems and lasts up to
+  `EASY_RUN_TRAYS` (5), and neither it nor the sweep hunt waits for a cooldown. Casual bot: about one clean sweep per 55
+  trays (3x 1.0), a sweep hand about every 25.
+- **LEAN is "hard, then you see it".** A LEAN candidate often carries a 4-6 cell piece with no spot yet
+  (`LEAN_PUZZLE_TRY`), scored up when evalHand proves a clear makes room for it (`LEAN_PUZZLE`); such a piece is exempt from
+  the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 2, `LEAN_ROOM` 0.3.
+- Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.
+
+### Round 6: back from the brink, chains, the carrying combo (2026-11-11)
+
+Jay after round 5: "it still goes off the rails... once it's off you have to really fight to bring it back"; asked to study
+how Block Blast "comes back from the brink" and its "multi chained solves" in three new recordings (sheets and NOTES.md in
+/mnt/project-files/plan-1.1/blockblast-study/rec3-5-2026-11-11/). Every stuck stretch there ends the same way: the next tray
+holds a piece that exactly finishes a nearly full row or column (often a 1x4/1x5 into a one-cell-high gap). After a board
+clear it deals big matching pieces that rebuild rows (about 14 board clears in 8.7 minutes in v3).
+- **Comeback keys.** A board under `CROWD_ROOM` (0.45) room or with `CROWD_GEMS` (34) gems is crowded: in either stretch the
+  rescue's fixers seed the hand (two of them `CROWD_TWO` of the time), ranked by cells taken away (cleared less the piece's
+  own) plus room, LEAN's awkward ones first; a hand scores `CROWD_KEY` per piece that clears now (up to two) and loses 3x it
+  with none. This trades game length against board clears per tray (person-like bot): 0.42 gave games 2x longer but a
+  quarter fewer clears per tray; 0.3 gave +15% length and about the same clears. 0.36 sat between; Jay's playtest moved it to 0.45 (see below).
+- **Chain.** `CHAIN_BUILD` (0.8): the tray after a board clear is three of one OPEN_BUILD piece (sometimes two and another),
+  label CHAIN.
+- **Carrying combo** (task H, Jay said yes): Endless and Daily (`comboCarries()`: not Challenge, Adventure or the guide) keep
+  the combo through drops that clear nothing until `COMBO_GRACE` (3) in a row; scoring is unchanged (LINE_POINTS x lines^2 x
+  (1 + (combo-1) x COMBO_STEP)), so points grow with the streak, uncapped. `comboMiss` resets on any clear, new game,
+  rescue and resume. The 7.5d fire / 7.5f mascot tests set COMBO_CARRY=false to test the snuff.
+
+### Round 5: board clears a person actually gets (2026-11-11)
+
+Jay after round 4: 1-2 board clears in 20 minutes on the web, "easily doable by the bots but for a human I wasn't getting
+that block blast experience"; openings "just useable ones would be better".
+- **BOT=human** in tools/bot-sim.mjs: takes an obvious clear 85% of the time, otherwise any piece first into one of up to
+  three snug spots. It reproduces Jay's experience (one board clear per 150-200 trays) where the casual bot, which the dealer
+  models exactly in predictPlay, got one per 40. New sim lines: `swings` (placements dropping the board 12+ gems; near-clears
+  leaving 9 or fewer) and `lowBoards`.
+- Block Blast target, counted from the 2nd recording's contact sheets (one frame per 2 s, ~275 trays): 3 board clears,
+  ~10 near-clears, ~57 drops of 12+ gems in 25 minutes.
+- **`sweepEase`**: of `SWEEP_EASE_K` (8) person-like plays of a hand (own dice, seeded from board and hand, so the dealer's
+  stream and the Daily are untouched), the share that sweeps. Run trays count as sweeps only at `SWEEP_EASE` (0.5); the
+  sweep hunt scores `SWEEP_EASE_W` (4) times it. `SWEEP_EASE_HUNT` (0, off) can refuse a hard hunted sweep (no gain in the sim).
+- **`EASY_RECT`**: EASY stretches and their sweep runs deal rectangles and bars only (keys that clear a line may be any
+  shape). The single biggest lever: boards stay blocky, so clears line up.
+- **Usable openings**: under the tide, the non build-off openings are 'gift' bands with no loose gems (no 'light'/'busy').
+- Human bot, 4000 trays x2: board clears ~1 per 180 to ~1 per 82, near-clears 1 per 90 to 1 per 42, 12+ drops 1 per 12 to
+  1 per 9.5. Per 275 trays that is ~3.3 board clears and ~6.6 near-clears (Block Blast: 3 and ~10). 0 unsolvable trays.
+
+### Round 4: trays you can read and build on (2026-11-11)
+
+Jay after round 3: "block blast gives you something to build off... there's always a goal... my clean planning was rewarded,
+or even my bad planning can be salvaged". Block Blast's game opening (first recording, game 2): an empty board and three of
+the same corner piece that make one block, then flush pieces, then the bars that clear it.
+- **Build-off opening.** With the tide on (Endless, Daily; never Challenge), `OPEN_BUILD` (0.7) of games open on an empty
+  board with three of one piece from `OPEN_BUILD` (rectangles and bars of 4-6 cells, the 5-cell big L's). `openingKind` 'build'.
+- **Matched trays.** `MATCH_TRY` (0.35) of EASY candidates are two or three of one fitting rectangle, bar or big L (the third
+  a key half the time), scored `MATCH` (25; 60% for two alike).
+- **Follow-through.** An EASY hand with no piece that clears right now loses `FOLLOW` (40) when the board has such a piece.
+- Sim (casual bot, 6000 trays): trays with two or three alike 15% to 22% (EASY 17% to 25-27%); board clears about 1 per 30-40
+  trays (was ~1 per 65-95 on the same seeds); games median 94-156 (noisy).
+
+### Round 3: big solves, fewer onsy-twosies (2026-11-11)
+
+From Jay's second Block Blast recording (played normally, 25 min, 12k to 127k): it lets rows and columns pile up nearly
+done, then one tray of exact keys clears 4-6 lines at once; bars match the gap length; 1-3 cell pieces are rare.
+- **Big-solve trays.** In EASY, on a board with `BIG_READY` (3) lines of `BIG_READY_CELLS`+ (5 of 8) cells (`readyLines`),
+  `tideHandSteps` seeds all three pieces from the line keys, searches twice as many hands and scores `BIG_SOLVE` per line
+  past 2. The first `BIG_FIRST` (2) EASY trays of a stretch on such a board skip the sweep run for it (the payoff for a LEAN stretch).
+  Casual bot on those trays: ~3.1 lines available, 2.3 cleared, 3+ lines on ~38%.
+- **One small piece a tray.** EASY hands lose `SMALL_CAP` per piece of 3 cells or fewer past the first, and run trays keep
+  hands with at most one, unless the tray clears the board (closers and sweep hunts still use dots).
+  Trays with 2+ small pieces 18% to 5%, small pieces 22% to 15%, mean piece 4.18 to 4.3.
+- Tried and dropped: favouring LEAN hands that leave multi-line gaps (`payoffRoom`); no change in the sim. Board clears look a
+  little rarer (casual ~1 per 65 trays vs ~1 per 52, the sweep count is noisy across seeds).
+
+### Jay's tuned coaster defaults (2026-11-12)
+
+After playtesting round 6 with the Admin sliders, Jay made his values the defaults: `CROWD_ROOM` 0.36 to 0.45 (comeback
+keys start sooner), `TIDE_EASY_MIN..MAX` 10-18 to 6-12, `TIDE_LEAN_MIN..MAX` 8-14 to 4-8 (shorter dry spells), `LEAN_DRY`
+3 to 2. At 0.45 a scattered board about 40% full already counts as crowded, so LEAN is much softer on such boards: look
+there first if the game gets too easy.

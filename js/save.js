@@ -46,7 +46,7 @@ function restore(o){
   cancelDeal(); clearRunFx(); stuck=false; hesVoid();   // a restored tray (resume) gives no hesitation sample
   grid=o.grid.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0}));
   tray=o.tray.map(t=>t&&{s:t.s<0?STAR:SHAPES[t.s],gi:t.gi});
-  score=o.score; combo=o.combo; tension=clamp(o.tension,0,1); sweepCool=Math.max(0,o.sweepCool|0); trayNo=o.trayNo;
+  score=o.score; combo=o.combo; comboMiss=0; tension=clamp(o.tension,0,1); sweepCool=Math.max(0,o.sweepCool|0); trayNo=o.trayNo;
   rescuesUsed=o.rescuesUsed; bestBeaten=!!o.bestBeaten; lastTier=typeof o.lastTier==='string'?o.lastTier:'—';
   carry=(Array.isArray(o.carry)?o.carry:[]).filter(i=>isInt(i,0,SHAPES.length-1)).map(i=>SHAPES[i]);
   golden=o.golden&&o.golden.want&&o.golden.got?{want:{...o.golden.want},got:{...o.golden.got},pts:o.golden.pts|0}:null;

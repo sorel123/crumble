@@ -83,19 +83,46 @@ const CFG = {
   // LEAN ones (awkward pieces, few free clears), and every tray has a solution; see solver.js "Coaster dealing". Challenge,
   // Adventure and the guided first game do not use it. Nothing on screen shows the stretch.
   TIDE:           true,  // off = the 1.0 dealer (payoff waves, jackpots, setups, gifts) for Endless and Daily too
-  TIDE_EASY_MIN:  10,    // an EASY stretch lasts this many trays at least...
-  TIDE_EASY_MAX:  18,    //   ...and at most (rolled per stretch)
-  TIDE_LEAN_MIN:  8,     // a LEAN stretch, the same
-  TIDE_LEAN_MAX:  14,
+  TIDE_EASY_MIN:  6,     // an EASY stretch lasts this many trays at least...
+  TIDE_EASY_MAX:  12,    //   ...and at most (rolled per stretch)
+  TIDE_LEAN_MIN:  4,     // a LEAN stretch, the same
+  TIDE_LEAN_MAX:  8,
   TIDE_SMALL:     0.4,   // weight on pieces of 3 cells or fewer, both stretches (lower = bigger pieces overall)
   TIDE_FIT:       0.6,   // EASY: how much a piece's fit to the board (lines its best drop clears, how flush it sits) raises its odds
   EASY_BIG:       2.5,   // EASY: score per cell of the hand (higher = bigger pieces win more of the search)
   EASY_ROOM:      15,    // EASY: score for the room left by her likely play (0..1 room), so big pieces come where they leave space
+  EASY_CASH:      2,     // (round 2) EASY: score per gem the hand can clear (a cash-in tray)
+  EASY_SWEEP:     60,    //   ...a hand her quick play would sweep with
+  EASY_STEER:     3,     //   ...late in the stretch, minus this per cell of distance to a sweep on the board she will leave
+  EASY_LOW:       2,     //   ...minus this per gem left on the board her quick play leaves (EASY drives the board down)
+  EASY_RUN_GEMS:  28,    // (round 2) in EASY the sweep run starts on boards this low (0 = as in calm), and neither it nor the sweep hunt waits for a cooldown
+  EASY_RUN_TRAYS: 5,     //   ...and an EASY sweep run lasts up to this many trays
+  BIG_SOLVE: 18,         // (round 3) an EASY tray on a board with BIG_READY nearly-done lines hunts the hand that clears the most lines at once (points per line past 2; 0 = off)
+  BIG_READY: 3,          //   ...nearly-done lines it takes
+  BIG_FIRST: 2,          //   ...the first this many EASY trays of a stretch skip the sweep run for it
+  BIG_READY_CELLS: 5,    //   ...cells of 8 a line needs to count as nearly done
+  SWEEP_EASE_K: 8,       // (round 5) plays a sweep hand is tried with, varied like a person (sweepEase); 0 = off
+  SWEEP_EASE: 0.5,       //   ...share of them that must sweep for a run hand to count as a sweep
+  SWEEP_EASE_W: 4,       //   ...the sweep hunt's score for a hand every such play sweeps
+  SWEEP_EASE_HUNT: 0,    //   ...a hunted sweep hand is only dealt if this share of those plays sweep (0 = always)
+  EASY_RECT: true,       // (round 5) EASY stretches deal rectangles and bars only: boards stay blocky, so big clears and board clears line up for a person
+  CROWD_ROOM: 0.45,      // (round 6) a board tighter than this (roomBits) or with CROWD_GEMS gems is crowded: every tray brings a piece that finishes a line (0 = off)
+  CROWD_GEMS: 34,        //   ...gems that count as crowded whatever the room
+  CROWD_TWO: 0.5,        //   ...odds a crowded-board candidate carries two such keys
+  CROWD_KEY: 20,         //   ...score per key piece (up to two), and three times it off for a tray with none
+  CHAIN_BUILD: 0.8,      // (round 6) odds the tray after a board clear is big matching pieces that rebuild rows (Block Blast's chain of clears)
+  OPEN_BUILD: 0.7,       // (round 4) odds an Endless or Daily game opens on an empty board with three of one piece (rectangle, bar or big L) to build off
+  MATCH: 25,             // (round 4) EASY score for a tray of three alike (60% of it for two alike): a tray she reads as one plan
+  MATCH_TRY: 0.35,       //   ...odds an EASY candidate is built that way
+  FOLLOW: 40,            // (round 4) EASY penalty for a tray with no piece that clears right now, when the board has one
+  SMALL_CAP: 30,         // (round 3) EASY penalty per small piece (3 cells or fewer) past the first in a tray, unless the tray clears the board; any value above 0 also keeps sweep-run trays to one small piece
+  LEAN_PUZZLE:    25,    // (round 2) LEAN: score for a tray where a piece only fits after another clears (hard, then you see it)
+  LEAN_PUZZLE_TRY: 0.35, //   ...odds a LEAN candidate carries such a piece
   EASY_TRIES:     24,    // candidate hands an EASY tray looks at
   LEAN_TRIES:     16,    // candidate hands a LEAN tray looks at
   LEAN_LINES:     1,     // a LEAN tray offers at most about this many lines (unless it is a rescue)
   LEAN_DRY:       2,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
-  LEAN_ROOM:      0.45,  //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
+  LEAN_ROOM:      0.3,   //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
   SOUND_ROOM:     0.12,  // a piece's sound spot may cost at most this much room (0..1) when it clears nothing
 
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
@@ -117,6 +144,8 @@ const CFG = {
 
   // scoring
   LINE_POINTS: 10*SCORE_SCALE, COMBO_STEP: 0.5,
+  COMBO_CARRY: true,     // (round 6) Endless and Daily: the combo survives drops that clear nothing while she clears again within COMBO_GRACE drops (Block Blast's streak)
+  COMBO_GRACE: 3,        //   ...drops in a row without a clear that end the streak
   SWEEP_BONUS: 300*SCORE_SCALE, SWEEP_PER_GEM: 25*SCORE_SCALE,
 
   // golden hand: a bonus tray that multiplies the points it earns
@@ -147,9 +176,14 @@ const CFG = {
   ALT:            0.5,    // plan 3.4: score per legal spot (up to 8) for the hand's smallest piece of 2+ cells: room to put the awkward one
   CLEAR_STYLE:    'crumble', // (7.5) 'crumble': a crack ripples along the line from the piece and each gem breaks into four pieces of itself that fall off the screen; 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
-  CRUMBLE_STAGGER:0.75,   // (7.5) crumble only: frames between one gem's crack and the next along the line, out from the placed piece (~12 ms)
+  CRUMBLE_STAGGER:0.4,    // (7.5) crumble only: frames between one gem's crack and the next along the line, out from the placed piece (~7 ms; was 0.75)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
   FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
+  FX_PIECE_COLOR_CLEAR: true, // (D) a cleared line turns the colour of the piece that cleared it and breaks in that colour
+  FX_ONE_VOICE:   true,   // (A) one headline at a time: praise or COMBO n, then COLOR GONE, then a banner, each with the board to itself
+  FX_HERO_STAMP:  true,
+  FX_SWEEP_SHOW:  true,   // (B) a clean sweep is a ~2 s show: the board floods with gems and drains, two crumbs cheer SWEEP ×N, then the new world (sky / look) arrives
+  SWEEP_SHOW_LEN: 118,    // (B) frames from the last gem breaking to the new world   // (C) a big moment stamps a little crumb on each gem of the piece that made it
   FX_CELL_TAGS:   true,   // a little point value appears on every cleared cell
   FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
   COLOR_GONE_BONUS: 60*SCORE_SCALE,   // points per colour wiped off the board by a clear ("COLOR GONE!")
@@ -178,6 +212,8 @@ const CFG = {
 
   MOUSE_LIFT:    0.15,   // (C2) the lift for a mouse drag (a cursor is a point, not a thumb); touch and pen use LIFT
   SLOT_TICK_MS:  40,     // (C1) at most one selection tick this often as the landing cell changes (app only)
+  PICKUP_GROW:   0.5,    // (speed) share of the pickup grow + lift per frame: 0.5 = 2 frames (~33 ms). Was 0.2 (5 frames), the piece trailed the thumb
+  SCORE_COUNT:   0.25,   // (speed) share of the gap the score counts up each frame: done in ~300 ms. Was 0.09 (~1 s)
   LIFT:          1.0,    // cells between the finger and the bottom edge of the dragged piece (same gap for every piece height)
   SMALL_BIAS:    3.0,    // density bias in weightedShape: higher = fewer big pieces as the board fills
   TIER_SOLVABLE: 0.0,    // (Adventure; Endless and Daily use the 6.1 phases) tension above this deals 'solvable' hands (2+ lines); at 0 there are no 'honest' hands — every tray can clear
@@ -213,7 +249,7 @@ const CFG = {
   ANTIC_SHIVER:      1.2,    // (7.5c) most the gems move, in px (reduced motion: no movement, a steady soft glow)
 
   // sound — variant + volume for the two most-heard effects, set on the settings panel
-  SND_SET:        'strings',  // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)
+  SND_SET:        'original',   // everything but pickup/place: 'original' | 'strings' | 'steel' (recorded) | 'bells' (synth)
   SND_PICKUP:     'soft',     // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
   SND_PLACE:      'drop',     // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
   JOURNEY_SKY:    true,       // (7.5b) Endless/Daily: the sky travels dawn -> day -> golden hour -> night -> aurora -> space (Settings -> Look, Advanced)
@@ -231,7 +267,8 @@ const CFG = {
   // frame budget (plan 2.2): the phone should never show a frame over FRAME_BUDGET_MS during a clear
   FRAME_BUDGET_MS: 20,   // a frame slower than this counts as long (the ?dev overlay counts them) and shrinks the particle budget
   PARTICLE_CAP:   260,   // most effect particles alive at once (fireworks, specks, dust, confetti); scaled down while frames run long
-  DEAL_SLICE_MS:  4,     // ms of tray dealing per frame after a drop (the deal is spread over frames, never inside the clear's first one)
+  DEAL_SLICE_MS:  12,    // ms of tray dealing per frame after a drop (never inside the clear's first one). (speed) Was 4: a deal is ~2 ms (9 ms on a
+                         // hard tray), so 12 finishes almost every deal in one frame; 4 ms slices tied to slow frames left the tray empty for 150-800 ms
   // (8.5) frame pacing, for battery and heat: full speed only while something moves fast (see frameGap in draw.js)
   FRAME_PACING:   true,  // off = redraw the whole screen every frame, as before
   FRAME_FULL_MS:  2500,  // full speed for this long after any touch (and after a deal, a score or the run's state changes)

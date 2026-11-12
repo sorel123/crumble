@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:2
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:3
   })); }catch(e){}
   cloudDirty();
 }
@@ -30,7 +30,7 @@ function loadSkinSave(){
       && (HOME_WORLDS.some(w=>w.id===o.homeWorld)||TRANSFORMS[o.homeWorld])) CFG.HOME_WORLD=o.homeWorld;
     if(THEMES.some(t=>t.id===o.theme)) CFG.THEME=o.theme;
     if(o.lookV!==2){ CFG.THEME='classic'; CFG.STYLE='blocks'; }   // 2026-10-30: everyone gets the new look once; Settings still changes it
-    if(o.sndV!==2) CFG.SND_SET='strings';                          // 6.5: everyone starts on the new sound family once; Settings still changes it
+    if(o.sndV!==3) CFG.SND_SET='original';                         // 2026-11-12 (Jay): Original is the default again, for everyone once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
     if(o.musicPick==='shuffle'||MUSIC_TRACKS.some(t=>t.id===o.musicPick)) CFG.MUSIC_PICK=o.musicPick;   // 7.4
@@ -39,6 +39,7 @@ function loadSkinSave(){
     if(typeof o.glint==='boolean'&&'FX_ANTICIPATION' in CFG) CFG.FX_ANTICIPATION=o.glint;   // Glints while dragging (7.5c)
     if(typeof o.haptics==='boolean') CFG.HAPTICS=o.haptics;           // (5.1) Settings > Sound > Haptics (app only)
     if(typeof o.fire==='boolean') CFG.FX_COMBO_FIRE=o.fire;            // Combo fire (7.5d)
+    if(typeof o.pc==='boolean') CFG.FX_PIECE_COLOR_CLEAR=o.pc;        // (D) Clear in your piece's colour
     if(typeof o.chase==='boolean') CFG.FX_CHASE=o.chase;              // Chase your best (7.5e)
     if(typeof o.mascot==='boolean') CFG.FX_MASCOT=o.mascot;           // the mascot crumb (7.5f)
     if(typeof o.tl==='boolean') CFG.FX_TIMELAPSE=o.tl;                // the game-over timelapse (7.5g)
@@ -183,6 +184,7 @@ function renderFxPicks(){                             // Settings > Look: Clear 
   el('clearPick').value=CFG.CLEAR_STYLE==='crumble'?'crumble':'squash';   // 'burst' (Admin only) shows as Classic
   el('glintTog').hidden=!('FX_ANTICIPATION' in CFG); el('glintOn').checked=!!CFG.FX_ANTICIPATION;
   el('fireOn').checked=!!CFG.FX_COMBO_FIRE;
+  el('pcOn').checked=!!CFG.FX_PIECE_COLOR_CLEAR;
   el('hapTog').hidden=!Native.on(); el('hapOn').checked=!!CFG.HAPTICS;
   el('chaseOn').checked=!!CFG.FX_CHASE;
   el('mascotOn').checked=!!CFG.FX_MASCOT;
@@ -205,6 +207,7 @@ function buildSettingsUI(){
   el('clearPick').onchange=()=>{ CFG.CLEAR_STYLE=el('clearPick').value; saveSkinSave(); };     // takes effect from the next clear, mid-run too
   el('glintOn').onchange=()=>{ CFG.FX_ANTICIPATION=el('glintOn').checked; saveSkinSave(); };
   el('hapOn').onchange=()=>{ CFG.HAPTICS=el('hapOn').checked; saveSkinSave(); if(CFG.HAPTICS) haptic('place'); };   // a taste when switched on
+  el('pcOn').onchange=()=>{ CFG.FX_PIECE_COLOR_CLEAR=el('pcOn').checked; saveSkinSave(); };   // (D) from the next clear
   el('fireOn').onchange=()=>{ CFG.FX_COMBO_FIRE=el('fireOn').checked; saveSkinSave(); };   // (7.5d) off mid-streak: the flames fade
   el('chaseOn').onchange=()=>{ CFG.FX_CHASE=el('chaseOn').checked; saveSkinSave(); chaseSync(); };   // (7.5e) the marker shows or hides at once
   el('mascotOn').onchange=()=>{ CFG.FX_MASCOT=el('mascotOn').checked; saveSkinSave(); };   // (7.5f) the crumb shows or hides on the next frame
@@ -229,7 +232,9 @@ el('setNote').onclick=e=>{
   const now=performance.now(); hesTaps=hesTaps.filter(t=>now-t<3000); hesTaps.push(now);
   if(hesTaps.length<5) return;
   hesTaps=[]; const h=hesSummary(), sec=ms=>(ms/1000).toFixed(1)+'s';
-  el('setNote').textContent=h.n?`Last ${h.n} trays (${h.total} kept): first pickup ${sec(h.pick)}, pickup to drop ${sec(h.place)}, first drop clears ${h.clr}%`:'No hesitation samples yet';
+  const d=dragPerf();                                 // (speed) how smoothly a held piece was drawn on this phone
+  el('setNote').textContent=(h.n?`Last ${h.n} trays (${h.total} kept): first pickup ${sec(h.pick)}, pickup to drop ${sec(h.place)}, first drop clears ${h.clr}%`:'No hesitation samples yet')
+    +(d?` · Drag: ${d.fps} fps, ${d.late}% late frames, worst ${d.worst} ms (${d.n} frames)`:'');
 };
 el('startBtn').onclick=e=>{e.stopPropagation();ac();homeCrumble();mode='endless';lvl=null;saveMode();start();};   // (8.3) the logo crumbles as the game starts
 el('againBtn').onclick=e=>{e.stopPropagation();el('overCard').hidden=true;start();};

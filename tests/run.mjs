@@ -60,7 +60,7 @@ test('front menu (8.3): Settings opened over the mode menu keeps the game paused
   assert.equal(await page.evaluate(() => paused), false);
 });
 
-test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and New game (tap twice)', async ({ page }) => {
+test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and End game (tap twice, back to the home screen)', async ({ page }) => {
   await play(page); await dealt(page);
   assert.equal(await page.evaluate(() => !!document.getElementById('modeTag')), false, 'the Endless pill is gone');
   assert.ok(await page.evaluate(() => { el('scoreVal').textContent = '1234560'; el('bestVal').textContent = '2345670'; hudFit();
@@ -72,10 +72,10 @@ test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, E
   await page.click('#pauseResume');
   assert.deepEqual(await page.evaluate(() => ({ paused, card: el('pauseCard').hidden })), { paused: false, card: true });
   await page.click('#pauseBtn'); await page.click('#pauseNew');
-  assert.deepEqual(await page.evaluate(() => ({ state, score, txt: el('pauseNew').textContent })), { state: 'play', score: 1240, txt: 'Tap again to start over' }, 'one tap does not throw the run away');
+  assert.deepEqual(await page.evaluate(() => ({ state, score, txt: el('pauseNew').textContent })), { state: 'play', score: 1240, txt: 'Tap again to end it' }, 'one tap does not throw the run away');
   await page.click('#pauseResume');
   await page.click('#pauseBtn');
-  assert.equal(await page.textContent('#pauseNew'), 'New game', 'the confirm resets when the card opens again');
+  assert.equal(await page.textContent('#pauseNew'), 'End game', 'the confirm resets when the card opens again');
   await page.click('#pauseHome'); await page.waitForFunction(() => hero.card === el('menuCard'));   // the menu's buttons are set up by its first frame
   assert.deepEqual(await page.evaluate(() => ({ sub: el('menuBest').textContent, back: el('menuClose').hidden, saved: JSON.parse(localStorage.getItem(runStore('endless'))).score })),
     { sub: 'Continue · 1.2k', back: true, saved: 1240 });
@@ -85,10 +85,16 @@ test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, E
   await openSet(page); await page.click('#setDone');
   assert.deepEqual(await page.evaluate(() => ({ paused, card: !el('pauseCard').hidden })), { paused: true, card: true }, 'Settings from pause returns to the pause card');
   await page.click('#pauseNew'); await page.click('#pauseNew');
-  assert.deepEqual(await page.evaluate(() => ({ state, score, paused, card: el('pauseCard').hidden })), { state: 'play', score: 0, paused: false, card: true }, 'two taps start over');
+  await page.waitForFunction(() => hero.card === el('startCard'));
+  assert.deepEqual(await page.evaluate(() => ({ state, score, paused, card: el('pauseCard').hidden, home: !el('startCard').hidden, saved: localStorage.getItem(runStore('endless')) })),
+    { state: 'idle', score: 0, paused: false, card: true, home: true, saved: null }, 'two taps end the run and go home, nothing left to continue');
+  await page.click('#startBtn');
+  await page.waitForFunction(() => state === 'play' && !paused); await dealt(page);
+  assert.equal(await page.evaluate(() => score), 0, 'Play from home starts a fresh run');
 });
 
 test('Play starts a run: the seeded opening board, three playable pieces', async ({ page }) => {
+  await page.evaluate(() => { CFG.OPEN_BUILD = 0; });   // the 3.1-7.2 openings (round 4's build-off opening has its own test)
   await play(page);
   const s = await snap(page);
   assert.ok(s.filled > 0 && s.filled < 20, 'the opening pattern is on the board (plan 3.1), not a full board');
@@ -464,9 +470,11 @@ test('7.5 crumble: each gem breaks into four pieces of itself, the line cracks a
   }));
   await page.evaluate(() => { perf.fx = 1; dust.length = 0; shards.length = 0; });
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  // read the wave as place() leaves it: the nearest gems can be gone by the time the drag returns on a slow machine
+  await page.evaluate(() => { const orig = place; place = function () { const out = orig.apply(this, arguments); window.__wave = shatters.filter(s => s.r === 0).map(s => ({ c: s.c, t0: s.t0 })); place = orig; return out; }; });
   await dragPiece(page, 0, 0, 0);
   // the crack ripples along the line from the piece: each gem starts CRUMBLE_STAGGER frames after its neighbour
-  const wave = await page.evaluate(() => shatters.filter(s => s.r === 0).sort((a, b) => a.c - b.c).map(s => -s.t0));
+  const wave = await page.evaluate(() => window.__wave.sort((a, b) => a.c - b.c).map(s => -s.t0));
   const st = await page.evaluate(() => CFG.CRUMBLE_STAGGER);
   assert.ok(wave.length >= 7 && wave.every((d, i) => i === 0 || Math.abs(d - wave[i - 1] - st) < 1e-6), 'the crack runs along the line from the piece: ' + wave.map(d => d.toFixed(2)).join(','));
   const one = await watch();
@@ -483,7 +491,7 @@ test('7.5 crumble: each gem breaks into four pieces of itself, the line cracks a
   const multi = await watch();
   assert.ok(multi.most > one.most * 2, `three lines break more (${multi.most} vs ${one.most})`);
   assert.ok(multi.dustMax > 24 && multi.specks > 0, `with a pale puff per gem and specks (${multi.dustMax} dust)`);
-  assert.ok(multi.low > multi.H, `the pieces fall off the bottom of the screen (${multi.low.toFixed(0)} > ${multi.H})`);
+  assert.ok(multi.frames < 45, `(speed) an everyday multi-line clear is quick too: gone in ~400 ms, not a fall off the screen (${multi.frames} frames)`);
   assert.equal(multi.left, 0, 'and are gone');
   // the order: over the board's gems, under the tray
   const order = await page.evaluate(() => new Promise(res => {
@@ -522,7 +530,7 @@ test('7.5 crumble: squash and burst stay in Admin; an old saved Admin tuning doe
 
 test('the opening: 100 seeded new games each clear a line within the first three placements', async ({ page }) => {
   const r = await page.evaluate(async () => {
-    const out = [];
+    const out = []; CFG.OPEN_BUILD = 0;   // the 3.1-7.2 openings (round 4's build-off opening has its own test)
     const orig = Math.random;
     for (let seed = 1; seed <= 100; seed++) {
       let a = seed * 2654435761 >>> 0;                    // a fresh mulberry32 stream per game
@@ -562,6 +570,7 @@ test('the opening: 100 seeded new games each clear a line within the first three
 });
 
 test('the opening clear really works through the UI: drag the clearing piece, the line goes', async ({ page }) => {
+  await page.evaluate(() => { CFG.OPEN_BUILD = 0; });
   await play(page);
   const found = await page.evaluate(() => {
     const a0 = packGrid(grid);
@@ -786,7 +795,7 @@ test('dealing in slices runs the same search as dealing in one go', async ({ pag
       bonus = k % 3 === 2 ? { left: 2, extra: 0 } : null;
       const run = stepwise => {
         grid = g0; tension = ten; carry = carry0; starForced = star0; trayNo = no0; transform = null; sweepCool = 0; goldenCool = 0; transformCool = 9; pace = { ...pace0 }; starCool = 0; specialEnd = -99; tray = [null, null, null];
-        tide = { st: k % 2 ? 'lean' : 'easy', n: 1 + (k % 3), len: 9 }; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
+        tide = { st: k % 2 ? 'lean' : 'easy', n: 1 + (k % 3), len: 9 }; sweepRun = null; wave = { n: k % 7, at: 5, due: false }; setups = []; closerNext = k % 4 === 3; closerCool = 0; dryN = 0; bigHist = []; trayClear = false; golden = null;   // (7.3) the wave state, the same for both runs (and no hand left live by the first)
         goldenNext = k % 4 === 1; Math.random = seeded(100 + k);
         if (stepwise) { const it = dealSteps(); while (!it.next().done) performance.now(); } else genTray();   // stepwise: one candidate per call, as frames would
         return tray.map(t => SHAPES.indexOf(t.s) + ':' + t.gi).join(',') + '|' + lastTier;
@@ -867,7 +876,7 @@ test('the hesitation log times the first drop of each tray, skips restored trays
   // on her phone there is no URL bar: five quick taps on the Settings note show the same numbers
   await openSet(page);
   for (let k = 0; k < 5; k++) await page.click('#setNote');
-  assert.match(await page.textContent('#setNote'), /^Last 2 trays \(2 kept\): first pickup [\d.]+s, pickup to drop [\d.]+s, first drop clears \d+%$/);
+  assert.match(await page.textContent('#setNote'), /^Last 2 trays \(2 kept\): first pickup [\d.]+s, pickup to drop [\d.]+s, first drop clears \d+%( · Drag: \d+ fps, \d+% late frames, worst \d+ ms \(\d+ frames\))?$/);
   await closeSet(page);
   await page.goto(server.url + '?dev');
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
@@ -2066,7 +2075,7 @@ test('audio on first touch (7.0): a touch anywhere unlocks the context and start
   assert.equal(r.after.src, 'blob:', 'it is a generated silent WAV, not a file');
 });
 
-test('sound family (6.5): every set can play every event, and the new family is the default for everyone once', async ({ page }) => {
+test('sound family (6.5): every set can play every event, and Original is the default for everyone once', async ({ page }) => {
   await play(page);
   const r = await page.evaluate(async () => {
     const out = { bad: [], dflt: CFG.SND_SET, pick: CFG.SND_PICKUP, place: CFG.SND_PLACE };
@@ -2078,14 +2087,14 @@ test('sound family (6.5): every set can play every event, and the new family is 
       }
     }
     // a saved game from before the family: the old sound choice is replaced once, a later choice sticks
-    localStorage.setItem('crumble.skins', JSON.stringify({ sndSet: 'original', lookV: 2 }));
+    localStorage.setItem('crumble.skins', JSON.stringify({ sndSet: 'strings', lookV: 2, sndV: 2 }));
     CFG.SND_SET = 'bells'; loadSkinSave(); out.migrated = CFG.SND_SET;
     saveSkinSave(); CFG.SND_SET = 'bells'; saveSkinSave(); CFG.SND_SET = 'steel'; loadSkinSave(); out.kept = CFG.SND_SET;
     return out;
   });
   assert.deepEqual(r.bad, [], 'no set throws on any event');
-  assert.equal(r.dflt, 'strings'); assert.equal(r.pick, 'soft'); assert.equal(r.place, 'drop');
-  assert.equal(r.migrated, 'strings', 'an old saved sound choice moves to the family once');
+  assert.equal(r.dflt, 'original'); assert.equal(r.pick, 'soft'); assert.equal(r.place, 'drop');
+  assert.equal(r.migrated, 'original', 'a sound choice saved before 2026-11-12 moves to Original once');
   assert.equal(r.kept, 'bells', 'after that, her choice is kept');
 });
 
@@ -2792,6 +2801,7 @@ test('7.3 the wave state is saved with the run and survives a resume', async ({ 
 
 test('1.1 A sweep hunt: finds sweeps that need a clear mid-way or no exact tiling; a small calm board off cooldown gets one, on cooldown it does not', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.EASY_RUN_GEMS = 0; });   // (1.1 G round 2) EASY hunts with no cooldown; this tests the cooldown
   const r = await page.evaluate('(() => {' + B73 + `
     const o = {};
     const sweeps = h => !!h && evalHand(packGrid(grid), h, 3000000).sweep;
@@ -2818,6 +2828,7 @@ test('1.1 A sweep hunt: finds sweeps that need a clear mid-way or no exact tilin
 
 test('1.1 A two-tray chase: a closer on a small board with no sweep gets a set-up hand that can leave one, the next tray hunts once, and it survives a resume', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.TIDE = false; });   // (1.1 G) the 1.0 dealer's chase
   const r = await page.evaluate('(() => {' + B73 + `
     CFG.CHASE_TRIES = 8; CFG.RUN_TRAYS = 0;                                                            // off by default (measured gain too small for its cost); the mechanism still works
     const o = {}, rows = ['00000000','00000000','00000000','00000000','11110000','11111100','11000011','00000011'];
@@ -3096,6 +3107,7 @@ const streak = async (page, n) => {
 const fireRead = page => page.evaluate(() => ({ combo, k: fire.k, flare: fire.flare, tier: fire.tier, embers: fire.embers.length, smoke: fire.smoke.length }));
 
 test('7.5d combo fire: lights at combo 3, hotter each step, the held piece sheds embers, a miss snuffs it in a puff', async ({ page }) => {
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });   // one miss ends the streak here (round 6's carrying combo has its own test)
   await play(page);
   await page.evaluate(() => { window.__sfx = []; const s = Sfx.snuff; Sfx.snuff = (...a) => { __sfx.push('snuff'); s(...a); }; });
   await streak(page, 2);
@@ -3139,6 +3151,7 @@ test('7.5d combo fire: lights at combo 3, hotter each step, the held piece sheds
 });
 
 test('7.5d combo fire: never over a gem, off with its switch (saved), steady under reduced motion, a bonus owns the rim', async ({ page }) => {
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });   // one miss ends the streak here (round 6's carrying combo has its own test)
   await play(page);
   const gemPx = async () => { await page.evaluate(() => { grid[4][4] = { gi: 2, t: 1, f: 0, l: 0 }; grid[0][3] = { gi: 2, t: 1, f: 0, l: 0 }; shake = 0; punchT = 0; }); await frames(page, 2); return page.evaluate(() => {
     const g = (x, y) => { const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data; return [d[0], d[1], d[2]]; };
@@ -3182,6 +3195,7 @@ test('7.5d combo fire: never over a gem, off with its switch (saved), steady und
   await page.reload(); await toGame(page);
   await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
   if (await page.evaluate(() => state) !== 'play') await play(page);
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });
   await streak(page, 4); await frames(page, 30);
   const r = await fireRead(page);
   assert.ok(r.k > 0.4 && r.embers === 0, 'reduced motion: it burns, but no sparks fly ' + JSON.stringify(r));
@@ -3304,6 +3318,7 @@ const mascotMood = (page, re) => page.waitForFunction(re => new RegExp(re).test(
 const KEEP = '10000000';                                          // one gem left so a clear is not a sweep
 test('7.5f mascot: it sits on the board corner, clear of the gems and the HUD, and reacts to clears by size', async ({ page }) => {
   assert.ok(await page.evaluate(() => el('mascot').hidden), 'not on the start card');
+  await page.evaluate(() => { CFG.COMBO_CARRY = false; });   // one miss ends the streak here (round 6's carrying combo has its own test)
   await play(page);
   await dealt(page);
   await mascotMood(page, /^idle\b/);
@@ -3914,12 +3929,13 @@ test('coaster (1.1 G): EASY and LEAN stretches take turns with rolled lengths, s
   const r = await page.evaluate('(() => {' + B73 + `
     const o = { seq: '', awk: { easy: [], lean: [] }, small: 0, pieces: 0 };
     W73(); resetTide(); closerCool = 99; sweepCool = 99; rndSrc = mulberry(7);
+    const crowd0 = CFG.CROWD_ROOM; CFG.CROWD_ROOM = 0;   // the tide alone: comeback keys (which this scattered board can trip) are tested on their own
     // a calm, scattered board of 26 gems: no sweep on it, room enough to stay out of the edge
     const board = ['11000011','10000001','00011000','00100100','10000001','00011000','11000011','10011001'];
     for (let k = 0; k < 90; k++) { B73(board); tray = [null, null, null]; dryN = 0; genTray(); closerCool = 99; sweepCool = 99;
       o.seq += tide.st === 'easy' ? 'E' : 'L'; o.awk[tide.st].push(tray.filter(t => awkward(t.s)).length);
       for (const t of tray) { o.pieces++; if (t.s.n <= 3) o.small++; } }
-    o.labels = lastTier; rndSrc = null;
+    o.labels = lastTier; rndSrc = null; CFG.CROWD_ROOM = crowd0; o.len = [CFG.TIDE_EASY_MIN, CFG.TIDE_EASY_MAX, CFG.TIDE_LEAN_MIN, CFG.TIDE_LEAN_MAX];
     const snap = JSON.parse(JSON.stringify(snapshot())); const t0 = JSON.stringify(tide); resetTide(); restore(snap); o.saved = JSON.stringify(tide) === t0;
     o.on = tideOn(); mode = 'adventure'; o.adv = tideOn(); mode = 'challenge'; o.ch = tideOn(); mode = 'endless'; CFG.TIDE = false; o.off = tideOn(); CFG.TIDE = true;
     return o; })()`);
@@ -3927,8 +3943,8 @@ test('coaster (1.1 G): EASY and LEAN stretches take turns with rolled lengths, s
   assert.equal(r.seq[0], 'E', 'a run starts EASY: ' + r.seq);
   assert.ok(runs.length >= 6, 'stretches take turns: ' + r.seq);
   for (const run of runs.slice(1, -1)) {
-    if (run[0] === 'E') assert.ok(run.length >= 10 && run.length <= 18, 'EASY lasts 10-18 trays: ' + r.seq);
-    else assert.ok(run.length >= 8 && run.length <= 14, 'LEAN lasts 8-14 trays: ' + r.seq);
+    const [lo, hi] = run[0] === 'E' ? r.len.slice(0, 2) : r.len.slice(2);
+    assert.ok(run.length >= lo && run.length <= hi, (run[0] === 'E' ? 'EASY' : 'LEAN') + ' lasts ' + lo + '-' + hi + ' trays: ' + r.seq);
   }
   const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
   assert.ok(avg(r.awk.easy) <= 1 && avg(r.awk.lean) >= 1.8, 'EASY is mostly rectangles and bars, LEAN mostly awkward: ' + avg(r.awk.easy).toFixed(2) + ' / ' + avg(r.awk.lean).toFixed(2));
@@ -3970,6 +3986,93 @@ test('the deal never fails (1.1 G): on awkward boards every tray plays out in fu
   assert.ok(r.unsound <= r.dealt * 0.1, 'pieces have a sound spot: ' + r.unsound + ' of ' + r.dealt + ' trays without');
   assert.ok(r.fixTries > 0 && r.fixed === r.fixTries, 'a messy LEAN board gets a piece that clears: ' + r.fixed + '/' + r.fixTries);
   assert.ok(r.guard, 'ensureWay turns an unplayable hand into a playable one');
+});
+
+test('build-off opening (round 4): Endless opens on an empty board with three of one piece', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const o = { build: 0, n: 0, bad: [] }, orig = CFG.OPEN_BUILD; CFG.OPEN_BUILD = 1;
+    for (let seed = 1; seed <= 20; seed++) {
+      rndSrc = mulberry(seed); seedOpening(); o.n++;
+      const h = tray.map(t => t.s);
+      if (openingKind === 'build' && countFlat(packGrid(grid)) === 0 && h[0] === h[1] && h[1] === h[2] && OPEN_BUILD.includes(h[0])) o.build++;
+      else o.bad.push(openingKind);
+    }
+    CFG.OPEN_BUILD = orig; o.kinds = {};   // (round 5) the others are usable: a seeded band to finish, never the loose 'light' or 'busy' boards
+    for (let seed = 1; seed <= 20; seed++) { rndSrc = mulberry(seed); seedOpening(); o.kinds[openingKind] = (o.kinds[openingKind] || 0) + 1; }
+    rndSrc = null;
+    return o; });
+  assert.equal(r.build, r.n, 'every opening is the build-off one when OPEN_BUILD is 1: ' + r.bad.join(','));
+  assert.deepEqual(Object.keys(r.kinds).filter(k => k !== 'build' && k !== 'gift'), [], 'openings are build-off or a band to finish: ' + JSON.stringify(r.kinds));
+});
+
+test('matched trays (round 4): EASY trays often bring two or three of one piece, and a tray finishes a line when the board has one ready', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = { dealt: 0, matched: 0, follow: 0, followTries: 0 }, eg = CFG.EASY_RUN_GEMS; CFG.EASY_RUN_GEMS = 0;   // no sweep run or hunt: the plain EASY tray
+    const boards = [
+      ['11111100','11111100','00000000','00000000','00000000','00000000','00000000','00000000'],
+      ['11000000','11000000','11000000','11000000','11000000','11000000','00000000','00000000'],
+      ['11111111','11111111','11111000','00000000','00000000','00000000','00000000','00000000'],
+      ['10000001','10000001','00000000','00000000','00000000','00000000','10000001','10000001'],
+    ];
+    let seed = 3;
+    for (const b of boards) for (let k = 0; k < 8; k++) {
+      W73(); resetTide(); tide = { st: 'easy', n: 5, len: 12 }; closerCool = 99; sweepCool = 99; dryN = 0; sweepRun = null;
+      const a0 = B73(b), [lo, hi] = packBits(a0);
+      rndSrc = mulberry(seed++); tray = [null, null, null]; genTray();
+      o.tiers = (o.tiers || '') + lastTier + ' '; if (!/EASY/.test(lastTier)) continue;
+      const h = tray.map(t => t.s); o.dealt++;
+      if (h.some(s => !s.star && s.n >= 3 && h.filter(x => x === s).length >= 2)) o.matched++;
+      o.nonRect = (o.nonRect || 0) + h.filter(s => !s.star && s.n !== s.rows * s.cols && bestDrop(lo, hi, s) < 1).length;   // (round 5) EASY: rectangles and bars (a key that clears a line may be any shape)
+      if (SHAPES.some(s => s.n >= 4 && bestDrop(lo, hi, s) >= 1)) { o.followTries++; if (h.some(s => !s.star && bestDrop(lo, hi, s) >= 1)) o.follow++; }
+    }
+    rndSrc = null; CFG.EASY_RUN_GEMS = eg; return o; })()`);
+  assert.ok(r.dealt >= 12, 'EASY trays dealt: ' + r.dealt + ' ' + r.tiers);
+  assert.ok(r.matched >= r.dealt * 0.2, 'matched trays: ' + r.matched + ' of ' + r.dealt);
+  assert.ok((r.nonRect || 0) <= r.dealt * 0.1, 'EASY deals rectangles and bars: ' + r.nonRect + ' other pieces in ' + r.dealt + ' trays');
+  assert.ok(r.follow >= r.followTries * 0.9, 'a ready line gets its piece: ' + r.follow + ' of ' + r.followTries);
+});
+
+test('carrying combo (round 6): in Endless the combo survives drops that clear nothing until COMBO_GRACE of them in a row; Challenge keeps the 1.0 combo', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate(() => {
+    const o = {}; mode = 'endless';
+    combo = 4; comboMiss = 0;
+    const dot = SHAPES.find(s => s.n === 1);
+    o.endless = [];
+    for (let k = 0; k < CFG.COMBO_GRACE; k++) { grid = empty(); tray = [{ s: dot, gi: 0 }, null, null]; place(0, k, k); o.endless.push(combo); }
+    mode = 'challenge'; combo = 4; comboMiss = 0; grid = empty(); tray = [{ s: dot, gi: 0 }, null, null]; place(0, 3, 3); o.challenge = combo;
+    mode = 'endless';
+    return o; });
+  assert.deepEqual(r.endless.slice(0, -1), Array(r.endless.length - 1).fill(4), 'the streak carries over misses: ' + r.endless.join(','));
+  assert.equal(r.endless[r.endless.length - 1], 0, 'and ends on the last one allowed');
+  assert.equal(r.challenge, 0, 'Challenge: a miss ends it');
+});
+
+test('big solves (round 3): after a LEAN stretch, a board of nearly-done lines gets keys that clear several at once, and small pieces come one a tray unless it clears the board', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = { lines: [], small: 0, dealt: 0, ready: 0 };
+    const boards = [
+      ['11111100','11111100','11111100','00000000','00000000','00000000','00000000','00000000'],   // three rows short of a 2-wide gap
+      ['11011111','11011111','11011111','11011111','00000000','00000000','00000000','00000000'],   // four rows with one hole in a column
+      ['11110000','11110000','11110000','11110000','11110000','00000000','00000000','00000000'],   // a block: rows half done
+    ];
+    let seed = 7;
+    for (const b of boards) for (let k = 0; k < 6; k++) {
+      W73(); resetTide(); tide = { st: 'easy', n: 0, len: 12 }; closerCool = 99; sweepCool = 99; dryN = 0;
+      const a0 = B73(b), [lo, hi] = packBits(a0); o.ready = Math.max(o.ready, readyLines(lo, hi));
+      rndSrc = mulberry(seed++); tray = [null, null, null]; genTray(); o.dealt++;
+      const hand = tray.map(t => t.s);
+      o.lines.push(evalHand(a0, hand, 400000).lines);
+      if (hand.filter(s => !s.star && s.n <= 3).length > 1 && !/CLOSER|SWEEP/.test(lastTier)) { o.small++; o.why = (o.why || '') + lastTier + ' '; }
+    }
+    rndSrc = null; return o; })()`);
+  assert.ok(r.ready >= 3, 'the boards have nearly-done lines');
+  const big = r.lines.filter(n => n >= 3).length;
+  assert.ok(big >= r.dealt * 0.6, 'most trays can clear 3+ lines at once: ' + r.lines.join(','));
+  assert.ok(r.small <= 1, 'small pieces come one a tray (a board clear may use more): ' + r.why + r.small + ' of ' + r.dealt + ' trays had two');
 });
 
 for (const { name, fn } of tests) {
