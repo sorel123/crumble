@@ -5,6 +5,8 @@
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
   ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
   ['DEALER_HOME','Dealer: pieces have a home (new)'],
+  ['HOME_BLOCKY','Home dealer: blocky cool stretch (TIGHT trays)'],
+  ['REC_PLAY','Record play (stays on without ?dev)'],
   ['COMBO_CARRY','Combo carries across trays (round 6)'],
   ['EASY_RECT','Coaster: easy stretches deal rectangles and bars only (round 5)'],
   ['FX_CLOSER_GLOW','Closer shimmer on the tray (7.3)'],
@@ -45,7 +47,19 @@ const DEV_ACTIONS=[['Fill bonus meter',()=>{ if(!bonus){ bonusMeter=CFG.BONUS_ME
   ['Bonus trays',()=>{ if(!bonus){ if(transform) endTransform(); bonusMeter=0; startBonus(); } }],
   ...Object.keys(ACHIEVE).map(id=>[TRANSFORMS[id].name,()=>{ transformCool=0; triggerTransform(id); }]),
   ['Next sky (7.5b)',()=>{ journeySweep(); if(jPend) jPend.t=1; }],
+  ['Copy play log',()=>recCopy()],
+  ['Clear play log',()=>{ recClear(); }],
   ['Reset unlocks',()=>{ discoveredWorlds.clear(); newLook=false; saveSkinSave(); renderWorlds(); renderLooks(); syncLookDot(); }]];
+// the play log to the clipboard; where there is no clipboard (an iOS web view) it shows in a box to select and copy by hand
+async function recCopy(){
+  const txt=recText();
+  try{ await navigator.clipboard.writeText(txt); pushBanner('PLAY LOG COPIED',(txt.length/1024).toFixed(0)+' KB','#8FF7FF'); return; }catch(_){}
+  const box=document.createElement('div'), ta=document.createElement('textarea'), b=document.createElement('button');
+  box.id='recBox'; box.style.cssText='position:fixed;inset:8%;z-index:99;display:flex;flex-direction:column;gap:8px;background:#111;padding:10px;border-radius:12px';
+  ta.readOnly=true; ta.value=txt; ta.style.cssText='flex:1;width:100%;font:11px monospace;user-select:text;-webkit-user-select:text';
+  b.type='button'; b.textContent='Close'; b.onclick=e=>{ e.stopPropagation(); box.remove(); };
+  box.onclick=e=>e.stopPropagation(); box.append(ta,b); document.body.append(box); ta.focus(); ta.select();
+}
 const opt=(...pairs)=>pairs.map(([value,label])=>({value,label}));
 const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
   ['CLEAR_STYLE','Clear style',opt(['crumble','Crumble to rubble'],['squash','Squash to a bar'],['burst','Blocks fly out']),()=>{}],
@@ -81,6 +95,7 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['HOME_FINISH','Home dealer: FINISH odds on a low board',0,1,0.05],
   ['HOME_FINISH_HOT','Home dealer: FINISH odds in win mode',0,1,0.05],
   ['HOME_FINISH_MAX','Home dealer: most FINISH trays in a row',0,6,1],
+  ['HOME_WIPE_KEEP','Home dealer: wipe chain carries on (odds^n)',0,1,0.05],
   ['TIDE_EASY_MIN','Coaster: easy stretch min (trays)',2,30,1],
   ['TIDE_EASY_MAX','Coaster: easy stretch max (trays)',2,30,1],
   ['TIDE_LEAN_MIN','Coaster: lean stretch min (trays)',0,30,1],
@@ -227,6 +242,7 @@ function initDev(){
     inp.onchange=()=>{
       cfgSet(k,inp.checked); devSave(); updateDbg(); syncBonusChip();
       if(k==='UNLOCK_ALL') renderSkins();
+      if(k==='REC_PLAY') try{ localStorage.setItem('crumble.rec',inp.checked?'1':'0'); }catch(_){}
       if(k==='UNLOCK_ALL_WORLDS') renderWorlds();
     };
     refresh.push(()=>{ inp.checked=!!cfgGet(k); });

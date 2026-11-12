@@ -4151,7 +4151,7 @@ test('home dealer: bot-played trays on two seeds always have a solution, every p
   await play(page);
   await page.evaluate(() => { CFG.DEALER_HOME = true; });
   const cfg = await page.evaluate(() => [CFG.HOME_WIN_MAX, CFG.HOME_COOL_MIN, CFG.HOME_COOL_MAX, CFG.HOME_WIN_DRY]);
-  const RX = /^HOME (\w+)(·CLEAR)?(·FB|·GUARD)? (warm|win|cool)(?: (\d+)\/(\d+))?$/;
+  const RX = /^HOME (\w+)(·CLEAR)?(·FB|·GUARD)? (warm|win|cool)(?:·LK)?(?: (\d+)\/(\d+))?$/;
   let kinds = {}, guards = 0, wins = 0, ends = { wipe: 0, cap: 0, dry: 0 }, cools = 0, winTrays = 0, flat = 0, cleared = 0;
   for (const seed of [11, 12]) {
     const r = await page.evaluate(`(${HOME_SIM})(260, ${seed}, true)`);
@@ -4265,27 +4265,107 @@ test('home dealer: FINISH on a low board in a cool stretch empties it (single ce
   const on = await runs(1, 21); assert.ok(on.n >= 5 && on.most <= max, 'FINISH trays capped in a row: ' + JSON.stringify(on));
   assert.equal((await runs(0, 21)).n, 0, 'HOME_FINISH 0: none over a run');
 });
+test('home dealer: the wipe chain is rolled (HOME_WIPE_KEEP^n): a failed roll goes cool with the help off, KEEP 0 stops after one wipe, KEEP 1 never', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    CFG.DEALER_HOME = true; CFG.HOME_FINISH = 1; CFG.HOME_FINISH_HOT = 1; const o = {}; rndSrc = mulberry(9);
+    const E = Array(8).fill('00000000'), low = ['00000000','00000000','00000000','00000000','00000000','00000000','11111100','11111100'];
+    const deal = rows => { B73(rows); roomNow = 1; tray = [null, null, null]; genTray(); const hand = tray.map(t => t.s);
+      return { l: lastTier, sizes: hand.map(s => s.n), kinds: new Set(hand).size, ev: evalHand(packGrid(grid), hand, 200000), hd: { ...hdeal } }; };
+    const wipe = () => { B73(E); waveAfterDrop(packGrid(grid), 1, 0, 1, false); };
+    W73(); resetHd(); CFG.HOME_WIPE_KEEP = 0; hdeal.ph = 'win'; hdeal.len = CFG.HOME_WIN_MAX; hdeal.n = 2; wipe();
+    o.k0 = [deal(E), deal(low)];                                   // KEEP 0: the first wipe ends the chain's help
+    o.k0.push(...Array.from({ length: 14 }, () => deal(low)));
+    W73(); resetHd(); CFG.HOME_WIPE_KEEP = 1; o.k1 = [];
+    for (let k = 0; k < 8; k++) { hdeal.ph = 'cool'; hdeal.n = 1; hdeal.len = 9; wipe(); o.k1.push(deal(E)); }   // eight wipes in a row: the help never stops
+    rndSrc = null; return o; })()`);
+  const [b, f] = r.k0;
+  assert.match(b.l, /^HOME BUILD cool·LK 1\/\d+$/, 'a failed roll: straight to a cool stretch with the help off: ' + b.l);
+  assert.ok(b.kinds >= 2 && b.sizes.every(n => n >= 4) && b.ev.lines === 0, 'its BUILD: big mixed pieces that complete no line: ' + JSON.stringify(b));
+  assert.doesNotMatch(f.l, /FINISH|CLEAR/, 'no FINISH on a low board while the help is off: ' + f.l);
+  assert.equal(f.ev.sweep, false, 'no tray that can empty the board');
+  assert.ok(r.k0.every(t => !t.ev.sweep || !/·LK/.test(t.l)), 'none in the whole stretch: ' + r.k0.map(t => t.l).join(' | '));
+  assert.ok(r.k0.some(t => / warm/.test(t.l) || / win /.test(t.l)) && r.k0.some(t => /FINISH/.test(t.l)), 'when the stretch ends the help is back: ' + r.k0.map(t => t.l).join(' | '));
+  assert.equal(r.k0[0].hd.wr, 1);
+  assert.ok(r.k1.every(t => !/·LK/.test(t.l) && t.kinds <= 2), 'KEEP 1: matching BUILD trays after every wipe: ' + r.k1.map(t => t.l).join(' | '));
+  assert.deepEqual(r.k1.map(t => t.hd.wr), [1, 2, 3, 4, 5, 6, 7, 8], 'the row counts on');
+  // bot play, FINISH odds forced to 1: with KEEP 0 no two wipes within 4 trays; with KEEP 1 rows of wipes come
+  const rows = async (keep, seed) => { await page.evaluate(k => { CFG.DEALER_HOME = true; CFG.HOME_FINISH = 1; CFG.HOME_FINISH_HOT = 1; CFG.HOME_WIPE_KEEP = k; }, keep);
+    const t = await page.evaluate(`(${HOME_SIM})(500, ${seed}, false)`); let most = 0, n = 0, wipes = 0;
+    const games = {}; t.forEach((x, i) => { if (x.sw) (games[x.g] = games[x.g] || []).push(i); });
+    for (const at of Object.values(games)) { wipes += at.length; let k = 1; for (let i = 1; i < at.length; i++) { k = at[i] - at[i - 1] <= 4 ? k + 1 : 1; most = Math.max(most, k); } if (at.length) most = Math.max(most, 1); }
+    return { most, wipes }; };
+  const k0 = await rows(0, 31); assert.ok(k0.wipes >= 4 && k0.most === 1, 'KEEP 0: every wipe stands alone: ' + JSON.stringify(k0));
+  const k1 = await rows(1, 31); assert.ok(k1.most >= 2, 'KEEP 1: wipes come in rows: ' + JSON.stringify(k1));
+});
 test('home dealer: its coaster survives a resume; an empty board deals BUILD; no star or golden hand', async ({ page }) => {
   await play(page);
   const r = await page.evaluate('(() => {' + B73 + `
     CFG.DEALER_HOME = true; W73(); const o = {};
-    hdeal = { ph: 'win', n: 3, len: 8, f: 2, wp: 1 };
+    hdeal = { ph: 'win', n: 3, len: 8, f: 2, wp: 1, wr: 2, wa: 1, wn: 1, lk: 1 };
     const snap = JSON.parse(JSON.stringify(snapshot())); resetHd(); restore(snap); o.saved = JSON.stringify(hdeal);
-    delete snap.hm.f; delete snap.hm.wp; resetHd(); restore(snap); o.old = JSON.stringify(hdeal);
+    delete snap.hm.f; delete snap.hm.wp; delete snap.hm.wr; delete snap.hm.wa; delete snap.hm.wn; delete snap.hm.lk; resetHd(); restore(snap); o.old = JSON.stringify(hdeal);
     snap.hm = { ph: 'gift', n: 1, len: 3, f: 0, hot: 2 }; resetHd(); restore(snap); o.gift = JSON.stringify(hdeal);   // a save from the gift-string dealer
     W73(); hdeal = { ph: 'warm', n: 0, len: 0 }; B73(Array(8).fill('00000000')); rndSrc = mulberry(3); tray = [null, null, null]; genTray();
     o.build = lastTier; o.hand = tray.map(t => t.s.n);
     W73(); goldenNext = true; starForced = true; o.special = 0;
     for (let k = 0; k < 20; k++) { B73(['00000000','00000000','11100111','11100111','00000000','11111100','11111100','11111100']); tray = [null, null, null]; goldenNext = true; genTray(); if (golden || tray.some(t => t.s.star)) o.special++; }
     rndSrc = null; return o; })()`);
-  assert.equal(r.saved, JSON.stringify({ ph: 'win', n: 3, len: 8, f: 2, wp: 1 }));
-  assert.equal(r.old, JSON.stringify({ ph: 'win', n: 3, len: 8, f: 0, wp: 0 }), 'an older save: no FINISH run, no wipe');
-  assert.equal(r.gift, JSON.stringify({ ph: 'win', n: 1, len: await page.evaluate(() => CFG.HOME_WIN_MAX), f: 0, wp: 0 }), 'a gift string resumes as win mode');
+  const Z = { wr: 0, wa: 99, wn: 0, lk: 0 };
+  assert.equal(r.saved, JSON.stringify({ ph: 'win', n: 3, len: 8, f: 2, wp: 1, wr: 2, wa: 1, wn: 1, lk: 1 }));
+  assert.equal(r.old, JSON.stringify({ ph: 'win', n: 3, len: 8, f: 0, wp: 0, ...Z }), 'an older save: no FINISH run, no wipe, no wipe row');
+  assert.equal(r.gift, JSON.stringify({ ph: 'win', n: 1, len: await page.evaluate(() => CFG.HOME_WIN_MAX), f: 0, wp: 0, ...Z }), 'a gift string resumes as win mode');
   assert.match(r.build, /^HOME BUILD warm$/);
   assert.ok(r.hand.every(n => n >= 4), 'big pieces to build with: ' + r.hand);
   assert.equal(r.special, 0, 'no star or golden hand under it');
 });
 
+test('home dealer: HOME_BLOCKY (experiment, off by default): cool TIGHT trays are big pieces, every one at a strict home in some order, all solvable', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => CFG.HOME_BLOCKY), false);
+  await page.evaluate(() => { CFG.DEALER_HOME = true; CFG.HOME_BLOCKY = true; });
+  const r = await page.evaluate(`(${HOME_SIM})(220, 13, true)`);
+  const tight = r.filter(t => /^HOME TIGHT/.test(t.l));
+  assert.ok(tight.length >= 30, 'TIGHT trays came round: ' + tight.length);
+  assert.ok(r.every(t => t.ok), 'every tray has a solution');
+  assert.ok(tight.every(t => / cool/.test(t.l) && t.flush && t.home), 'in the cool stretch, every piece at a strict (bump 0) home in some order');
+  const cells = tight.flatMap(t => t.t.split(',').map(i => +i)), mean = cells.reduce((a, i) => a + [1,2,2,3,3,4,4,5,5,4,9,3,3,3,3,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,6,6][i], 0) / cells.length;
+  assert.ok(mean >= 4.6, 'big pieces: mean ' + mean.toFixed(2));
+});
+test('play recorder: off writes nothing; on (REC_PLAY) keeps one well-formed record per tray, the drops, a game-over marker and the knobs; tools/play-log.mjs reads it', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { CFG.DEALER_HOME = true; CFG.REC_PLAY = false; localStorage.removeItem('crumble.playlog'); });
+  await page.evaluate(`(${HOME_SIM})(12, 5, false)`);
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.playlog')), null, 'off: nothing written');
+  await page.evaluate(() => { CFG.REC_PLAY = true; });
+  await page.evaluate(`(${HOME_SIM})(14, 5, false)`);
+  await page.evaluate(() => { state = 'play'; gameOver(); });
+  const L = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.playlog')));
+  assert.equal(L.v, 1);
+  const g = L.e.filter(e => e.k === 'g'), t = L.e.filter(e => e.k === 't'), o = L.e.filter(e => e.k === 'o');
+  assert.ok(g.length >= 1 && g[0].cfg.DEALER_HOME === true && 'HOME_WIPE_KEEP' in g[0].cfg && 'HOME_BUMP' in g[0].cfg && g[0].m === 'endless', 'a game marker with the knobs: ' + JSON.stringify(g[0]));
+  assert.ok(t.length >= 14, 'a record per tray: ' + t.length);
+  for (const x of t) {
+    assert.match(x.b, /^[0-9a-f]{16}$/, 'the board at deal');
+    assert.ok(x.s.length === 3 && x.s.every(i => Number.isInteger(i) && i >= -1 && i < 37), 'three shapes: ' + x.s);
+    assert.ok(typeof x.d === 'string' && /^(warm|win|cool)$/.test(x.p) && Number.isInteger(x.n), 'label, phase, tray number: ' + JSON.stringify(x));
+    for (const d of x.x) assert.ok(d.length === 5 && d[0] >= 0 && d[0] < 3 && d[1] >= 0 && d[1] < 8 && d[2] >= 0 && d[2] < 8 && d[3] >= 0 && (d[4] === 0 || d[4] === 1), 'a drop: ' + d);
+  }
+  assert.ok(t.slice(0, -1).every((x, i) => x.x.length === 3 || t[i + 1].n === 1), 'every finished tray has its three drops');
+  const first = await page.evaluate(() => { const L = JSON.parse(localStorage.getItem('crumble.playlog')); const x = L.e.find(e => e.k === 't'); return x; });
+  assert.equal(first.n, 1, 'the opening tray is recorded');
+  assert.equal(o.length, 1, 'the game-over marker');
+  // the tool reads it
+  const f = 'tests/out/play-log-test.json'; fs.mkdirSync('tests/out', { recursive: true }); fs.writeFileSync(f, JSON.stringify(L));
+  const { execFileSync } = await import('node:child_process');
+  const txt = execFileSync('node', ['tools/play-log.mjs', f], { encoding: 'utf8' });
+  assert.match(txt, /play log: \d+ games, \d+ trays/); assert.match(txt, /longest wipe-less stretch/); assert.match(txt, /phase: /);
+  const copied = await page.evaluate(async () => { const orig = navigator.clipboard; Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    await recCopy(); const box = document.querySelector('#recBox textarea'); const v = box && box.value; Object.defineProperty(navigator, 'clipboard', { value: orig, configurable: true }); return v; });
+  assert.equal(JSON.parse(copied).e.length, L.e.length, 'no clipboard (an iOS web view): the log shows in a box to select');
+  await page.evaluate(() => recClear());
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.playlog')), null, 'Clear play log');
+});
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
