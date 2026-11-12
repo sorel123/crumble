@@ -1489,7 +1489,7 @@ back. Like a coaster", and "you always have a solution, we're never gonna deal y
 that can fail is your placement." Study: project memory `blockblast-recording-study`, /mnt/project-files/plan-1.1/blockblast-study/.
 
 - **The tide** (`tide`, `tideStep`, solver.js "Coaster dealing"): a stretch state that does not read the board. EASY lasts
-  `TIDE_EASY_MIN..MAX` trays (6-12), LEAN `TIDE_LEAN_MIN..MAX` (4-8), rolled per stretch; a run starts EASY. Getting
+  `TIDE_EASY_MIN..MAX` trays (10-18), LEAN `TIDE_LEAN_MIN..MAX` (6-10), rolled per stretch; a run starts EASY. Getting
   out of the edge (relief) during LEAN starts a fresh EASY stretch. Nothing on screen shows it. Saved with the run (`td`).
   The 6.1 room phases still run underneath: edge and recovery trays are dealt as before (but must now be solvable).
 - **EASY** (`tideHandSteps`): pieces drawn from big rectangles, bars and big L's (`tideBase`), each weighted up by how
@@ -1532,7 +1532,7 @@ The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 tr
   trays (3x 1.0), a sweep hand about every 25.
 - **LEAN is "hard, then you see it".** A LEAN candidate often carries a 4-6 cell piece with no spot yet
   (`LEAN_PUZZLE_TRY`), scored up when evalHand proves a clear makes room for it (`LEAN_PUZZLE`); such a piece is exempt from
-  the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 2, `LEAN_ROOM` 0.3.
+  the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 3, `LEAN_ROOM` 0.3.
 - Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.
 
 ### Round 6: back from the brink, chains, the carrying combo (2026-11-11)
@@ -1542,7 +1542,7 @@ how Block Blast "comes back from the brink" and its "multi chained solves" in th
 /mnt/project-files/plan-1.1/blockblast-study/rec3-5-2026-11-11/). Every stuck stretch there ends the same way: the next tray
 holds a piece that exactly finishes a nearly full row or column (often a 1x4/1x5 into a one-cell-high gap). After a board
 clear it deals big matching pieces that rebuild rows (about 14 board clears in 8.7 minutes in v3).
-- **Comeback keys.** A board under `CROWD_ROOM` (0.45) room or with `CROWD_GEMS` (34) gems is crowded: in either stretch the
+- **Comeback keys.** A board under `CROWD_ROOM` (0.35) room or with `CROWD_GEMS` (34) gems is crowded: in either stretch the
   rescue's fixers seed the hand (two of them `CROWD_TWO` of the time), ranked by cells taken away (cleared less the piece's
   own) plus room, LEAN's awkward ones first; a hand scores `CROWD_KEY` per piece that clears now (up to two) and loses 3x it
   with none. This trades game length against board clears per tray (person-like bot): 0.42 gave games 2x longer but a
