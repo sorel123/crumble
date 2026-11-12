@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:2
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:3
   })); }catch(e){}
 }
 function loadSkinSave(){
@@ -29,7 +29,7 @@ function loadSkinSave(){
       && (HOME_WORLDS.some(w=>w.id===o.homeWorld)||TRANSFORMS[o.homeWorld])) CFG.HOME_WORLD=o.homeWorld;
     if(THEMES.some(t=>t.id===o.theme)) CFG.THEME=o.theme;
     if(o.lookV!==2){ CFG.THEME='classic'; CFG.STYLE='blocks'; }   // 2026-10-30: everyone gets the new look once; Settings still changes it
-    if(o.sndV!==2) CFG.SND_SET='strings';                          // 6.5: everyone starts on the new sound family once; Settings still changes it
+    if(o.sndV!==3) CFG.SND_SET='original';                         // 2026-11-12 (Jay): Original is the default again, for everyone once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
     if(o.musicPick==='shuffle'||MUSIC_TRACKS.some(t=>t.id===o.musicPick)) CFG.MUSIC_PICK=o.musicPick;   // 7.4

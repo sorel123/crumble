@@ -273,9 +273,9 @@ function openMap(){
   el('mapCard').hidden=false;
   const n=list.querySelector('.next'); if(n) n.scrollIntoView({block:'center'});
 }
-/* ── (8.4) pause: Resume, Home (the run is saved), or New game (tap twice) ── */
+/* ── (8.4) pause: Resume, Home (the run is saved), or End game (tap twice; a Challenge says Restart and deals its round again) ── */
 let pauseNewT=0;
-function pauseNewReset(){ clearTimeout(pauseNewT); const b=el('pauseNew'); b.textContent=b.dataset.lbl||'New game'; b.classList.remove('confirm'); }
+function pauseNewReset(){ clearTimeout(pauseNewT); const b=el('pauseNew'); b.textContent=b.dataset.lbl||'End game'; b.classList.remove('confirm'); }
 function openPause(){
   if(state!=='play'||overlayOpen()) return;
   pauseForMenu(); pauseNewReset();
@@ -283,7 +283,7 @@ function openPause(){
   el('pauseEye').textContent='Paused · '+(adventure?'Level '+lvl.id:mode==='daily'?'Daily':mode==='challenge'&&chal?chLabel(chal.seed):'Endless');
   el('pauseScore').textContent=score.toLocaleString('en-US');
   el('pauseMsg').textContent=adventure?goalText(lvl.goal)+'. Your game is saved.':mode==='challenge'&&chal?'Tray '+Math.min(trayNo,CH_TRAYS)+' of '+CH_TRAYS+'. Your game is saved.':'Your game is saved.';
-  el('pauseNew').dataset.lbl=mode==='challenge'?'Restart':'New game'; pauseNewReset();
+  el('pauseNew').dataset.lbl=mode==='challenge'?'Restart':'End game'; pauseNewReset();
   el('pauseCard').hidden=false;
 }
 function closePause(){ pauseNewReset(); el('pauseCard').hidden=true; if(!overlayOpen()) paused=false; }
@@ -298,9 +298,16 @@ el('pauseResume').onclick=e=>{ e.stopPropagation(); closePause(); };
 el('pauseHome').onclick=e=>{ e.stopPropagation(); pauseNewReset(); el('pauseCard').hidden=true; saveRun(); openMenu(); };
 el('pauseNew').onclick=e=>{
   e.stopPropagation(); const b=el('pauseNew');
-  if(!b.classList.contains('confirm')){ b.textContent='Tap again to start over'; b.classList.add('confirm'); pauseNewT=setTimeout(pauseNewReset,3000); return; }
-  closePause(); start();
+  const restart=mode==='challenge';
+  if(!b.classList.contains('confirm')){ b.textContent=restart?'Tap again to start over':'Tap again to end it'; b.classList.add('confirm'); pauseNewT=setTimeout(pauseNewReset,3000); return; }
+  closePause(); if(restart) start(); else endToHome();
 };
+// End game (2026-11-12, Jay): the run is thrown away and the home screen comes up, as on a first launch with nothing saved
+function endToHome(){
+  cancelDeal(); clearRun(); clearRunFx(); stuck=false; state='idle'; mode='endless'; lvl=null; saveMode();
+  grid=empty(); score=0; combo=0; shownScore=0; el('scoreVal').textContent='0'; resetWorld(); genTray();
+  syncActions(); syncHud(); el('overCard').hidden=true; el('startCard').hidden=false;
+}
 el('menuEndless').onclick=e=>{ e.stopPropagation(); homeCrumble(); playEndless(); };
 el('menuAdv').onclick=e=>{ e.stopPropagation(); openMap(); };
 el('menuClose').onclick=e=>{ e.stopPropagation(); closeMenu(); };
