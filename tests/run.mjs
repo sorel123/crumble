@@ -465,9 +465,11 @@ test('7.5 crumble: each gem breaks into four pieces of itself, the line cracks a
   }));
   await page.evaluate(() => { perf.fx = 1; dust.length = 0; shards.length = 0; });
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
+  // read the wave as place() leaves it: the nearest gems can be gone by the time the drag returns on a slow machine
+  await page.evaluate(() => { const orig = place; place = function () { const out = orig.apply(this, arguments); window.__wave = shatters.filter(s => s.r === 0).map(s => ({ c: s.c, t0: s.t0 })); place = orig; return out; }; });
   await dragPiece(page, 0, 0, 0);
   // the crack ripples along the line from the piece: each gem starts CRUMBLE_STAGGER frames after its neighbour
-  const wave = await page.evaluate(() => shatters.filter(s => s.r === 0).sort((a, b) => a.c - b.c).map(s => -s.t0));
+  const wave = await page.evaluate(() => window.__wave.sort((a, b) => a.c - b.c).map(s => -s.t0));
   const st = await page.evaluate(() => CFG.CRUMBLE_STAGGER);
   assert.ok(wave.length >= 7 && wave.every((d, i) => i === 0 || Math.abs(d - wave[i - 1] - st) < 1e-6), 'the crack runs along the line from the piece: ' + wave.map(d => d.toFixed(2)).join(','));
   const one = await watch();
