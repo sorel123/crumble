@@ -145,6 +145,19 @@ const CFG = {
   HOME_BLOCKY:    false, // (experiment) the cool stretch deals TIGHT trays: big pieces at strictly flush homes that keep the gems in few lines (no scatter); win mode prefers big multi-line drops
   HOME_WIPE_KEEP: 0.75,  // after the n-th board wipe in a row (each within 4 trays of the last) the chain's help carries on with odds this^n, else a cool stretch without it
 
+  // the Block Blast curve (solver.js "The Block Blast curve"): no phases, every slot's class is rolled from what 253 Block Blast trays
+  // showed. Endless and Daily only; beats DEALER_HOME when both are on. Also on with ?dealer=curve in the URL.
+  DEALER_CURVE: /[?&]dealer=curve(&|$)/.test(location.search),   // off by default
+  CURVE_TABLE: [26,70, 50,46, 70,25, 80,6],   // per gems bucket 0-12, 13-24, 25-36, 37+: % of slots rolled CLEAR, FLUSH (the rest FREE)
+  CURVE_MIX: [['1x5',108],['3x3',105],['2x3',101],['L4',80],['1x4',72],['L5',60],['2x2',52],['S4',38],['T4',24],['1x3',23],['1x1',17],['L3',10],['1x2',5]],   // Block Blast's shape counts (rotations pooled; its 3 diagonals have no shape here)
+  CURVE_SMALL: [5,6,12,21],   // % of pieces of 3 cells or fewer, per gems bucket (scales the small shapes of CURVE_MIX)
+  CURVE_MULTI:  2,       // a CLEAR piece's odds go with (1 + lines its best drop clears) to this power (big multi-line drops)
+  CURVE_DENSE:  1,       // a FLUSH piece's odds go with e^(this x its best flush spot's density: nearly-done lines gained, less half the new lines it opens)
+  CURVE_HEAT:   0.5,     // the luck dial: how far the slow random walk `heat` (-1..1) shifts the table (0 = the table alone)
+  CURVE_GIVE:   0,       // generosity: added to every bucket's CLEAR share (taken from FLUSH and FREE), -0.3..0.3
+  CURVE_TWINS:  0.11,    // odds the tray dealt on an emptied board is three of one big piece
+  CURVE_EASE:   0.75,    // share of 8 person-like plays (personPlays) that must get all three pieces down, else the pieces are re-picked (0 = off)
+
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
   TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped

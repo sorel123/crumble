@@ -45,11 +45,21 @@
 // wipes each within 4 trays of the one before, by length) and blocky (per phase, boards of 10+ gems at deal: lines holding gems, roughBits, each per gem).
 // 1.1 A (sweep chase) adds sweepHands (trays dealt with the sweep shimmer: a closer or planned sweep), traysPerSweepHand,
 // sweepHandsConverted (share of those the bot swept), chases (two-tray set-up hands), sweepsAll / traysPerSweep (every clean sweep).
+// The Block Blast yardstick ('bb yardstick' table and the 'bbm:' JSON line; any dealer, DEALER_CURVE=1 for the curve), by gems at deal
+// (0-12, 13-24, 25-36, 37+), each cell 'this run|Block Blast' (plan-1.1/blockblast-study/trays/SUMMARY.md): dealt pieces that can clear /
+// are flush / must stick out / have no spot on the board as dealt (measures.py: clear = a drop completes a line; flush = no clear but a drop
+// whose open edges less covered edges, walls covered, is <= 0; this is solver.js bumpOf), trays whose three pieces are all clear or flush,
+// occupied rows+columns, lines with 5+ gems, isolated gems, mean piece, pieces of 3 cells or fewer, awkward (S, T, L4, L3); then lines per
+// tray (mean, 3+, none), gems at deal (median, p10, p90), wipes (count, trays per wipe, gap between wipes in a game: median, p90, longest;
+// rows of wipes each within 4 trays of the one before), comebacks (a deal at 32+ gems to the first deal at 12 or fewer: count, trays
+// taken, fit of the pieces dealt in between, most lines in one of those trays) and game length. Where it differs from measures.py: lines per
+// tray counts trays the bot played in full (Block Blast: fully parsed trays), the wipe and comeback counts include the game still running
+// at the end, and Block Blast's game split is a heuristic (revives not separated), ours is exact.
 import { serve, openGame, play } from '../tests/harness.mjs';
 
 const args = process.argv.slice(2), kv = args.filter(a => a.includes('=')), pos = args.filter(a => !a.includes('='));
 const TRAYS = +(pos[0] || 4000), SEED = +(pos[1] || 1);
-const OVR = Object.fromEntries(kv.map(a => { const [k, v] = a.split('='); return [k, isNaN(+v) ? v : +v]; }));
+const OVR = Object.fromEntries(kv.map(a => { const [k, v] = a.split('='); if (/^[\[{]/.test(v)) return [k, JSON.parse(v)]; return [k, isNaN(+v) ? v : +v]; }));   // arrays as JSON: CURVE_TABLE=[26,70,50,46,70,25,80,6]
 const BOT = OVR.BOT || 'casual', RESCUE = !!OVR.RESCUE; delete OVR.BOT; delete OVR.RESCUE;
 const srv = await serve();
 const { browser, page } = await openGame(srv.url, { seed: SEED });
@@ -183,6 +193,15 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     { let occ = 0; for (let j = 0; j < 16; j++) if ((glo & LINE_MASKS[j * 2]) | (ghi & LINE_MASKS[j * 2 + 1])) occ++; cur.occ = occ; cur.rough = roughBits(glo, ghi); }   // blockiness at deal: lines holding gems, filled/empty edges
     cur.noHomeNow = typeof hasHome === 'function' ? shp.filter(s => !s.star && !hasHome(glo, ghi, s)).length : 0;
     cur.noHome = typeof homeAfterMates === 'function' ? shp.filter((s, k) => !homeAfterMates(glo, ghi, shp, k)).length : 0;
+    // Block Blast's yardstick (measures.py): each piece on the board as dealt is clear (a drop completes a line), flush (no clear,
+    // but a drop whose open edges less covered edges, walls covered, is <= 0), stick (only protruding drops) or none (no legal spot)
+    cur.bb = shp.filter(s => !s.star).map(s => { let fits = false, fl = false;
+      for (const m of placeMasks(s)) { if ((glo & m.lo) || (ghi & m.hi)) continue; fits = true; if (applyBits(glo, ghi, s, m)) return 'clear'; if (bumpOf(glo, ghi, s, m) <= 0) fl = true; }
+      return fits ? (fl ? 'flush' : 'stick') : 'none'; });
+    { let l5 = 0, iso = 0; for (let j = 0; j < 16; j++) if (pop32(glo & LINE_MASKS[j * 2]) + pop32(ghi & LINE_MASKS[j * 2 + 1]) >= 5) l5++;
+      for (let i = 0; i < 64; i++) if (bitAt(glo, ghi, i) && NB[i].every(j => j < 0 || !bitAt(glo, ghi, j))) iso++;
+      cur.l5 = l5; cur.iso = iso; }
+    cur.awkN = shp.filter(s => !s.star && awkward(s)).length; cur.placed = 0;
     trays.push(cur);
     if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
@@ -195,7 +214,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     const before = stats.lines, sw0 = stats.sweeps;
     if (cur.firstObv === null) cur.firstObv = m[3];
     const g0n = countFlat(packGrid(grid));
-    place(m[0], m[1], m[2]);
+    place(m[0], m[1], m[2]); cur.placed++;
     { const g1n = countFlat(packGrid(grid)); if (g0n - g1n >= 12) { swing++; if (g1n <= 9) nearClear++; } }
     { const k = { goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool }; clearRunFx(); ({ goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool } = k); }   // drop the effects, keep the specials' bookkeeping
     if (stats.lines > before) afterClear.push(countFlat(packGrid(grid)));
@@ -282,19 +301,36 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
         meanLen: +(w.lens.reduce((a, b) => a + b, 0) / Math.max(1, w.lens.length)).toFixed(1), flat: hdStats.winFlat }; })(),
     wipes: (() => {                          // finished games: trays between board wipes (the game's start counts as one end of a stretch), rows of wipes each within 4 trays of the one before
       const gaps = [], rows = {}, stretch = []; let longest = 0, n = 0;
-      perGame.forEach(a => { const at = []; a.forEach((t, i) => { for (let k = 0; k < t.sweeps; k++) at.push(i); }); n += at.length;
+      const allG = perGame.concat([trays.filter(t => t.game === games)]).filter(a => a.length);   // (the game still running counts too: a strong bot may never lose)
+      allG.forEach(a => { const at = []; a.forEach((t, i) => { for (let k = 0; k < t.sweeps; k++) at.push(i); }); n += at.length;
         for (let i = 1; i < at.length; i++) gaps.push(at[i] - at[i - 1]);
         const ends = [0, ...at, a.length]; for (let i = 1; i < ends.length; i++) longest = Math.max(longest, ends[i] - ends[i - 1]);
         let k = 0; at.forEach((x, i) => { if (i && x - at[i - 1] <= 4) k++; else { if (k) rows[k] = (rows[k] || 0) + 1; k = 1; } }); if (k) rows[k] = (rows[k] || 0) + 1; });
       const g = gaps.slice().sort((x, y) => x - y), qq = f => g.length ? g[Math.floor((g.length - 1) * f)] : null;
-      return { n, traysPerWipe: +(perGame.reduce((x, a) => x + a.length, 0) / Math.max(1, n)).toFixed(1), gapMedian: qq(0.5), gapP90: qq(0.9), longestStretch: longest, rows }; })(),
+      return { n, traysPerWipe: +(allG.reduce((x, a) => x + a.length, 0) / Math.max(1, n)).toFixed(1), gapMedian: qq(0.5), gapP90: qq(0.9), gapMax: g.length ? g[g.length - 1] : null, longestStretch: longest, rows }; })(),
     blocky: (() => { const o = {}; for (const t of trays) { const m = /^HOME \S+ (warm|win|cool)/.exec(t.tier); const k = m ? m[1] : 'other'; if (t.gems < 10) continue; (o[k] = o[k] || []).push(t); }
       for (const k in o) { const a = o[k]; o[k] = { trays: a.length, occLines: mean(a, t => t.occ), occPerGem: mean(a, t => t.occ / t.gems), rough: mean(a, t => t.rough), roughPerGem: mean(a, t => t.rough / t.gems) }; } return o; })(),
     low8: pct(trays, t => t.gems <= 8) + '%', lostIn: (() => { const o = {}; perGame.forEach(a => { const m = /^HOME (\S+) (warm|win|cool)/.exec(a[a.length - 1].tier); const k = m ? m[2] + '/' + m[1].split('·')[0] : 'other'; o[k] = (o[k] || 0) + 1; }); return o; })(),
     byPhase: (() => { const o = {}; for (const t of trays) { const m = /^HOME \S+ (warm|win|cool)/.exec(t.tier); if (!m) continue; (o[m[1]] = o[m[1]] || []).push(t); }
       for (const k in o) { const a = o[k]; o[k] = { trays: a.length, clearPerTray: pct(a, t => t.cleared) + '%', linesPerTray: mean(a, t => t.lines), gemsAtDeal: median(a.map(t => t.gems)), clearHands: a.filter(t => /·CLEAR/.test(t.tier)).length, sweeps: a.reduce((x, t) => x + t.sweeps, 0) }; } return o; })(),
     kinds: typeof hdStats === 'object' ? { ...hdStats, win: undefined } : null };
-  return { homeLine, g1, series, pace6,
+  // Block Blast's measures, by gems at deal (SUMMARY.md of the tray study); lines per tray over trays played in full
+  const BK = [[0, 12, '0-12'], [13, 24, '13-24'], [25, 36, '25-36'], [37, 64, '37+'], [0, 64, 'all']];
+  const bbOf = a => { const ps = a.flatMap(t => t.bb), sz = a.flatMap(t => t.sizes), sh = k => +(100 * ps.filter(x => x === k).length / Math.max(1, ps.length)).toFixed(0);
+    return { trays: a.length, clear: sh('clear'), flush: sh('flush'), stick: sh('stick'), none: sh('none'), all3: pct(a, t => t.bb.length === 3 && t.bb.every(x => x === 'clear' || x === 'flush')),
+      occ: mean(a, t => t.occ), l5: mean(a, t => t.l5), iso: mean(a, t => t.iso), meanPiece: +(sz.reduce((x, y) => x + y, 0) / Math.max(1, sz.length)).toFixed(2),
+      small: +(100 * sz.filter(n => n <= 3).length / Math.max(1, sz.length)).toFixed(1), awk: +(100 * a.reduce((x, t) => x + t.awkN, 0) / Math.max(1, sz.length)).toFixed(1) }; };
+  const bbm = { buckets: BK.map(([lo, hi, k]) => [k, bbOf(trays.filter(t => t.gems >= lo && t.gems <= hi))]) };
+  { const full = trays.filter(t => t.placed === 3); bbm.linesMean = mean(full, t => t.lines); bbm.lines3 = pct(full, t => t.lines >= 3); bbm.lines0 = pct(full, t => t.lines === 0);
+    const g = trays.map(t => t.gems).sort((x, y) => x - y); bbm.gemsMedian = g[g.length >> 1]; bbm.gemsP10 = g[Math.floor((g.length - 1) * 0.1)]; bbm.gemsP90 = g[Math.floor((g.length - 1) * 0.9)];
+    // comebacks: in a game, from the last deal at 32+ gems to the first deal at 12 or fewer after it (trays taken), and the pieces dealt in between
+    const cb = [], cbT = []; perGame.concat([trays.filter(t => t.game === games)]).forEach(a => { let hi = -1; a.forEach((t, i) => { if (t.gems >= 32) hi = i; else if (t.gems <= 12 && hi >= 0) { cb.push(i - hi); cbT.push(...a.slice(hi, i)); hi = -1; } }); });
+    const cs = cb.slice().sort((x, y) => x - y), cp = cbT.flatMap(t => t.bb), cpl = cbT.filter(t => t.placed === 3);
+    bbm.comebacks = { n: cb.length, perGame: +(cb.length / Math.max(1, perGame.length)).toFixed(2), traysMedian: cs.length ? cs[(cs.length - 1) >> 1] : null, oneTray: pct(cb, x => x === 1),
+      clear: pct(cp, x => x === 'clear'), flush: pct(cp, x => x === 'flush'), stick: pct(cp, x => x === 'stick'), maxLines: cpl.reduce((x, t) => Math.max(x, t.lines), 0), lines5: pct(cpl, t => t.lines >= 5) };
+    bbm.games = { ended: games, p10: q(0.1), median: q(0.5), p90: q(0.9), endGems: median(perGame.map(a => a[a.length - 1].gems)), endPlaced: median(perGame.map(a => a[a.length - 1].placed)) };   // the last tray of a lost game: gems at its deal, pieces she got down
+    bbm.curve = typeof cvStats === 'object' ? cvStats : null; }
+  return { homeLine, g1, series, pace6, bbm,
     trays: trays.length, games, goldens, goldensPerGame: +(goldens / (games + 1)).toFixed(2), traysPerGame: Math.round(trays.length / (games + 1)), buckets,
     obviousAtDealAll: pct(trays, t => t.obv), boardAllowsAll: pct(trays, t => t.possible), clearPerTrayAll: pct(trays, t => t.cleared), allThreeAll: pct(trays, t => t.obvN === 3), clearsPerTrayAll: mean(trays, t => t.clears),
     medianFill: Math.round(100 * median(trays.map(t => t.fill))),
@@ -307,6 +343,16 @@ console.log('home:', JSON.stringify(out.homeLine));
 console.log('pace (6.1):', JSON.stringify(out.pace6));
 console.log('coaster (1.1 G):', JSON.stringify(out.g1));
 if (process.env.SERIES) (await import('node:fs')).writeFileSync(process.env.SERIES, JSON.stringify(out.series));
+{ // Block Blast's yardstick: one compact table, this run beside Block Blast's measured numbers (BB; SUMMARY.md of the tray study)
+  const b = out.bbm, w = out.homeLine.wipes, BB = { '0-12': [19, 77, 3, 0, 92, 5.76, 0.62, 0.15, 5.42, 5.1, 20.1], '13-24': [47, 49, 4, 1, 90, 10.89, 2.6, 0.24, 5.29, 6.2, 21.4], '25-36': [68, 26, 2, 4, 81, 13.92, 6.54, 0.39, 4.72, 12.4, 27.7], '37+': [77, 4, 0, 18, 50, 14.67, 10.67, 0.4, 4.59, 20.5, 15.9], all: [45, 50, 3, 2, 86, null, null, null, 5.14, 8.3, 22.2] };
+  const K = ['clear', 'flush', 'stick', 'none', 'all3', 'occ', 'l5', 'iso', 'meanPiece', 'small', 'awk'];
+  console.log('bb yardstick (run | Block Blast):  gems  trays  ' + K.join('  '));
+  for (const [k, v] of b.buckets) console.log('  ' + k.padEnd(6) + String(v.trays).padStart(6) + '  ' + K.map((x, i) => (v[x] + '|' + (BB[k][i] ?? '-')).padEnd(Math.max(x.length, 9))).join(' '));
+  console.log('  lines/tray ' + b.linesMean + '|1.9  clear3+ ' + b.lines3 + '%|37%  clear0 ' + b.lines0 + '%|23%  gems median ' + b.gemsMedian + '|18 (p10 ' + b.gemsP10 + '|4, p90 ' + b.gemsP90 + '|34)');
+  console.log('  wipes ' + w.n + ' (trays/wipe ' + w.traysPerWipe + ', gap median ' + w.gapMedian + '|2, p90 ' + w.gapP90 + '|8, longest gap ' + w.gapMax + '|15; longest wipe-less stretch incl. game start/end ' + w.longestStretch + ') rows ' + JSON.stringify(w.rows) + '|{1:8,2:4,4:1,7:1}');
+  console.log('  comebacks ' + JSON.stringify(b.comebacks) + ' | BB: 12, median 1.5 trays, clear 70% flush 26% stick 0%');
+  console.log('  games ' + JSON.stringify(b.games) + (b.curve ? '  curve ' + JSON.stringify(b.curve) : ''));
+  console.log('bbm:', JSON.stringify(b)); }
 console.log('fill  trays  obvious@deal  board-allows  2+obvious  all-3  clear/tray  clears/tray  sweep-hands  swept');
 for (const b of out.buckets) console.log([b.fill, b.trays, b.obviousAtDeal + '%', b.boardAllows + '%', b.twoPlus + '%', b.allThree + '%', b.clearPerTray + '%', b.clearsPerTray, b.sweepHands, b.swept].map(String).map(x => x.padEnd(12)).join(''));
 await browser.close(); await srv.close();

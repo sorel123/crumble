@@ -408,8 +408,8 @@ function sweepEase(lo0,hi0,hand){ return personPlays(lo0,hi0,hand,99).sw; }
 /* ...and its general form: of those plays, the share that empty the board (sw) and the share that clear `need` lines or
    the board (hit), and the mean gems left after it (left). The home dealer asks it of a gift: lines a person finds, not only lines the cut holds. */
 function personPlays(lo0,hi0,hand,need){
-  const K=CFG.SWEEP_EASE_K; if(!K) return {sw:1,hit:1,left:0};
-  let sw=0, hits=0, left0=0, st=(lo0^Math.imul(hi0,0x9E3779B1)^hand.reduce((a,s)=>Math.imul(a,31)+SHAPES.indexOf(s),7))>>>0;
+  const K=CFG.SWEEP_EASE_K; if(!K) return {sw:1,hit:1,left:0,done:1};
+  let sw=0, hits=0, left0=0, done=0, st=(lo0^Math.imul(hi0,0x9E3779B1)^hand.reduce((a,s)=>Math.imul(a,31)+SHAPES.indexOf(s),7))>>>0;
   const r=()=>{ st=(st+0x6D2B79F5)>>>0; let t=st; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; };
   for(let k=0;k<K;k++){
     let lo=lo0, hi=hi0, lines=0; const left=hand.filter(s=>!s.star); let ok=true;
@@ -438,11 +438,12 @@ function personPlays(lo0,hi0,hand,need){
       lines+=applyBits(lo,hi,left[pick],pm); lo=_lo; hi=_hi; left.splice(pick,1);
       if(!lo&&!hi) break;
     }
+    if(ok) done++;
     if(ok&&!lo&&!hi) sw++;
     if(!lo&&!hi||lines>=need) hits++;
     left0+=pop32(lo)+pop32(hi)+left.reduce((a,s)=>a+s.n,0);   // left: gems on the board after her play, pieces she could not place counted in
   }
-  return {sw:sw/K,hit:hits/K,left:left0/K};
+  return {sw:sw/K,hit:hits/K,left:left0/K,done:done/K};   // done: the share of plays that got every piece down
 }
 const RUN_RECTS=RUN_POOL.filter(s=>s.n===s.rows*s.cols);   // (round 5) an EASY run's pool
 function* runHandSteps(a0){
@@ -579,7 +580,7 @@ const waveStats={setups:0,dealt:0,missed:0,closed:0,closerTries:0,chases:0,runs:
 let wave={n:0,at:5,due:false}, jack={n:0,at:10}, setups=[], closerNext=false, chaseNext=false, chaseNow=false, chaseCool=0, closerCool=0, dryN=0, bigHist=[], closerTray=false, trayClear=false;
 const waveAt=()=>CFG.WAVE_MIN+((rnd()*(CFG.WAVE_MAX-CFG.WAVE_MIN+1))|0);
 const jackAt=()=>CFG.JACKPOT_MIN+((rnd()*(CFG.JACKPOT_MAX-CFG.JACKPOT_MIN+1))|0);
-function resetWave(){ resetTide(); resetHd(); wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; chaseNext=false; chaseNow=false; chaseCool=0; sweepRun=null; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
+function resetWave(){ resetTide(); resetHd(); resetCurve(); wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; chaseNext=false; chaseNow=false; chaseCool=0; sweepRun=null; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
 /* every empty exact rectangle of SETUP_RECTS on the board whose filling completes a line, with at least SETUP_WALLED of
    the cells around it filled or wall. Returned as {k: index in SETUP_RECTS, r, c, lo, hi}. */
 function findHoles(lo,hi){
@@ -608,6 +609,7 @@ function waveAfterDrop(before,lines,gemsLeft,comboNow,wasTight){
     trayClear=true;
     if(!gemsLeft&&hdeal.ph==='win'&&!hdeal.wp) hdeal.wp=1;   // the home dealer: she wiped the board in win mode, which ends it
     if(!gemsLeft&&hdOn()) hdeal.wn=1;                      // ...and the wipe chain rolls at the next deal
+    if(!gemsLeft&&curveOn()) curve.heat=Math.min(1,curve.heat+CURVE_WIPE_NUDGE);   // the curve: a wipe warms the luck dial a little (it drifts back)
     if(gemsLeft>0&&gemsLeft<=CFG.CLOSER_GEMS) closerNext=true;
     if(comboNow===CFG.CLOSER_COMBO) closerNext=true;
     if(wasTight&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE) closerNext=true;   // out of the edge hold
@@ -953,7 +955,7 @@ function* ensureWaySteps(a0,hand,why){
      big piece that finishes 2+ lines at one drop higher. No plan is carried between trays: each tray reads the
      board she left, so an off-plan drop breaks nothing. Golden hands and the star are not dealt under it (bonus trays and
      transformations still are). */
-const hdOn=()=>CFG.DEALER_HOME&&tideOn();
+const hdOn=()=>CFG.DEALER_HOME&&!CFG.DEALER_CURVE&&tideOn();   // the curve wins when both are on
 const HOME_ROW_GAP=4;                                  // wipes within this many trays of the one before are a row (the wipe chain)
 let hdeal={ph:'warm',n:0,len:0,f:0,wp:0,wr:0,wa:99,wn:0,lk:0};   // wr: wipes in the row; wa: trays since the last wipe; wn: a wipe not yet rolled for (waveAfterDrop); lk: the chain's help is off until this cool stretch ends
 // the coaster: 'warm' | 'win' | 'cool', trays dealt in it, its length (win: HOME_WIN_MAX; cool: rolled; warm: 0); f: FINISH trays in a row; wp: she wiped the board in win mode (1; 2: its BUILD tray is dealt), which ends it
@@ -1439,6 +1441,130 @@ function* homeDealSteps(a0){
   hdeal.n++; hdeal.f=kind==='FINISH'?fin+1:0; hdeal.wa=Math.min(99,(hdeal.wa|0)+1);        // FINISH keeps the phase and counts in it
   commitTray(hand,'HOME '+kind+(got&&got.sweep&&!tag?'·CLEAR':'')+tag+' '+hdeal.ph+(lk?'·LK':'')+(hdeal.len?' '+hdeal.n+'/'+hdeal.len:''));   // ·CLEAR: the cut can empty the board
 }
+/* ═══ The Block Blast curve (CFG.DEALER_CURVE; Endless and Daily, in place of the tide and the home dealer) ═══
+   Built from 253 trays read out of Jay's Block Blast recordings (plan-1.1/blockblast-study/trays). Block Blast has no hard
+   mode and no small-piece finish mode: it deals big pieces that almost always have a clean place, the share of pieces that
+   can finish a line rises with the fill, the board fills in dense lines, and wipes come from big multi-line clears of
+   dense boards. The ups and downs come from that loop and from luck. So this dealer has no phases and no rules of the
+   always/never kind, only odds:
+   - Each slot's class is rolled from CURVE_TABLE by the gems on the board as dealt (buckets 0-12, 13-24, 25-36, 37+):
+     CLEAR (a piece with a drop that completes a line now), FLUSH (no clear, but a strict home: bump 0, walls count as
+     filled, no cell sealed in) or FREE (it fits, but every spot sticks out). Block Blast's own "no legal spot" pieces are
+     not dealt (Jay's rule: a dealt tray never fails); their share goes to FREE, which on a 37+ board are tight ones.
+   - The piece within its class is drawn by Block Blast's shape counts (CURVE_MIX, rotations pooled), the small ones scaled to
+     CURVE_SMALL's share for the bucket. CLEAR pieces weigh (1 + lines their best drop clears)^CURVE_MULTI: a 3x3 or a bar
+     into a dense board is how Block Blast's 5-8 line comebacks happen. FLUSH pieces weigh e^(CURVE_DENSE x density) of
+     their best strict home: nearly-done lines (5-7 of 8) it adds, less half the new lines it opens: dense rows and columns.
+   - The tray must play out in full (evalHand), its CLEAR and FLUSH pieces must reach their homes in some order
+     (homeOrders), and of a few person-like plays (personPlays) at least CURVE_EASE get every piece down. Rolled classes
+     that cannot be met together are re-picked (8 times), then re-rolled once and picked without the person check (4 more),
+     then relaxed (·RELAX: the home order is dropped too); ensureWay stays the last guard (·GUARD).
+     The person check is not from Block Blast's numbers (they cannot show it): without it the bots lose a game in ~16
+     trays to big pieces they place carelessly; with it a tray stays the same mix and classes, picked so a careless
+     player usually gets all three down.
+   - The luck dial: heat, a slow random walk in -1..1 (it drifts back toward 0), steps every tray and is saved with the run.
+     Times CURVE_HEAT it moves share from FLUSH and FREE to CLEAR and raises the multi-line weight; below 0 the reverse,
+     and pieces come bigger. A wipe warms it a little (CURVE_WIPE_NUDGE). CURVE_GIVE shifts every bucket's CLEAR share.
+   - On an emptied board the tray is dealt by the 0-12 row as usual; with odds CURVE_TWINS it is three of one big piece.
+   No star and no golden hands (Block Blast has none); bonus trays and transformations still come. */
+const curveOn=()=>CFG.DEALER_CURVE&&tideOn();
+const CURVE_FAM={'1x1':[0],'1x2':[1,2],'1x3':[3,4],'1x4':[5,6],'1x5':[7,8],'2x2':[9],'3x3':[10],'L3':[11,12,13,14],'L5':[15,16,17,18],
+  'S4':[19,20,21,22],'T4':[23,24,25,26],'L4':[27,28,29,30,31,32,33,34],'2x3':[35,36]};   // Block Blast's shape names -> SHAPES (its D2/D3 diagonals: none)
+const CURVE_WIPE_NUDGE=0.15, CURVE_DRIFT=0.93, CURVE_STEP=0.2;   // heat: a wipe's nudge; each tray heat = heat*DRIFT + a roll in +-STEP
+let curve={heat:0};
+const cvStats={rolled:{C:0,F:0,X:0},dealt:{C:0,F:0,X:0},relax:0,guard:0,twins:0,rerolls:0};   // this session only (the bot sim reads them)
+function resetCurve(){ curve={heat:0}; }                // (no rnd() here: resetWave runs it on every path, Challenge included)
+const curveBucket=g=>g<=12?0:g<=24?1:g<=36?2:3;
+// the shape mix for a bucket: CURVE_MIX spread over each family's rotations, the small shapes scaled to CURVE_SMALL's share
+function curveMix(b){
+  const w=new Array(SHAPES.length).fill(0);
+  for(const [f,n] of CFG.CURVE_MIX){ const ids=CURVE_FAM[f]; if(ids) for(const i of ids) w[i]+=n/ids.length; }
+  let sm=0, bg=0; SHAPES.forEach((s,i)=>{ if(s.n<=3) sm+=w[i]; else bg+=w[i]; });
+  const want=Math.min(0.9,Math.max(0,(CFG.CURVE_SMALL[b]||0)/100)), k=sm>0&&want>0?want/(1-want)*bg/sm:0;
+  return w.map((x,i)=>SHAPES[i].n<=3?x*k:x);
+}
+// the board's lines with gems, and nearly-done ones (5-7 of 8)
+function curveDensity(lo,hi){ return readyLines(lo,hi)-0.5*occLines(lo,hi); }
+/* every shape on this board: cls 'C' | 'F' | 'X' (FREE) | 'f' (flush only by sealing a cell in: Block Blast's measure calls it
+   flush, the dealer does not deal it as either) | null (no spot); lines (its best drop), dens (its best strict home's density
+   gain), spots (legal spots) */
+function curveTable(lo,hi){
+  const d0=curveDensity(lo,hi);
+  return SHAPES.map(s=>{
+    let spots=0, lines=0, flush=false, flushAny=false, dens=-99;
+    for(const m of placeMasks(s)){
+      if((lo&m.lo)||(hi&m.hi)) continue;
+      spots++;
+      const l=applyBits(lo,hi,s,m); if(l){ if(l>lines) lines=l; continue; }
+      if(bumpOf(lo,hi,s,m)>0) continue;
+      flushAny=true;
+      if(sealedNear(lo|m.lo,hi|m.hi,m,s)) continue;
+      flush=true; const d=curveDensity(lo|m.lo,hi|m.hi)-d0; if(d>dens) dens=d;
+    }
+    return spots?{cls:lines?'C':flush?'F':flushAny?'f':'X',lines,dens,spots}:null;
+  });
+}
+// the table row for this board, heat and generosity applied: [clear, flush, free] shares summing to 1
+function curveRow(b,shift){
+  const t=CFG.CURVE_TABLE; let c=(t[b*2]||0)/100, f=(t[b*2+1]||0)/100; c=Math.min(1,Math.max(0,c)); f=Math.min(1-c,Math.max(0,f));
+  let x=1-c-f;
+  const move=(dc)=>{ dc=Math.max(-c,Math.min(1-c,dc)); const rest=f+x; if(dc>=0){ if(rest>0){ f-=dc*f/rest; x-=dc*x/rest; } } else { f+=-dc*(rest>0?f/rest:1); x+=rest>0?-dc*x/rest:0; } c+=dc; };
+  move(CFG.CURVE_GIVE||0);
+  if(shift>0) move(0.5*shift*(1-c)); else if(shift<0) move(0.5*shift*c);
+  return [c,f,Math.max(0,1-c-f)];
+}
+function curvePick(ws){ const t=ws.reduce((a,b)=>a+b,0); if(t<=0) return -1; let r=rnd()*t; for(let i=0;i<ws.length;i++){ if(!ws[i]) continue; r-=ws[i]; if(r<=0) return i; } for(let i=ws.length-1;i>=0;i--) if(ws[i]>0) return i; return -1; }
+function* curveDealSteps(a0){
+  const [lo,hi]=packBits(a0), gems=pop32(lo)+pop32(hi), b=curveBucket(gems);
+  goldenNext=false; starForced=false;                   // no golden hands or stars under this dealer
+  curve.heat=Math.max(-1,Math.min(1,curve.heat*CURVE_DRIFT+(rnd()*2-1)*CURVE_STEP));   // the luck dial's slow walk
+  const shift=curve.heat*(CFG.CURVE_HEAT||0), row=curveRow(b,shift), tab=curveTable(lo,hi), mix=curveMix(b);
+  const k=Math.max(0,CFG.CURVE_MULTI*(1+shift)), big=shift<0?-shift*1.5:0;   // hot: multi-line drops weigh more; cold: pieces come bigger
+  const base=mix.map((w,i)=>w*(big?Math.pow(SHAPES[i].n/5,big):1));
+  const pools={
+    C:base.map((w,i)=>tab[i]&&tab[i].cls==='C'?w*Math.pow(1+Math.min(tab[i].lines,8),k):0),
+    F:base.map((w,i)=>tab[i]&&tab[i].cls==='F'?w*Math.exp(CFG.CURVE_DENSE*Math.max(-4,Math.min(4,tab[i].dens))):0),
+    X:base.map((w,i)=>tab[i]&&tab[i].cls==='X'?w:0)};
+  const has={C:pools.C.some(x=>x>0),F:pools.F.some(x=>x>0),X:pools.X.some(x=>x>0)};
+  const FALL={C:['C','F','X'],F:['F','X','C'],X:['X','F','C']};
+  const roll=()=>{ const u=rnd(); return u<row[0]?'C':u<row[0]+row[1]?'F':'X'; };
+  const small=Math.min(0.9,Math.max(0,(CFG.CURVE_SMALL[b]||0)/100))*(big?Math.max(0,1-big):1);   // each slot's size is rolled too (CURVE_SMALL), so a class's pool does not drift small
+  const pickIn=c=>{ const sm=rnd()<small, fit=(w,i)=>(SHAPES[i].n<=3)===sm?w:0;
+    for(const q of FALL[c]) if(has[q]){ const i=curvePick(pools[q].map(fit)); if(i>=0) return i; }
+    for(const q of FALL[c]) if(has[q]) return curvePick(pools[q]);
+    return curvePick(base.map((w,i)=>tab[i]?w||0.01:0)); };
+  yield;                                                // the table costs a slice of its own
+  let hand=null, tag='';
+  if(!gems&&trayNo>1&&rnd()<CFG.CURVE_TWINS){           // an emptied board: sometimes three of one big piece
+    const p=curvePick(base.map((w,i)=>tab[i]&&SHAPES[i].n>=4?w:0));
+    if(p>=0&&evalHand(a0,[SHAPES[p],SHAPES[p],SHAPES[p]],CFG.NODE_BUDGET).ok){ hand=[SHAPES[p],SHAPES[p],SHAPES[p]]; tag='·TWIN'; cvStats.twins++; }
+  }
+  if(!hand){
+    let cls=[roll(),roll(),roll()]; for(const c of cls) cvStats.rolled[c]++;
+    let fallback=null;
+    for(let i=0;i<12&&!hand;i++){
+      if(i===8){ cls=[roll(),roll(),roll()]; cvStats.rerolls++; }   // eight picks could not meet the roll: roll the classes again
+      const ids=cls.map(pickIn); if(ids.some(x=>x<0)) continue;
+      const h=ids.map(x=>SHAPES[x]);
+      if(i%3===2) yield;
+      if(!evalHand(a0,h,CFG.NODE_BUDGET).ok) continue;
+      if(!fallback) fallback=h;
+      const clean=h.filter((s,j)=>{ const c=tab[ids[j]].cls; return c==='C'||c==='F'; });
+      if(clean.length&&!homeOrders(lo,hi,clean,2000)) continue;
+      if(i<8&&personPlays(lo,hi,h,1).done<CFG.CURVE_EASE) continue;   // a person's play gets every piece down most of the time (else re-picked; relaxed after the reroll)
+      hand=h;
+    }
+    if(!hand&&fallback){ hand=fallback; tag='·RELAX'; cvStats.relax++; }
+  }
+  if(!hand){ hand=HUNT_POOL.filter(s=>fitsBits(lo,hi,s)).slice(0,3); while(hand.length<3) hand.push(SHAPES[0]); tag='·GUARD'; }
+  const kept=yield* ensureWaySteps(a0,hand,'curve');
+  if(kept!==hand) tag='·GUARD';
+  hand=kept; if(tag==='·GUARD') cvStats.guard++;
+  const got=hand.map(s=>{ const t=tab[SHAPES.indexOf(s)]; return !t?'X':t.cls==='f'?'F':t.cls; });
+  for(const c of got) cvStats.dealt[c]++;
+  const h=curve.heat;
+  commitTray(hand,'CURVE '+got.join('/')+tag+' g='+gems+' heat='+(h>=0?'+':'')+h.toFixed(1));
+}
 /* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
 // The tray deal runs as a generator that yields after every candidate hand, so a deal can be
 // spread over a few frames (dealLater) instead of landing in the frame a clear starts. Same
@@ -1552,6 +1678,7 @@ function* dealSteps(){
   starCool=Math.max(0,starCool-1);
 
   waveTick();                                           // (7.3) setups age, the dry spell and the wave clock count
+  if(curveOn()){ yield* curveDealSteps(a0); return; } // the Block Blast curve (DEALER_CURVE) deals Endless and Daily instead of the tide below
   if(hdOn()){ yield* homeDealSteps(a0); return; }     // the home dealer (DEALER_HOME) deals Endless and Daily instead of the tide below
   const freeOfSpecials=specialsOk&&!goldenNext&&!golden&&trayNo>specialEnd+1;   // (7.3) a closer never shares a tray with a star or golden hand, nor follows a special (bonus trays and looks only change points and colours, so they allow one)
   const tideNow=tideOn()&&tier!=='edge'&&tier!=='recovery'?tideStep():null;   // (1.1 G) 'easy' | 'lean' (null: edge, recovery, or no tide)

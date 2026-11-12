@@ -5,6 +5,7 @@
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
   ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
   ['DEALER_HOME','Dealer: pieces have a home (new)'],
+  ['DEALER_CURVE','Dealer: Block Blast curve'],
   ['HOME_BLOCKY','Home dealer: blocky cool stretch (TIGHT trays)'],
   ['REC_PLAY','Record play (stays on without ?dev)'],
   ['COMBO_CARRY','Combo carries across trays (round 6)'],
@@ -96,6 +97,9 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['HOME_FINISH_HOT','Home dealer: FINISH odds in win mode',0,1,0.05],
   ['HOME_FINISH_MAX','Home dealer: most FINISH trays in a row',0,6,1],
   ['HOME_WIPE_KEEP','Home dealer: wipe chain carries on (odds^n)',0,1,0.05],
+  ['CURVE_HEAT','Curve: heat strength (luck dial)',0,1,0.05],
+  ['CURVE_MULTI','Curve: multi-line weight',0,4,0.1],
+  ['CURVE_GIVE','Curve: generosity (CLEAR share offset)',-0.3,0.3,0.01],
   ['TIDE_EASY_MIN','Coaster: easy stretch min (trays)',2,30,1],
   ['TIDE_EASY_MAX','Coaster: easy stretch max (trays)',2,30,1],
   ['TIDE_LEAN_MIN','Coaster: lean stretch min (trays)',0,30,1],
@@ -222,7 +226,7 @@ function devLoad(){
     if(!o.clearV) delete o.CLEAR_STYLE;                  // (7.5) tuning saved before crumble was the default keeps its other values but not the old 'squash'
     for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);
     for(const [k,,options] of DEV_CHOICES) if(!options.some(x=>x.value===CFG[k])) CFG[k]=DEV_DEFAULTS[k];
-    const dl=new URLSearchParams(location.search).get('dealer'); if(dl) CFG.DEALER_HOME=dl==='home';   // ?dealer=home|tide beats the saved switch
+    const dl=new URLSearchParams(location.search).get('dealer'); if(dl){ CFG.DEALER_HOME=dl==='home'; CFG.DEALER_CURVE=dl==='curve'; }   // ?dealer=home|curve|tide beats the saved switches
   }catch(e){}
 }
 function devSnippet(){
