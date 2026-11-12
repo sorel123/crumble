@@ -4320,6 +4320,18 @@ test('home dealer: its coaster survives a resume; an empty board deals BUILD; no
   assert.equal(r.special, 0, 'no star or golden hand under it');
 });
 
+test('home dealer: HOME_BLOCKY (experiment, off by default): cool TIGHT trays are big pieces, every one at a strict home in some order, all solvable', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => CFG.HOME_BLOCKY), false);
+  await page.evaluate(() => { CFG.DEALER_HOME = true; CFG.HOME_BLOCKY = true; });
+  const r = await page.evaluate(`(${HOME_SIM})(220, 13, true)`);
+  const tight = r.filter(t => /^HOME TIGHT/.test(t.l));
+  assert.ok(tight.length >= 30, 'TIGHT trays came round: ' + tight.length);
+  assert.ok(r.every(t => t.ok), 'every tray has a solution');
+  assert.ok(tight.every(t => / cool/.test(t.l) && t.flush && t.home), 'in the cool stretch, every piece at a strict (bump 0) home in some order');
+  const cells = tight.flatMap(t => t.t.split(',').map(i => +i)), mean = cells.reduce((a, i) => a + [1,2,2,3,3,4,4,5,5,4,9,3,3,3,3,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,6,6][i], 0) / cells.length;
+  assert.ok(mean >= 4.6, 'big pieces: mean ' + mean.toFixed(2));
+});
 test('play recorder: off writes nothing; on (REC_PLAY) keeps one well-formed record per tray, the drops, a game-over marker and the knobs; tools/play-log.mjs reads it', async ({ page }) => {
   await play(page); await dealt(page);
   await page.evaluate(() => { CFG.DEALER_HOME = true; CFG.REC_PLAY = false; localStorage.removeItem('crumble.playlog'); });

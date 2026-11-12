@@ -947,7 +947,10 @@ function* ensureWaySteps(a0,hand,why){
      a wipe the chain's help carries on with odds HOME_WIPE_KEEP^n (n: wipes in the row so far); when the roll fails the
      coaster goes straight to a cool stretch with the help off (hdeal.lk) until it ends: no FINISH, no win mode, a BUILD of
      mixed big pieces that complete no line, and no tray that can empty the board. A new game starts with no row (its
-     opening's wipe is the first of one). No plan is carried between trays: each tray reads the
+     opening's wipe is the first of one).
+   - HOME_BLOCKY (an experiment, off): cool trays are TIGHT (homeTightSteps) in place of TWIST: big pieces at strictly flush
+     homes that keep the gems in few lines, so the hard stretch is short of space rather than ragged; WIN trays score a
+     big piece that finishes 2+ lines at one drop higher. No plan is carried between trays: each tray reads the
      board she left, so an off-plan drop breaks nothing. Golden hands and the star are not dealt under it (bonus trays and
      transformations still are). */
 const hdOn=()=>CFG.DEALER_HOME&&tideOn();
@@ -1280,11 +1283,47 @@ function* homeWinSteps(lo,hi){
     const now=hand.filter(s=>bestDrop(lo,hi,s)>=1).length, pp=personPlays(lo,hi,hand,3), cv=coverOf(alo,ahi);
     let occ=0; for(let j=0;j<16;j++) if((alo&LINE_MASKS[j*2])|(ahi&LINE_MASKS[j*2+1])) occ++;
     const gap=sweepGap(alo,ahi), ease=!alo&&!ahi?1:gap<=24?sweepCutEase(alo,ahi):0;   // the board it leaves: a cut that wipes it next tray, and how easily a person finds it
-    const sc=4*net+3*(gems-pp.left)+40*pp.sw+(now>=2?14:0)+3*now+2*Math.min(orders,4)+6*f.pl.good/f.pl.orders
+    const big2=CFG.HOME_BLOCKY?hand.filter(s=>s.n>=4&&bestDrop(lo,hi,s)>=2).length:0;   // (HOME_BLOCKY) a big piece that finishes 2+ lines at one drop
+    const sc=4*net+3*(gems-pp.left)+40*pp.sw+12*big2+(now>=2?14:0)+3*now+2*Math.min(orders,4)+6*f.pl.good/f.pl.orders
       +30*ease-Math.min(sweepDist(alo,ahi),40)-2*Math.min(cv.nl,6)-0.4*Math.min(gap,30)-0.4*occ+0.2*hand.reduce((a,s)=>a+s.n,0)+rnd();
     if(!best||sc>best.sc){ for(let k=2;k>0;k--){ const j=(rnd()*(k+1))|0; [hand[k],hand[j]]=[hand[j],hand[k]]; } best={hand,sweep:pp.sw>=CFG.SWEEP_EASE,net,sc}; }
   }
   return best;
+}
+/* TIGHT (HOME_BLOCKY: the cool stretch's tray in place of TWIST): the pressure is space, not scatter. Big pieces (rectangles,
+   bars, big L's; other shapes rarely), each dropped in turn at a strictly flush home (bump 0) on the board the ones before
+   it leave, where the gems stay in the fewest lines: few new rows and columns taken, little new raggedness (roughBits),
+   against the walls and the mass already there. They finish 0-1 lines (more is scored down, not barred). Every piece has
+   a strict home in some drop order (homeOrders, bump 0). {hand} or null. */
+const TIGHT_W=new Map(SHAPES.filter(s=>s.n>=3).map(s=>[s,isRect(s)&&s.n>=4||isBigL(s)?1:s.n>=4?0.3:0.06]));
+const occLines=(lo,hi)=>{ let n=0; for(let j=0;j<16;j++) if((lo&LINE_MASKS[j*2])|(hi&LINE_MASKS[j*2+1])) n++; return n; };
+function* homeTightSteps(lo0,hi0){
+  for(let attempt=0;attempt<3;attempt++){
+    let lo=lo0, hi=hi0, lines=0; const hand=[];
+    for(let k=0;k<3;k++){
+      const o0=occLines(lo,hi), r0=roughBits(lo,hi), opts=[];
+      for(const [s,w] of TIGHT_W){
+        let bv=-Infinity, bl=0, bh=0, bn=0;
+        for(const m of placeMasks(s)){
+          if((lo&m.lo)||(hi&m.hi)) continue;
+          const h=homeAt(lo,hi,s,m,0); if(h<0) continue;
+          const v=-2.5*(occLines(_lo,_hi)-o0)-0.6*(roughBits(_lo,_hi)-r0)-(lines+h>1?12*(lines+h-1):0)+rnd()*1.5;
+          if(v>bv){ bv=v; bl=_lo; bh=_hi; bn=h; }
+        }
+        if(bv===-Infinity) continue;
+        opts.push({s,v:bv+1.2*s.n+4*Math.log(w),lo:bl,hi:bh,h:bn});
+      }
+      if(!opts.length) break;
+      opts.sort((x,y)=>y.v-x.v);
+      const o=opts[(rnd()*Math.min(3,opts.length))|0];
+      hand.push(o.s); lo=o.lo; hi=o.hi; lines+=o.h;
+    }
+    yield;
+    if(hand.length<3||smallCount(hand)>1) continue;
+    for(let k=2;k>0;k--){ const j=(rnd()*(k+1))|0; [hand[k],hand[j]]=[hand[j],hand[k]]; }
+    if(homeOrders(lo0,hi0,hand,2000,0)) return {hand,sweep:false};
+  }
+  return null;
 }
 /* one tray of a kind, built from the board (lo,hi): {hand, sweep} or null if this board offers none */
 function* homeHandSteps(lo,hi,kind,lk=false){
@@ -1382,7 +1421,8 @@ function* homeDealSteps(a0){
     if(got) kind='WIN';
     else { hdStats.winFlat++; got=yield* homeHandSteps(lo,hi,'GIFT'); if(got) kind='GIFT'; }   // no tray removes gems here: the best gift, else a steady one
   }
-  if(!kind) kind=crowded?'RESCUE':hdeal.ph==='cool'?(rnd()<CFG.HOME_TWIST?'TWIST':'STEADY'):'STEADY';
+  if(!kind) kind=crowded?'RESCUE':hdeal.ph==='cool'?(rnd()<CFG.HOME_TWIST?(CFG.HOME_BLOCKY?'TIGHT':'TWIST'):'STEADY'):'STEADY';
+  if(kind==='TIGHT'&&!got){ got=yield* homeTightSteps(lo,hi); if(!got) kind='TWIST'; }   // no tight tray on this board: a TWIST
   if(!got) got=yield* homeHandSteps(lo,hi,kind,lk);
   if(lk&&got&&evalHand(a0,got.hand,CFG.NODE_BUDGET*2).sweep){   // help off: a tray that can empty the board is dealt again (twice), else built from scratch
     for(let k=0;k<2&&got&&evalHand(a0,got.hand,CFG.NODE_BUDGET*2).sweep;k++) got=yield* homeHandSteps(lo,hi,kind,lk);

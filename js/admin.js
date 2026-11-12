@@ -5,6 +5,7 @@
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
   ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
   ['DEALER_HOME','Dealer: pieces have a home (new)'],
+  ['HOME_BLOCKY','Home dealer: blocky cool stretch (TIGHT trays)'],
   ['REC_PLAY','Record play (stays on without ?dev)'],
   ['COMBO_CARRY','Combo carries across trays (round 6)'],
   ['EASY_RECT','Coaster: easy stretches deal rectangles and bars only (round 5)'],

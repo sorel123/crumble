@@ -142,6 +142,7 @@ const CFG = {
   HOME_FINISH:    0.6,   // odds a low board gets a FINISH tray (the pieces that clear it, or leave the least), any phase
   HOME_FINISH_HOT: 0.85, //   ...the odds in win mode (the heater)
   HOME_FINISH_MAX: 3,    // at most this many FINISH trays in a row, then the phase's own kind
+  HOME_BLOCKY:    false, // (experiment) the cool stretch deals TIGHT trays: big pieces at strictly flush homes that keep the gems in few lines (no scatter); win mode prefers big multi-line drops
   HOME_WIPE_KEEP: 0.75,  // after the n-th board wipe in a row (each within 4 trays of the last) the chain's help carries on with odds this^n, else a cool stretch without it
 
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
