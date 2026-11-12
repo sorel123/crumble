@@ -83,10 +83,10 @@ const CFG = {
   // LEAN ones (awkward pieces, few free clears), and every tray has a solution; see solver.js "Coaster dealing". Challenge,
   // Adventure and the guided first game do not use it. Nothing on screen shows the stretch.
   TIDE:           true,  // off = the 1.0 dealer (payoff waves, jackpots, setups, gifts) for Endless and Daily too
-  TIDE_EASY_MIN:  10,    // an EASY stretch lasts this many trays at least...
+  TIDE_EASY_MIN:  6,     // an EASY stretch lasts this many trays at least...
   TIDE_EASY_MAX:  12,    //   ...and at most (rolled per stretch)
-  TIDE_LEAN_MIN:  6,     // a LEAN stretch, the same
-  TIDE_LEAN_MAX:  10,
+  TIDE_LEAN_MIN:  4,     // a LEAN stretch, the same
+  TIDE_LEAN_MAX:  8,
   TIDE_SMALL:     0.4,   // weight on pieces of 3 cells or fewer, both stretches (lower = bigger pieces overall)
   TIDE_FIT:       0.6,   // EASY: how much a piece's fit to the board (lines its best drop clears, how flush it sits) raises its odds
   EASY_BIG:       2.5,   // EASY: score per cell of the hand (higher = bigger pieces win more of the search)
@@ -121,7 +121,7 @@ const CFG = {
   EASY_TRIES:     24,    // candidate hands an EASY tray looks at
   LEAN_TRIES:     16,    // candidate hands a LEAN tray looks at
   LEAN_LINES:     1,     // a LEAN tray offers at most about this many lines (unless it is a rescue)
-  LEAN_DRY:       3,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
+  LEAN_DRY:       2,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
   LEAN_ROOM:      0.3,   //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
   SOUND_ROOM:     0.12,  // a piece's sound spot may cost at most this much room (0..1) when it clears nothing
 

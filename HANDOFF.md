@@ -1467,7 +1467,7 @@ back. Like a coaster", and "you always have a solution, we're never gonna deal y
 that can fail is your placement." Study: project memory `blockblast-recording-study`, /mnt/project-files/plan-1.1/blockblast-study/.
 
 - **The tide** (`tide`, `tideStep`, solver.js "Coaster dealing"): a stretch state that does not read the board. EASY lasts
-  `TIDE_EASY_MIN..MAX` trays (10-12), LEAN `TIDE_LEAN_MIN..MAX` (6-10), rolled per stretch; a run starts EASY. Getting
+  `TIDE_EASY_MIN..MAX` trays (6-12), LEAN `TIDE_LEAN_MIN..MAX` (4-8), rolled per stretch; a run starts EASY. Getting
   out of the edge (relief) during LEAN starts a fresh EASY stretch. Nothing on screen shows it. Saved with the run (`td`).
   The 6.1 room phases still run underneath: edge and recovery trays are dealt as before (but must now be solvable).
 - **EASY** (`tideHandSteps`): pieces drawn from big rectangles, bars and big L's (`tideBase`), each weighted up by how
@@ -1510,7 +1510,7 @@ The first tide had made board clears rarer than 1.0 (casual bot: one per ~440 tr
   trays (3x 1.0), a sweep hand about every 25.
 - **LEAN is "hard, then you see it".** A LEAN candidate often carries a 4-6 cell piece with no spot yet
   (`LEAN_PUZZLE_TRY`), scored up when evalHand proves a clear makes room for it (`LEAN_PUZZLE`); such a piece is exempt from
-  the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 3, `LEAN_ROOM` 0.3.
+  the sound-spot check. The rescue only steps in on a real mess: `LEAN_DRY` 2, `LEAN_ROOM` 0.3.
 - Games are shorter (casual median about 120 trays vs about 230 on 1.0), and most now end in LEAN.
 
 ### Round 6: back from the brink, chains, the carrying combo (2026-11-11)
@@ -1580,6 +1580,7 @@ done, then one tray of exact keys clears 4-6 lines at once; bars match the gap l
 
 ### Jay's tuned coaster defaults (2026-11-12)
 
-After playtesting round 6 with the Admin sliders, Jay made these the defaults: `CROWD_ROOM` 0.36 to 0.45 (comeback keys
-start sooner), `TIDE_LEAN_MIN..MAX` 8-14 to 6-10 (shorter dry spells), `TIDE_EASY_MAX` 18 to 12 (the start is not easy for
-as long). `LEAN_DRY` stays 3; 2 is the next lever if the middle still drags.
+After playtesting round 6 with the Admin sliders, Jay made his values the defaults: `CROWD_ROOM` 0.36 to 0.45 (comeback
+keys start sooner), `TIDE_EASY_MIN..MAX` 10-18 to 6-12, `TIDE_LEAN_MIN..MAX` 8-14 to 4-8 (shorter dry spells), `LEAN_DRY`
+3 to 2. At 0.45 a scattered board about 40% full already counts as crowded, so LEAN is much softer on such boards: look
+there first if the game gets too easy.

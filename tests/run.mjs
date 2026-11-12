@@ -3874,14 +3874,13 @@ test('coaster (1.1 G): EASY and LEAN stretches take turns with rolled lengths, s
   const r = await page.evaluate('(() => {' + B73 + `
     const o = { seq: '', awk: { easy: [], lean: [] }, small: 0, pieces: 0 };
     W73(); resetTide(); closerCool = 99; sweepCool = 99; rndSrc = mulberry(7);
-    // stretch shapes only: comeback keys (CROWD_ROOM, tested in 'big solves'/'never fails') would count this board as crowded
-    const crowd = CFG.CROWD_ROOM; CFG.CROWD_ROOM = 0;
+    const crowd0 = CFG.CROWD_ROOM; CFG.CROWD_ROOM = 0;   // the tide alone: comeback keys (which this scattered board can trip) are tested on their own
     // a calm, scattered board of 26 gems: no sweep on it, room enough to stay out of the edge
     const board = ['11000011','10000001','00011000','00100100','10000001','00011000','11000011','10011001'];
     for (let k = 0; k < 90; k++) { B73(board); tray = [null, null, null]; dryN = 0; genTray(); closerCool = 99; sweepCool = 99;
       o.seq += tide.st === 'easy' ? 'E' : 'L'; o.awk[tide.st].push(tray.filter(t => awkward(t.s)).length);
       for (const t of tray) { o.pieces++; if (t.s.n <= 3) o.small++; } }
-    o.labels = lastTier; rndSrc = null; CFG.CROWD_ROOM = crowd;
+    o.labels = lastTier; rndSrc = null; CFG.CROWD_ROOM = crowd0; o.len = [CFG.TIDE_EASY_MIN, CFG.TIDE_EASY_MAX, CFG.TIDE_LEAN_MIN, CFG.TIDE_LEAN_MAX];
     const snap = JSON.parse(JSON.stringify(snapshot())); const t0 = JSON.stringify(tide); resetTide(); restore(snap); o.saved = JSON.stringify(tide) === t0;
     o.on = tideOn(); mode = 'adventure'; o.adv = tideOn(); mode = 'challenge'; o.ch = tideOn(); mode = 'endless'; CFG.TIDE = false; o.off = tideOn(); CFG.TIDE = true;
     return o; })()`);
@@ -3889,8 +3888,8 @@ test('coaster (1.1 G): EASY and LEAN stretches take turns with rolled lengths, s
   assert.equal(r.seq[0], 'E', 'a run starts EASY: ' + r.seq);
   assert.ok(runs.length >= 6, 'stretches take turns: ' + r.seq);
   for (const run of runs.slice(1, -1)) {
-    if (run[0] === 'E') assert.ok(run.length >= 10 && run.length <= 12, 'EASY lasts 10-12 trays: ' + r.seq);
-    else assert.ok(run.length >= 6 && run.length <= 10, 'LEAN lasts 6-10 trays: ' + r.seq);
+    const [lo, hi] = run[0] === 'E' ? r.len.slice(0, 2) : r.len.slice(2);
+    assert.ok(run.length >= lo && run.length <= hi, (run[0] === 'E' ? 'EASY' : 'LEAN') + ' lasts ' + lo + '-' + hi + ' trays: ' + r.seq);
   }
   const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
   assert.ok(avg(r.awk.easy) <= 1 && avg(r.awk.lean) >= 1.8, 'EASY is mostly rectangles and bars, LEAN mostly awkward: ' + avg(r.awk.easy).toFixed(2) + ' / ' + avg(r.awk.lean).toFixed(2));
