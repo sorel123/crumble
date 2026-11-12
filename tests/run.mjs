@@ -4086,7 +4086,7 @@ const HOME_SIM = `(trays, seed, check) => {
   const finish = () => { if (dealing) { runSteps(dealing.it); dealing = null; } };
   const out = []; let game = 0;
   const rec = () => { const a0 = packGrid(grid), [lo, hi] = packBits(a0), hand = tray.map(t => t.s); const r = { t: hand.map(s => SHAPES.indexOf(s)).join(','), l: lastTier, g: game };
-    if (check) { r.ok = evalHand(a0, hand, 400000).ok; r.home = hand.every((s, k) => homeAfterMates(lo, hi, hand, k, 20000)); r.small = hand.filter(s => s.n <= 3).length; }
+    if (check) { r.ok = evalHand(a0, hand, 400000).ok; r.home = hand.every((s, k) => homeAfterMates(lo, hi, hand, k, 20000)); r.small = hand.filter(s => s.n <= 3).length; r.flush = homeOrders(lo, hi, hand, 4000, 0) > 0; }
     out.push(r); };
   rndSrc = mulberry(seed); start(); finish(); rec();
   while (out.length < trays) {
@@ -4154,8 +4154,9 @@ test('home dealer: bot-played trays on two seeds always have a solution, every p
       kinds[m[1]] = (kinds[m[1]] || 0) + 1;
       if (m[3] === '·GUARD') { guards++; continue; }
       assert.ok(t.home, 'every piece has a home: ' + t.l + ' ' + t.t);
-      assert.ok(t.small <= 1 || m[2], 'one piece of 3 cells or fewer unless it clears the board: ' + t.l + ' ' + t.t);
+      assert.ok(t.small <= 1 || m[2] || m[1] === 'FINISH', 'one piece of 3 cells or fewer unless it clears the board (FINISH may close out with small pieces): ' + t.l + ' ' + t.t);
       if (m[1] === 'GIFT') assert.equal(m[4], 'gift', 'gifts only in a string: ' + t.l);
+      if (m[1] === 'FINISH') assert.ok(t.flush, 'a FINISH tray plays every piece strictly flush (or clearing) in some order, padding included: ' + t.l + ' ' + t.t);
     }
     // per game: a run of string trays is at most HOME_GIFT_MAX long, and the trays after it are a cool stretch of HOME_COOL_MIN..MAX
     const games = {}; for (const t of r) if (t.l !== 'OPENING') (games[t.g] = games[t.g] || []).push(t.l.match(RX));
@@ -4172,19 +4173,50 @@ test('home dealer: bot-played trays on two seeds always have a solution, every p
   assert.ok(strings >= 10 && cools >= 5, 'strings and cool stretches came round: ' + strings + ' / ' + cools);
   assert.ok(kinds.GIFT && kinds.STEADY && kinds.TWIST, 'the kinds: ' + JSON.stringify(kinds));
   assert.ok(guards <= 2, 'the last guard is rare: ' + guards);
+  assert.ok(kinds.FINISH, 'FINISH trays came round: ' + JSON.stringify(kinds));
+});
+test('home dealer: FINISH on a low board in a cool stretch empties it (single cells too), padding flush; a roll, capped in a row', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    CFG.DEALER_HOME = true; CFG.HOME_FINISH = 1; CFG.HOME_FINISH_HOT = 1; const o = {};
+    // can her pieces, each dropped at a strict home (a line, or flush: bump 0), empty the board in some order?
+    const empties = (lo, hi, hand) => { const rec = (lo, hi, left) => { if (!lo && !hi) return true; for (let k = 0; k < left.length; k++) for (const m of placeMasks(left[k])) {
+      if ((lo & m.lo) || (hi & m.hi) || homeAt(lo, hi, left[k], m, 0) < 0) continue; const a = _lo, b = _hi; if (rec(a, b, left.filter((x, j) => j !== k))) return true; } return false; }; return rec(lo, hi, hand); };
+    const deal = rows => { W73(); roomNow = 1; hdeal = { ph: 'cool', n: 1, len: 6, f: 0, hot: 0 }; const a0 = B73(rows), [lo, hi] = packBits(a0); rndSrc = mulberry(5); tray = [null, null, null]; genTray(); rndSrc = null;
+      const hand = tray.map(t => t.s); return { l: lastTier, sizes: hand.map(s => s.n), empties: empties(lo, hi, hand), flush: homeOrders(lo, hi, hand, 4000, 0) > 0, ph: hdeal.ph, n: hdeal.n, f: hdeal.f }; };
+    const E = '00000000';
+    o.block = deal([E, E, E, E, E, E, '11111100', '11111100']);   // two rows, a 2x2 gap: the obvious clearing cut
+    o.cells = deal([E, E, E, E, E, E, E, '01101101']);             // three single-cell gaps
+    CFG.HOME_FINISH = 0; CFG.HOME_FINISH_HOT = 0; o.off = deal([E, E, E, E, E, E, '11111100', '11111100']);
+    return o; })()`);
+  assert.match(r.block.l, /^HOME FINISH·CLEAR cool 2\/6$/, 'a cool stretch still gets the finishing tray; the phase keeps counting');
+  assert.ok(r.block.empties, 'playing its pieces at their homes empties the board: ' + r.block.sizes);
+  assert.ok(r.block.flush && r.block.f === 1, 'padding strictly flush; one FINISH in a row');
+  assert.match(r.cells.l, /^HOME FINISH·CLEAR cool/);
+  assert.ok(r.cells.sizes.filter(n => n === 1).length === 3 && r.cells.empties, 'single-cell gaps get single cells that close it out: ' + r.cells.sizes);
+  assert.doesNotMatch(r.off.l, /FINISH/, 'HOME_FINISH 0: no finishing tray');
+  // over bot play: with the odds at 1 never more than HOME_FINISH_MAX FINISH trays in a row; at 0 never one
+  const runs = async (odds, seed) => { await page.evaluate(o => { CFG.DEALER_HOME = true; CFG.HOME_FINISH = o; CFG.HOME_FINISH_HOT = o; }, odds);
+    const t = await page.evaluate(`(${HOME_SIM})(160, ${seed}, false)`); let k = 0, most = 0, n = 0, g = -1;
+    for (const x of t) { if (x.g !== g) { g = x.g; k = 0; } if (/^HOME FINISH/.test(x.l)) { n++; most = Math.max(most, ++k); } else k = 0; } return { most, n }; };
+  const max = await page.evaluate(() => CFG.HOME_FINISH_MAX);
+  const on = await runs(1, 21); assert.ok(on.n >= 5 && on.most <= max, 'FINISH trays capped in a row: ' + JSON.stringify(on));
+  assert.equal((await runs(0, 21)).n, 0, 'HOME_FINISH 0: none over a run');
 });
 test('home dealer: its coaster survives a resume; an empty board deals BUILD; no star or golden hand', async ({ page }) => {
   await play(page);
   const r = await page.evaluate('(() => {' + B73 + `
     CFG.DEALER_HOME = true; W73(); const o = {};
-    hdeal = { ph: 'cool', n: 3, len: 6 };
+    hdeal = { ph: 'cool', n: 3, len: 6, f: 2, hot: 1 };
     const snap = JSON.parse(JSON.stringify(snapshot())); resetHd(); restore(snap); o.saved = JSON.stringify(hdeal);
+    delete snap.hm.f; delete snap.hm.hot; resetHd(); restore(snap); o.old = JSON.stringify(hdeal);
     W73(); hdeal = { ph: 'warm', n: 0, len: 0 }; B73(Array(8).fill('00000000')); rndSrc = mulberry(3); tray = [null, null, null]; genTray();
     o.build = lastTier; o.hand = tray.map(t => t.s.n);
     W73(); goldenNext = true; starForced = true; o.special = 0;
     for (let k = 0; k < 20; k++) { B73(['00000000','00000000','11100111','11100111','00000000','11111100','11111100','11111100']); tray = [null, null, null]; goldenNext = true; genTray(); if (golden || tray.some(t => t.s.star)) o.special++; }
     rndSrc = null; return o; })()`);
-  assert.equal(r.saved, JSON.stringify({ ph: 'cool', n: 3, len: 6 }));
+  assert.equal(r.saved, JSON.stringify({ ph: 'cool', n: 3, len: 6, f: 2, hot: 1 }));
+  assert.equal(r.old, JSON.stringify({ ph: 'cool', n: 3, len: 6, f: 0, hot: 0 }), 'an older save: no FINISH run, no heater');
   assert.match(r.build, /^HOME BUILD gift 1\/\d$/);
   assert.ok(r.hand.every(n => n >= 4), 'big pieces to build with: ' + r.hand);
   assert.equal(r.special, 0, 'no star or golden hand under it');

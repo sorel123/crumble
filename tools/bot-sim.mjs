@@ -37,7 +37,8 @@
 // (medians: gems on the board when a tray is dealt, and right after a drop that cleared lines), noHome (share of dealt pieces with no
 // home, solver.js homeAt, on the board as dealt or after one or two tray-mates are dropped at homes; noHomeNow: none on the board as
 // dealt), meanPiece, share3plus (trays the bot cleared 3+ lines in), runs3plus (in finished games, how many runs of consecutive such
-// trays had each length), games (length quantiles), dealMs, and the home dealer's kinds.
+// trays had each length), games (length quantiles), dealMs, finish (FINISH trays dealt, the share that can empty the board, ·CLEAR,
+// and the share of those the bot emptied), and the home dealer's kinds.
 // 1.1 A (sweep chase) adds sweepHands (trays dealt with the sweep shimmer: a closer or planned sweep), traysPerSweepHand,
 // sweepHandsConverted (share of those the bot swept), chases (two-tray set-up hands), sweepsAll / traysPerSweep (every clean sweep).
 import { serve, openGame, play } from '../tests/harness.mjs';
@@ -270,6 +271,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   const homeLine = { traysPerSweep: +(trays.length / Math.max(1, sweepsN)).toFixed(1), gemsAtDeal: median(trays.map(t => t.gems)), gemsAfterClear: median(afterClear),
     noHome: +(100 * trays.reduce((x, t) => x + t.noHome, 0) / Math.max(1, pieces)).toFixed(2) + '%', noHomeNow: +(100 * trays.reduce((x, t) => x + t.noHomeNow, 0) / Math.max(1, pieces)).toFixed(1) + '%', meanPiece: +(trays.reduce((x, t) => x + t.sizes.reduce((a, b) => a + b, 0), 0) / Math.max(1, pieces)).toFixed(2),
     share3plus: pct(trays, t => t.lines >= 3) + '%', runs3plus: runs3, games: { ended: games, p10: q(0.1), median: q(0.5), p90: q(0.9) }, dealMs: { median: +median(costs).toFixed(2), p95: +(sorted[Math.floor(sorted.length * 0.95)] || 0).toFixed(2) },
+    finish: (() => { const f = trays.filter(t => /^HOME FINISH/.test(t.tier)), c = f.filter(t => /·CLEAR/.test(t.tier)); return { trays: f.length, clearShare: pct(f, t => /·CLEAR/.test(t.tier)) + '%', clearSwept: pct(c, t => t.sweeps > 0) + '%' }; })(),
     kinds: typeof hdStats === 'object' ? hdStats : null };
   return { homeLine, g1, series, pace6,
     trays: trays.length, games, goldens, goldensPerGame: +(goldens / (games + 1)).toFixed(2), traysPerGame: Math.round(trays.length / (games + 1)), buckets,
