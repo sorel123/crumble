@@ -45,7 +45,7 @@ async function rescue(){
 function clearRunFx(){
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false; starCool=0; transform=null; transformCool=0;
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
-  praises=[];bursts=[];lineFlashes=[];stamps=[];bannerWait=0;
+  praises=[];bursts=[];lineFlashes=[];stamps=[];bannerWait=0;sweepShow=null;
   chunks=[];rubble=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
   bonus=null; bonusTag=null; clearTimeout(bonusTagT);
   tags=[]; slams=[]; bands=[]; borderFlash=null;

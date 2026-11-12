@@ -326,6 +326,12 @@ function place(idx,r,c){
       shake=16*CFG.SHAKE; glowT=1.6;
       Sfx.sweep();
       tension=0;
+      if(CFG.FX_SWEEP_SHOW&&!reduce){              // (B) the show; the new sky and look wait for its end
+        const lead=maxDelay+6, hold=lead+CFG.SWEEP_SHOW_LEN;
+        sweepShow={t:-lead,n:jJumps};          // jJumps: this run's sweeps (draw.js)
+        if(jPend) jPend.t=Math.max(jPend.t,hold);
+        if(flip&&flip.t<=1) flip.t=-hold;
+      }
     }
     const escaped=wasTight&&!swept&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE;   // (6.3) out of the edge or a recovery
     if(CFG.FX_NARROW_ESCAPE&&escaped){   // (6.3) a narrow escape: out of the edge or a recovery. Its own short flourish: a gold rim, two soft rings, one word
