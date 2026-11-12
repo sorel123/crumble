@@ -4,6 +4,7 @@
    Everything is driven by the two tables below — a new toggle or slider is one line. */
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
   ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
+  ['DEALER_HOME','Dealer: pieces have a home (new)'],
   ['COMBO_CARRY','Combo carries across trays (round 6)'],
   ['EASY_RECT','Coaster: easy stretches deal rectangles and bars only (round 5)'],
   ['FX_CLOSER_GLOW','Closer shimmer on the tray (7.3)'],
@@ -67,6 +68,13 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['TRANSFORM_COOLDOWN','Transform cooldown (trays)',0,15,1],
   ['TRANSFORM_COMBO','Volcano: combo needed',3,9,1],
   ['TRANSFORM_STAR_GEMS','Starfield: star gems needed',9,15,1],
+  ['HOME_BUMP','Home dealer: how far a home may stick out',0,6,1],
+  ['HOME_GIFT_MAX','Home dealer: longest gift string (trays)',1,5,1],
+  ['HOME_COOL_MIN','Home dealer: cool stretch min (trays)',0,15,1],
+  ['HOME_COOL_MAX','Home dealer: cool stretch max (trays)',0,15,1],
+  ['HOME_EARN','Home dealer: nearly-done lines that earn a gift',1,8,1],
+  ['HOME_TWIST','Home dealer: twist odds in a cool stretch',0,1,0.05],
+  ['HOME_RESCUE_ROOM','Home dealer: rescue below room',0,1,0.01],
   ['TIDE_EASY_MIN','Coaster: easy stretch min (trays)',2,30,1],
   ['TIDE_EASY_MAX','Coaster: easy stretch max (trays)',2,30,1],
   ['TIDE_LEAN_MIN','Coaster: lean stretch min (trays)',0,30,1],
@@ -193,6 +201,7 @@ function devLoad(){
     if(!o.clearV) delete o.CLEAR_STYLE;                  // (7.5) tuning saved before crumble was the default keeps its other values but not the old 'squash'
     for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);
     for(const [k,,options] of DEV_CHOICES) if(!options.some(x=>x.value===CFG[k])) CFG[k]=DEV_DEFAULTS[k];
+    const dl=new URLSearchParams(location.search).get('dealer'); if(dl) CFG.DEALER_HOME=dl==='home';   // ?dealer=home|tide beats the saved switch
   }catch(e){}
 }
 function devSnippet(){
