@@ -135,6 +135,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 | `js/challenge.js` | Challenge mode (1.1 E1): frozen deal from a seed, medal bots, HUD, end card, results |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
+| `js/cloud.js` | iCloud backup of progress, app only (1.1 F) |
 | `js/main.js` | boot |
 
 Top to bottom:
@@ -512,7 +513,8 @@ registering our in-app plugins) and `GameCenterPlugin`. JS calls it through `js/
 
 #### Game Center (plan 5.3)
 
-Quiet by design: no sign-in sheet at launch and no new buttons. If the phone is signed in to Game Center, the
+Quiet by design: no sign-in sheet at launch. The only buttons are "🏆 Leaderboards" (1.1 F) on the Endless /
+Daily game-over card and in Settings' footer, shown only in the app while signed in (`gcButtons`, `gcShow`). If the phone is signed in to Game Center, the
 app sends the Endless best (after every Endless game and at launch), today's Daily score (after every Daily),
 and every goal rung reached (as achievements). People see them in Apple's Games app. If not signed in, nothing
 is sent and the game is unchanged.
@@ -539,6 +541,26 @@ One-time setup (needs Jay's account; ids must match `GC` in `js/native.js` exact
    `crumble.daily` (1 day), both integer, high to low, best score; then the achievement ids the dry run lists.
 
 Until those exist, the calls fail quietly (they are caught) and nothing shows.
+
+#### iCloud backup of progress (1.1 F)
+
+`js/cloud.js` + `ios/App/App/CloudStore.swift` (plugin `CloudStore`: `get`/`set` of one string, a `change` event
+when another device writes). Progress only, never a run: best, `stats`, goals + streak, unlocked skins,
+discovered looks, Adventure records, Daily results, Challenge results and the guided-game flag, as one JSON value under the key `progress` in the player's
+own iCloud key-value store. No UI. A no-op on the web (`Native.plugin('CloudStore')` is null).
+
+- **Merge, never overwrite.** Launch, back to the front, iCloud's change event and every write first read the
+  cloud copy and fold it in (`cloudMerge`): numbers by max, sets by union, Adventure levels by best (stars max,
+  fewest pieces min), Daily days by best, the streak by the later day. Nothing is written before the first read
+  succeeds, and a failed read writes nothing, so a fresh install cannot push empty progress over a backup.
+- **Writes** ride on the existing saves (`saveStats`, `saveGoals`, `saveAdv`, `recordDaily`, `saveSkinSave` call
+  `cloudDirty()`), at most once per `CLOUD.WAIT` (5 s), and at once when the app is hidden.
+- The copy carries the points scale (`sc`), so a later `SCORE_SCALE` change rescales an old backup.
+- Because merging is max/union, there is no "reset progress" across devices; one would need a version bump.
+- Setup (once): Xcode, Signing & Capabilities, the iCloud capability with Key-value storage ticked (the
+  entitlement `com.apple.developer.ubiquity-kvstore-identifier` is already in `App.entitlements`; automatic
+  signing adds iCloud to the App ID). Device check: play on one phone, delete and reinstall (or a second
+  phone on the same Apple Account), progress comes back within a few seconds of launch.
 
 #### Icon, splash, signing and TestFlight (plan 5.4)
 

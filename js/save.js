@@ -154,6 +154,7 @@ function migrateScale(){
 const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,bonuses:0,starSeen:0,escapes:0};   // bonuses: bonus runs earned
 function saveStats(){
   try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'&&mode==='endless'?score:0),...stats})); }catch(e){}
+  cloudDirty();                                     // (1.1 F) the iCloud backup follows, a few seconds later
 }
 function loadStats(){
   try{

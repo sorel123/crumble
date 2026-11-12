@@ -16,6 +16,7 @@ function saveSkinSave(){
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
     theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:3
   })); }catch(e){}
+  cloudDirty();
 }
 function loadSkinSave(){
   try{

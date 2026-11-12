@@ -17,6 +17,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		C0FFEE042FE9A0000072D4E8 /* AppAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE052FE9A0000072D4E8 /* AppAudio.swift */; };
+		C0FFEE072FE9A0000072D4E8 /* CloudStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE082FE9A0000072D4E8 /* CloudStore.swift */; };
 		C0FFEE012FE9A0000072D4E8 /* GameCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0FFEE022FE9A0000072D4E8 /* GameCenter.swift */; };
 /* End PBXBuildFile section */
 
@@ -33,6 +34,7 @@
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		C0FFEE052FE9A0000072D4E8 /* AppAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAudio.swift; sourceTree = "<group>"; };
+		C0FFEE082FE9A0000072D4E8 /* CloudStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudStore.swift; sourceTree = "<group>"; };
 		C0FFEE022FE9A0000072D4E8 /* GameCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameCenter.swift; sourceTree = "<group>"; };
 		C0FFEE032FE9A0000072D4E8 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -72,6 +74,7 @@
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				C0FFEE022FE9A0000072D4E8 /* GameCenter.swift */,
 				C0FFEE052FE9A0000072D4E8 /* AppAudio.swift */,
+				C0FFEE082FE9A0000072D4E8 /* CloudStore.swift */,
 				C0FFEE032FE9A0000072D4E8 /* App.entitlements */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
@@ -170,6 +173,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				C0FFEE012FE9A0000072D4E8 /* GameCenter.swift in Sources */,
 				C0FFEE042FE9A0000072D4E8 /* AppAudio.swift in Sources */,
+				C0FFEE072FE9A0000072D4E8 /* CloudStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

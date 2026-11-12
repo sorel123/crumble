@@ -34,6 +34,7 @@ function loadGoals(){
 }
 function saveGoals(){
   try{ localStorage.setItem(GOALS_STORE,JSON.stringify({v:1,streak:goals.streak,days:goals.days,done:[...goals.done]})); }catch(e){}
+  cloudDirty();
 }
 // the streak she is on right now: alive while she played today or yesterday
 function streakNow(){

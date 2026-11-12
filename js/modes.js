@@ -36,7 +36,7 @@ function loadAdv(){
     }
   }catch(e){}
 }
-function saveAdv(){ try{ localStorage.setItem(ADV_STORE,JSON.stringify({v:1,lv:adv.lv})); }catch(e){} }
+function saveAdv(){ try{ localStorage.setItem(ADV_STORE,JSON.stringify({v:1,lv:adv.lv})); }catch(e){} cloudDirty(); }
 const advRec=id=>adv.lv[id]||(adv.lv[id]={s:0,p:0,n:0,f:0});
 const levelDone=id=>!!(adv.lv[id]&&adv.lv[id].n>0);
 // a level is open once the one before it is cleared; after three failed tries on a level the next one opens too (nobody gets stuck)
@@ -73,6 +73,7 @@ function recordDaily(key,sc,lines,again){        // again: the same run reaching
   const r=daily.d[key]||(daily.d[key]={s:0,l:0,n:0});
   if(!again) r.n++; r.s=Math.max(r.s,sc|0); r.l=Math.max(r.l,lines|0);
   try{ localStorage.setItem(DAILY_STORE,JSON.stringify({v:1,d:daily.d})); }catch(e){}
+  cloudDirty();
   return r;
 }
 const dailyBest=()=>(daily.d[dk||dailyKey()]||{s:0}).s;
