@@ -4075,6 +4075,121 @@ test('big solves (round 3): after a LEAN stretch, a board of nearly-done lines g
   assert.ok(r.small <= 1, 'small pieces come one a tray (a board clear may use more): ' + r.why + r.small + ' of ' + r.dealt + ' trays had two');
 });
 
+// ---- the home dealer (DEALER_HOME) ----
+// in the page: plays `trays` trays of Endless from the seeded stream `seed` with a simple person-like bot (its own dice: any
+// piece first, one of the three snuggest spots), starting a new game when stuck. Per tray as dealt: the shapes, the label, the
+// game, and with `check` whether it has a solution, whether every piece has a home (as dealt or after its tray-mates) and its
+// count of pieces of 3 cells or fewer.
+const HOME_SIM = `(trays, seed, check) => {
+  let hs = seed * 7919 + 1; const hr = () => { hs = (hs + 0x6D2B79F5) >>> 0; let t = hs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const flush = (s, r, c) => { let k = 0; for (const [dr, dc] of s.cells) for (const [a, b] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) { const rr = r + dr + a, cc = c + dc + b; if (s.cells.some(([x, y]) => x === dr + a && y === dc + b)) continue; if (rr < 0 || cc < 0 || rr >= N || cc >= N || grid[rr][cc]) k++; } return k; };
+  const finish = () => { if (dealing) { runSteps(dealing.it); dealing = null; } };
+  const out = []; let game = 0;
+  const rec = () => { const a0 = packGrid(grid), [lo, hi] = packBits(a0), hand = tray.map(t => t.s); const r = { t: hand.map(s => SHAPES.indexOf(s)).join(','), l: lastTier, g: game };
+    if (check) { r.ok = evalHand(a0, hand, 400000).ok; r.home = hand.every((s, k) => homeAfterMates(lo, hi, hand, k, 20000)); r.small = hand.filter(s => s.n <= 3).length; }
+    out.push(r); };
+  rndSrc = mulberry(seed); start(); finish(); rec();
+  while (out.length < trays) {
+    const order = [0, 1, 2].filter(i => tray[i]).sort(() => hr() - 0.5); let mv = null;
+    for (const i of order) { const s = tray[i].s, c3 = [];
+      for (let r = 0; r <= N - s.rows; r++) for (let c = 0; c <= N - s.cols; c++) if (canPlace(s, r, c, grid)) c3.push([flush(s, r, c), r, c]);
+      if (!c3.length) continue; c3.sort((a, b) => b[0] - a[0]); const p = c3[(hr() * Math.min(3, c3.length)) | 0]; mv = [i, p[1], p[2]]; break; }
+    if (!mv) { game++; start(); finish(); rec(); continue; }
+    place(mv[0], mv[1], mv[2]); clearRunFx();
+    if (dealing) { finish(); rec(); }
+  }
+  rndSrc = null; return out;
+}`;
+test('home dealer: off by default, and with the switch off a pinned Endless seed deals exactly what it dealt before it', async ({ page }) => {
+  await play(page);
+  assert.equal(await page.evaluate(() => CFG.DEALER_HOME), false);
+  // generated on main before the home dealer (40 trays, one game restart included)
+  const pinned = '35,35,35;9,7,3;36,9,36;10,35,18;36,31,9;4,35,35;36,31,36;34,9,10;36,5,5;36,8,36;4,36,13;10,15,35;10,10,18;28,9,10;35,5,1;7,7,7;17,7,10;7,35,32;6,24,10;3,4,4;1,1,20;13,4,2;32,21,22;35,36,5;8,6,8;10,10,8;20,35,10;15,18,32;36,12,23;26,21,35;5,5,8;30,8,18;22,6,12;4,4,11;36,4,19;5,5,5;9,9,5;35,35,35;27,6,8;8,6,6';
+  assert.equal(await page.evaluate(`(${HOME_SIM})(40, 4242, false)`).then(r => r.map(x => x.t).join(';')), pinned);
+});
+test('home dealer: the switch leaves Challenge as it was (frozen deals), and ?dealer=home turns it on', async ({ page, server }) => {
+  await page.evaluate(() => { CFG.DEALER_HOME = true; });
+  const packs = await page.evaluate(() => ['frozen1', 'd2026-11-11'].map(s => chPack(chMake(s))));
+  assert.deepEqual(packs, ['AAYAgAAAAAAAAAAAIGoAAAAAAIAAAAAAAkYiDAogTEXcZLZJBIgTb5ShVEEgfoVEDVcYSYo1jpbWBoGoRSklAaAAAAAAAFeAAG4AAISA',
+    'ADAYAAAAAAAAAAAAAAAAAAAIAAAAAAAAAKgxGIqViaPZbWUbEkdUorHRjgL6XpFEBqCRUjUMJcKEIZEjdWCrJrdAAAAAAGkAAH5AAJdA']);
+  assert.deepEqual(await page.evaluate(() => { mode = 'challenge'; const c = hdOn(); mode = 'adventure'; const a = hdOn(); mode = 'endless'; return [c, a, hdOn()]; }), [false, false, true]);
+  await page.goto(server.url + '?dealer=home'); await toGame(page);
+  assert.equal(await page.evaluate(() => CFG.DEALER_HOME), true);
+  assert.ok(await page.evaluate(() => DEV_TOGGLES.some(t => t[0] === 'DEALER_HOME')), 'an Admin switch');
+});
+test('home dealer: a home is a line it completes or a flush spot (HOME_BUMP); no hole sealed', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const sq = SHAPES.find(s => s.rows === 2 && s.cols === 2 && s.n === 4), S = SHAPES[19], bar = SHAPES[5];
+    const at = (rows, s, r, c) => { const [lo, hi] = packBits(B73(rows)); return homeAt(lo, hi, s, placeMasks(s).find(m => m.r === r && m.c === c)); };
+    const E = Array(8).fill('00000000'), floor = ['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11111110'];
+    const o = { corner: at(E, sq, 0, 0), middle: at(E, sq, 3, 3), wall: at(E, bar, 0, 2),
+      sOnFloor: at(floor, S, 5, 2), sqOnFloor: at(floor, sq, 5, 3), sqInCorner: at(floor, sq, 5, 0),
+      line: at(floor, SHAPES[0], 7, 7),
+      seal: at(['00000000','00000000','00000000','00000000','00000000','00000000','11000110','11101111'], SHAPES[3], 6, 2) };   // flush (bump 0) and no line, but it shuts the cell under it in
+    const b0 = CFG.HOME_BUMP; CFG.HOME_BUMP = 4; o.sqOnFloor4 = at(floor, sq, 5, 3); CFG.HOME_BUMP = b0;
+    return o; })()`);
+  assert.equal(r.corner, 0, 'a 2x2 in a corner of an empty board sits flush');
+  assert.equal(r.middle, -1, 'in the open it sticks out');
+  assert.equal(r.wall, 0, 'a bar along the wall');
+  assert.equal(r.sqInCorner, 0, 'a 2x2 on the floor against the wall');
+  assert.equal(r.sqOnFloor, -1, 'a 2x2 on the floor in the open is a bump');
+  assert.equal(r.sOnFloor, -1, 'an S on a flat floor sticks out');
+  assert.equal(r.line, 1, 'completing a line is a home');
+  assert.equal(r.seal, -1, 'a bar that shuts an empty cell in is no home');
+  assert.equal(r.sqOnFloor4, 0, 'HOME_BUMP sets how far it may stick out');
+});
+test('home dealer: bot-played trays on two seeds always have a solution, every piece a home, one small piece, gift strings and cool stretches', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { CFG.DEALER_HOME = true; });
+  const cfg = await page.evaluate(() => [CFG.HOME_GIFT_MAX, CFG.HOME_COOL_MIN, CFG.HOME_COOL_MAX]);
+  const RX = /^HOME (\w+)(·CLEAR)?(·FB|·GUARD)? (warm|gift|cool)(?: (\d+)\/(\d+))?$/;
+  let kinds = {}, guards = 0, strings = 0, cools = 0;
+  for (const seed of [11, 12]) {
+    const r = await page.evaluate(`(${HOME_SIM})(260, ${seed}, true)`);
+    for (const t of r) {
+      assert.ok(t.ok, 'every tray has a solution: ' + t.l + ' ' + t.t);
+      if (t.l === 'OPENING') continue;
+      const m = t.l.match(RX); assert.ok(m, 'labelled with the dealer state: ' + t.l);
+      kinds[m[1]] = (kinds[m[1]] || 0) + 1;
+      if (m[3] === '·GUARD') { guards++; continue; }
+      assert.ok(t.home, 'every piece has a home: ' + t.l + ' ' + t.t);
+      assert.ok(t.small <= 1 || m[2], 'one piece of 3 cells or fewer unless it clears the board: ' + t.l + ' ' + t.t);
+      if (m[1] === 'GIFT') assert.equal(m[4], 'gift', 'gifts only in a string: ' + t.l);
+    }
+    // per game: a run of string trays is at most HOME_GIFT_MAX long, and the trays after it are a cool stretch of HOME_COOL_MIN..MAX
+    const games = {}; for (const t of r) if (t.l !== 'OPENING') (games[t.g] = games[t.g] || []).push(t.l.match(RX));
+    for (const g of Object.values(games)) {
+      const ph = g.map(m => m[4]).join('').replace(/warm/g, 'w').replace(/gift/g, 'g').replace(/cool/g, 'c');
+      for (const run of ph.match(/g+/g) || []) { strings++; assert.ok(run.length <= cfg[0], 'a string of ' + run.length + ': ' + ph); }
+      const runs = ph.match(/g+|c+|w+/g) || [];
+      runs.forEach((run, i) => {
+        if (run[0] === 'g' && i + 1 < runs.length) assert.equal(runs[i + 1][0], 'c', 'a cool stretch follows a string: ' + ph);
+        if (run[0] === 'c' && i + 1 < runs.length) { cools++; assert.ok(run.length >= cfg[1] && run.length <= cfg[2], 'cool lasts ' + cfg[1] + '-' + cfg[2] + ': ' + ph); }
+      });
+    }
+  }
+  assert.ok(strings >= 10 && cools >= 5, 'strings and cool stretches came round: ' + strings + ' / ' + cools);
+  assert.ok(kinds.GIFT && kinds.STEADY && kinds.TWIST, 'the kinds: ' + JSON.stringify(kinds));
+  assert.ok(guards <= 2, 'the last guard is rare: ' + guards);
+});
+test('home dealer: its coaster survives a resume; an empty board deals BUILD; no star or golden hand', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    CFG.DEALER_HOME = true; W73(); const o = {};
+    hdeal = { ph: 'cool', n: 3, len: 6 };
+    const snap = JSON.parse(JSON.stringify(snapshot())); resetHd(); restore(snap); o.saved = JSON.stringify(hdeal);
+    W73(); hdeal = { ph: 'warm', n: 0, len: 0 }; B73(Array(8).fill('00000000')); rndSrc = mulberry(3); tray = [null, null, null]; genTray();
+    o.build = lastTier; o.hand = tray.map(t => t.s.n);
+    W73(); goldenNext = true; starForced = true; o.special = 0;
+    for (let k = 0; k < 20; k++) { B73(['00000000','00000000','11100111','11100111','00000000','11111100','11111100','11111100']); tray = [null, null, null]; goldenNext = true; genTray(); if (golden || tray.some(t => t.s.star)) o.special++; }
+    rndSrc = null; return o; })()`);
+  assert.equal(r.saved, JSON.stringify({ ph: 'cool', n: 3, len: 6 }));
+  assert.match(r.build, /^HOME BUILD gift 1\/\d$/);
+  assert.ok(r.hand.every(n => n >= 4), 'big pieces to build with: ' + r.hand);
+  assert.equal(r.special, 0, 'no star or golden hand under it');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

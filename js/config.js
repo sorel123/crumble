@@ -125,6 +125,17 @@ const CFG = {
   LEAN_ROOM:      0.3,   //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
   SOUND_ROOM:     0.12,  // a piece's sound spot may cost at most this much room (0..1) when it clears nothing
 
+  // the home dealer (solver.js "The home dealer"): every piece has a home and the tray is cut from the board. Replaces the
+  // tide in Endless and Daily when on; Challenge and Adventure never use it. Also on with ?dealer=home in the URL (off: ?dealer=tide).
+  DEALER_HOME: /[?&]dealer=home(&|$)/.test(location.search),   // off by default
+  HOME_BUMP:      2,     // a home that clears nothing may raise the raggedness (walls count as filled) by at most this (0 = only snug spots)
+  HOME_GIFT_MAX:  3,     // a gift string (trays of 3+ lines or a board clear) lasts 1 to this many trays, rolled
+  HOME_COOL_MIN:  4,     // after a string, this many cool trays at least (TWIST and STEADY, never a gift)...
+  HOME_COOL_MAX:  8,     //   ...and at most (rolled per stretch)
+  HOME_EARN:      3,     // after the cool stretch a new string starts once this many lines are nearly done (or a cut can clear the board)
+  HOME_TWIST:     0.6,   // odds a cool tray is a TWIST (builds the board up, 0-1 lines) rather than a STEADY (1-2 lines)
+  HOME_RESCUE_ROOM: 0.3, // a board with less room than this gets a rescue tray whatever the phase (in a cool stretch no gift)
+
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)
   TENSION_UP:    0.10,   // added each placement that clears nothing (slower build = calm stretches before help arrives)
   TENSION_DRIFT: 0.07,   // extra rise when the board is getting cramped

@@ -33,6 +33,11 @@
 // big4Per5 (fewest 4+ pieces in any five trays), and the difficulty guards gamesEnded, p10 (10th percentile game length), edgeHoldsPerGame.
 // Plan 8.2 (more clearing hands) adds traysPer3Lines (trays per tray in which the bot cleared 3+ lines in all), jackpotsPerGame
 // (behind-the-scenes jackpot trays) and traysPerBigHand (trays per jackpot, golden, closer or planned-sweep tray).
+// The home dealer (DEALER_HOME=1 to try it) adds a 'home:' line for any dealer: traysPerSweep, gemsAtDeal and gemsAfterClear
+// (medians: gems on the board when a tray is dealt, and right after a drop that cleared lines), noHome (share of dealt pieces with no
+// home, solver.js homeAt, on the board as dealt or after one or two tray-mates are dropped at homes; noHomeNow: none on the board as
+// dealt), meanPiece, share3plus (trays the bot cleared 3+ lines in), runs3plus (in finished games, how many runs of consecutive such
+// trays had each length), games (length quantiles), dealMs, and the home dealer's kinds.
 // 1.1 A (sweep chase) adds sweepHands (trays dealt with the sweep shimmer: a closer or planned sweep), traysPerSweepHand,
 // sweepHandsConverted (share of those the bot swept), chases (two-tray set-up hands), sweepsAll / traysPerSweep (every clean sweep).
 import { serve, openGame, play } from '../tests/harness.mjs';
@@ -153,7 +158,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   };
   const fillOf = () => grid.flat().filter(Boolean).length / (N * N);
   const finishDeal = () => { if (dealing) { const t0 = performance.now(); runSteps(dealing.it); dealing = null; costs.push(performance.now() - t0); } };
-  const costs = [], trays = [];
+  const costs = [], trays = [], afterClear = [];
   let cur = null, games = 0, goldens = 0, rescues = 0;
   const newTray = () => {
     const obvN = tray.filter(t => { if (!t) return false; for (let r = 0; r <= N - t.s.rows; r++) for (let c = 0; c <= N - t.s.cols; c++) if (canPlace(t.s, r, c, grid) && obviousAt(t.s, r, c, grid)) return true; return false; }).length, obv = obvN > 0;
@@ -163,12 +168,15 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     const a0 = packGrid(grid), [glo, ghi] = packBits(a0), shp = tray.filter(Boolean).map(t => t.s);
     const awkK = s => !s.star && s.n !== s.rows * s.cols && s.n !== 5;     // S, Z, T, L, J, hooks (the 5-cell corners count as big L's)
     const full = shp.length === 3 ? evalHand(a0, shp, 200000) : null;
-    const tideSt = typeof tideOn === 'function' && tideOn() ? tide.st : 'flat';
+    const tideSt = typeof hdOn === 'function' && hdOn() ? 'home' : typeof tideOn === 'function' && tideOn() ? tide.st : 'flat';
     const fit = { st: tideSt, avail: full ? full.lines : 0, solvable: full ? full.ok : true, awk: shp.filter(awkK).length,
       sizes: shp.filter(s => !s.star).map(s => s.n), multiPieces: shp.filter(s => !s.star && bestDrop(glo, ghi, s) >= 2).length,
       puzzle: shp.some(s => !s.star && !placeMasks(s).some(m => !(glo & m.lo) && !(ghi & m.hi))), clearable: shp.some(s => !s.star && bestDrop(glo, ghi, s) >= 1), roomAtDeal: roomOf(a0), matched: shp.some(s => !s.star && s.n >= 3 && shp.filter(x => x === s).length >= 2), ready: typeof readyLines === 'function' ? readyLines(glo, ghi) : 0,
       sound: typeof soundBits === 'function' ? shp.every(s => soundBits(glo, ghi, s, roomOf(a0))) : null };
     cur = { ...fit, sweepHand: closerTray, offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
+    cur.gems = pop32(glo) + pop32(ghi);
+    cur.noHomeNow = typeof hasHome === 'function' ? shp.filter(s => !s.star && !hasHome(glo, ghi, s)).length : 0;
+    cur.noHome = typeof homeAfterMates === 'function' ? shp.filter((s, k) => !homeAfterMates(glo, ghi, shp, k)).length : 0;
     trays.push(cur);
     if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
@@ -184,6 +192,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     place(m[0], m[1], m[2]);
     { const g1n = countFlat(packGrid(grid)); if (g0n - g1n >= 12) { swing++; if (g1n <= 9) nearClear++; } }
     { const k = { goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool }; clearRunFx(); ({ goldenNext, goldenCool, golden, trayHadSweep, trayCombo, starForced, starCool, transform, transformCool } = k); }   // drop the effects, keep the specials' bookkeeping
+    if (stats.lines > before) afterClear.push(countFlat(packGrid(grid)));
     if (stats.lines > before) { cur.lines += stats.lines - before; cur.cleared = true; cur.clears++; if (stats.lines - before >= 2) cur.multi++; }
     if (stats.sweeps > sw0) cur.sweeps++;
     if (dealing) { finishDeal(); newTray(); }
@@ -256,7 +265,13 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     lostAfterLeanTrays: (() => { const r = []; perGame.forEach(a => { let k = 0; for (let i = a.length - 1; i >= 0 && a[i].st === 'lean'; i--) k++; if (k) r.push(k); }); return r.sort((x, y) => x - y); })(),
   };
   const series = g0.map(t => ({ st: t.st, ph: t.ph, avail: t.avail, awk: t.awk, tier: t.tier, cleared: t.lines, sw: t.sweeps }));
-  return { g1, series, pace6,
+  const runs3 = {}; perGame.forEach(a => { let k = 0; for (const t of a.concat([{ lines: 0 }])) { if (t.lines >= 3) k++; else if (k) { runs3[k] = (runs3[k] || 0) + 1; k = 0; } } });
+  const pieces = trays.reduce((x, t) => x + t.sizes.length, 0), sweepsN = trays.reduce((x, t) => x + t.sweeps, 0);
+  const homeLine = { traysPerSweep: +(trays.length / Math.max(1, sweepsN)).toFixed(1), gemsAtDeal: median(trays.map(t => t.gems)), gemsAfterClear: median(afterClear),
+    noHome: +(100 * trays.reduce((x, t) => x + t.noHome, 0) / Math.max(1, pieces)).toFixed(2) + '%', noHomeNow: +(100 * trays.reduce((x, t) => x + t.noHomeNow, 0) / Math.max(1, pieces)).toFixed(1) + '%', meanPiece: +(trays.reduce((x, t) => x + t.sizes.reduce((a, b) => a + b, 0), 0) / Math.max(1, pieces)).toFixed(2),
+    share3plus: pct(trays, t => t.lines >= 3) + '%', runs3plus: runs3, games: { ended: games, p10: q(0.1), median: q(0.5), p90: q(0.9) }, dealMs: { median: +median(costs).toFixed(2), p95: +(sorted[Math.floor(sorted.length * 0.95)] || 0).toFixed(2) },
+    kinds: typeof hdStats === 'object' ? hdStats : null };
+  return { homeLine, g1, series, pace6,
     trays: trays.length, games, goldens, goldensPerGame: +(goldens / (games + 1)).toFixed(2), traysPerGame: Math.round(trays.length / (games + 1)), buckets,
     obviousAtDealAll: pct(trays, t => t.obv), boardAllowsAll: pct(trays, t => t.possible), clearPerTrayAll: pct(trays, t => t.cleared), allThreeAll: pct(trays, t => t.obvN === 3), clearsPerTrayAll: mean(trays, t => t.clears),
     medianFill: Math.round(100 * median(trays.map(t => t.fill))),
@@ -264,7 +279,8 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     dealMs: { median: +median(costs).toFixed(2), p95: +(sorted[Math.floor(sorted.length * 0.95)] || 0).toFixed(2), max: +(sorted[sorted.length - 1] || 0).toFixed(2) },
   };
 }, [TRAYS, BOT, RESCUE]);
-console.log(JSON.stringify({ bot: BOT, rescue: RESCUE, overrides: OVR, ...out, buckets: undefined, pace6: undefined, g1: undefined, series: undefined }));
+console.log(JSON.stringify({ bot: BOT, rescue: RESCUE, overrides: OVR, ...out, buckets: undefined, pace6: undefined, g1: undefined, series: undefined, homeLine: undefined }));
+console.log('home:', JSON.stringify(out.homeLine));
 console.log('pace (6.1):', JSON.stringify(out.pace6));
 console.log('coaster (1.1 G):', JSON.stringify(out.g1));
 if (process.env.SERIES) (await import('node:fs')).writeFileSync(process.env.SERIES, JSON.stringify(out.series));

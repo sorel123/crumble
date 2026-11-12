@@ -403,12 +403,15 @@ function predictPlay(lo,hi,hand){
 /* (round 5) how easily a person finds the sweep in a hand: of SWEEP_EASE_K plays that vary like a person (any piece first,
    a snug spot but not always the snuggest, an obvious clear taken most of the time), the share that empties the board.
    Its own dice, seeded from the board and the hand, so the dealer's stream (and the Daily) is untouched. */
-function sweepEase(lo0,hi0,hand){
-  const K=CFG.SWEEP_EASE_K; if(!K) return 1;
-  let sw=0, st=(lo0^Math.imul(hi0,0x9E3779B1)^hand.reduce((a,s)=>Math.imul(a,31)+SHAPES.indexOf(s),7))>>>0;
+function sweepEase(lo0,hi0,hand){ return personPlays(lo0,hi0,hand,99).sw; }
+/* ...and its general form: of those plays, the share that empty the board (sw) and the share that clear `need` lines or
+   the board (hit). The home dealer asks it of a gift: lines a person finds, not only lines the cut holds. */
+function personPlays(lo0,hi0,hand,need){
+  const K=CFG.SWEEP_EASE_K; if(!K) return {sw:1,hit:1};
+  let sw=0, hits=0, st=(lo0^Math.imul(hi0,0x9E3779B1)^hand.reduce((a,s)=>Math.imul(a,31)+SHAPES.indexOf(s),7))>>>0;
   const r=()=>{ st=(st+0x6D2B79F5)>>>0; let t=st; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; };
   for(let k=0;k<K;k++){
-    let lo=lo0, hi=hi0; const left=hand.filter(s=>!s.star); let ok=true;
+    let lo=lo0, hi=hi0, lines=0; const left=hand.filter(s=>!s.star); let ok=true;
     while(left.length){
       let pick=-1, pm=null;
       const ob=obviousLines(lo,hi);
@@ -431,12 +434,13 @@ function sweepEase(lo0,hi0,hand){
         spots.sort((a,b)=>b[0]-a[0]); const top=spots.filter(x=>x[0]>=spots[0][0]-1);
         pick=q; pm=top[(r()*Math.min(3,top.length))|0][1];
       }
-      applyBits(lo,hi,left[pick],pm); lo=_lo; hi=_hi; left.splice(pick,1);
+      lines+=applyBits(lo,hi,left[pick],pm); lo=_lo; hi=_hi; left.splice(pick,1);
       if(!lo&&!hi) break;
     }
     if(ok&&!lo&&!hi) sw++;
+    if(!lo&&!hi||lines>=need) hits++;
   }
-  return sw/K;
+  return {sw:sw/K,hit:hits/K};
 }
 const RUN_RECTS=RUN_POOL.filter(s=>s.n===s.rows*s.cols);   // (round 5) an EASY run's pool
 function* runHandSteps(a0){
@@ -573,7 +577,7 @@ const waveStats={setups:0,dealt:0,missed:0,closed:0,closerTries:0,chases:0,runs:
 let wave={n:0,at:5,due:false}, jack={n:0,at:10}, setups=[], closerNext=false, chaseNext=false, chaseNow=false, chaseCool=0, closerCool=0, dryN=0, bigHist=[], closerTray=false, trayClear=false;
 const waveAt=()=>CFG.WAVE_MIN+((rnd()*(CFG.WAVE_MAX-CFG.WAVE_MIN+1))|0);
 const jackAt=()=>CFG.JACKPOT_MIN+((rnd()*(CFG.JACKPOT_MAX-CFG.JACKPOT_MIN+1))|0);
-function resetWave(){ resetTide(); wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; chaseNext=false; chaseNow=false; chaseCool=0; sweepRun=null; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
+function resetWave(){ resetTide(); resetHd(); wave={n:0,at:waveAt(),due:false}; jack={n:0,at:jackAt()}; setups=[]; closerNext=false; chaseNext=false; chaseNow=false; chaseCool=0; sweepRun=null; closerCool=0; dryN=0; bigHist=[]; closerTray=false; trayClear=false; }
 /* every empty exact rectangle of SETUP_RECTS on the board whose filling completes a line, with at least SETUP_WALLED of
    the cells around it filled or wall. Returned as {k: index in SETUP_RECTS, r, c, lo, hi}. */
 function findHoles(lo,hi){
@@ -907,6 +911,313 @@ function* ensureWaySteps(a0,hand,why){
   }
   return [SHAPES[0],SHAPES[0],SHAPES[0]];
 }
+/* ═══ The home dealer (CFG.DEALER_HOME; Endless and Daily, in place of the tide) ═══
+   Every piece has a home, and the tray is cut from the board.
+   - A piece's home (homeAt) is a legal spot where it completes a line, or sits flush: the board's raggedness, counting
+     the walls as filled, rises by at most HOME_BUMP (a 2x2 or a big L in a corner: 0; a 2x2 flat on a floor in the
+     open: 4; an S on a flat floor: 6) and it seals no empty cell in. On an empty board the corners and walls are homes.
+   - A tray is built, not scored from random hands. A set of rows and columns whose empty cells (the target) up to three
+     real shapes tile exactly is cut into those shapes (homeCutSteps; any shape that tiles the gap). Slots the cut does
+     not need get builders (homeBuilder): pieces with a home off the target that leave the board tidy, ideally pushing a
+     line toward done. Generate-and-test (homeFallbackSteps) only when no cut fits. Every tray is checked: some drop
+     order plays every piece at a home in turn (homeOrders; two or more distinct orders preferred), so it always has a
+     solution too, and ensureWay stays the last guard. At most one piece of 3 cells or fewer, unless it clears the board.
+   - Kinds: GIFT (the cut finishes 3+ lines, or empties the board), STEADY (1-2 lines), TWIST (0-1 lines; builders of
+     any shape with a home, sometimes a piece whose home only opens once its tray-mate has cleared a line), BUILD (an
+     empty board: three big matching pieces), RESCUE (a crowded board, room < HOME_RESCUE_ROOM: the most a 1-2 line cut
+     gives; a GIFT when the phase allows one).
+   - The coaster reads the board, with a small clock: a gift string (1..HOME_GIFT_MAX trays, rolled) starts only when
+     the board has earned it (HOME_EARN nearly-done lines, or a board a cut can empty) and ends early when the board has
+     no gift left; then HOME_COOL_MIN..MAX cool trays (TWIST with odds HOME_TWIST, else STEADY) with no gift; then warm
+     STEADY trays until the board earns the next string. A board clear is followed by BUILD, which counts in the string
+     (or in the cool stretch). No plan is carried between trays: each tray reads the board she left, so an off-plan drop
+     breaks nothing. Golden hands and the star are not dealt under it (bonus trays and transformations still are). */
+const hdOn=()=>CFG.DEALER_HOME&&tideOn();
+let hdeal={ph:'warm',n:0,len:0};                      // the coaster: 'warm' | 'gift' | 'cool', trays dealt in it, its rolled length (warm: 0)
+function resetHd(){ hdeal={ph:'warm',n:0,len:0}; } // (no rnd() here: resetWave runs it on every path, Challenge included)
+function hdSet(ph){ hdeal={ph,n:0,len:ph==='gift'?1+((rnd()*CFG.HOME_GIFT_MAX)|0):ph==='cool'?CFG.HOME_COOL_MIN+((rnd()*(CFG.HOME_COOL_MAX-CFG.HOME_COOL_MIN+1))|0):0}; }
+const ctz=x=>31-Math.clz32(x&-x);
+/* a placement's outline, cached on it: masks of the cells next to it (a cell next to two of its cells is in the second
+   mask too), how many edges that is, and how many of its edges are the wall */
+function edgeOf(s,m){
+  if(m.e) return m.e;
+  const cnt=new Uint8Array(64), own=new Set(s.cells.map(([r,c])=>(m.r+r)*8+m.c+c)); let wall=0, tot=0;
+  for(const i of own) for(const j of NB[i]){ if(j<0) wall++; else if(!own.has(j)){ cnt[j]++; tot++; } }
+  const a=[0,0,0,0,0,0];
+  for(let j=0;j<64;j++) for(let q=0;q<Math.min(cnt[j],3);q++){ if(j<32) a[q*2]|=1<<j; else a[q*2+1]|=1<<(j-32); }
+  return (m.e={a,tot,wall});
+}
+// how much a drop raises the raggedness (walls counted as filled): edges left open less edges against gems or the wall
+function bumpOf(lo,hi,s,m){ const e=edgeOf(s,m), a=e.a; return e.tot-e.wall-2*(pop32(a[0]&lo)+pop32(a[1]&hi)+pop32(a[2]&lo)+pop32(a[3]&hi)+pop32(a[4]&lo)+pop32(a[5]&hi)); }
+/* THE home test, for a legal spot m: lines it completes (1+), 0 if it sits flush, -1 if it is no home. Leaves the board
+   after the drop (clears applied) in _lo/_hi, like applyBits. */
+function homeAt(lo,hi,s,m){
+  const lines=applyBits(lo,hi,s,m);
+  if(lines) return lines;
+  return bumpOf(lo,hi,s,m)<=CFG.HOME_BUMP&&!sealedNear(lo|m.lo,hi|m.hi,m,s)?0:-1;
+}
+function hasHome(lo,hi,s){ for(const m of placeMasks(s)) if(!(lo&m.lo)&&!(hi&m.hi)&&homeAt(lo,hi,s,m)>=0) return true; return false; }
+/* how many distinct drop orders play every piece at a home in turn (clears between drops). 0: the tray has a piece
+   with no home in any order. Identical pieces give one order between them. */
+function homeOrders(lo0,hi0,hand,budget=2000){
+  const ps=hand.length===3?PERMS:hand.length===2?[[0,1],[1,0]]:[[0]], seen=new Set();
+  let orders=0, nodes;
+  const dfs=(lo,hi,p,i)=>{
+    if(i===p.length) return true;
+    const s=hand[p[i]];
+    for(const m of placeMasks(s)){
+      if(nodes<=0) return false;
+      if((lo&m.lo)||(hi&m.hi)) continue;
+      nodes--;
+      if(homeAt(lo,hi,s,m)<0) continue;
+      if(dfs(_lo,_hi,p,i+1)) return true;
+    }
+    return false;
+  };
+  for(const p of ps){ const key=p.map(k=>SHAPES.indexOf(hand[k])).join(); if(seen.has(key)) continue; seen.add(key); nodes=budget; if(dfs(lo0,hi0,p,0)) orders++; }
+  return orders;
+}
+/* (measure) does piece k have a home on the board as dealt, or after one or two of its tray-mates are dropped at homes?
+   The bot sim asks it of every dealer; the tests ask it of this one. */
+function homeAfterMates(lo0,hi0,hand,k,budget=4000){
+  let nodes=budget;
+  const rec=(lo,hi,used)=>{
+    if(hasHome(lo,hi,hand[k])) return true;
+    for(let j=0;j<hand.length;j++){
+      if(j===k||used&(1<<j)||hand[j].star) continue;
+      for(const m of placeMasks(hand[j])){
+        if(nodes--<=0) return false;
+        if((lo&m.lo)||(hi&m.hi)) continue;
+        if(homeAt(lo,hi,hand[j],m)<0) continue;
+        if(rec(_lo,_hi,used|(1<<j))) return true;
+      }
+    }
+    return false;
+  };
+  return hand[k].star||rec(lo0,hi0,0);
+}
+let PL_CELL=null;                                      // every placement of every shape, by each cell it covers, biggest shapes first
+function plCell(){
+  if(PL_CELL) return PL_CELL;
+  PL_CELL=Array.from({length:64},()=>[]);
+  for(const s of HUNT_POOL.slice().sort((x,y)=>y.n-x.n)) for(const m of placeMasks(s)) for(const [r,c] of s.cells) PL_CELL[(m.r+r)*8+m.c+c].push({s,m});
+  return PL_CELL;
+}
+/* cuts of a target (tlo/thi, empty cells) into up to three shapes, at most smallMax of 3 cells or fewer, up to `limit` of
+   them. A piece may spill past the target onto empty cells (spillMax in all), but only where it sits flush (bumpOf at
+   most HOME_BUMP on the board with the pieces before it): an L that fills a gap and sits on the gems beside it. */
+function tilings(lo,hi,tlo,thi,smallMax,spillMax,limit,budget){
+  const PL=plCell(), out=[], path=[]; let nodes=budget;
+  const rec=(rlo,rhi,flo,fhi,small,spill)=>{
+    if(!rlo&&!rhi){ out.push(path.slice()); return; }
+    if(path.length>=3||pop32(rlo)+pop32(rhi)>9*(3-path.length)) return;
+    for(const t of PL[rlo?ctz(rlo):32+ctz(rhi)]){
+      if(nodes<=0||out.length>=limit) return;
+      const m=t.m; if((m.lo&~flo)||(m.hi&~fhi)) continue;
+      const sp=pop32(m.lo&~tlo)+pop32(m.hi&~thi); if(spill+sp>spillMax) continue;
+      const sm=small+(t.s.n<=3?1:0); if(sm>smallMax) continue;
+      nodes--;
+      if(sp&&bumpOf(~flo,~fhi,t.s,m)>CFG.HOME_BUMP) continue;
+      path.push(t); rec(rlo&~m.lo,rhi&~m.hi,flo&~m.lo,fhi&~m.hi,sm,spill+sp); path.pop();
+    }
+  };
+  rec(tlo,thi,~lo,~hi,0,0);
+  return out;
+}
+// a cut dropped in every order: the most lines, how many orders reach them, how many orders empty the board
+function cutPlay(lo0,hi0,tiles){
+  const ps=tiles.length===3?PERMS:tiles.length===2?[[0,1],[1,0]]:[[0]];
+  let best=-1, good=0, sweeps=0, left=64, alo=0, ahi=0;
+  for(const p of ps){
+    let lo=lo0, hi=hi0, n=0;
+    for(const k of p){ n+=applyBits(lo,hi,tiles[k].s,tiles[k].m); lo=_lo; hi=_hi; }
+    if(!lo&&!hi) sweeps++;
+    if(n>best){ best=n; good=1; left=pop32(lo)+pop32(hi); alo=lo; ahi=hi; } else if(n===best) good++;
+  }
+  let tlo=0, thi=0; for(const t of tiles){ tlo|=t.m.lo; thi|=t.m.hi; }
+  return {lines:best,good,sweeps,orders:ps.length,left,lo:alo,hi:ahi,strays:pop32(alo&tlo)+pop32(ahi&thi)};   // after an order that reaches the most lines: left, the gems on the board (lo/hi); strays, cells of the pieces still standing
+}
+/* the cut: of the sets of 1-4 rows/columns, the tightest whose empty cells tile, for what the tray is to be:
+   'gift' 3+ lines or a board clear; 'steady' and 'rescue' 1-2 lines and no board clear; 'one' a single piece, one line. */
+function* homeCutSteps(lo,hi,want){
+  const gems=pop32(lo)+pop32(hi), cands=[], emp=[];
+  for(let i=0;i<16;i++) emp.push(8-pop32(lo&LINE_MASKS[i*2])-pop32(hi&LINE_MASKS[i*2+1]));
+  const ready=8-CFG.BIG_READY_CELLS;                   // a line a gift finishes is nearly done: she can see the gift coming
+  for(let k=0;k<LINE_SETS.length;k++){
+    const ids=LINE_SETS[k], nl=ids.length, L=SET_LO[k], H=SET_HI[k], tlo=L&~lo, thi=H&~hi, n=pop32(tlo)+pop32(thi);
+    if(!n||n>27) continue;
+    const sweep=gems>0&&!(lo&~L)&&!(hi&~H);
+    let sc, far=0; for(const i of ids) far=Math.max(far,emp[i]);
+    if(want==='gift'){ if(sweep) sc=n-24; else if(nl>=3&&far<=ready) sc=n-3*nl; else continue; }
+    else if(want==='one'){ if(nl!==1||n>9||sweep) continue; sc=n; }
+    else { if(nl>2||n>18) continue; sc=want==='rescue'?n-6*nl:n; }
+    cands.push({tlo,thi,n,sweep,sc:sc+rnd()*3});
+  }
+  cands.sort((x,y)=>x.sc-y.sc);
+  const found=[];
+  for(let i=0;i<Math.min(cands.length,10);i++){
+    const c=cands[i], tl=tilings(lo,hi,c.tlo,c.thi,c.sweep&&want==='gift'?3:1,c.sweep&&want==='gift'?0:6,want==='one'?3:6,1500);
+    for(const tiles of tl){
+      if(want==='one'&&tiles.length!==1) continue;
+      const pl=cutPlay(lo,hi,tiles), size=tiles.reduce((a,t)=>a+t.s.n,0), small=tiles.filter(t=>t.s.n<=3).length;
+      const swept=pl.sweeps>0;
+      if(want==='gift'&&!(pl.lines>=3||swept)) continue;
+      if((want==='steady'||want==='rescue')&&(pl.lines<1||pl.lines>2||swept)) continue;
+      if(want==='one'&&pl.lines!==1) continue;
+      let now=0, imm=0; for(const t of tiles){ const h=homeAt(lo,hi,t.s,t.m); if(h>=0) now++; if(h>0) imm++; }   // imm: pieces that clear a line the moment they drop, whatever the order
+      let sc=pl.lines*6+pl.good/pl.orders*8+size*0.8-small*10+now*2+imm*4-c.n*0.2-pl.left*(want==='gift'?0.8:0.3)-pl.strays*(want==='one'?0.5:1.5);   // the board it leaves low (a gift cashes in), and no bits of the pieces left standing
+      if(want==='gift'&&!swept) sc-=(3-tiles.length)*8;   // a cash-in: all three pieces in the cut
+      found.push({tiles,tlo:c.tlo,thi:c.thi,play:pl,sweep:swept&&want==='gift',sc});
+    }
+    yield;
+  }
+  found.sort((x,y)=>y.sc-x.sc);
+  const look=want==='gift'?found.filter(f=>f.sweep).slice(0,8).concat(found.filter(f=>!f.sweep).slice(0,4)):found.slice(0,4);
+  let best=null;
+  for(const f of look){
+    if(want==='gift'){                                  // of the best few, the gift a person finds (personPlays: plays that vary like hers)
+      const hand=f.tiles.map(t=>t.s);
+      if(f.sweep) while(hand.length<3) hand.push(OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0]);   // a clear in one or two pieces: the rest are big blocks to build with once the board is empty (BUILD's chain)
+      if(f.sweep&&hand.length>f.tiles.length) f.pads=hand.slice(f.tiles.length);
+      const pp=personPlays(lo,hi,hand,3);
+      if(f.sweep&&pp.sw<CFG.SWEEP_EASE){ f.sweep=false; if(f.play.lines<3) continue; }   // a board clear most people would miss is no board clear
+      f.sc+=30*pp.hit+(f.sweep?20+60*pp.sw:0);         // a board clear above all
+    }
+    if(!f.sweep&&f.play.left&&f.play.left<=CFG.SWEEP_MAX&&want!=='one'){   // the board it leaves a cut can clear: the string, or the next one, ends on a board clear
+      const e=sweepGap(f.play.lo,f.play.hi)<=24?sweepCutEase(f.play.lo,f.play.hi):0;
+      f.sc+=e?25*e:-0.5*Math.min(sweepGap(f.play.lo,f.play.hi),30);
+    }
+    if(!best||f.sc>best.sc) best=f;
+  }
+  return best;
+}
+// how well a cut clears this board: of the cuts that do (three pieces exactly filling rows and columns that hold every gem),
+// the best share of a person's plays that empty it (personPlays); 0 if none does
+function sweepCutEase(lo,hi){
+  const gems=pop32(lo)+pop32(hi); let tried=0, best=0;
+  if(!gems) return 1;
+  for(let k=0;k<LINE_SETS.length&&tried<12&&best<0.75;k++){
+    const L=SET_LO[k], H=SET_HI[k];
+    if((lo&~L)||(hi&~H)) continue;
+    const tlo=L&~lo, thi=H&~hi; if(pop32(tlo)+pop32(thi)>27) continue;
+    tried++;
+    for(const t of tilings(lo,hi,tlo,thi,3,0,2,300)) if(t.length===3&&cutPlay(lo,hi,t).sweeps) best=Math.max(best,personPlays(lo,hi,t.map(x=>x.s),99).sw);
+  }
+  return best;
+}
+/* a builder: a piece with a home that keeps off the cells in use (blo/bhi), the board left tidy. 'calm': rectangles,
+   bars, corners and L's (RUN_POOL); 'twist': any shape, awkward ones welcome. Scored on nearly-done lines it makes,
+   lines it clears (calm) or does not (twist), how flush it sits and its size; one of the best few, at random. */
+function homeBuilder(lo,hi,blo,bhi,style,smallOk){
+  const r0=readyLines(lo,hi), opts=[], low=pop32(lo)+pop32(hi)<=20&&style!=='twist';   // low: on a small board a calm builder keeps it close to a board clear
+  for(const s of style==='twist'?HUNT_POOL:RUN_POOL){
+    if(s.n<=3&&!smallOk) continue;
+    let bv=-Infinity, bm=null, spots=0;
+    for(const m of placeMasks(s)){
+      if((lo&m.lo)||(hi&m.hi)) continue;
+      spots++;
+      if((blo&m.lo)||(bhi&m.hi)) continue;
+      const h=homeAt(lo,hi,s,m); if(h<0) continue;
+      const v=3*(readyLines(_lo,_hi)-r0)+(style==='twist'?-3*h:h)-bumpOf(lo,hi,s,m)*0.5;
+      if(v>bv){ bv=v; bm=m; }
+    }
+    if(!bm) continue;
+    if(low){ applyBits(lo,hi,s,bm); bv-=0.3*Math.min(sweepDist(_lo,_hi),40); }
+    let off=true; if(blo|bhi) for(const m of placeMasks(s)) if(!(lo&m.lo)&&!(hi&m.hi)&&((m.lo&blo)|(m.hi&bhi))){ off=false; break; }   // it cannot be dropped into the cut's gap by mistake
+    opts.push({s,m:bm,v:bv+s.n*0.6+(style==='twist'&&awkward(s)?2:0)-(s.n<=3?3:0)+(off?4:0)-Math.max(0,6-spots)*1.5});   // a piece with a handful of spots left is a trap for a quick player
+  }
+  if(!opts.length) return null;
+  opts.sort((x,y)=>y.v-x.v);
+  return opts[(rnd()*Math.min(4,opts.length))|0];
+}
+const smallCount=h=>h.filter(s=>!s.star&&s.n<=3).length;
+/* one tray of a kind, built from the board (lo,hi): {hand, sweep} or null if this board offers none */
+function* homeHandSteps(lo,hi,kind){
+  for(let attempt=0;attempt<3;attempt++){
+    let parts=[], blo=0, bhi=0, sweep=false, style='calm';
+    if(kind==='BUILD'){
+      const p=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0], h=[p,p,p];
+      if(rnd()<0.4) h[2]=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0];
+      if(homeOrders(lo,hi,h)) return {hand:h,sweep:false};
+      continue;
+    }
+    if(kind==='TWIST'){
+      style='twist';
+      if(rnd()<0.5){
+        const c=yield* homeCutSteps(lo,hi,'one');
+        if(c){ parts.push(c.tiles[0].s); blo=c.tlo; bhi=c.thi;
+          if(rnd()<0.35){                                  // hard, then you see it: a big piece whose home opens once the cut piece has cleared its line
+            applyBits(lo,hi,c.tiles[0].s,c.tiles[0].m); const alo=_lo, ahi=_hi;
+            const later=HUNT_POOL.filter(s=>s.n>=4&&!hasHome(lo,hi,s)&&hasHome(alo,ahi,s));
+            if(later.length) parts.push(later[(rnd()*later.length)|0]);
+          }
+        }
+      }
+    } else {
+      const c=yield* homeCutSteps(lo,hi,kind==='GIFT'?'gift':kind==='RESCUE'?'rescue':'steady');
+      if(!c) return null;                                   // no cut on this board: the caller falls back
+      parts=c.tiles.map(t=>t.s).concat(c.pads||[]); blo=c.tlo; bhi=c.thi; sweep=c.sweep;
+    }
+    let ok=true;
+    while(parts.length<3){
+      const b=homeBuilder(lo,hi,blo,bhi,style,false);
+      if(!b){ ok=false; break; }
+      parts.push(b.s); blo|=b.m.lo; bhi|=b.m.hi;
+    }
+    yield;
+    if(!ok||smallCount(parts)>1&&!sweep) continue;
+    for(let k=2;k>0;k--){ const j=(rnd()*(k+1))|0; [parts[k],parts[j]]=[parts[j],parts[k]]; }   // the tray order never gives the drop order away
+    const orders=homeOrders(lo,hi,parts);
+    if(orders) return {hand:parts,sweep,orders};
+  }
+  return null;
+}
+/* no cut fits: generate and test. Pieces with a home now, big ones likelier; kept to the hard rules (every piece a home in
+   some order, one small piece at most), the closest to the kind's lines wins. */
+function* homeFallbackSteps(a0,lo,hi,kind){
+  const pool=HUNT_POOL.filter(s=>hasHome(lo,hi,s)), w=pool.map(s=>s.n<=3?0.3:s.n);
+  if(!pool.length) return null;
+  const pick=()=>{ let r=rnd()*w.reduce((a,b)=>a+b,0); for(let i=0;i<pool.length;i++){ r-=w[i]; if(r<=0) return pool[i]; } return pool[pool.length-1]; };
+  let best=null, bestSc=-Infinity;
+  for(let i=0;i<24;i++){
+    const h=[pick(),pick(),pick()];
+    if(i%4===3) yield;
+    if(smallCount(h)>1) continue;
+    const orders=homeOrders(lo,hi,h); if(!orders) continue;
+    const ev=evalHand(a0,h,CFG.NODE_BUDGET), l=ev.lines;
+    const fit=kind==='GIFT'?(ev.sweep||l>=3?20:l*4):kind==='TWIST'?(l<=1?20:0):kind==='BUILD'?0:(l>=1&&l<=2?20:l>2?10:0);
+    const sc=fit+orders*2+h.reduce((a,s)=>a+s.n,0)*0.5;
+    if(sc>bestSc){ bestSc=sc; best=h; }
+    if(bestSc>=30&&i>=6) break;
+  }
+  return best;
+}
+const hdStats={kinds:{},fallback:0,guard:0};        // this session only (the bot sim reads them)
+function* homeDealSteps(a0){
+  const [lo,hi]=packBits(a0), gems=pop32(lo)+pop32(hi);
+  goldenNext=false;                                    // no golden hands under this dealer
+  if(hdeal.ph==='gift'&&hdeal.n>=hdeal.len) hdSet('cool');
+  else if(hdeal.ph==='cool'&&hdeal.n>=hdeal.len) hdSet('warm');
+  const crowded=roomNow<CFG.HOME_RESCUE_ROOM;
+  let kind=null, got=null;
+  if(!gems&&trayNo>1){ kind='BUILD'; if(hdeal.ph==='warm') hdSet('gift'); }   // after a board clear: big matching pieces, in the string
+  else if(hdeal.ph!=='cool'&&(hdeal.ph==='gift'||crowded||readyLines(lo,hi)>=CFG.HOME_EARN||gems<=CFG.SWEEP_MAX&&sweepGap(lo,hi)<=24)){
+    got=yield* homeHandSteps(lo,hi,'GIFT');
+    if(got){ kind='GIFT'; if(hdeal.ph==='warm') hdSet('gift'); }
+    else if(hdeal.ph==='gift') hdSet('cool');         // the board has no gift left: the string ends early
+  }
+  if(!kind) kind=crowded?'RESCUE':hdeal.ph==='cool'?(rnd()<CFG.HOME_TWIST?'TWIST':'STEADY'):'STEADY';
+  if(!got) got=yield* homeHandSteps(lo,hi,kind);
+  let hand=got&&got.hand, tag='';
+  if(!hand){ hand=yield* homeFallbackSteps(a0,lo,hi,kind); tag='·FB'; hdStats.fallback++; }
+  if(!hand){ hand=HUNT_POOL.filter(s=>fitsBits(lo,hi,s)).slice(0,3); while(hand.length<3) hand.push(SHAPES[0]); tag='·GUARD'; }
+  const kept=yield* ensureWaySteps(a0,hand,'home');
+  if(kept!==hand){ hand=kept; tag='·GUARD'; }
+  if(tag==='·GUARD') hdStats.guard++;
+  hdStats.kinds[kind]=(hdStats.kinds[kind]||0)+1;
+  hdeal.n++;
+  commitTray(hand,'HOME '+kind+(got&&got.sweep&&!tag?'·CLEAR':'')+tag+' '+hdeal.ph+(hdeal.len?' '+hdeal.n+'/'+hdeal.len:''));   // ·CLEAR: the cut can empty the board
+}
 /* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
 // The tray deal runs as a generator that yields after every candidate hand, so a deal can be
 // spread over a few frames (dealLater) instead of landing in the frame a clear starts. Same
@@ -1020,6 +1331,7 @@ function* dealSteps(){
   starCool=Math.max(0,starCool-1);
 
   waveTick();                                           // (7.3) setups age, the dry spell and the wave clock count
+  if(hdOn()){ yield* homeDealSteps(a0); return; }     // the home dealer (DEALER_HOME) deals Endless and Daily instead of the tide below
   const freeOfSpecials=specialsOk&&!goldenNext&&!golden&&trayNo>specialEnd+1;   // (7.3) a closer never shares a tray with a star or golden hand, nor follows a special (bonus trays and looks only change points and colours, so they allow one)
   const tideNow=tideOn()&&tier!=='edge'&&tier!=='recovery'?tideStep():null;   // (1.1 G) 'easy' | 'lean' (null: edge, recovery, or no tide)
   if(tideNow) tier=tideNow;                             // the stretch replaces calm/building/relief's tiers (relief started a fresh EASY one)
