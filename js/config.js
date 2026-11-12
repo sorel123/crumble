@@ -129,15 +129,17 @@ const CFG = {
   // tide in Endless and Daily when on; Challenge and Adventure never use it. Also on with ?dealer=home in the URL (off: ?dealer=tide).
   DEALER_HOME: /[?&]dealer=home(&|$)/.test(location.search),   // off by default
   HOME_BUMP:      2,     // a home that clears nothing may raise the raggedness (walls count as filled) by at most this (0 = only snug spots)
-  HOME_GIFT_MAX:  3,     // a gift string (trays of 3+ lines or a board clear) lasts 1 to this many trays, rolled
-  HOME_COOL_MIN:  6,     // after a string, this many cool trays at least (TWIST and STEADY, never a gift)...
-  HOME_COOL_MAX:  10,    //   ...and at most (rolled per stretch)
-  HOME_EARN:      5,     // after the cool stretch a new string starts once this many lines are nearly done (or a cut can clear the board)
-  HOME_TWIST:     0.9,   // odds a cool tray is a TWIST (builds the board up, 0-1 lines) rather than a STEADY (1-2 lines)
-  HOME_RESCUE_ROOM: 0.25, // a board with less room than this gets a rescue tray whatever the phase (in a cool stretch no gift)
+  HOME_COOL_MIN:  8,     // after win mode, this many cool trays at least (TWIST and STEADY, never a gift)...
+  HOME_COOL_MAX:  12,    //   ...and at most (rolled per stretch)
+  HOME_EARN:      3,     // after the cool stretch win mode starts once this many lines are nearly done (or a crowded or low board)
+  HOME_WIN_WAIT:  4,     // ...or anyway after this many warm trays
+  HOME_WIN_MAX:   8,     // win mode lasts until the board is wiped (and its BUILD tray), or this many trays...
+  HOME_WIN_DRY:   2,     //   ...or this many trays in a row in which she cleared no line
+  HOME_TWIST:     0.95,   // odds a cool tray is a TWIST (builds the board up, 0-1 lines) rather than a STEADY (1-2 lines)
+  HOME_RESCUE_ROOM: 0.1,  // a board with less room than this gets a rescue tray whatever the phase (in a cool stretch no gift)
   HOME_FINISH_GEMS: 18,  // a board this low (and not empty) is low: FINISH trays may come, and a home that clears nothing must sit flush
   HOME_FINISH:    0.6,   // odds a low board gets a FINISH tray (the pieces that clear it, or leave the least), any phase
-  HOME_FINISH_HOT: 0.85, //   ...the odds on a heater (a gift string, or the few trays after a board clear)
+  HOME_FINISH_HOT: 0.85, //   ...the odds in win mode (the heater)
   HOME_FINISH_MAX: 3,    // at most this many FINISH trays in a row, then the phase's own kind
 
   // difficulty wave (Adventure only since plan 6.1: its levels and stars are calibrated on it)

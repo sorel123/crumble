@@ -4078,15 +4078,23 @@ test('big solves (round 3): after a LEAN stretch, a board of nearly-done lines g
 // ---- the home dealer (DEALER_HOME) ----
 // in the page: plays `trays` trays of Endless from the seeded stream `seed` with a simple person-like bot (its own dice: any
 // piece first, one of the three snuggest spots), starting a new game when stuck. Per tray as dealt: the shapes, the label, the
-// game, and with `check` whether it has a solution, whether every piece has a home (as dealt or after its tray-mates) and its
-// count of pieces of 3 cells or fewer.
+// game, the gems on the board, the lines cleared in it (cl) and board wipes (sw), and with `check` whether it has a solution,
+// whether every piece has a home (as dealt or after its tray-mates), its count of pieces of 3 cells or fewer, and for a WIN
+// tray the most gems a play at homes takes off the board (net).
 const HOME_SIM = `(trays, seed, check) => {
   let hs = seed * 7919 + 1; const hr = () => { hs = (hs + 0x6D2B79F5) >>> 0; let t = hs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const flush = (s, r, c) => { let k = 0; for (const [dr, dc] of s.cells) for (const [a, b] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) { const rr = r + dr + a, cc = c + dc + b; if (s.cells.some(([x, y]) => x === dr + a && y === dc + b)) continue; if (rr < 0 || cc < 0 || rr >= N || cc >= N || grid[rr][cc]) k++; } return k; };
   const finish = () => { if (dealing) { runSteps(dealing.it); dealing = null; } };
-  const out = []; let game = 0;
-  const rec = () => { const a0 = packGrid(grid), [lo, hi] = packBits(a0), hand = tray.map(t => t.s); const r = { t: hand.map(s => SHAPES.indexOf(s)).join(','), l: lastTier, g: game };
-    if (check) { r.ok = evalHand(a0, hand, 400000).ok; r.home = hand.every((s, k) => homeAfterMates(lo, hi, hand, k, 20000)); r.small = hand.filter(s => s.n <= 3).length; r.flush = homeOrders(lo, hi, hand, 4000, 0) > 0; }
+  const out = []; let game = 0, l0 = stats.lines, s0 = stats.sweeps;
+  // the most gems a play at homes takes off the board (gems removed less cells added), every order, every home spot
+  const netOf = (lo0, hi0, hand) => { const hb = hbOf(lo0, hi0), g0 = pop32(lo0) + pop32(hi0); let best = -99, nodes = 60000;
+    const dfs = (lo, hi, left) => { if (!left.length) { best = Math.max(best, g0 - pop32(lo) - pop32(hi)); return; }
+      for (let k = 0; k < left.length; k++) for (const m of placeMasks(left[k])) { if (nodes-- <= 0) return; if ((lo & m.lo) || (hi & m.hi) || homeAt(lo, hi, left[k], m, hb) < 0) continue; const a = _lo, b = _hi; dfs(a, b, left.filter((x, j) => j !== k)); } };
+    dfs(lo0, hi0, hand); return best; };
+  const rec = () => { const a0 = packGrid(grid), [lo, hi] = packBits(a0), hand = tray.map(t => t.s); const r = { t: hand.map(s => SHAPES.indexOf(s)).join(','), l: lastTier, g: game, gems: pop32(lo) + pop32(hi) };
+    if (out.length) { const p = out[out.length - 1]; p.cl = stats.lines - l0; p.sw = stats.sweeps - s0; } l0 = stats.lines; s0 = stats.sweeps;   // the tray before: lines she cleared in it, board wipes
+    if (check) { r.ok = evalHand(a0, hand, 400000).ok; r.home = hand.every((s, k) => homeAfterMates(lo, hi, hand, k, 20000)); r.small = hand.filter(s => s.n <= 3).length; r.flush = homeOrders(lo, hi, hand, 4000, 0) > 0;
+      if (/^HOME WIN/.test(lastTier)) r.net = netOf(lo, hi, hand); }
     out.push(r); };
   rndSrc = mulberry(seed); start(); finish(); rec();
   while (out.length < trays) {
@@ -4139,41 +4147,95 @@ test('home dealer: a home is a line it completes or a flush spot (HOME_BUMP); no
   assert.equal(r.seal, -1, 'a bar that shuts an empty cell in is no home');
   assert.equal(r.sqOnFloor4, 0, 'HOME_BUMP sets how far it may stick out');
 });
-test('home dealer: bot-played trays on two seeds always have a solution, every piece a home, one small piece, gift strings and cool stretches', async ({ page }) => {
+test('home dealer: bot-played trays on two seeds always have a solution, every piece a home; win mode lasts until a wipe, the cap or a dry spell, then a cool stretch', async ({ page }) => {
   await play(page);
   await page.evaluate(() => { CFG.DEALER_HOME = true; });
-  const cfg = await page.evaluate(() => [CFG.HOME_GIFT_MAX, CFG.HOME_COOL_MIN, CFG.HOME_COOL_MAX]);
-  const RX = /^HOME (\w+)(·CLEAR)?(·FB|·GUARD)? (warm|gift|cool)(?: (\d+)\/(\d+))?$/;
-  let kinds = {}, guards = 0, strings = 0, cools = 0;
+  const cfg = await page.evaluate(() => [CFG.HOME_WIN_MAX, CFG.HOME_COOL_MIN, CFG.HOME_COOL_MAX, CFG.HOME_WIN_DRY]);
+  const RX = /^HOME (\w+)(·CLEAR)?(·FB|·GUARD)? (warm|win|cool)(?: (\d+)\/(\d+))?$/;
+  let kinds = {}, guards = 0, wins = 0, ends = { wipe: 0, cap: 0, dry: 0 }, cools = 0, winTrays = 0, flat = 0, cleared = 0;
   for (const seed of [11, 12]) {
     const r = await page.evaluate(`(${HOME_SIM})(260, ${seed}, true)`);
     for (const t of r) {
       assert.ok(t.ok, 'every tray has a solution: ' + t.l + ' ' + t.t);
       if (t.l === 'OPENING') continue;
       const m = t.l.match(RX); assert.ok(m, 'labelled with the dealer state: ' + t.l);
-      kinds[m[1]] = (kinds[m[1]] || 0) + 1;
+      t.m = m; kinds[m[1]] = (kinds[m[1]] || 0) + 1;
       if (m[3] === '·GUARD') { guards++; continue; }
       assert.ok(t.home, 'every piece has a home: ' + t.l + ' ' + t.t);
-      assert.ok(t.small <= 1 || m[2] || m[1] === 'FINISH', 'one piece of 3 cells or fewer unless it clears the board (FINISH may close out with small pieces): ' + t.l + ' ' + t.t);
-      if (m[1] === 'GIFT') assert.equal(m[4], 'gift', 'gifts only in a string: ' + t.l);
+      assert.ok(t.small <= 1 || m[2] || m[1] === 'FINISH' || m[1] === 'WIN', 'one piece of 3 cells or fewer unless it clears the board (FINISH and WIN may use small pieces): ' + t.l + ' ' + t.t);
+      if (m[1] === 'GIFT' || m[1] === 'WIN') assert.equal(m[4], 'win', 'gifts and WIN trays only in win mode: ' + t.l);
+      if (m[1] === 'WIN') { winTrays++; if (t.net > 0) continue; flat++; }
       if (m[1] === 'FINISH') assert.ok(t.flush, 'a FINISH tray plays every piece strictly flush (or clearing) in some order, padding included: ' + t.l + ' ' + t.t);
     }
-    // per game: a run of string trays is at most HOME_GIFT_MAX long, and the trays after it are a cool stretch of HOME_COOL_MIN..MAX
-    const games = {}; for (const t of r) if (t.l !== 'OPENING') (games[t.g] = games[t.g] || []).push(t.l.match(RX));
+    // per game, from the dealer's own labels: win mode counts 1, 2, ... and ends only on a wipe (its BUILD tray, or the tray after
+    // the wipe), at HOME_WIN_MAX, or after HOME_WIN_DRY trays in a row she cleared nothing in; a cool stretch of HOME_COOL_MIN..MAX follows
+    const games = {}; for (const t of r) if (t.m) (games[t.g] = games[t.g] || []).push(t);
     for (const g of Object.values(games)) {
-      const ph = g.map(m => m[4]).join('').replace(/warm/g, 'w').replace(/gift/g, 'g').replace(/cool/g, 'c');
-      for (const run of ph.match(/g+/g) || []) { strings++; assert.ok(run.length <= cfg[0], 'a string of ' + run.length + ': ' + ph); }
-      const runs = ph.match(/g+|c+|w+/g) || [];
-      runs.forEach((run, i) => {
-        if (run[0] === 'g' && i + 1 < runs.length) assert.equal(runs[i + 1][0], 'c', 'a cool stretch follows a string: ' + ph);
-        if (run[0] === 'c' && i + 1 < runs.length) { cools++; assert.ok(run.length >= cfg[1] && run.length <= cfg[2], 'cool lasts ' + cfg[1] + '-' + cfg[2] + ': ' + ph); }
+      const ph = g.map(t => t.m[4][0]).join('');
+      const runs = []; let k = 0; for (const run of ph.match(/w+|i+|c+/g) || []) { runs.push({ p: run[0], a: k, b: k + run.length }); k += run.length; }
+      runs.forEach((u, i) => {
+        const last = i + 1 === runs.length;
+        if (u.p === 'c' && !last) { cools++; assert.ok(u.b - u.a >= cfg[1] && u.b - u.a <= cfg[2], 'cool lasts ' + cfg[1] + '-' + cfg[2] + ': ' + ph); }
       });
+      for (let a = 0; a < g.length; a++) {
+        if (g[a].m[4] !== 'win' || (a && g[a - 1].m[4] === 'win')) continue;
+        let b = a; while (b + 1 < g.length && g[b + 1].m[4] === 'win') b++;
+        const run = g.slice(a, b + 1); wins++;
+        run.forEach((t, i) => assert.equal(+t.m[5], i + 1, 'win mode counts its trays: ' + run.map(x => x.l).join(' | ')));
+        let dry = 0;
+        for (let i = 0; i < run.length; i++) {                        // nothing ends it early: no wipe, no dry spell before its last tray
+          const t = run[i], isLast = i === run.length - 1;
+          dry = t.cl ? 0 : dry + 1; cleared += t.cl ? 1 : 0;
+          if (!isLast && t.sw) assert.ok(i + 1 === run.length - 1 && run[i + 1].m[1] === 'BUILD' && run[i + 1].gems === 0, 'a wipe ends win mode after its BUILD tray: ' + run.map(x => x.l + ' ' + x.cl + '/' + x.sw).join(' | '));
+          if (!isLast) assert.ok(dry < cfg[3] || (i + 1 === run.length - 1 && run[i + 1].m[1] === 'BUILD'), 'a dry spell of ' + cfg[3] + ' ends it: ' + run.map(x => x.l + ' ' + x.cl).join(' | '));
+        }
+        if (b + 1 >= g.length) continue;                               // the game ended in it
+        assert.equal(g[b + 1].m[4], 'cool', 'a cool stretch follows win mode: ' + ph);
+        const t = run[run.length - 1], why = t.sw || t.m[1] === 'BUILD' && t.gems === 0 ? 'wipe' : run.length === cfg[0] ? 'cap' : dry >= cfg[3] ? 'dry' : null;
+        assert.ok(why, 'win mode ends only on a wipe, the cap or a dry spell: ' + run.map(x => x.l + ' ' + x.cl + '/' + x.sw).join(' | '));
+        ends[why]++;
+      }
     }
   }
-  assert.ok(strings >= 10 && cools >= 5, 'strings and cool stretches came round: ' + strings + ' / ' + cools);
-  assert.ok(kinds.GIFT && kinds.STEADY && kinds.TWIST, 'the kinds: ' + JSON.stringify(kinds));
+  assert.ok(wins >= 10 && cools >= 5, 'win modes and cool stretches came round: ' + wins + ' / ' + cools);
+  assert.ok(ends.cap + ends.wipe + ends.dry >= 8, 'win modes ended: ' + JSON.stringify(ends));
+  assert.ok(winTrays >= 40, 'WIN trays came round: ' + winTrays);
+  assert.ok(flat <= winTrays * 0.05, 'a WIN tray takes gems off the board when played at homes (net > 0): ' + flat + ' of ' + winTrays + ' did not');
+  assert.ok(kinds.WIN && kinds.STEADY && kinds.TWIST, 'the kinds: ' + JSON.stringify(kinds));
   assert.ok(guards <= 2, 'the last guard is rare: ' + guards);
   assert.ok(kinds.FINISH, 'FINISH trays came round: ' + JSON.stringify(kinds));
+});
+test('home dealer: win mode starts when earned or after HOME_WIN_WAIT warm trays, carries on across trays that clear, and ends on a dry spell, the cap, or a wipe after its BUILD tray', async ({ page }) => {
+  await play(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    CFG.DEALER_HOME = true; W73(); roomNow = 1; const o = {}; rndSrc = mulberry(7);
+    const mid = ['00000000','00000000','00000011','00110000','11001100','11001100','11001100','11001100'];   // no nearly-done line, not low (20 gems), room
+    const ready = ['00000000','00000000','00000000','00000000','11111000','11111000','11111000','10000000'];   // three nearly-done lines
+    const deal = (rows, cleared) => { B73(rows); roomNow = 1; trayClear = cleared; tray = [null, null, null]; genTray(); return lastTier; };
+    const W = CFG.HOME_WIN_WAIT, s0 = { ...hdStats.win };
+    hdeal = { ph: 'warm', n: 0, len: 0, f: 0, wp: 0 }; o.warm = []; for (let k = 0; k < W + 1; k++) o.warm.push(deal(mid, true));
+    hdeal = { ph: 'warm', n: 0, len: 0, f: 0, wp: 0 }; o.earned = deal(ready, true);
+    o.on = []; for (let k = 0; k < 3; k++) o.on.push(deal(mid, true));               // she clears in every tray: it carries on
+    o.dry = [deal(mid, false), deal(mid, false)];                                   // the last tray and the one before it cleared nothing: cool
+    hdeal = { ph: 'win', n: CFG.HOME_WIN_MAX - 1, len: CFG.HOME_WIN_MAX, f: 0, wp: 0 }; o.cap = [deal(mid, true), deal(mid, true)];
+    hdeal = { ph: 'win', n: 2, len: CFG.HOME_WIN_MAX, f: 0, wp: 0 }; dryN = 0;
+    B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11111110']);
+    waveAfterDrop(packGrid(grid), 1, 0, 1, false); o.wp = hdeal.wp;                  // she wipes the board in win mode
+    o.wipe = [deal(Array(8).fill('00000000'), true), deal(mid, true)];
+    o.ends = ['cap', 'dry', 'wipe'].map(k => (hdStats.win[k] || 0) - (s0[k] || 0));
+    rndSrc = null; return o; })()`);
+  const W = await page.evaluate(() => CFG.HOME_WIN_WAIT), M = await page.evaluate(() => CFG.HOME_WIN_MAX);
+  r.warm.slice(0, W).forEach(l => assert.match(l, / warm$/, 'warm until earned: ' + r.warm));
+  assert.match(r.warm[W], / win 1\/\d+$/, 'after HOME_WIN_WAIT warm trays it starts anyway: ' + r.warm);
+  assert.match(r.earned, /^HOME \w+(·\w+)? win 1\//, 'nearly-done lines (HOME_EARN) start it: ' + r.earned);
+  assert.deepEqual(r.on.map(l => l.split(' ').pop()), ['2/' + M, '3/' + M, '4/' + M], 'it carries on across trays that clear: ' + r.on);
+  assert.match(r.dry[0], / win 5\//, 'one dry tray does not end it: ' + r.dry);
+  assert.match(r.dry[1], / cool \d+\/\d+$/, 'HOME_WIN_DRY trays she cleared nothing in end it: ' + r.dry);
+  assert.match(r.cap[0], new RegExp(' win ' + M + '/' + M + '$')); assert.match(r.cap[1], / cool /, 'HOME_WIN_MAX ends it: ' + r.cap);
+  assert.equal(r.wp, 1, 'the wipe is seen as it happens');
+  assert.match(r.wipe[0], /^HOME BUILD win 3\//, 'the emptied board gets its BUILD tray in win mode: ' + r.wipe);
+  assert.match(r.wipe[1], / cool /, 'then win mode ends: ' + r.wipe);
+  assert.deepEqual(r.ends, [1, 1, 1], 'the dealer records why each ended');
 });
 test('home dealer: FINISH on a low board in a cool stretch empties it (single cells too), padding flush; a roll, capped in a row', async ({ page }) => {
   await play(page);
@@ -4207,17 +4269,19 @@ test('home dealer: its coaster survives a resume; an empty board deals BUILD; no
   await play(page);
   const r = await page.evaluate('(() => {' + B73 + `
     CFG.DEALER_HOME = true; W73(); const o = {};
-    hdeal = { ph: 'cool', n: 3, len: 6, f: 2, hot: 1 };
+    hdeal = { ph: 'win', n: 3, len: 8, f: 2, wp: 1 };
     const snap = JSON.parse(JSON.stringify(snapshot())); resetHd(); restore(snap); o.saved = JSON.stringify(hdeal);
-    delete snap.hm.f; delete snap.hm.hot; resetHd(); restore(snap); o.old = JSON.stringify(hdeal);
+    delete snap.hm.f; delete snap.hm.wp; resetHd(); restore(snap); o.old = JSON.stringify(hdeal);
+    snap.hm = { ph: 'gift', n: 1, len: 3, f: 0, hot: 2 }; resetHd(); restore(snap); o.gift = JSON.stringify(hdeal);   // a save from the gift-string dealer
     W73(); hdeal = { ph: 'warm', n: 0, len: 0 }; B73(Array(8).fill('00000000')); rndSrc = mulberry(3); tray = [null, null, null]; genTray();
     o.build = lastTier; o.hand = tray.map(t => t.s.n);
     W73(); goldenNext = true; starForced = true; o.special = 0;
     for (let k = 0; k < 20; k++) { B73(['00000000','00000000','11100111','11100111','00000000','11111100','11111100','11111100']); tray = [null, null, null]; goldenNext = true; genTray(); if (golden || tray.some(t => t.s.star)) o.special++; }
     rndSrc = null; return o; })()`);
-  assert.equal(r.saved, JSON.stringify({ ph: 'cool', n: 3, len: 6, f: 2, hot: 1 }));
-  assert.equal(r.old, JSON.stringify({ ph: 'cool', n: 3, len: 6, f: 0, hot: 0 }), 'an older save: no FINISH run, no heater');
-  assert.match(r.build, /^HOME BUILD gift 1\/\d$/);
+  assert.equal(r.saved, JSON.stringify({ ph: 'win', n: 3, len: 8, f: 2, wp: 1 }));
+  assert.equal(r.old, JSON.stringify({ ph: 'win', n: 3, len: 8, f: 0, wp: 0 }), 'an older save: no FINISH run, no wipe');
+  assert.equal(r.gift, JSON.stringify({ ph: 'win', n: 1, len: await page.evaluate(() => CFG.HOME_WIN_MAX), f: 0, wp: 0 }), 'a gift string resumes as win mode');
+  assert.match(r.build, /^HOME BUILD warm$/);
   assert.ok(r.hand.every(n => n >= 4), 'big pieces to build with: ' + r.hand);
   assert.equal(r.special, 0, 'no star or golden hand under it');
 });
