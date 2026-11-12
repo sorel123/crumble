@@ -1524,7 +1524,7 @@ clear it deals big matching pieces that rebuild rows (about 14 board clears in 8
   rescue's fixers seed the hand (two of them `CROWD_TWO` of the time), ranked by cells taken away (cleared less the piece's
   own) plus room, LEAN's awkward ones first; a hand scores `CROWD_KEY` per piece that clears now (up to two) and loses 3x it
   with none. This trades game length against board clears per tray (person-like bot): 0.42 gave games 2x longer but a
-  quarter fewer clears per tray; 0.3 gave +15% length and about the same clears. 0.36 sits between.
+  quarter fewer clears per tray; 0.3 gave +15% length and about the same clears. 0.36 sat between; Jay's playtest moved it to 0.45 (see below).
 - **Chain.** `CHAIN_BUILD` (0.8): the tray after a board clear is three of one OPEN_BUILD piece (sometimes two and another),
   label CHAIN.
 - **Carrying combo** (task H, Jay said yes): Endless and Daily (`comboCarries()`: not Challenge, Adventure or the guide) keep
@@ -1577,3 +1577,10 @@ done, then one tray of exact keys clears 4-6 lines at once; bars match the gap l
   Trays with 2+ small pieces 18% to 5%, small pieces 22% to 15%, mean piece 4.18 to 4.3.
 - Tried and dropped: favouring LEAN hands that leave multi-line gaps (`payoffRoom`); no change in the sim. Board clears look a
   little rarer (casual ~1 per 65 trays vs ~1 per 52, the sweep count is noisy across seeds).
+
+### Jay's tuned coaster defaults (2026-11-12)
+
+After playtesting round 6 with the Admin sliders, Jay made his values the defaults: `CROWD_ROOM` 0.36 to 0.45 (comeback
+keys start sooner), `TIDE_EASY_MIN..MAX` 10-18 to 6-12, `TIDE_LEAN_MIN..MAX` 8-14 to 4-8 (shorter dry spells), `LEAN_DRY`
+3 to 2. At 0.45 a scattered board about 40% full already counts as crowded, so LEAN is much softer on such boards: look
+there first if the game gets too easy.
