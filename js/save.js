@@ -200,3 +200,42 @@ function hesSummary(){                                // {n, total, pick, place,
   return {n:w.length,total:hes.log.length,pick:med('pick'),place:med('place'),clr:w.length?Math.round(100*w.filter(s=>s.clr).length/w.length):0};
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') hesVoid(); });
+/* ═══ The play recorder (?dev, or CFG.REC_PLAY) ═══
+   So the dealer is tuned on real boards, not bots. A ring buffer of the last REC_MAX trays in its own localStorage key,
+   one compact record per tray, oldest first ({v:1, e:[...]}):
+     {k:'g', g, m:mode, cfg:{DEALER_HOME, HOME_*...}}        a game starts (r:1: a run resumed after a reload)
+     {k:'t', g, n:trayNo, d:dealer label, p:phase, b:board, s:[shape indices, -1 the star], x:[[slot,row,col,lines,wiped]...]}
+     {k:'o', g, n:trayNo, sc:score}                         game over
+   b: the board at deal, 16 hex chars, two per row from the top, the left column the high bit. Off, nothing runs and
+   nothing is written; a full or missing storage only loses the log, never the game. */
+const REC_STORE='crumble.playlog', REC_ON_STORE='crumble.rec', REC_MAX=800;
+let recLog=null, recCur=null, recLive=false;
+const recOn=()=>CFG.DEV_MODE||CFG.REC_PLAY;
+function recLoad(){
+  if(recLog) return recLog;
+  try{ const o=JSON.parse(localStorage.getItem(REC_STORE)||'null'); if(o&&Array.isArray(o.e)) recLog=o; }catch(e){}
+  return recLog||(recLog={v:1,g:0,e:[]});
+}
+function recSave(){ if(!recLog) return; try{ localStorage.setItem(REC_STORE,JSON.stringify(recLog)); }catch(e){} }
+const recHex=g=>g.map(row=>{ let b=0; for(let c=0;c<N;c++) if(row[c]) b|=0x80>>c; return (b|0x100).toString(16).slice(1); }).join('');
+function recGame(resumed){                             // start(): a new game (and the knobs it is dealt under)
+  if(!recOn()) return;
+  const L=recLoad(); L.g++; recLive=true; recCur=null;
+  const cfg={}; for(const k in CFG) if(k==='DEALER_HOME'||k.startsWith('HOME_')&&k!=='HOME_WORLD') cfg[k]=CFG[k];   // the dealer's knobs (HOME_WORLD is her sky)
+  L.e.push(resumed?{k:'g',g:L.g,m:mode,cfg,r:1}:{k:'g',g:L.g,m:mode,cfg});
+}
+function recTray(shapes,label){                        // commitTray: the tray as dealt, on the board it was dealt on
+  if(!recOn()){ recCur=null; return; }
+  if(!recLive) recGame(true);
+  const L=recLoad(), ph=typeof hdOn==='function'&&hdOn()?hdeal.ph:typeof tideOn==='function'&&tideOn()?tide.st:pace.ph;
+  recCur={k:'t',g:L.g,n:trayNo,d:label,p:ph,b:recHex(grid),s:shapes.map(s=>s.star?-1:SHAPES.indexOf(s)),x:[]};
+  L.e.push(recCur);
+  let n=0; for(const e of L.e) if(e.k==='t') n++;
+  while(n>REC_MAX&&L.e.length){ if(L.e.shift().k==='t') n--; }   // the ring: drop the oldest trays (and the markers before them)
+  recSave();
+}
+function recDrop(idx,r,c,lines,swept){ if(recCur) recCur.x.push([idx,r,c,lines,swept?1:0]); }   // place(): each drop of the tray
+function recOver(){ if(!recCur&&!recLive) return; if(!recOn()) return; const L=recLoad(); L.e.push({k:'o',g:L.g,n:trayNo,sc:score}); recCur=null; recLive=false; recSave(); }
+function recText(){ recSave(); return JSON.stringify(recLoad()); }
+function recClear(){ recLog={v:1,g:0,e:[]}; recCur=null; recLive=false; try{ localStorage.removeItem(REC_STORE); }catch(e){} }
+try{ if(localStorage.getItem(REC_ON_STORE)==='1') CFG.REC_PLAY=true; }catch(e){}   // the Admin switch sticks without ?dev

@@ -4320,6 +4320,40 @@ test('home dealer: its coaster survives a resume; an empty board deals BUILD; no
   assert.equal(r.special, 0, 'no star or golden hand under it');
 });
 
+test('play recorder: off writes nothing; on (REC_PLAY) keeps one well-formed record per tray, the drops, a game-over marker and the knobs; tools/play-log.mjs reads it', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { CFG.DEALER_HOME = true; CFG.REC_PLAY = false; localStorage.removeItem('crumble.playlog'); });
+  await page.evaluate(`(${HOME_SIM})(12, 5, false)`);
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.playlog')), null, 'off: nothing written');
+  await page.evaluate(() => { CFG.REC_PLAY = true; });
+  await page.evaluate(`(${HOME_SIM})(14, 5, false)`);
+  await page.evaluate(() => { state = 'play'; gameOver(); });
+  const L = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.playlog')));
+  assert.equal(L.v, 1);
+  const g = L.e.filter(e => e.k === 'g'), t = L.e.filter(e => e.k === 't'), o = L.e.filter(e => e.k === 'o');
+  assert.ok(g.length >= 1 && g[0].cfg.DEALER_HOME === true && 'HOME_WIPE_KEEP' in g[0].cfg && 'HOME_BUMP' in g[0].cfg && g[0].m === 'endless', 'a game marker with the knobs: ' + JSON.stringify(g[0]));
+  assert.ok(t.length >= 14, 'a record per tray: ' + t.length);
+  for (const x of t) {
+    assert.match(x.b, /^[0-9a-f]{16}$/, 'the board at deal');
+    assert.ok(x.s.length === 3 && x.s.every(i => Number.isInteger(i) && i >= -1 && i < 37), 'three shapes: ' + x.s);
+    assert.ok(typeof x.d === 'string' && /^(warm|win|cool)$/.test(x.p) && Number.isInteger(x.n), 'label, phase, tray number: ' + JSON.stringify(x));
+    for (const d of x.x) assert.ok(d.length === 5 && d[0] >= 0 && d[0] < 3 && d[1] >= 0 && d[1] < 8 && d[2] >= 0 && d[2] < 8 && d[3] >= 0 && (d[4] === 0 || d[4] === 1), 'a drop: ' + d);
+  }
+  assert.ok(t.slice(0, -1).every((x, i) => x.x.length === 3 || t[i + 1].n === 1), 'every finished tray has its three drops');
+  const first = await page.evaluate(() => { const L = JSON.parse(localStorage.getItem('crumble.playlog')); const x = L.e.find(e => e.k === 't'); return x; });
+  assert.equal(first.n, 1, 'the opening tray is recorded');
+  assert.equal(o.length, 1, 'the game-over marker');
+  // the tool reads it
+  const f = 'tests/out/play-log-test.json'; fs.mkdirSync('tests/out', { recursive: true }); fs.writeFileSync(f, JSON.stringify(L));
+  const { execFileSync } = await import('node:child_process');
+  const txt = execFileSync('node', ['tools/play-log.mjs', f], { encoding: 'utf8' });
+  assert.match(txt, /play log: \d+ games, \d+ trays/); assert.match(txt, /longest wipe-less stretch/); assert.match(txt, /phase: /);
+  const copied = await page.evaluate(async () => { const orig = navigator.clipboard; Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    await recCopy(); const box = document.querySelector('#recBox textarea'); const v = box && box.value; Object.defineProperty(navigator, 'clipboard', { value: orig, configurable: true }); return v; });
+  assert.equal(JSON.parse(copied).e.length, L.e.length, 'no clipboard (an iOS web view): the log shows in a box to select');
+  await page.evaluate(() => recClear());
+  assert.equal(await page.evaluate(() => localStorage.getItem('crumble.playlog')), null, 'Clear play log');
+});
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

@@ -1738,7 +1738,7 @@ function commitTray(shapes,label,plan){
     pushBanner('GOLDEN HAND','×'+CFG.GOLDEN_MULT+' if you find it');
     Sfx.goldenIn();
   }
-  lastTier=label;
+  lastTier=label; recTray(shapes,label);              // the play recorder (save.js; nothing when off)
   closerTray=label==='CLOSER'||(label==='SWEEP'&&paced());   // (7.3) the shimmer behind the tray: this hand can empty the board
   carry=shapes.filter(x=>!stackable(x));
   if(shapes.includes(STAR)) Sfx.starIn();
