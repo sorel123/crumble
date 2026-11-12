@@ -179,6 +179,11 @@ const CFG = {
   CRUMBLE_STAGGER:0.4,    // (7.5) crumble only: frames between one gem's crack and the next along the line, out from the placed piece (~7 ms; was 0.75)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
   FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
+  FX_PIECE_COLOR_CLEAR: true, // (D) a cleared line turns the colour of the piece that cleared it and breaks in that colour
+  FX_ONE_VOICE:   true,   // (A) one headline at a time: praise or COMBO n, then COLOR GONE, then a banner, each with the board to itself
+  FX_HERO_STAMP:  true,
+  FX_SWEEP_SHOW:  true,   // (B) a clean sweep is a ~2 s show: the board floods with gems and drains, two crumbs cheer SWEEP ×N, then the new world (sky / look) arrives
+  SWEEP_SHOW_LEN: 118,    // (B) frames from the last gem breaking to the new world   // (C) a big moment stamps a little crumb on each gem of the piece that made it
   FX_CELL_TAGS:   true,   // a little point value appears on every cleared cell
   FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
   COLOR_GONE_BONUS: 60*SCORE_SCALE,   // points per colour wiped off the board by a clear ("COLOR GONE!")

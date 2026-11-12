@@ -433,6 +433,57 @@ function outlined(x,txt,px,fill,strokes,dx=0,dy=0){   // strokes: [[width, colou
   for(const [w,col,a] of strokes){ x.globalAlpha=a===undefined?1:a; x.lineWidth=w; x.strokeStyle=col; x.strokeText(txt,dx,dy); }
   x.globalAlpha=1; x.fillStyle=fill; x.fillText(txt,dx,dy);
 }
+/* (B) the clean-sweep show, in frames from the last gem breaking:
+   0-56   the empty board floods with gems in a rainbow wave from the top-left corner and drains behind it (CLEAN SWEEP banner on top)
+   54-118 two crumbs hop in from the sides and cheer SWEEP ×N (this run's sweeps); then the new sky / look arrives */
+function drawSweepShow(dt){
+  const S=sweepShow; S.t+=dt;
+  const L=CFG.SWEEP_SHOW_LEN;
+  if(S.t>=L){ sweepShow=null; return; }
+  if(S.t<0) return;
+  if(S.t<60){                                       // the flood
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      if(grid[r][c]) continue;                      // she may already be placing again
+      const d=(r+c)/(2*(N-1)), lt=S.t-d*26;
+      if(lt<0||lt>30) continue;
+      const k=lt<8?easeOutBack(lt/8):lt>20?1-(lt-20)/10:1;
+      const gi=Math.floor((r+c)/2.4)%NCOLOR;
+      gem(gi,bx+c*cell,by+r*cell,cell,0.92*Math.max(0,k),Math.min(1,k*1.4),lt<8?0.6:0.15,false,0.92*Math.max(0,k));
+    }
+  }
+  const u=S.t-54;                                    // the cheer
+  if(u>=0){
+    const pin=Math.min(1,u/10), out=u>L-54-14?(u-(L-54-14))/14:0, a=1-out;
+    const cs=Math.round(cell*1.5), sp=crumbSprite(cs), cy=by+B*0.5;
+    for(const side of [-1,1]){
+      const hop=Math.abs(Math.sin(u*0.22+(side>0?1.3:0)))*cell*0.45*(1-out);
+      const x=W/2+side*(B*0.36+(1-easeOutBack(pin))*B*0.5);
+      blit(sp,x,cy-hop,1,a,side*0.18*Math.sin(u*0.16));
+    }
+    const fs=Math.round(Math.min(W*0.13,cell*1.3)), txt='×'+S.n;
+    const tsp=sprite('sweepn|'+txt+'|'+fs,textW(txt,fs*1.4)+fs*0.8,fs*2.4,x=>{
+      outlined(x,'SWEEP',Math.round(fs*0.5),'#FFFFFF',[[fs*0.12,'rgba(40,14,50,.92)']],0,-fs*0.72);
+      outlined(x,txt,Math.round(fs*1.4),vgrad(x,-fs*0.3,fs*0.9,[[0,'#FFFFFF'],[0.35,'#FFE66B'],[1,'#FFA726']]),[[fs*0.3,'rgba(255,255,255,.35)'],[fs*0.18,'rgba(40,20,60,.95)']],0,fs*0.3);
+    });
+    blit(tsp,W/2,cy,(0.4+0.6*easeOutBack(pin))*(1+0.25*out),a);
+  }
+}
+function crumbSprite(sz){                            // (C) a little cookie crumb with a happy face, Crumble's own stamp
+  return sprite('crumb|'+sz,sz*1.5,sz*1.5,x=>{
+    const r=sz/2;
+    x.beginPath();
+    for(let k=0;k<=10;k++){ const a=k/10*6.283, rr=r*(k%2?0.9:1); x.lineTo(Math.cos(a)*rr,Math.sin(a)*rr); }   // a slightly lumpy edge
+    x.closePath();
+    x.lineWidth=r*0.42; x.strokeStyle='rgba(255,250,235,.95)'; x.stroke();      // a white rim so it reads on any gem
+    x.fillStyle='#FFC978'; x.fill(); x.lineWidth=r*0.14; x.strokeStyle='#7A3E14'; x.stroke();
+    x.fillStyle='rgba(255,236,190,.7)'; x.beginPath(); x.arc(-r*0.32,-r*0.42,r*0.22,0,6.283); x.fill();   // highlight
+    x.fillStyle='#5A2E12';
+    [[0.48,0.32],[-0.55,0.35],[0.1,0.6]].forEach(([u,v])=>{ x.beginPath(); x.arc(u*r,v*r,r*0.1,0,6.283); x.fill(); });   // chocolate chips
+    x.beginPath(); x.arc(-r*0.28,-r*0.05,r*0.12,0,6.283); x.arc(r*0.28,-r*0.05,r*0.12,0,6.283); x.fill();   // eyes
+    x.lineWidth=r*0.12; x.strokeStyle='#5A2E12'; x.lineCap='round';
+    x.beginPath(); x.arc(0,r*0.08,r*0.28,0.5,2.64); x.stroke();                   // smile
+  });
+}
 function vgrad(x,y0,y1,stops){ const g=x.createLinearGradient(0,y0,0,y1); stops.forEach(([o,c])=>g.addColorStop(o,c)); return g; }
 
 // a firework: a fountain of little stars in yellow / green / pink / blue from one point (drawn by the bursts loop)
@@ -793,7 +844,7 @@ let lastInput=0, paceSig='', paceFull=true;
 function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
-    ||slams.length||bursts.length||praises.length||banners.length||goldRain.length||orbs.length||rings.length||dust.length
+    ||slams.length||bursts.length||praises.length||banners.length||stamps.length||sweepShow||goldRain.length||orbs.length||rings.length||dust.length
     ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn()||trayPopping());
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
@@ -871,7 +922,7 @@ function frame(now){
   if(CFG.FX_SWEEP_FX && sweepFxT>0){
     ctx.globalAlpha=sweepFxT*0.4; ctx.fillStyle=`hsl(${glowH} 85% 70%)`; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
   }
-  if(flip && flip.t<14){                          // a brief flash right as a flip begins
+  if(flip && flip.t>=0 && flip.t<14){                          // a brief flash right as a flip begins
     ctx.globalAlpha=(1-flip.t/14)*0.5; ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1;
   }
 
@@ -1229,6 +1280,15 @@ function frame(now){
     ctx.restore();
   }
 
+  if(sweepShow) drawSweepShow(dt);                  // (B) the clean-sweep show
+  for(let i=stamps.length-1;i>=0;i--){             // (C) hero stamps: a crumb pops onto each gem of the piece that did it, winks, lifts away
+    const m=stamps[i]; m.t+=dt;
+    if(m.t<0) continue;
+    if(m.t>=56){ stamps.splice(i,1); continue; }
+    const pin=Math.min(1,m.t/7), out=m.t>42?(m.t-42)/14:0;
+    blit(crumbSprite(Math.round(cell*0.66)),m.x,m.y-out*cell*0.6,(0.2+0.8*easeOutBack(pin))*(1-0.3*out),1-out,Math.sin(m.t*0.35)*0.12*(1-out));
+  }
+
   for(let i=pops.length-1;i>=0;i--){
     const p=pops[i]; p.t+=dt*(p.lines>1||p.combo>1?0.026:0.042);   // (speed) a plain one-line +points is gone in ~400 ms, not 640
     if(p.t<0) continue;
@@ -1311,7 +1371,8 @@ function frame(now){
     blit(sp,W/2,by+B*0.27-out*cell*0.9,sc,1-out,reduce?0:Math.sin(p.t*18)*0.05*(1-pin));
   }
 
-  for(let i=0;i<banners.length;i++){               // head banner runs; the one behind it starts once the head is fading
+  if(bannerWait>0) bannerWait=Math.max(0,bannerWait-dt);   // (A) the clear's headline is still up
+  for(let i=0;bannerWait<=0&&i<banners.length;i++){   // head banner runs; the one behind it starts once the head is fading
     const b=banners[i];
     if(i>0 && banners[i-1].t<0.97) break;
     b.t+=dt*0.017*(b.k||1);

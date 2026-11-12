@@ -288,6 +288,6 @@ function startSky(toWorld){
 function stepFlip(dt){                           // (while a journey wipe runs it owns the sky: bgT waits)
   if(!flip){ if(bgT<1&&!jw){ bgT=Math.min(1,bgT+dt/BONUS_SKY_FRAMES); if(bgT>=1) ambientOld=[]; } return; }
   flip.t+=dt;
-  if(bgT<1&&!jw){ bgT=Math.min(1,flip.t/FLIP_BG_DUR); if(bgT>=1) ambientOld=[]; }
+  if(bgT<1&&!jw){ bgT=clamp(flip.t/FLIP_BG_DUR,0,1); if(bgT>=1) ambientOld=[]; }
   if(flip.t>=FLIP_TOTAL) flip=null;
 }

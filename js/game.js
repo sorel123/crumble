@@ -252,12 +252,18 @@ function place(idx,r,c){
         :(reduce?0:CFG.CLEAR_BLINK)+d*CFG.CLEAR_STAGGER;   // a star's cross lights up from the star outward after its charge
       maxDelay=Math.max(maxDelay,delay);
       cellsGone.push([rr,cc,delay]);
-      shatters.push({r:rr,c:cc,gi:g.gi,horiz,star:!!s.star,big:!single,tier:single?1:loud?3:2,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
+      shatters.push({r:rr,c:cc,gi:CFG.FX_PIECE_COLOR_CLEAR&&!s.star?t.gi:g.gi,horiz,star:!!s.star,big:!single,tier:single?1:loud?3:2,t:-delay,t0:-delay,ox:bx+cc0*cell,oy:by+cr*cell});
       if(CFG.FX_SCORE_ORBS && loud && !reduce) orbs.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,gi:g.gi,t:-(delay+5)/60,
         dir:Math.atan2(rr+0.5-cr,cc+0.5-cc0),trail:[]});
       grid[rr][cc]=null;
     });
     if(CFG.FX_SCORE_ORBS && loud && !reduce) scoreHold=Math.max(scoreHold,performance.now()+(maxDelay+5)/60*1000+ORB_MS*0.8);
+    // (A) one voice at a time: the headline (praise word and/or COMBO n) has the board to itself, then COLOR GONE, then any banner
+    const oneV=CFG.FX_ONE_VOICE, slammedNow=CFG.FX_COMBO_SLAM&&loud;
+    const praiseFirst=!oneV||!slammedNow||praiseTier(total,0)>=2;   // with a COMBO slam the word stays only for a 3+ line clear, and goes first
+    const slamAt=reduce?0:(oneV&&slammedNow&&praiseFirst?Math.max(maxDelay+7,32):maxDelay+7);
+    let vEnd=slammedNow?slamAt+42:(praiseTier(total,combo)?30:16);   // frames from now until the headline starts to fade
+    if(oneV) bands.length=0;                          // a new clear's words replace any still waiting
     // COLOR GONE — a clear that wipes the last of a colour off the board
     const colorsAfter=new Set();
     for(let rr=0;rr<N;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]) colorsAfter.add(grid[rr][cc].gi);
@@ -266,8 +272,9 @@ function place(idx,r,c){
     if(loud && gone.length && colorsAfter.size>0 && CFG.COLOR_GONE_BONUS>0){
       colorBonus=Math.round(CFG.COLOR_GONE_BONUS*gone.length*(1+(combo-1)*0.25));
       gained+=colorBonus;
-      bands.push({t:-(maxDelay+8),txt:gone.length>1?gone.length+' COLORS GONE!':'COLOR GONE!',sub:'+'+colorBonus,
+      bands.push({t:-(oneV&&!reduce?vEnd:maxDelay+8),txt:gone.length>1?gone.length+' COLORS GONE!':'COLOR GONE!',sub:'+'+colorBonus,
         hues:gone.map(gi=>GEMS[gi].h)});
+      if(oneV) vEnd+=66;
       if(!reduce) for(let k=0;k<gone.length+1;k++) spawnFirework(bx+B*(0.2+0.6*Math.random()),by+B*(0.15+0.4*Math.random()),null,maxDelay+10+k*5);
     }
     // the point value on every cleared cell, rippling out with the collapse
@@ -278,9 +285,9 @@ function place(idx,r,c){
     // the headline: COMBO n slams in under the board centre, with fireworks; bigger streak = bigger word
     if(CFG.FX_COMBO_SLAM && loud){
       slams.length=0;
-      slams.push({t:-(reduce?0:maxDelay+7),txt:'COMBO '+combo,n:combo});
-      if(!reduce) for(let k=0;k<Math.min(5,1+combo);k++) spawnFirework(bx+B*(0.15+0.7*Math.random()),by+B*(0.1+0.5*Math.random()),null,maxDelay+7+k*4);
-      if(combo>=3) borderFlash={t:-(maxDelay+7),col:combo>=5?'255,123,213':'255,212,92'};
+      slams.push({t:-slamAt,txt:'COMBO '+combo,n:combo});
+      if(!reduce) for(let k=0;k<Math.min(5,1+combo);k++) spawnFirework(bx+B*(0.15+0.7*Math.random()),by+B*(0.1+0.5*Math.random()),null,slamAt+k*4);
+      if(combo>=3) borderFlash={t:-slamAt,col:combo>=5?'255,123,213':'255,212,92'};
     } else if(!reduce && loud) spawnFirework(bx+cc0*cell,by+Math.min(cr,N-1.5)*cell,null,maxDelay+6);   // even a single clear gets a burst
 
     if(!single) waves.push({x:bx+cc0*cell,y:by+cr*cell,t:-(reduce?0:CFG.CLEAR_BLINK)*0.07});
@@ -297,7 +304,8 @@ function place(idx,r,c){
     if(combo>1) Sfx.combo(combo,total,beat); else Sfx.clear(total,beat);
     // the points number sits high on the board's right side, clear of the COMBO slam and the COLOR GONE band
     const slammed=CFG.FX_COMBO_SLAM&&loud;
-    const popY=slammed?by+cell*1.2:by+cr*cell, popX=slammed?bx+B-cell*1.6:bx+cc0*cell;
+    const corner=slammed||(oneV&&!single);            // (A) a big clear's points sit in the corner, out of the headline's way
+    const popY=corner?by+cell*1.2:by+cr*cell, popX=corner?bx+B-cell*1.6:bx+cc0*cell;
     pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n*SCORE_SCALE),
                sub:slammed?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
@@ -318,6 +326,12 @@ function place(idx,r,c){
       shake=16*CFG.SHAKE; glowT=1.6;
       Sfx.sweep();
       tension=0;
+      if(CFG.FX_SWEEP_SHOW&&!reduce){              // (B) the show; the new sky and look wait for its end
+        const lead=maxDelay+6, hold=lead+CFG.SWEEP_SHOW_LEN;
+        sweepShow={t:-lead,n:jJumps};          // jJumps: this run's sweeps (draw.js)
+        if(jPend) jPend.t=Math.max(jPend.t,hold);
+        if(flip&&flip.t<=1) flip.t=-hold;
+      }
     }
     const escaped=wasTight&&!swept&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE;   // (6.3) out of the edge or a recovery
     if(CFG.FX_NARROW_ESCAPE&&escaped){   // (6.3) a narrow escape: out of the edge or a recovery. Its own short flourish: a gold rim, two soft rings, one word
@@ -326,7 +340,10 @@ function place(idx,r,c){
       pushBanner('PHEW!','that was close',"#8FF7FF",1.3);
       Sfx.phew(total,beat,combo);                      // (6.5) the clear's own sound plus one stronger accent; it outranks the plain clear raised above
     }
-    if(!swept&&!(s.star&&starGems>0)) praise(total,combo);   // a star has its own STAR BLAST banner
+    if(!swept&&!(s.star&&starGems>0)&&praiseFirst) praise(total,combo);   // a star has its own STAR BLAST banner
+    if(oneV&&!reduce) bannerWait=Math.max(bannerWait,(swept&&!slammedNow)?0:vEnd);   // (A) PHEW, CLEAN SWEEP, a new look... wait their turn
+    if(CFG.FX_HERO_STAMP&&!reduce&&!s.star&&(swept||escaped||total>=3||(loud&&total>=2)))   // (C) the piece that made the moment gets a crumb on each gem
+      s.cells.forEach(([dr,dc],k)=>stamps.push({x:bx+(c+dc+.5)*cell,y:by+(r+dr+.5)*cell,t:-k*1.5}));
     mascotClear(total,combo,swept,escaped);          // (7.5f) the crumb reacts, sized like the clear
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
   } else if(comboCarries()&&combo>0&&++comboMiss<CFG.COMBO_GRACE){
