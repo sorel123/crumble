@@ -34,6 +34,7 @@ let golden=null, goldenNext=false, goldenCool=0, trayHadSweep=false, trayCombo=0
 let goldenArrive=999, goldenCele=null, goldRain=[];   // (4.5c) arrival fanfare clock (frames) and the completion celebration {t,full}; both cosmetic, never saved
 let shatters=[],shards=[],pops=[],sweeps=[],waves=[],sparkles=[],banners=[],blasts=[];
 let praises=[],bursts=[],lineFlashes=[];
+let stamps=[], bannerWait=0;   // (A/C) hero-piece crumb stamps; banners hold until the clear's headline is done
 let chunks=[],orbs=[],rings=[],dust=[];      // juice: block chunks, score orbs, landing rings, landing dust
 let rubble=[];                              // (7.5) crumble: the broken pieces of cleared gems, falling off the screen
 let scoreHold=0, bestBeaten=false, hitWait=0;           // score count-up waits for the first orb; NEW BEST fires once a run
