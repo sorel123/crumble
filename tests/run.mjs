@@ -60,7 +60,7 @@ test('front menu (8.3): Settings opened over the mode menu keeps the game paused
   assert.equal(await page.evaluate(() => paused), false);
 });
 
-test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and New game (tap twice)', async ({ page }) => {
+test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and End game (tap twice, back to the home screen)', async ({ page }) => {
   await play(page); await dealt(page);
   assert.equal(await page.evaluate(() => !!document.getElementById('modeTag')), false, 'the Endless pill is gone');
   assert.ok(await page.evaluate(() => { el('scoreVal').textContent = '1234560'; el('bestVal').textContent = '2345670'; hudFit();
@@ -72,10 +72,10 @@ test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, E
   await page.click('#pauseResume');
   assert.deepEqual(await page.evaluate(() => ({ paused, card: el('pauseCard').hidden })), { paused: false, card: true });
   await page.click('#pauseBtn'); await page.click('#pauseNew');
-  assert.deepEqual(await page.evaluate(() => ({ state, score, txt: el('pauseNew').textContent })), { state: 'play', score: 1240, txt: 'Tap again to start over' }, 'one tap does not throw the run away');
+  assert.deepEqual(await page.evaluate(() => ({ state, score, txt: el('pauseNew').textContent })), { state: 'play', score: 1240, txt: 'Tap again to end it' }, 'one tap does not throw the run away');
   await page.click('#pauseResume');
   await page.click('#pauseBtn');
-  assert.equal(await page.textContent('#pauseNew'), 'New game', 'the confirm resets when the card opens again');
+  assert.equal(await page.textContent('#pauseNew'), 'End game', 'the confirm resets when the card opens again');
   await page.click('#pauseHome'); await page.waitForFunction(() => hero.card === el('menuCard'));   // the menu's buttons are set up by its first frame
   assert.deepEqual(await page.evaluate(() => ({ sub: el('menuBest').textContent, back: el('menuClose').hidden, saved: JSON.parse(localStorage.getItem(runStore('endless'))).score })),
     { sub: 'Continue · 1.2k', back: true, saved: 1240 });
@@ -85,7 +85,12 @@ test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, E
   await openSet(page); await page.click('#setDone');
   assert.deepEqual(await page.evaluate(() => ({ paused, card: !el('pauseCard').hidden })), { paused: true, card: true }, 'Settings from pause returns to the pause card');
   await page.click('#pauseNew'); await page.click('#pauseNew');
-  assert.deepEqual(await page.evaluate(() => ({ state, score, paused, card: el('pauseCard').hidden })), { state: 'play', score: 0, paused: false, card: true }, 'two taps start over');
+  await page.waitForFunction(() => hero.card === el('startCard'));
+  assert.deepEqual(await page.evaluate(() => ({ state, score, paused, card: el('pauseCard').hidden, home: !el('startCard').hidden, saved: localStorage.getItem(runStore('endless')) })),
+    { state: 'idle', score: 0, paused: false, card: true, home: true, saved: null }, 'two taps end the run and go home, nothing left to continue');
+  await page.click('#startBtn');
+  await page.waitForFunction(() => state === 'play' && !paused); await dealt(page);
+  assert.equal(await page.evaluate(() => score), 0, 'Play from home starts a fresh run');
 });
 
 test('Play starts a run: the seeded opening board, three playable pieces', async ({ page }) => {
@@ -2070,7 +2075,7 @@ test('audio on first touch (7.0): a touch anywhere unlocks the context and start
   assert.equal(r.after.src, 'blob:', 'it is a generated silent WAV, not a file');
 });
 
-test('sound family (6.5): every set can play every event, and the new family is the default for everyone once', async ({ page }) => {
+test('sound family (6.5): every set can play every event, and Original is the default for everyone once', async ({ page }) => {
   await play(page);
   const r = await page.evaluate(async () => {
     const out = { bad: [], dflt: CFG.SND_SET, pick: CFG.SND_PICKUP, place: CFG.SND_PLACE };
@@ -2082,14 +2087,14 @@ test('sound family (6.5): every set can play every event, and the new family is 
       }
     }
     // a saved game from before the family: the old sound choice is replaced once, a later choice sticks
-    localStorage.setItem('crumble.skins', JSON.stringify({ sndSet: 'original', lookV: 2 }));
+    localStorage.setItem('crumble.skins', JSON.stringify({ sndSet: 'strings', lookV: 2, sndV: 2 }));
     CFG.SND_SET = 'bells'; loadSkinSave(); out.migrated = CFG.SND_SET;
     saveSkinSave(); CFG.SND_SET = 'bells'; saveSkinSave(); CFG.SND_SET = 'steel'; loadSkinSave(); out.kept = CFG.SND_SET;
     return out;
   });
   assert.deepEqual(r.bad, [], 'no set throws on any event');
-  assert.equal(r.dflt, 'strings'); assert.equal(r.pick, 'soft'); assert.equal(r.place, 'drop');
-  assert.equal(r.migrated, 'strings', 'an old saved sound choice moves to the family once');
+  assert.equal(r.dflt, 'original'); assert.equal(r.pick, 'soft'); assert.equal(r.place, 'drop');
+  assert.equal(r.migrated, 'original', 'a sound choice saved before 2026-11-12 moves to Original once');
   assert.equal(r.kept, 'bells', 'after that, her choice is kept');
 });
 
