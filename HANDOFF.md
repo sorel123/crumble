@@ -1467,7 +1467,7 @@ back. Like a coaster", and "you always have a solution, we're never gonna deal y
 that can fail is your placement." Study: project memory `blockblast-recording-study`, /mnt/project-files/plan-1.1/blockblast-study/.
 
 - **The tide** (`tide`, `tideStep`, solver.js "Coaster dealing"): a stretch state that does not read the board. EASY lasts
-  `TIDE_EASY_MIN..MAX` trays (10-18), LEAN `TIDE_LEAN_MIN..MAX` (8-14), rolled per stretch; a run starts EASY. Getting
+  `TIDE_EASY_MIN..MAX` trays (10-12), LEAN `TIDE_LEAN_MIN..MAX` (6-10), rolled per stretch; a run starts EASY. Getting
   out of the edge (relief) during LEAN starts a fresh EASY stretch. Nothing on screen shows it. Saved with the run (`td`).
   The 6.1 room phases still run underneath: edge and recovery trays are dealt as before (but must now be solvable).
 - **EASY** (`tideHandSteps`): pieces drawn from big rectangles, bars and big L's (`tideBase`), each weighted up by how
@@ -1520,11 +1520,11 @@ how Block Blast "comes back from the brink" and its "multi chained solves" in th
 /mnt/project-files/plan-1.1/blockblast-study/rec3-5-2026-11-11/). Every stuck stretch there ends the same way: the next tray
 holds a piece that exactly finishes a nearly full row or column (often a 1x4/1x5 into a one-cell-high gap). After a board
 clear it deals big matching pieces that rebuild rows (about 14 board clears in 8.7 minutes in v3).
-- **Comeback keys.** A board under `CROWD_ROOM` (0.36) room or with `CROWD_GEMS` (34) gems is crowded: in either stretch the
+- **Comeback keys.** A board under `CROWD_ROOM` (0.45) room or with `CROWD_GEMS` (34) gems is crowded: in either stretch the
   rescue's fixers seed the hand (two of them `CROWD_TWO` of the time), ranked by cells taken away (cleared less the piece's
   own) plus room, LEAN's awkward ones first; a hand scores `CROWD_KEY` per piece that clears now (up to two) and loses 3x it
   with none. This trades game length against board clears per tray (person-like bot): 0.42 gave games 2x longer but a
-  quarter fewer clears per tray; 0.3 gave +15% length and about the same clears. 0.36 sits between.
+  quarter fewer clears per tray; 0.3 gave +15% length and about the same clears. 0.36 sat between; Jay's playtest moved it to 0.45 (see below).
 - **Chain.** `CHAIN_BUILD` (0.8): the tray after a board clear is three of one OPEN_BUILD piece (sometimes two and another),
   label CHAIN.
 - **Carrying combo** (task H, Jay said yes): Endless and Daily (`comboCarries()`: not Challenge, Adventure or the guide) keep
@@ -1577,3 +1577,9 @@ done, then one tray of exact keys clears 4-6 lines at once; bars match the gap l
   Trays with 2+ small pieces 18% to 5%, small pieces 22% to 15%, mean piece 4.18 to 4.3.
 - Tried and dropped: favouring LEAN hands that leave multi-line gaps (`payoffRoom`); no change in the sim. Board clears look a
   little rarer (casual ~1 per 65 trays vs ~1 per 52, the sweep count is noisy across seeds).
+
+### Jay's tuned coaster defaults (2026-11-12)
+
+After playtesting round 6 with the Admin sliders, Jay made these the defaults: `CROWD_ROOM` 0.36 to 0.45 (comeback keys
+start sooner), `TIDE_LEAN_MIN..MAX` 8-14 to 6-10 (shorter dry spells), `TIDE_EASY_MAX` 18 to 12 (the start is not easy for
+as long). `LEAN_DRY` stays 3; 2 is the next lever if the middle still drags.
