@@ -22,6 +22,7 @@ function packGrid(g){
    the array version it replaced, so it returns identical answers, just
    ~20x faster (a tray refill used to cost a visible frame on a phone). */
 const pop32=x=>{ x-=(x>>>1)&0x55555555; x=(x&0x33333333)+((x>>>2)&0x33333333); return (((x+(x>>>4))&0x0F0F0F0F)*0x01010101)>>>24; };
+function unpackBits(lo,hi){ const a=new Uint8Array(64); for(let i=0;i<64;i++) a[i]=bitAt(lo,hi,i); return a; }
 function packBits(a){ let lo=0,hi=0; for(let i=0;i<32;i++){ if(a[i]) lo|=1<<i; if(a[i+32]) hi|=1<<i; } return [lo,hi]; }
 function placeMasks(s){                      // every legal (r,c) for a shape, in the solver's scan order, cached on the shape
   if(s._pm) return s._pm;
@@ -606,6 +607,7 @@ function waveAfterDrop(before,lines,gemsLeft,comboNow,wasTight){
   if(lines>0){
     trayClear=true;
     if(!gemsLeft&&hdeal.ph==='win'&&!hdeal.wp) hdeal.wp=1;   // the home dealer: she wiped the board in win mode, which ends it
+    if(!gemsLeft&&hdOn()) hdeal.wn=1;                      // ...and the wipe chain rolls at the next deal
     if(gemsLeft>0&&gemsLeft<=CFG.CLOSER_GEMS) closerNext=true;
     if(comboNow===CFG.CLOSER_COMBO) closerNext=true;
     if(wasTight&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE) closerNext=true;   // out of the edge hold
@@ -940,14 +942,21 @@ function* ensureWaySteps(a0,hand,why){
      low board) until the board is wiped (its BUILD tray is the last of it), or HOME_WIN_MAX trays, or HOME_WIN_DRY trays
      in a row in which she cleared nothing (she blew it); never because the board has no big gift left. Then
      HOME_COOL_MIN..MAX cool trays (TWIST with odds HOME_TWIST, else STEADY; RESCUE on a crowded board), then warm again. A
-     board clear outside win mode is followed by BUILD in its phase. No plan is carried between trays: each tray reads the
+     board clear outside win mode is followed by BUILD in its phase.
+   - The wipe chain is rolled, not capped: wipes each within HOME_ROW_GAP trays of the one before are a row. At the deal after
+     a wipe the chain's help carries on with odds HOME_WIPE_KEEP^n (n: wipes in the row so far); when the roll fails the
+     coaster goes straight to a cool stretch with the help off (hdeal.lk) until it ends: no FINISH, no win mode, a BUILD of
+     mixed big pieces that complete no line, and no tray that can empty the board. A new game starts with no row (its
+     opening's wipe is the first of one). No plan is carried between trays: each tray reads the
      board she left, so an off-plan drop breaks nothing. Golden hands and the star are not dealt under it (bonus trays and
      transformations still are). */
 const hdOn=()=>CFG.DEALER_HOME&&tideOn();
-let hdeal={ph:'warm',n:0,len:0,f:0,wp:0};             // the coaster: 'warm' | 'win' | 'cool', trays dealt in it, its length (win: HOME_WIN_MAX; cool: rolled; warm: 0); f: FINISH trays in a row; wp: she wiped the board in win mode (1; 2: its BUILD tray is dealt), which ends it
-const hdStats={kinds:{},fallback:0,guard:0,finClear:0,win:{started:0,lens:[]},winFlat:0};   // this session only (the bot sim reads them); winFlat: win-mode trays with no WIN tray (none removes gems)
-function resetHd(){ if(hdeal.ph==='win') hdWinEnd('over'); hdeal={ph:'warm',n:0,len:0,f:0,wp:0}; } // (no rnd() here: resetWave runs it on every path, Challenge included)
-function hdSet(ph){ hdeal={f:hdeal.f||0,wp:0,ph,n:0,len:ph==='win'?CFG.HOME_WIN_MAX:ph==='cool'?CFG.HOME_COOL_MIN+((rnd()*(CFG.HOME_COOL_MAX-CFG.HOME_COOL_MIN+1))|0):0}; }
+const HOME_ROW_GAP=4;                                  // wipes within this many trays of the one before are a row (the wipe chain)
+let hdeal={ph:'warm',n:0,len:0,f:0,wp:0,wr:0,wa:99,wn:0,lk:0};   // wr: wipes in the row; wa: trays since the last wipe; wn: a wipe not yet rolled for (waveAfterDrop); lk: the chain's help is off until this cool stretch ends
+// the coaster: 'warm' | 'win' | 'cool', trays dealt in it, its length (win: HOME_WIN_MAX; cool: rolled; warm: 0); f: FINISH trays in a row; wp: she wiped the board in win mode (1; 2: its BUILD tray is dealt), which ends it
+const hdStats={kinds:{},fallback:0,guard:0,finClear:0,win:{started:0,lens:[]},winFlat:0,chain:{rolls:0,stops:0}};   // this session only (the bot sim reads them); winFlat: win-mode trays with no WIN tray (none removes gems)
+function resetHd(){ if(hdeal.ph==='win') hdWinEnd('over'); hdeal={ph:'warm',n:0,len:0,f:0,wp:0,wr:0,wa:99,wn:0,lk:0}; } // (no rnd() here: resetWave runs it on every path, Challenge included)
+function hdSet(ph,lk=0){ hdeal={f:hdeal.f||0,wp:0,wr:hdeal.wr|0,wa:hdeal.wa===undefined?99:hdeal.wa,wn:0,lk,ph,n:0,len:ph==='win'?CFG.HOME_WIN_MAX:ph==='cool'?CFG.HOME_COOL_MIN+((rnd()*(CFG.HOME_COOL_MAX-CFG.HOME_COOL_MIN+1))|0):0}; }
 // (measure) how win mode ended: 'wipe' | 'cap' | 'dry' | 'over' (the game ended in it); the bot sim reads them
 function hdWinEnd(why){ const w=hdStats.win; w[why]=(w[why]||0)+1; w.lens.push(hdeal.n); }
 const ctz=x=>31-Math.clz32(x&-x);
@@ -1278,13 +1287,18 @@ function* homeWinSteps(lo,hi){
   return best;
 }
 /* one tray of a kind, built from the board (lo,hi): {hand, sweep} or null if this board offers none */
-function* homeHandSteps(lo,hi,kind){
+function* homeHandSteps(lo,hi,kind,lk=false){
   const hb=hbOf(lo,hi);
   for(let attempt=0;attempt<3;attempt++){
     let parts=[], blo=0, bhi=0, sweep=false, style='calm';
     if(kind==='BUILD'){
       const p=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0], h=[p,p,p];
-      if(rnd()<0.4) h[2]=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0];
+      if(lk){                                           // the chain's help is off: three different big pieces that complete no line between them
+        let ok=false;
+        for(let i=0;i<16&&!ok;i++){ const q=OPEN_BUILD.slice(); for(let k=0;k<3;k++){ const j=k+((rnd()*(q.length-k))|0); [q[k],q[j]]=[q[j],q[k]]; h[k]=q[k]; } ok=!evalHand(unpackBits(lo,hi),h,CFG.NODE_BUDGET*2).lines; }
+        if(!ok) continue;
+      }
+      else if(rnd()<0.4) h[2]=OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0];
       if(homeOrders(lo,hi,h,2000,hb)) return {hand:h,sweep:false};
       continue;
     }
@@ -1343,17 +1357,22 @@ function* homeDealSteps(a0){
   const [lo,hi]=packBits(a0), gems=pop32(lo)+pop32(hi);
   goldenNext=false;                                    // no golden hands under this dealer
   const crowded=roomNow<CFG.HOME_RESCUE_ROOM, low=gems>0&&gems<=CFG.HOME_FINISH_GEMS;
+  if(hdeal.wn){                                        // she wiped the board: one more in the row, and the roll whether the chain's help carries on
+    hdeal.wr=hdeal.wa<=HOME_ROW_GAP?(hdeal.wr|0)+1:1; hdeal.wa=0; hdeal.wn=0; hdStats.chain.rolls++;
+    if(!hdeal.lk&&rnd()>=Math.pow(CFG.HOME_WIPE_KEEP,hdeal.wr)){ hdStats.chain.stops++; if(hdeal.ph==='win') hdWinEnd('wipe'); hdSet('cool',1); }
+  }
   if(hdeal.ph==='win'){                                // win mode ends on a wipe (after its BUILD tray), the cap, or when she blew it
     const dry=Math.min(dryN,hdeal.n);                  // trays of win mode in a row in which she cleared nothing (waveTick counted the last)
     const why=hdeal.wp===2||hdeal.wp===1&&gems?'wipe':hdeal.n>=hdeal.len?'cap':dry>=CFG.HOME_WIN_DRY?'dry':null;
     if(why){ hdWinEnd(why); hdSet('cool'); }
   }
-  else if(hdeal.ph==='cool'&&hdeal.n>=hdeal.len) hdSet('warm');
+  else if(hdeal.ph==='cool'&&hdeal.n>=hdeal.len){ if(hdeal.lk) hdeal.wr=0; hdSet('warm'); }
   if(hdeal.ph==='warm'&&trayNo>1&&(crowded||low||readyLines(lo,hi)>=CFG.HOME_EARN||hdeal.n>=CFG.HOME_WIN_WAIT)){ hdSet('win'); hdStats.win.started++; }   // earned, or waited long enough
   const win=hdeal.ph==='win';
   let kind=null, got=null; const fin=hdeal.f||0;
+  const lk=!!hdeal.lk;                                 // the chain's help is off (the roll failed): no FINISH, no wipe-capable tray
   if(!gems&&trayNo>1){ kind='BUILD'; if(win) hdeal.wp=2; }   // after a board clear: big matching pieces (in win mode, its last tray)
-  else if(low&&fin<CFG.HOME_FINISH_MAX&&rnd()<(win?CFG.HOME_FINISH_HOT:CFG.HOME_FINISH)){
+  else if(!lk&&low&&fin<CFG.HOME_FINISH_MAX&&rnd()<(win?CFG.HOME_FINISH_HOT:CFG.HOME_FINISH)){
     // a low board, in any phase, on a roll (likelier in win mode, the heater): the tray that finishes it, at most HOME_FINISH_MAX in a row
     got=yield* homeFinishSteps(lo,hi,win);
     if(got) kind='FINISH';
@@ -1364,7 +1383,11 @@ function* homeDealSteps(a0){
     else { hdStats.winFlat++; got=yield* homeHandSteps(lo,hi,'GIFT'); if(got) kind='GIFT'; }   // no tray removes gems here: the best gift, else a steady one
   }
   if(!kind) kind=crowded?'RESCUE':hdeal.ph==='cool'?(rnd()<CFG.HOME_TWIST?'TWIST':'STEADY'):'STEADY';
-  if(!got) got=yield* homeHandSteps(lo,hi,kind);
+  if(!got) got=yield* homeHandSteps(lo,hi,kind,lk);
+  if(lk&&got&&evalHand(a0,got.hand,CFG.NODE_BUDGET*2).sweep){   // help off: a tray that can empty the board is dealt again (twice), else built from scratch
+    for(let k=0;k<2&&got&&evalHand(a0,got.hand,CFG.NODE_BUDGET*2).sweep;k++) got=yield* homeHandSteps(lo,hi,kind,lk);
+    if(got&&evalHand(a0,got.hand,CFG.NODE_BUDGET*2).sweep) got=null;
+  }
   let hand=got&&got.hand, tag='';
   if(!hand){ hand=yield* homeFallbackSteps(a0,lo,hi,kind); tag='·FB'; hdStats.fallback++; }
   if(!hand){ hand=HUNT_POOL.filter(s=>fitsBits(lo,hi,s)).slice(0,3); while(hand.length<3) hand.push(SHAPES[0]); tag='·GUARD'; }
@@ -1373,8 +1396,8 @@ function* homeDealSteps(a0){
   if(tag==='·GUARD') hdStats.guard++;
   hdStats.kinds[kind]=(hdStats.kinds[kind]||0)+1;
   if(kind==='FINISH'&&got.sweep&&!tag) hdStats.finClear++;
-  hdeal.n++; hdeal.f=kind==='FINISH'?fin+1:0;        // FINISH keeps the phase and counts in it
-  commitTray(hand,'HOME '+kind+(got&&got.sweep&&!tag?'·CLEAR':'')+tag+' '+hdeal.ph+(hdeal.len?' '+hdeal.n+'/'+hdeal.len:''));   // ·CLEAR: the cut can empty the board
+  hdeal.n++; hdeal.f=kind==='FINISH'?fin+1:0; hdeal.wa=Math.min(99,(hdeal.wa|0)+1);        // FINISH keeps the phase and counts in it
+  commitTray(hand,'HOME '+kind+(got&&got.sweep&&!tag?'·CLEAR':'')+tag+' '+hdeal.ph+(lk?'·LK':'')+(hdeal.len?' '+hdeal.n+'/'+hdeal.len:''));   // ·CLEAR: the cut can empty the board
 }
 /* the candidate search: the best-scoring playable hand for a tier, plus its solver result */
 // The tray deal runs as a generator that yields after every candidate hand, so a deal can be

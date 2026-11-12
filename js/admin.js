@@ -81,6 +81,7 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['HOME_FINISH','Home dealer: FINISH odds on a low board',0,1,0.05],
   ['HOME_FINISH_HOT','Home dealer: FINISH odds in win mode',0,1,0.05],
   ['HOME_FINISH_MAX','Home dealer: most FINISH trays in a row',0,6,1],
+  ['HOME_WIPE_KEEP','Home dealer: wipe chain carries on (odds^n)',0,1,0.05],
   ['TIDE_EASY_MIN','Coaster: easy stretch min (trays)',2,30,1],
   ['TIDE_EASY_MAX','Coaster: easy stretch max (trays)',2,30,1],
   ['TIDE_LEAN_MIN','Coaster: lean stretch min (trays)',0,30,1],

@@ -41,6 +41,8 @@
 // and the share of those the bot emptied), and the home dealer's kinds; win (win modes started, the share that ended in a board wipe,
 // at the cap and dry, games that ended in one (over), mean length, flat: win-mode trays with no WIN tray), low8 (trays dealt on a board
 // of 8 gems or fewer) and byPhase (per coaster phase: trays, share the bot cleared a line in, lines per tray, median gems at deal).
+// wipes (finished games: board wipes, trays per wipe, the median and p90 trays between wipes, the longest wipe-less stretch, and rows of
+// wipes each within 4 trays of the one before, by length) and blocky (per phase, boards of 10+ gems at deal: lines holding gems, roughBits, each per gem).
 // 1.1 A (sweep chase) adds sweepHands (trays dealt with the sweep shimmer: a closer or planned sweep), traysPerSweepHand,
 // sweepHandsConverted (share of those the bot swept), chases (two-tray set-up hands), sweepsAll / traysPerSweep (every clean sweep).
 import { serve, openGame, play } from '../tests/harness.mjs';
@@ -178,6 +180,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
       sound: typeof soundBits === 'function' ? shp.every(s => soundBits(glo, ghi, s, roomOf(a0))) : null };
     cur = { ...fit, sweepHand: closerTray, offers2, lines: 0, small: tray.every(t => !t || t.s.n <= 3), big4: tray.filter(t => t && t.s.n >= 4).length, multi: 0, sweeps: 0, fill: fillOf(), obv, obvN, possible, cleared: false, clears: 0, firstObv: null, ph: pace.ph, phN: pace.n, room: roomNow, tier: lastTier, game: games };
     cur.gems = pop32(glo) + pop32(ghi);
+    { let occ = 0; for (let j = 0; j < 16; j++) if ((glo & LINE_MASKS[j * 2]) | (ghi & LINE_MASKS[j * 2 + 1])) occ++; cur.occ = occ; cur.rough = roughBits(glo, ghi); }   // blockiness at deal: lines holding gems, filled/empty edges
     cur.noHomeNow = typeof hasHome === 'function' ? shp.filter(s => !s.star && !hasHome(glo, ghi, s)).length : 0;
     cur.noHome = typeof homeAfterMates === 'function' ? shp.filter((s, k) => !homeAfterMates(glo, ghi, shp, k)).length : 0;
     trays.push(cur);
@@ -277,6 +280,16 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     win: (() => { const w = typeof hdStats === 'object' && hdStats.win; if (!w) return null; const ended = (w.wipe || 0) + (w.cap || 0) + (w.dry || 0);
       return { started: w.started, wipe: Math.round(100 * (w.wipe || 0) / Math.max(1, ended)) + '%', cap: Math.round(100 * (w.cap || 0) / Math.max(1, ended)) + '%', dry: Math.round(100 * (w.dry || 0) / Math.max(1, ended)) + '%', over: w.over || 0,
         meanLen: +(w.lens.reduce((a, b) => a + b, 0) / Math.max(1, w.lens.length)).toFixed(1), flat: hdStats.winFlat }; })(),
+    wipes: (() => {                          // finished games: trays between board wipes (the game's start counts as one end of a stretch), rows of wipes each within 4 trays of the one before
+      const gaps = [], rows = {}, stretch = []; let longest = 0, n = 0;
+      perGame.forEach(a => { const at = []; a.forEach((t, i) => { for (let k = 0; k < t.sweeps; k++) at.push(i); }); n += at.length;
+        for (let i = 1; i < at.length; i++) gaps.push(at[i] - at[i - 1]);
+        const ends = [0, ...at, a.length]; for (let i = 1; i < ends.length; i++) longest = Math.max(longest, ends[i] - ends[i - 1]);
+        let k = 0; at.forEach((x, i) => { if (i && x - at[i - 1] <= 4) k++; else { if (k) rows[k] = (rows[k] || 0) + 1; k = 1; } }); if (k) rows[k] = (rows[k] || 0) + 1; });
+      const g = gaps.slice().sort((x, y) => x - y), qq = f => g.length ? g[Math.floor((g.length - 1) * f)] : null;
+      return { n, traysPerWipe: +(perGame.reduce((x, a) => x + a.length, 0) / Math.max(1, n)).toFixed(1), gapMedian: qq(0.5), gapP90: qq(0.9), longestStretch: longest, rows }; })(),
+    blocky: (() => { const o = {}; for (const t of trays) { const m = /^HOME \S+ (warm|win|cool)/.exec(t.tier); const k = m ? m[1] : 'other'; if (t.gems < 10) continue; (o[k] = o[k] || []).push(t); }
+      for (const k in o) { const a = o[k]; o[k] = { trays: a.length, occLines: mean(a, t => t.occ), occPerGem: mean(a, t => t.occ / t.gems), rough: mean(a, t => t.rough), roughPerGem: mean(a, t => t.rough / t.gems) }; } return o; })(),
     low8: pct(trays, t => t.gems <= 8) + '%', lostIn: (() => { const o = {}; perGame.forEach(a => { const m = /^HOME (\S+) (warm|win|cool)/.exec(a[a.length - 1].tier); const k = m ? m[2] + '/' + m[1].split('·')[0] : 'other'; o[k] = (o[k] || 0) + 1; }); return o; })(),
     byPhase: (() => { const o = {}; for (const t of trays) { const m = /^HOME \S+ (warm|win|cool)/.exec(t.tier); if (!m) continue; (o[m[1]] = o[m[1]] || []).push(t); }
       for (const k in o) { const a = o[k]; o[k] = { trays: a.length, clearPerTray: pct(a, t => t.cleared) + '%', linesPerTray: mean(a, t => t.lines), gemsAtDeal: median(a.map(t => t.gems)), clearHands: a.filter(t => /·CLEAR/.test(t.tier)).length, sweeps: a.reduce((x, t) => x + t.sweeps, 0) }; } return o; })(),
