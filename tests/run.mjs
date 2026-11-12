@@ -4366,6 +4366,92 @@ test('play recorder: off writes nothing; on (REC_PLAY) keeps one well-formed rec
   await page.evaluate(() => recClear());
   assert.equal(await page.evaluate(() => localStorage.getItem('crumble.playlog')), null, 'Clear play log');
 });
+
+// ---- the Block Blast curve (DEALER_CURVE) ----
+test('curve dealer: off by default; with it off a pinned home-dealer deal is unchanged (the tide pin is the home dealer test above)', async ({ page }) => {
+  await play(page); await dealt(page);
+  assert.equal(await page.evaluate(() => CFG.DEALER_CURVE), false);
+  // generated on main (e01b4a5), before the curve dealer: 40 trays of the home dealer from a fresh page
+  const pinned = '35,35,35;7,7,9;0,7,1;3,9,0;1,20,0;10,7,5;34,0,8;1,0,1;1,4,0;30,36,35;26,7,36;7,27,23;32,21,9;7,33,17;7,35,34;36,28,7;18,7,21;34,4,12;5,29,17;3,23,20;30,32,0;0,0,27;1,3,0;2,3,0;34,3,7;7,36,35;34,28,18;19,25,35;17,30,24;15,31,27;29,24,7;16,16,16;9,7,0;14,1,1;36,0,0;7,14,33;21,15,2;2,17,1;1,1,0;28,6,34';
+  await page.evaluate(() => { CFG.DEALER_HOME = true; });
+  assert.equal(await page.evaluate(`(${HOME_SIM})(40, 4242, false)`).then(r => r.map(x => x.t).join(';')), pinned);
+});
+test('curve dealer: Challenge is untouched, only Endless and Daily use it, it beats the home switch; ?dealer=curve, the Admin switch and sliders', async ({ page, server }) => {
+  await page.evaluate(() => { CFG.DEALER_CURVE = true; CFG.DEALER_HOME = true; });
+  const packs = await page.evaluate(() => ['frozen1', 'd2026-11-11'].map(s => chPack(chMake(s))));
+  assert.deepEqual(packs, ['AAYAgAAAAAAAAAAAIGoAAAAAAIAAAAAAAkYiDAogTEXcZLZJBIgTb5ShVEEgfoVEDVcYSYo1jpbWBoGoRSklAaAAAAAAAFeAAG4AAISA',
+    'ADAYAAAAAAAAAAAAAAAAAAAIAAAAAAAAAKgxGIqViaPZbWUbEkdUorHRjgL6XpFEBqCRUjUMJcKEIZEjdWCrJrdAAAAAAGkAAH5AAJdA']);
+  assert.deepEqual(await page.evaluate(() => { mode = 'challenge'; const c = curveOn(); mode = 'adventure'; const a = curveOn(); mode = 'daily'; const d = curveOn(); mode = 'endless'; return [c, a, d, curveOn(), hdOn()]; }), [false, false, true, true, false], 'curve wins over home');
+  await page.goto(server.url + '?dealer=curve'); await toGame(page);
+  assert.deepEqual(await page.evaluate(() => [CFG.DEALER_CURVE, CFG.DEALER_HOME]), [true, false]);
+  assert.ok(await page.evaluate(() => DEV_TOGGLES.some(t => t[0] === 'DEALER_CURVE' && /Block Blast curve/.test(t[1]))), 'an Admin switch');
+  assert.deepEqual(await page.evaluate(() => ['CURVE_HEAT', 'CURVE_MULTI', 'CURVE_GIVE'].map(k => DEV_SLIDERS.some(s => s[0] === k))), [true, true, true], 'Admin sliders');
+  await page.goto(server.url + '?dealer=tide'); await toGame(page);
+  assert.deepEqual(await page.evaluate(() => [CFG.DEALER_CURVE, CFG.DEALER_HOME]), [false, false]);
+});
+test('curve dealer: bot-played trays on two seeds always have a solution; with heat 0 the dealt CLEAR/FLUSH shares follow the table by bucket; big pieces', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { CFG.DEALER_CURVE = true; CFG.CURVE_HEAT = 0; });
+  const [tab, small] = await page.evaluate(() => [CFG.CURVE_TABLE, CFG.CURVE_SMALL]);
+  const RX = /^CURVE ([CFX])\/([CFX])\/([CFX])(·TWIN|·RELAX|·GUARD)? g=(\d+) heat=([+-]\d\.\d)$/;
+  const by = [0, 1, 2, 3].map(() => ({ C: 0, F: 0, X: 0, n: 0 })), cells = [], tags = {};
+  let trays = 0;
+  for (const seed of [41, 42]) {
+    const r = await page.evaluate(`(${HOME_SIM})(250, ${seed}, true)`);
+    for (const t of r) {
+      assert.ok(t.ok, 'every tray has a solution: ' + t.l + ' ' + t.t);
+      if (t.l === 'OPENING') continue;
+      const m = t.l.match(RX); assert.ok(m, 'labelled with the classes, gems and heat: ' + t.l);
+      assert.equal(+m[5], t.gems, 'the gems in the label');
+      trays++; if (m[4]) tags[m[4]] = (tags[m[4]] || 0) + 1;
+      const b = t.gems <= 12 ? 0 : t.gems <= 24 ? 1 : t.gems <= 36 ? 2 : 3;
+      for (const k of [1, 2, 3]) { by[b][m[k]]++; by[b].n++; }
+      cells.push(...t.t.split(',').map(i => [1,2,2,3,3,4,4,5,5,4,9,3,3,3,3,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,6,6][+i]));
+    }
+  }
+  assert.ok(trays >= 400, 'trays: ' + trays);
+  by.forEach((o, b) => {
+    if (o.n < 60) return;                                       // too few pieces in this bucket to judge
+    const c = 100 * o.C / o.n, f = 100 * o.F / o.n;
+    // the empty board (bucket 0) has no line to clear, so its CLEAR share runs below the table there
+    assert.ok(Math.abs(c - tab[b * 2]) <= (b ? 12 : 15) && Math.abs(f - tab[b * 2 + 1]) <= (b ? 12 : 15), 'bucket ' + b + ': CLEAR ' + c.toFixed(0) + '% FLUSH ' + f.toFixed(0) + '% vs table ' + tab[b * 2] + '/' + tab[b * 2 + 1] + ' (' + o.n + ' pieces)');
+  });
+  const mean = cells.reduce((a, b) => a + b, 0) / cells.length, sm = cells.filter(n => n <= 3).length / cells.length;
+  assert.ok(mean >= 4.5, 'big pieces: mean ' + mean.toFixed(2));
+  assert.ok(sm <= Math.max(...small) / 100 + 0.05, 'few small pieces: ' + (100 * sm).toFixed(0) + '%');
+  assert.ok((tags['·GUARD'] || 0) <= 2, 'the last guard is rare: ' + JSON.stringify(tags));
+});
+test('curve dealer: the luck dial walks in -1..1, moves the table, survives a resume; an emptied board can get three of one big piece; the recorder notes the knobs', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    CFG.DEALER_CURVE = true; W73(); const o = {}; rndSrc = mulberry(17);
+    o.rows = [curveRow(1, 0), curveRow(1, 0.5), curveRow(1, -0.5)];
+    CFG.CURVE_GIVE = 0.1; o.give = curveRow(1, 0); CFG.CURVE_GIVE = 0;
+    const mid = ['00000000','00000000','00000011','00110000','11001100','11001100','11001100','11001100'];
+    o.heats = []; for (let k = 0; k < 120; k++) { B73(mid); tray = [null, null, null]; genTray(); o.heats.push(curve.heat); }
+    curve.heat = -0.4321; const snap = JSON.parse(JSON.stringify(snapshot())); resetCurve(); o.zero = curve.heat; restore(snap); o.saved = curve.heat;
+    delete snap.cv; resetCurve(); restore(snap); o.old = curve.heat;
+    CFG.CURVE_TWINS = 1; o.twins = []; for (let k = 0; k < 6; k++) { B73(Array(8).fill('00000000')); trayNo = 5; tray = [null, null, null]; genTray(); o.twins.push(lastTier + ' ' + tray.map(t => SHAPES.indexOf(t.s)).join(',')); }
+    curve.heat = 0.5; B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11111110']); waveAfterDrop(packGrid(grid), 1, 0, 1, false); o.nudged = curve.heat;
+    rndSrc = null; return o; })()`);
+  const [mid, hot, cold] = r.rows;
+  assert.ok(Math.abs(mid[0] + mid[1] + mid[2] - 1) < 1e-9 && hot[0] > mid[0] && cold[0] < mid[0], 'heat moves share to and from CLEAR: ' + JSON.stringify(r.rows));
+  assert.ok(Math.abs(r.give[0] - mid[0] - 0.1) < 1e-9, 'generosity shifts the CLEAR share');
+  assert.ok(r.heats.every(h => h >= -1 && h <= 1) && new Set(r.heats.map(h => h.toFixed(3))).size > 50, 'a walk in -1..1');
+  assert.ok(Math.max(...r.heats) - Math.min(...r.heats) > 0.4, 'it goes somewhere: ' + Math.min(...r.heats).toFixed(2) + '..' + Math.max(...r.heats).toFixed(2));
+  assert.equal(r.zero, 0); assert.equal(r.saved, -0.4321, 'heat survives save and resume'); assert.equal(r.old, 0, 'an older save starts at 0');
+  r.twins.forEach(t => { const ids = t.split(' ').pop().split(',');
+    assert.ok(/·TWIN/.test(t) && ids[0] === ids[1] && ids[1] === ids[2], 'CURVE_TWINS 1: three of one piece on an emptied board: ' + t); });
+  assert.ok(Math.abs(r.nudged - 0.65) < 1e-9, 'a wipe warms the dial a little: ' + r.nudged);
+  // the play recorder's game marker carries the curve's knobs
+  await page.evaluate(() => { CFG.DEALER_CURVE = true; CFG.REC_PLAY = true; localStorage.removeItem('crumble.playlog'); recClear(); });
+  await page.evaluate(`(${HOME_SIM})(6, 3, false)`);
+  const L = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.playlog')));
+  const g = L.e.find(e => e.k === 'g'), t = L.e.filter(e => e.k === 't');
+  assert.ok(g && g.cfg.DEALER_CURVE === true && Array.isArray(g.cfg.CURVE_TABLE) && 'CURVE_HEAT' in g.cfg && 'CURVE_MULTI' in g.cfg, 'the knobs in the game marker: ' + JSON.stringify(g && g.cfg));
+  assert.ok(t.some(x => /^CURVE /.test(x.d) && x.p === 'curve'), 'trays recorded with the curve label and phase');
+  await page.evaluate(() => { CFG.REC_PLAY = false; recClear(); });
+});
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

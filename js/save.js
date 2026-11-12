@@ -19,6 +19,7 @@ function snapshot(){
     pace:{...pace},
     td:{st:tide.st,n:tide.n,len:tide.len},          // (1.1 G) the coaster's stretch
     hm:{ph:hdeal.ph,n:hdeal.n,len:hdeal.len,f:hdeal.f||0,wp:hdeal.wp|0,wr:hdeal.wr|0,wa:hdeal.wa===undefined?99:hdeal.wa,wn:hdeal.wn|0,lk:hdeal.lk|0},          // the home dealer's coaster (DEALER_HOME)
+    cv:{h:+curve.heat.toFixed(4)},                  // the Block Blast curve's luck dial (DEALER_CURVE)
     wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,chaseNext:chaseNext?1:0,chaseCool,sr:sweepRun?sweepRun.n:-1,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0,jn:jack.n,ja:jack.at},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'||mode==='challenge'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
@@ -74,6 +75,7 @@ function restore(o){
   }
   const td=o.td; if(td&&(td.st==='easy'||td.st==='lean')&&isInt(td.n,0,99)&&isInt(td.len,0,99)) tide={st:td.st,n:td.n,len:td.len};   // (1.1 G) older saves: a fresh EASY stretch (resetWave)
   const hm=o.hm; if(hm&&['warm','win','gift','cool'].includes(hm.ph)&&isInt(hm.n,0,99)&&isInt(hm.len,0,99)) hdeal={ph:hm.ph==='gift'?'win':hm.ph,n:hm.n,len:hm.ph==='gift'?CFG.HOME_WIN_MAX:hm.len,f:isInt(hm.f,0,99)?hm.f:0,wp:isInt(hm.wp,0,2)?hm.wp:0,wr:isInt(hm.wr,0,99)?hm.wr:0,wa:isInt(hm.wa,0,99)?hm.wa:99,wn:isInt(hm.wn,0,1)?hm.wn:0,lk:isInt(hm.lk,0,1)?hm.lk:0};   // the home dealer's coaster (f, wp, wr, wn, lk: older saves 0, wa 99; an older save's gift string resumes as win mode); older saves: warm (resetWave)
+  const cv=o.cv; if(cv&&typeof cv.h==='number'&&cv.h>=-1&&cv.h<=1) curve={heat:cv.h};   // the curve's luck dial; older saves: 0 (resetWave)
   roomNow=roomOf(packGrid(grid)); resetPressure(true);
   const b=o.bonus;                                  // a live bonus carries on with the trays it had left (the sky is back at once)
   if(b&&isInt(b.left,1,CFG.BONUS_TRAYS)&&isInt(b.extra,0,1e9)){
@@ -203,7 +205,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 /* ═══ The play recorder (?dev, or CFG.REC_PLAY) ═══
    So the dealer is tuned on real boards, not bots. A ring buffer of the last REC_MAX trays in its own localStorage key,
    one compact record per tray, oldest first ({v:1, e:[...]}):
-     {k:'g', g, m:mode, cfg:{DEALER_HOME, HOME_*...}}        a game starts (r:1: a run resumed after a reload)
+     {k:'g', g, m:mode, cfg:{DEALER_HOME, HOME_*, DEALER_CURVE, CURVE_*...}}   a game starts (r:1: a run resumed after a reload)
      {k:'t', g, n:trayNo, d:dealer label, p:phase, b:board, s:[shape indices, -1 the star], x:[[slot,row,col,lines,wiped]...]}
      {k:'o', g, n:trayNo, sc:score}                         game over
    b: the board at deal, 16 hex chars, two per row from the top, the left column the high bit. Off, nothing runs and
@@ -221,13 +223,13 @@ const recHex=g=>g.map(row=>{ let b=0; for(let c=0;c<N;c++) if(row[c]) b|=0x80>>c
 function recGame(resumed){                             // start(): a new game (and the knobs it is dealt under)
   if(!recOn()) return;
   const L=recLoad(); L.g++; recLive=true; recCur=null;
-  const cfg={}; for(const k in CFG) if(k==='DEALER_HOME'||k.startsWith('HOME_')&&k!=='HOME_WORLD') cfg[k]=CFG[k];   // the dealer's knobs (HOME_WORLD is her sky)
+  const cfg={}; for(const k in CFG) if(k==='DEALER_HOME'||k==='DEALER_CURVE'||k.startsWith('CURVE_')||k.startsWith('HOME_')&&k!=='HOME_WORLD') cfg[k]=CFG[k];   // the dealers' knobs (HOME_WORLD is her sky)
   L.e.push(resumed?{k:'g',g:L.g,m:mode,cfg,r:1}:{k:'g',g:L.g,m:mode,cfg});
 }
 function recTray(shapes,label){                        // commitTray: the tray as dealt, on the board it was dealt on
   if(!recOn()){ recCur=null; return; }
   if(!recLive) recGame(true);
-  const L=recLoad(), ph=typeof hdOn==='function'&&hdOn()?hdeal.ph:typeof tideOn==='function'&&tideOn()?tide.st:pace.ph;
+  const L=recLoad(), ph=typeof curveOn==='function'&&curveOn()?'curve':typeof hdOn==='function'&&hdOn()?hdeal.ph:typeof tideOn==='function'&&tideOn()?tide.st:pace.ph;
   recCur={k:'t',g:L.g,n:trayNo,d:label,p:ph,b:recHex(grid),s:shapes.map(s=>s.star?-1:SHAPES.indexOf(s)),x:[]};
   L.e.push(recCur);
   let n=0; for(const e of L.e) if(e.k==='t') n++;
