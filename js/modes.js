@@ -235,7 +235,7 @@ function openMenu(){
   const today=daily.d[dailyKey()], liveD=peekRun('daily');
   el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'New board today';
   el('menuAdvSub').textContent=advStars()?'Level '+nextLevel().id+' · ★ '+advStars():'Goal levels, no timer';
-  el('menuGoalsSub').textContent=streakNow()?'🔥 '+streakNow()+(streakNow()===1?' day':' days')+' in a row':'Streak and unlocks';
+  el('menuGoalsSub').textContent=goalsSub();
   const liveE=mode==='endless'&&state==='play'?{score}:peekRun('endless');   // (8.4) a saved endless run waits here
   el('menuBest').textContent=liveE&&liveE.score?'Continue · '+fmtScore(liveE.score):liveE?'Continue':'Play as long as you can';
   el('menuCard').hidden=false;
@@ -290,6 +290,7 @@ function openPause(){
   el('pauseEye').textContent='Paused · '+(adventure?'Level '+lvl.id:mode==='daily'?'Daily':mode==='challenge'&&chal?chLabel(chal.seed):'Endless');
   el('pauseScore').textContent=score.toLocaleString('en-US');
   el('pauseMsg').textContent=adventure?goalText(lvl.goal)+'. Your game is saved.':mode==='challenge'&&chal?'Tray '+Math.min(trayNo,CH_TRAYS)+' of '+CH_TRAYS+'. Your game is saved.':'Your game is saved.';
+  { const t=darePauseText(), p=el('pauseDare'); p.hidden=!t; p.textContent=t; }   // (dares) the run's dare
   el('pauseNew').dataset.lbl=mode==='challenge'?'Restart':'End game'; pauseNewReset();
   el('pauseCard').hidden=false;
 }

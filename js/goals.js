@@ -60,6 +60,11 @@ function checkGoals(announce=true){
 }
 
 /* ── the card ── */
+function goalsSub(){                                   // the Goals tile's line on the menus; (dares) the cookie jar once she has any
+  const st=streakNow(), ck=dare.st.cookies;
+  if(ck) return ck+(ck===1?' cookie':' cookies')+(st?' · Streak '+st:'');
+  return st?'🔥 '+st+(st===1?' day':' days')+' in a row':'Streak and unlocks';
+}
 function nextSkin(){ return PICKABLE_SKINS.filter(s=>!isUnlocked(s.id)).sort((a,b)=>a.unlock-b.unlock)[0]||null; }
 function goalRow(text,v,n){
   const r=document.createElement('div'); r.className='goal';
@@ -89,6 +94,8 @@ function renderGoals(){
   const gl=el('goalList'); gl.textContent='';
   for(const f of GOAL_FAMILIES){ const n=goalRung(f); if(n) gl.append(goalRow(f.text(n),f.val(),n)); }
   if(!gl.children.length) gl.append(Object.assign(document.createElement('p'),{className:'setnote',textContent:'Every goal done. Wow.'}));
+  const dw=daresWon(), dl=el('goalsDares');           // (dares) one line for the jar; hats come later
+  dl.hidden=!(dw||dare.st.cookies); dl.textContent='Dares won: '+dw+' · Cookies: '+dare.st.cookies;
   el('goalsDone').textContent=goals.done.size?goals.done.size+(goals.done.size===1?' goal':' goals')+' reached':'';
 }
 function openGoals(){

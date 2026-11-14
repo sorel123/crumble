@@ -297,6 +297,12 @@ const CFG = {
   TALK_COMBO:        4,      // (talk) from this streak (every other step) it remarks on the combo
   TALK_DRY:          7,      // (talk) drops in a row without a clear before "bold strategy."
   TALK_DITHER:       3,      // (talk) pieces picked up and put back in a row before "any day now."
+  DARES:             true,   // (dares) Endless: the crumb dares her once a run; beating it pays a cookie into the jar (js/dares.js). Needs the mascot
+  DARE_MAX:          3,      // (dares) dares a run at most: each one beaten brings the next, harder one
+  DARE_SAY_MS:       4200,   // (dares) ms a dare's line stays up (an ordinary line: TALK_MS)
+  DARE_NEXT_MS:      2200,   // (dares) ms after one is beaten before the next is issued (it still waits for a quiet board)
+  DARE_TIERS:        [[.6,.35,.05],[.2,.55,.25],[.1,.35,.55]],   // (dares) odds of easy / medium / hard for the run's 1st, 2nd, 3rd dare
+  DARE_FADE:         .35,    // (dares) a dare she has beaten n times is picked 1/(1+DARE_FADE*n) as often
   TILT:              true,   // (toy) with motion allowed, leaning the phone rolls the crumb along the board's rim
   TILT_FLIP:         false,  // (toy) if the crumb rolls uphill on some device, flip the sign
   TILT_DEAD:         .07,    // (toy) lean (share of gravity, ~4 degrees) the phone forgives before the crumb moves

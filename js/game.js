@@ -230,7 +230,7 @@ function place(idx,r,c){
     cols=grid.some(row=>row[c])?[c]:[];
   } else ({rows,cols}=linesFor(grid));
   const total=rows.length+cols.length;
-  let gained=s.n*SCORE_SCALE, swept=false, avaLines=0;
+  let gained=s.n*SCORE_SCALE, swept=false, avaLines=0, colourGone=false, avaHit=false;   // (dares) a colour wiped out, an avalanche fell
   hesPlace(total>0);                               // the hesitation log (save.js): the tray's first drop, timed
 
   if(s.star){
@@ -301,6 +301,7 @@ function place(idx,r,c){
     const colorsAfter=new Set();
     for(let rr=0;rr<N;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]) colorsAfter.add(grid[rr][cc].gi);
     const gone=[...colorsBefore].filter(gi=>!colorsAfter.has(gi));
+    colourGone=gone.length>0&&colorsAfter.size>0;
     let colorBonus=0;
     if(loud && gone.length && colorsAfter.size>0 && CFG.COLOR_GONE_BONUS>0){
       colorBonus=Math.round(CFG.COLOR_GONE_BONUS*gone.length*(1+(combo-1)*0.25));
@@ -344,7 +345,7 @@ function place(idx,r,c){
 
     if(!s.star&&avaDue(combo)){                    // (Avalanche) the streak brings the board down: gems fall, rows that fill clear, and again
       const combo0=combo, a=avalanche(maxDelay+CFG.AVA_LEAD,lastGi);
-      gained+=a.gained; cleared+=a.cleared; avaLines=a.lines; maxDelay=Math.max(maxDelay,a.end);
+      gained+=a.gained; cleared+=a.cleared; avaLines=a.lines; avaHit=true; maxDelay=Math.max(maxDelay,a.end);
       // each chain clear counts like an ordinary clear: it fills the bonus meter, a combo it reaches can earn Volcano and the star
       for(const [n,cmb] of a.steps) chargeBonus(n,cmb);
       if(a.steps.length){
@@ -357,7 +358,7 @@ function place(idx,r,c){
       const goneA=[...colorsAfter].filter(gi=>!left.has(gi));
       if(combo>=CFG.BIG_COMBO && goneA.length && left.size>0 && CFG.COLOR_GONE_BONUS>0){
         const cb=Math.round(CFG.COLOR_GONE_BONUS*goneA.length*(1+(combo-1)*0.25));
-        gained+=cb;
+        gained+=cb; colourGone=true;
         banners.splice(Math.max(0,banners.indexOf(a.banner))+1,0,{t:0,txt:goneA.length>1?goneA.length+' COLORS GONE!':'COLOR GONE!',sub:'+'+cb,col:`hsl(${GEMS[goneA[0]].h} 95% 72%)`,k:1.2});
       }
     }
@@ -432,6 +433,7 @@ function place(idx,r,c){
   playedToday(); checkGoals();                       // (4.2) the day counts, a reached goal gets its banner
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
   guideDrop(total,swept);                            // (1.1 D) the guided first game counts its lesson
+  dareDrop(rows.length,cols.length,total+avaLines,swept,colourGone,avaHit,!!s.star);   // (dares) Crumb's dare checks this drop (dares.js)
   if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
 const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));

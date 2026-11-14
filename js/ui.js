@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, toy:CFG.FX_CRUMB_TOY, talk:CFG.FX_CRUMB_TALK, tilt:CFG.TILT, av2:CFG.AVALANCHE, gold:!!CFG.SPECIALS.golden, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:3
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, toy:CFG.FX_CRUMB_TOY, talk:CFG.FX_CRUMB_TALK, dares:CFG.DARES, tilt:CFG.TILT, av2:CFG.AVALANCHE, gold:!!CFG.SPECIALS.golden, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:3
   })); }catch(e){}
   cloudDirty();
 }
@@ -44,6 +44,7 @@ function loadSkinSave(){
     if(typeof o.mascot==='boolean') CFG.FX_MASCOT=o.mascot;           // the mascot crumb (7.5f)
     if(typeof o.toy==='boolean') CFG.FX_CRUMB_TOY=o.toy;              // (toy) the crumb can be grabbed and flicked
     if(typeof o.talk==='boolean') CFG.FX_CRUMB_TALK=o.talk;           // (talk) the crumb's bubble and signs
+    if(typeof o.dares==='boolean') CFG.DARES=o.dares;                 // (dares) Crumb's dares
     if(typeof o.tilt==='boolean') CFG.TILT=o.tilt;                    // (toy) lean the phone and it rolls
     if(typeof o.av2==='boolean') CFG.AVALANCHE=o.av2;                // (Avalanche) the board falls on a streak (`ava` was the off-by-default trial: ignored, so everyone gets it once)
     if(typeof o.gold==='boolean') CFG.SPECIALS.golden=o.gold;        // (Jay) the golden hand, on a player switch while he decides whether to keep it
@@ -193,7 +194,7 @@ function renderFxPicks(){                             // Settings > Look: Clear 
   el('hapTog').hidden=!Native.on(); el('hapOn').checked=!!CFG.HAPTICS;
   el('chaseOn').checked=!!CFG.FX_CHASE;
   el('mascotOn').checked=!!CFG.FX_MASCOT;
-  el('avaOn').checked=!!CFG.AVALANCHE; el('goldOn').checked=!!CFG.SPECIALS.golden; el('talkOn').checked=!!CFG.FX_CRUMB_TALK;
+  el('avaOn').checked=!!CFG.AVALANCHE; el('goldOn').checked=!!CFG.SPECIALS.golden; el('talkOn').checked=!!CFG.FX_CRUMB_TALK; el('dareOn').checked=!!CFG.DARES;
   el('toyOn').checked=!!CFG.FX_CRUMB_TOY; el('tiltOn').checked=!!CFG.TILT;
   el('tlOn').checked=!!CFG.FX_TIMELAPSE;
 }
@@ -221,6 +222,7 @@ function buildSettingsUI(){
   el('avaOn').onchange=()=>{ CFG.AVALANCHE=el('avaOn').checked; saveSkinSave(); };   // (Avalanche) from the next clear
   el('goldOn').onchange=()=>{ CFG.SPECIALS.golden=el('goldOn').checked; if(!CFG.SPECIALS.golden) goldenNext=false; saveSkinSave(); };   // off: no new golden hand is dealt (a queued one is dropped); one already in the tray plays out and pays as usual
   el('talkOn').onchange=()=>{ CFG.FX_CRUMB_TALK=el('talkOn').checked; saveSkinSave(); };   // (talk) off: the bubble goes on the next frame
+  el('dareOn').onchange=()=>{ CFG.DARES=el('dareOn').checked; saveSkinSave(); };   // (dares) off: the chip goes on the next frame; back on, the run's dare carries on
   el('toyOn').onchange=()=>{ CFG.FX_CRUMB_TOY=el('toyOn').checked; saveSkinSave(); };   // (toy) off: it goes back to its corner on the next frame
   el('tiltOn').onchange=()=>{ CFG.TILT=el('tiltOn').checked; saveSkinSave(); if(CFG.TILT) toyAskTilt(true); };   // (toy) the switch is a tap, so iOS may ask for motion here
   el('tlOn').onchange=()=>{ CFG.FX_TIMELAPSE=el('tlOn').checked; saveSkinSave(); };   // (7.5g) from the next drop; on mid-run, it starts from there

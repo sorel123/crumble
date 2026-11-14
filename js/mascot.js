@@ -57,7 +57,7 @@ function mascotInit(){
   d.innerHTML='<div class="mb">'+MASCOT_SVG+'</div>';
   el('stage').appendChild(d);
   masc.el=d; masc.body=d.firstChild; masc.pp=d.querySelector('.pp');
-  mascotPlace(); toyInit(); sayInit();              // (talk) its bubble and signs: js/crumbsay.js
+  mascotPlace(); toyInit(); sayInit(); dareInit();   // (dares) the dare chip: js/dares.js              // (talk) its bubble and signs: js/crumbsay.js
                             // (toy) the crumb can be grabbed and flicked: js/crumbtoy.js
 }
 function mascotPlace(){                               // layout() calls this: feet on the board frame's top edge, left corner
@@ -87,6 +87,7 @@ function mascotTight(){
 function mascotStep(now){                             // draw.js frame(): writes only when something it shows changes
   const m=masc; if(!m.el) return;
   const on=CFG.FX_MASCOT&&state!=='idle'&&!hero.card&&!hero.falling;   // (8.3) the menu has its own crumb (and it is still tumbling off the logo)
+  dareStep(now,on);                                 // (dares) the dare chip, the cookie and the dare's lines
   if(!on){ sayStep(now,false,false); if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
   if(state==='won'&&m.lastState!=='won') mascotAct('sweep');   // a level won: the big one
   m.lastState=state;
