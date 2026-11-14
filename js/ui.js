@@ -14,7 +14,7 @@ function saveSkinSave(){
   try{ localStorage.setItem(SKIN_STORE,JSON.stringify({
     unlocked:[...unlocked], style:CFG.STYLE, motif:CFG.MOTIF,
     homeWorld:CFG.HOME_WORLD, discovered:[...discoveredWorlds], newLook,
-    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:3
+    theme:CFG.THEME, sndSet:CFG.SND_SET, muted, music:CFG.MUSIC, musicPick:CFG.MUSIC_PICK, journey:CFG.JOURNEY_SKY, clear:CFG.CLEAR_STYLE, haptics:CFG.HAPTICS, glint:CFG.FX_ANTICIPATION, fire:CFG.FX_COMBO_FIRE, pc:CFG.FX_PIECE_COLOR_CLEAR, chase:CFG.FX_CHASE, mascot:CFG.FX_MASCOT, toy:CFG.FX_CRUMB_TOY, tilt:CFG.TILT, tl:CFG.FX_TIMELAPSE, lookV:2, sndV:3
   })); }catch(e){}
   cloudDirty();
 }
@@ -42,6 +42,8 @@ function loadSkinSave(){
     if(typeof o.pc==='boolean') CFG.FX_PIECE_COLOR_CLEAR=o.pc;        // (D) Clear in your piece's colour
     if(typeof o.chase==='boolean') CFG.FX_CHASE=o.chase;              // Chase your best (7.5e)
     if(typeof o.mascot==='boolean') CFG.FX_MASCOT=o.mascot;           // the mascot crumb (7.5f)
+    if(typeof o.toy==='boolean') CFG.FX_CRUMB_TOY=o.toy;              // (toy) the crumb can be grabbed and flicked
+    if(typeof o.tilt==='boolean') CFG.TILT=o.tilt;                    // (toy) lean the phone and it rolls
     if(typeof o.tl==='boolean') CFG.FX_TIMELAPSE=o.tl;                // the game-over timelapse (7.5g)
     if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
     syncSoundBtns();
@@ -188,6 +190,7 @@ function renderFxPicks(){                             // Settings > Look: Clear 
   el('hapTog').hidden=!Native.on(); el('hapOn').checked=!!CFG.HAPTICS;
   el('chaseOn').checked=!!CFG.FX_CHASE;
   el('mascotOn').checked=!!CFG.FX_MASCOT;
+  el('toyOn').checked=!!CFG.FX_CRUMB_TOY; el('tiltOn').checked=!!CFG.TILT;
   el('tlOn').checked=!!CFG.FX_TIMELAPSE;
 }
 function renderMusicPick(){
@@ -211,6 +214,8 @@ function buildSettingsUI(){
   el('fireOn').onchange=()=>{ CFG.FX_COMBO_FIRE=el('fireOn').checked; saveSkinSave(); };   // (7.5d) off mid-streak: the flames fade
   el('chaseOn').onchange=()=>{ CFG.FX_CHASE=el('chaseOn').checked; saveSkinSave(); chaseSync(); };   // (7.5e) the marker shows or hides at once
   el('mascotOn').onchange=()=>{ CFG.FX_MASCOT=el('mascotOn').checked; saveSkinSave(); };   // (7.5f) the crumb shows or hides on the next frame
+  el('toyOn').onchange=()=>{ CFG.FX_CRUMB_TOY=el('toyOn').checked; saveSkinSave(); };   // (toy) off: it goes back to its corner on the next frame
+  el('tiltOn').onchange=()=>{ CFG.TILT=el('tiltOn').checked; saveSkinSave(); if(CFG.TILT) toyAskTilt(true); };   // (toy) the switch is a tap, so iOS may ask for motion here
   el('tlOn').onchange=()=>{ CFG.FX_TIMELAPSE=el('tlOn').checked; saveSkinSave(); };   // (7.5g) from the next drop; on mid-run, it starts from there
   el('journeyOn').onchange=()=>{ CFG.JOURNEY_SKY=el('journeyOn').checked; saveSkinSave(); syncHomeSky(); };   // (7.5b)
   renderThemes(); renderSndSet(); el('sndOn').checked=!muted; renderMusicPick(); el('journeyOn').checked=CFG.JOURNEY_SKY; renderFxPicks();

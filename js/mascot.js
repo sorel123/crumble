@@ -14,7 +14,7 @@
    Plain DOM (an inline SVG) over the canvas: no canvas drawing. Faces are class swaps written only when the mood changes;
    motion is CSS / Web Animations on transform and opacity only. The pupils follow the drag in quantised steps (an attribute
    write only when the step changes). Reduced motion: the faces change, nothing moves. It dims when the held piece comes near
-   it, so it never hides the piece. Switch: Settings > Look > Advanced "Mascot" (CFG.FX_MASCOT, saved as `mascot`). */
+   it, so it never hides the piece. It is also a toy (grab, flick, tilt to roll): js/crumbtoy.js adds the grab/dizzy/sulk faces. Switch: Settings > Look > Advanced "Mascot" (CFG.FX_MASCOT, saved as `mascot`). */
 const MASCOT_SVG=`<svg viewBox="0 0 48 48" aria-hidden="true">
 <g class="fe"><rect x="16" y="38.5" width="5.5" height="5" rx="2.4"/><rect x="26.5" y="38.5" width="5.5" height="5" rx="2.4"/></g>
 <g class="ad"><path d="M10.5 26 L6.5 31.5"/><path d="M37.5 26 L41.5 31.5"/></g>
@@ -25,6 +25,7 @@ const MASCOT_SVG=`<svg viewBox="0 0 48 48" aria-hidden="true">
 <g class="ey"><ellipse cx="18.6" cy="21.4" rx="3.6" ry="4.2"/><ellipse cx="29.4" cy="21.4" rx="3.6" ry="4.2"/>
 <g class="pp"><circle cx="18.9" cy="22" r="1.9"/><circle cx="29.7" cy="22" r="1.9"/></g></g>
 <g class="ld"><path d="M14.6 21.4a4 4.4 0 0 1 8 0z"/><path d="M25.4 21.4a4 4.4 0 0 1 8 0z"/><path class="ln" d="M14.8 21.4h7.6M25.6 21.4h7.6"/></g>
+<g class="dz"><path d="M18.6 21.6c.9-.9 2.1.3 1.2 1.5-1.2 1.5-3.9.3-3.6-1.9.3-2.7 4.2-3.3 5.6-.7"/><path d="M29.4 21.6c.9-.9 2.1.3 1.2 1.5-1.2 1.5-3.9.3-3.6-1.9.3-2.7 4.2-3.3 5.6-.7"/></g>
 <g class="xe"><path d="M16.4 19.2l4.4 4.4M20.8 19.2l-4.4 4.4M27.2 19.2l4.4 4.4M31.6 19.2l-4.4 4.4"/></g>
 <g class="se"><path d="M18.6 17.2l1.2 2.9 3 .2-2.3 1.9.8 3-2.7-1.7-2.7 1.7.8-3-2.3-1.9 3-.2z"/><path d="M29.4 17.2l1.2 2.9 3 .2-2.3 1.9.8 3-2.7-1.7-2.7 1.7.8-3-2.3-1.9 3-.2z"/></g>
 <path class="bl bL" d="M15 15.6 21.8 15.2"/><path class="bl bR" d="M26.2 15.2 33 15.6"/>
@@ -33,6 +34,7 @@ const MASCOT_SVG=`<svg viewBox="0 0 48 48" aria-hidden="true">
 <path class="mo m2" d="M20.8 30.4q4 .6 7-1.8"/>
 <path class="mo m3" d="M21 30.2h6"/>
 <path class="mo m4" d="M20 31.2q2-2 4 0t4 0"/>
+<path class="mo m6" d="M20.6 31.4q3.4-2.6 6.8 0"/>
 <ellipse class="mo m5" cx="24" cy="30.4" rx="1.7" ry="2"/>
 <g class="ab"><path d="M10.5 26 L6.5 31.5"/><path d="M38.6 25 Q40.5 17 36.5 14 L26.5 13"/></g>
 <path class="sw" d="M38.6 11.5q2.2 3.3 0 4.6q-2.2-1.3 0-4.6z"/>
@@ -55,7 +57,7 @@ function mascotInit(){
   d.innerHTML='<div class="mb">'+MASCOT_SVG+'</div>';
   el('stage').appendChild(d);
   masc.el=d; masc.body=d.firstChild; masc.pp=d.querySelector('.pp');
-  mascotPlace();
+  mascotPlace(); toyInit();                           // (toy) the crumb can be grabbed and flicked: js/crumbtoy.js
 }
 function mascotPlace(){                               // layout() calls this: feet on the board frame's top edge, left corner
   if(!masc.el) return;
@@ -63,8 +65,9 @@ function mascotPlace(){                               // layout() calls this: fe
   const s=Math.round(Math.max(28,Math.min(46,room+8)));
   masc.s=s; masc.x=bx+6; masc.y=top-s*44/48+1.5;
   const st=masc.el.style; st.width=st.height=s+'px'; st.left=masc.x+'px'; st.top=masc.y+'px';
+  if(toy.mode==='rim'){ toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); toyWrite(); }
 }
-function mascotReset(){ masc.act=''; masc.until=0; masc.fainted=false; masc.key=''; if(masc.el){ masc.el.getAnimations({subtree:true}).forEach(a=>a.cancel()); } }
+function mascotReset(){ toyReset(); masc.act=''; masc.until=0; masc.fainted=false; masc.key=''; if(masc.el){ masc.el.getAnimations({subtree:true}).forEach(a=>a.cancel()); } }
 // game.js calls this: an event mood ('nod','hop','smug','flat','phew','sweep'), shown just after the drop lands
 function mascotAct(name){
   const a=MASCOT_ACT[name]; if(!a||!masc.el||!CFG.FX_MASCOT) return;
@@ -91,7 +94,9 @@ function mascotStep(now){                             // draw.js frame(): writes
     if(faint&&!reduce) m.el.animate([{transform:'none'},{transform:'rotate(-14deg)',offset:.25},{transform:'translate(4%,-38%) rotate(80deg)'}],{duration:650,easing:'cubic-bezier(.5,0,.7,1.4)',fill:'forwards'});
     if(!faint&&!reduce) m.body.animate([{transform:'translateY(-25%) scale(.9,1.1)'},{transform:'none'}],{duration:380,easing:'ease-out'});
   }
-  let mood=faint?'faint':(m.act&&now>=m.start&&now<m.until)?m.act:mascotTight()?'tight':state==='won'?'hop':'idle';
+  toyStep(now);                                     // (toy) held, flying, rolling with the tilt: it moves the element, and may ask for a face
+  const tm=faint?'':toyMood(now);
+  let mood=faint?'faint':tm?tm:(m.act&&now>=m.start&&now<m.until)?m.act:mascotTight()?'tight':state==='won'?'hop':'idle';
   if(m.act&&now>=m.until) m.act='';
   if(now>=m.blinkTo&&now>m.blinkAt+150) m.blinkAt=now+2400+mascotRnd()*3200, m.blinkTo=m.blinkAt+130;
   const blink=now>=m.blinkAt&&now<m.blinkTo&&(mood==='idle'||mood==='tight'||mood==='nod');
@@ -99,11 +104,11 @@ function mascotStep(now){                             // draw.js frame(): writes
   const held=drag&&tray[drag.i]&&drag.cx!=null;
   let dim=false, lx=.3, ly=.5;
   if(held){
-    const cx=m.x+m.s/2, cy=m.y+m.s*.45, dx=drag.cx-cx, dy=drag.cy-cy, d=Math.hypot(dx,dy)||1;
+    const cx=m.x+toy.x+m.s/2, cy=m.y+toy.y+m.s*.45, dx=drag.cx-cx, dy=drag.cy-cy, d=Math.hypot(dx,dy)||1;
     lx=dx/d; ly=dy/d; dim=d<m.s*1.6+cell*1.2;
   }
-  const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'');
+  const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'')+(toyOn()&&!faint?' toy':'');
   if(key!==m.key){ m.el.hidden=false; m.el.className=key; m.key=key; }
-  const look=mood==='faint'||mood==='sweep'||mood==='flat'?'0,0':(Math.round(lx*1.3*4)/4)+','+(Math.round(ly*1.1*4)/4);
+  const look=mood==='faint'||mood==='sweep'||mood==='flat'||mood==='dizzy'?'0,0':(Math.round(lx*1.3*4)/4)+','+(Math.round(ly*1.1*4)/4);
   if(look!==m.look){ m.look=look; m.pp.setAttribute('transform','translate('+look+')'); }
 }

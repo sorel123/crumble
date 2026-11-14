@@ -1356,6 +1356,22 @@ A sidekick on the board. Code is `js/mascot.js` (the SVG, `mascotStep` called fr
 - **Check on the phone:** the crumb should stand on the board's top-left corner; clear one line (nod), two (hop), three in a row (smirk), then miss (flat stare); fill the board until it sweats; run out of moves and it should faint. If it is too busy, turn it off in Settings, or shorten the `ms` holds in `MASCOT_ACT`.
 - Tests: the three "7.5f mascot" scenarios.
 
+## The crumb is a toy (2026-11-14, Jay: "something whacky like flicking the crumb guy")
+
+The mascot can be grabbed, flicked and rolled by leaning the phone. Code is `js/crumbtoy.js` (`toyStep` is called from `mascotStep`; pointer listeners on `#mascot`), the `#mascot.toy / .grab / .dizzy / .sulk` CSS in `index.html`, and `toyBusy()` in `fxBusy()` so the frame pacing runs at full speed while it moves. It never touches score, tray or board.
+
+- **Grab.** A finger on the crumb (a slightly bigger target than the drawing) picks it up: wide eyes, arms up, it swings behind the finger. A piece in the hand wins: the crumb cannot be grabbed mid-drag, and while a held piece is near it (`dim`) touches pass through.
+- **Flick.** Let go while moving and it flies (`TOY_GRAVITY`, capped at `TOY_MAX_SPEED`), spins, and bounces off the screen edges (`TOY_BOUNCE`). The board's top rim is a ledge from above only; anywhere else it falls to the floor under the tray, rolls to a stop and hops back up to the rim (`TOY_BACK_MS`). Let go without moving and it is a put-down.
+- **Dizzy.** A throw faster than `TOY_DIZZY_V`, or three bounces, lands with spiral eyes for `TOY_DIZZY_MS`.
+- **Sulk.** `TOY_SULK_N` throws within `TOY_SULK_MS` and it frowns for `TOY_SULK_HOLD`; a grab then gets a head shake.
+- **Tilt.** `devicemotion` gravity along the screen's x axis rolls it along the rim (`TILT_PUSH`, dead zone `TILT_DEAD`, friction `TOY_RIM_DRAG`); it stays where it stops, so a lean to the right leaves it on the right. iOS reports gravity with the opposite sign to the spec, so the sign is chosen by platform; `TILT_FLIP` (Admin) reverses it if a device rolls uphill. iOS only grants motion from a user gesture: the request rides on the first finger lifted off the crumb (once per launch), or on turning the Tilt switch on. A "Don't Allow" turns the switch off and it is not asked again.
+- **Where it stands.** `toy.x` is its offset along the rim from the left corner (0..`toyXMax()`); `mascotPlace()` clamps it on a layout.
+- **Sound.** Small synthesized squeak / whee / boing / dizzy warble through `play()` (so the Sound effects button mutes them), and a light haptic on a bounce in the app.
+- **Reduced motion:** the toy is off (the crumb stays in its corner).
+- **Switches.** `CFG.FX_CRUMB_TOY` (Settings → Look → Advanced "Crumb is a toy", saved `toy`) and `CFG.TILT` ("Tilt", saved `tilt`); both in Admin.
+- **Check on the phone:** flick the crumb hard at a wall: it should bounce around and land dizzy. Flick it five times quickly: it sulks. After the first flick iOS asks for motion; allow it, then lean the phone right: the crumb should roll to the right end of the rim and stay there when the phone is level again. **Not yet tried on a real phone**: the motion prompt inside the app's web view, and the tilt direction.
+- Tests: the two "crumb toy" scenarios.
+
 ## Timelapse (plan 7.5, seventh zazz idea)
 
 The whole run in a few seconds on the game-over card. Code is `js/timelapse.js`; it is fed by `tlReset()` in `start()`, `tlRecord()` at the end of `place()`, `tlSnap()`/`tlLoad()` in the run save, and `tlShow()` in `gameOver()`. All modes.

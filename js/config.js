@@ -276,6 +276,23 @@ const CFG = {
   CHASE_HOT:         .9,     // (7.5e) from this share the bar glows
   CHASE_SKY_MIN:     500*SCORE_SCALE,    // (7.5e) a best below this beats with the banner only, so a tiny early best does not skip dawn
   FX_MASCOT:         true,   // (7.5f) a cookie crumb on the board's top-left corner: nods/hops/smirks on clears, sweats when it is tight, faints on game over (js/mascot.js)
+  FX_CRUMB_TOY:      true,   // (toy) the crumb can be grabbed and flicked: it flies, bounces, lands dizzy, sulks if overdone (js/crumbtoy.js)
+  TILT:              true,   // (toy) with motion allowed, leaning the phone rolls the crumb along the board's rim
+  TILT_FLIP:         false,  // (toy) if the crumb rolls uphill on some device, flip the sign
+  TILT_DEAD:         .07,    // (toy) lean (share of gravity, ~4 degrees) the phone forgives before the crumb moves
+  TILT_PUSH:         1.1,    // (toy) how hard the lean pushes it along the rim, in gravities
+  TOY_GRAVITY:       2600,   // (toy) px/s^2
+  TOY_BOUNCE:        .62,    // (toy) speed kept by a bounce off a wall
+  TOY_MAX_SPEED:     3200,   // (toy) fastest throw, px/s
+  TOY_FLICK_MIN:     140,    // (toy) slower than this at release is a put-down, not a throw
+  TOY_REST_V:        260,    // (toy) landing slower than this stays down
+  TOY_RIM_DRAG:      2.2,    // (toy) rolling friction on the rim, 1/s
+  TOY_DIZZY_V:       1500,   // (toy) a throw this fast (or 3+ bounces) lands dizzy
+  TOY_DIZZY_MS:      1500,   // (toy) how long the spiral eyes last
+  TOY_SULK_N:        5,      // (toy) this many throws within TOY_SULK_MS and it sulks
+  TOY_SULK_MS:       14000,
+  TOY_SULK_HOLD:     6000,   // (toy) how long the sulk lasts
+  TOY_BACK_MS:       560,    // (toy) the hop from the floor back to the rim
   FX_TIMELAPSE:      true,   // (7.5g) the run's boards are recorded (capped, in the run save) and replay on the game-over card (js/timelapse.js)
   FX_ANTICIPATION:   true,   // (7.5c) while she drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
   ANTIC_REACH:       2.5,    // (7.5c) cells from a completing landing where the shiver starts; it peaks as the piece arrives
