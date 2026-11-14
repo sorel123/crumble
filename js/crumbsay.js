@@ -74,8 +74,9 @@ const SAY={
   rsStar3:["perfect. don't get smug."],
   rsTop:["from the top. watch."],
   rsCookie:["fine. one cookie. for the cousins."],
+  quiet:["ok. now it gets interesting.","warm-up's over.","fine. now the fun stuff."],   // (quiet) Day: Volcano, the cannonball and the x2 meter are awake
 };
-const say={stop:0,stopDue:'',stopT:0,el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
+const say={stop:0,stopDue:'',stopT:0,quiet:false,qSync:true,qDue:false,qT:0,el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){
   const d=document.createElement('div'); d.id='crumbSay'; d.hidden=true; d.setAttribute('aria-hidden','true');
   el('stage').appendChild(d); say.el=d;
@@ -105,7 +106,9 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
     if(state==='over') sayLine(dareOpen()?'dareLost':'over',true);   // (dares) a run that ends with a dare open: "told you."
     else if(state==='play'&&say.state==='idle'&&mascotRnd()<.5) sayLine('start');
     say.state=state; say.stop=skyStop(); say.stopDue='';   // (sky bite) a new or resumed run starts counting stops from where it is
+    say.qSync=true;
   }
+  if(say.qSync){ say.qSync=false; say.quiet=quietNow(); say.qDue=false; }   // (quiet) a new or restored run: no line for a stop it was already past
   if(say.placed<0||stats.placed<say.placed) sync();
   if(stats.placed!==say.placed){                           // a drop
     const got=stats.lines-say.lines; say.backs=0;
@@ -132,6 +135,14 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
     }
     if(say.stopDue&&(now-say.stopT>8000||!dare.q.length&&dareQuiet(now)&&sayLine(say.stopDue))) say.stopDue='';   // (dares, stakes) only when a dare line, the charged crumb or the slingshot is not speaking; it never forces
   } else { say.stop=state==='play'?skyStop():0; say.stopDue=''; }
+  // (quiet) the quiet opening ends at Day: one line, once a run, waiting its turn like the stop lines (never forced). A jump
+  // straight past Day to a stop that has its own line says that one instead
+  if(state==='play'){
+    const q=quietNow();
+    if(say.quiet&&!q&&CFG.QUIET_START&&!say.stopDue){ say.qDue=true; say.qT=now; }   // (switched off in Admin: no line)
+    say.quiet=q;
+    if(say.qDue&&(now-say.qT>8000||!dare.q.length&&dareQuiet(now)&&sayLine('quiet'))) say.qDue=false;
+  }
   if(!!ret!==say.retOn){ say.retOn=!!ret; if(ret&&++say.backs>=CFG.TALK_DITHER){ say.backs=0; sayLine('dither'); } }   // a piece picked up and sent back
   const tight=state==='play'&&mascotTight(); if(tight&&!say.tight) sayLine('tight'); say.tight=tight;
   // ── idle: a sign, a second one, then asleep; the next touch wakes it ──

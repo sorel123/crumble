@@ -6860,6 +6860,130 @@ test('Rescue: every board\'s stored solution wins with 3 stars in the real game,
   }
   assert.equal(s.rolls, 0, 'the solver never rolls Math.random');
 });
+/* ── (quiet) a quiet opening: Volcano, the cannonball charge and the bonus meter wait for Day ── */
+const quietOn = page => page.evaluate(() => { CFG.QUIET_START = true; CFG.DARES = false; syncActions(); });
+// one clear of row r at combo k (a 1x1 into a row of seven), on a board with one gem left over so it is not a sweep
+const quietClear = (r, k) => `grid = empty(); grid[7][7] = { gi: 2, t: 1, f: 0, l: 0 }; ${clearAt(r, k)}`;
+const loud = page => page.evaluate(() => ({ quiet: quietNow(), hot: toy.hot, volcano: discoveredWorlds.has('volcano'), live: !!transform, meter: bonusMeter, chip: !el('bonusChip').hidden, size: +toySize().toFixed(2) }));
+const quietReset = page => page.evaluate(() => { trayNo = 10; transform = null; transformCool = 0; specialEnd = -99; golden = null; bonus = null; bonusMeter = 0; toy.hot = false; toy.pow = 0; toy.lastCombo = 0; discoveredWorlds.delete('volcano'); banners.length = 0; syncActions(); });
+
+test('quiet: before Day nothing loud (no cannonball charge, no Volcano, no meter and its chip hidden); from Day all three work, the chip slides in', async ({ page }) => {
+  await play(page); await dealt(page);
+  assert.equal(await page.evaluate(() => window.__quietDefault), true, 'on by default in the game');
+  await quietOn(page); await quietReset(page);
+  const t0 = await loud(page);
+  assert.deepEqual(t0, { quiet: true, hot: false, volcano: false, live: false, meter: 0, chip: false, size: 1 }, 'the first screen is calm: no meter chip');
+  const cc = await page.evaluate(() => [CFG.CANNON_COMBO, CFG.TRANSFORM_COMBO]);
+  assert.deepEqual(cc, [5, 5]);
+  await page.evaluate(src => { eval(src); }, quietClear(0, 5));
+  const t1 = await loud(page);
+  assert.deepEqual(t1, { quiet: true, hot: false, volcano: false, live: false, meter: 0, chip: false, size: 1 }, 'a streak of 5 charges nothing, earns no Volcano, fills no meter, and the crumb does not swell');
+  assert.equal(await page.evaluate(() => combo), 5, 'the combo itself is untouched');
+  // Day: the same streak's next clear charges him, earns Volcano and fills the meter; the chip slides in
+  await page.evaluate(() => { score = CFG.JOURNEY_AT[1]; });
+  await page.evaluate(src => { eval(src); }, quietClear(0, 6));
+  await frames(page, 2);
+  const t2 = await page.evaluate(() => ({ quiet: quietNow(), hot: toy.hot, volcano: discoveredWorlds.has('volcano'), meter: bonusMeter > 0, chip: !el('bonusChip').hidden, arrive: el('bonusChip').classList.contains('arrive'), busy: fxBusy() }));
+  assert.deepEqual(t2, { quiet: false, hot: true, volcano: true, meter: true, chip: true, arrive: true, busy: true }, 'from Day all three work, and the meter slides in');
+  await page.waitForTimeout(800);
+  assert.equal(await page.evaluate(() => performance.now() < quietIn), false, 'the slide holds the frame rate only while it moves');
+  await page.evaluate(() => { start(); });
+  await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [quietNow(), el('bonusChip').hidden]), [true, true], 'a new run is quiet again, the chip hidden from its first tray');
+  assert.equal(await page.evaluate(() => { jJumps = 1; return quietNow(); }), false, 'a jump past dawn (a sweep) ends it too');
+});
+
+test('quiet: a last chance still works for a crumb charged at Day; before Day out of room the run ends as it always did for an uncharged crumb', async ({ page }) => {
+  await play(page); await dealt(page);
+  await quietOn(page); await quietReset(page);
+  const r = await page.evaluate(() => { stuck = true; toy.hot = false; const o = { quiet: quietNow(), last: toyLast() }; stuck = false; return o; });
+  assert.deepEqual(r, { quiet: true, last: false }, 'uncharged (the only way before Day): no last chance, as before');
+  const r2 = await page.evaluate(() => { score = CFG.JOURNEY_AT[1]; stuck = true; toy.hot = true; const o = toyLast(); stuck = false; toy.hot = false; return o; });
+  assert.equal(r2, true, 'charged at Day: the last chance holds');
+});
+
+test('quiet: Crumb says one line when the quiet opening ends (his own dice), once a run, not on a resume past Day', async ({ page }) => {
+  await play(page); await dealt(page);
+  await quietOn(page);
+  await page.waitForFunction(() => !el('mascot').hidden);
+  const r = await page.evaluate(async () => {
+    const o = {}, wait = (ms = 150) => new Promise(res => setTimeout(res, ms)), seen = () => el('crumbSay').hidden ? '' : el('crumbSay').textContent;
+    const r0 = rndSrc; let dealerDice = 0; rndSrc = () => { dealerDice++; return Math.random(); };
+    banners.length = 0; say.until = 0; say.last = -1e9; await wait(); o.before = seen();
+    score = CFG.JOURNEY_AT[1]; await wait(); o.day = seen();
+    say.until = 0; say.last = -1e9; await wait(); o.again = seen();
+    score = CFG.JOURNEY_AT[2]; say.until = 0; say.last = -1e9; await wait(); o.golden = seen();
+    rndSrc = r0; o.dice = dealerDice;
+    const snap = JSON.parse(JSON.stringify(snapshot()));    // a run past Day
+    start(); await wait(); say.until = 0; say.last = -1e9;
+    o.ok = restore(snap); await wait(); o.resumed = seen(); o.due = say.qDue;
+    start(); await wait(); say.until = 0; say.last = -1e9; CFG.QUIET_START = false; await wait(); o.off = seen(); o.offDue = say.qDue;   // switched off in Admin mid-quiet
+    return o; });
+  const lines = await page.evaluate(() => SAY.quiet);
+  assert.equal(r.before, '', 'nothing before Day');
+  assert.ok(lines.includes(r.day), 'at Day: ' + r.day);
+  assert.ok(!lines.includes(r.again) && !lines.includes(r.golden), 'once a run: ' + r.again + ' / ' + r.golden);
+  assert.equal(r.dice, 0, 'his line never touches the dealer\'s dice');
+  assert.ok(r.ok); assert.ok(!lines.includes(r.resumed) && !r.due, 'a resume past Day says nothing');
+  assert.ok(!lines.includes(r.off) && !r.offDue, 'the switch turned off says nothing');
+  const sky = await page.evaluate(() => SAY.night.concat(SAY.aurora, SAY.space, SAY.deep));
+  assert.ok(lines.every(l => !sky.includes(l)), 'his Day lines are not the sky stops\' lines');
+});
+
+test('quiet: off in Daily, Challenge, Adventure, the Lab and the guided first game; the switch off restores today\'s behaviour', async ({ page }) => {
+  await play(page); await dealt(page);
+  await quietOn(page);
+  const r = await page.evaluate(() => {
+    const o = {}, m0 = mode;
+    for (const m of ['endless', 'daily', 'challenge', 'adventure', 'lab']) { mode = m; o[m] = quietNow(); }
+    mode = m0;
+    guide = { n: 1, ln: 0, sw: false, dn: 0 }; o.guide = quietNow(); guide = null;
+    ck.off = true; o.guidedLater = quietNow(); ck.off = false;
+    CFG.QUIET_START = false; o.off = quietNow(); CFG.QUIET_START = true;
+    return o; });
+  assert.deepEqual(r, { endless: true, daily: false, challenge: false, adventure: false, lab: false, guide: false, guidedLater: false, off: false });
+  // Daily with it on: Volcano and the meter at score 0, as ever (the cannonball is Endless only)
+  await quietReset(page);
+  await page.evaluate(() => { mode = 'daily'; dk = dailyKey(); lv = { lines: 0, pieces: 0, combo: 0, swept: false }; syncActions(); });
+  await page.evaluate(src => { eval(src); }, quietClear(0, 5));
+  assert.deepEqual(await loud(page), { quiet: false, hot: false, volcano: true, live: true, meter: 3, chip: true, size: 1 }, 'Daily is untouched');
+  // Endless with the switch off: exactly as before
+  await page.evaluate(() => { mode = 'endless'; dk = ''; CFG.QUIET_START = false; });
+  await quietReset(page);
+  await page.evaluate(src => { eval(src); }, quietClear(0, 5));
+  const off = await loud(page);
+  assert.deepEqual({ ...off, size: off.size > 1 }, { quiet: false, hot: true, volcano: true, live: true, meter: 3, chip: true, size: true }, 'switched off: charge, Volcano and the meter at score 0, as before');
+});
+
+test('quiet: dealing for a pinned seed is unchanged with it on or off (it never rolls the dealer\'s dice)', async ({ page }) => {
+  await play(page); await dealt(page);
+  const snap0 = await page.evaluate(() => { CFG.TRANSFORM_COMBO = 2; CFG.CANNON_COMBO = 2; CFG.DARES = false;
+    grid = empty(); for (let r = 0; r < 4; r++) for (let c = 0; c < 8; c++) if ((r * 3 + c) % 5) grid[r][c] = { gi: r % 6, t: 1, f: 0, l: 0 };
+    trayNo = 1; score = 0; combo = 0; tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 2 }, { s: SHAPES[0], gi: 3 }]; return snapshot(); });
+  const run = q => page.evaluate(({ q, snap0 }) => {
+    CFG.QUIET_START = q; restore(snap0); discoveredWorlds.delete('volcano'); toy.hot = false; toy.lastCombo = 0;
+    let s = 99, n = 0; rndSrc = () => { n++; s = (s * 16807) % 2147483647; return s / 2147483647; };
+    const out = [], best = () => { let b = null, bl = -1;
+      for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) {
+        const g = grid.map(x => x.slice()); for (const [dr, dc] of tray[i].s.cells) g[r + dr][c + dc] = 1; const l = linesFor(g), k = l.rows.length + l.cols.length;
+        if (k > bl) { bl = k; b = [i, r, c]; } }
+      return b; };
+    let wasLoud = false;
+    while (trayNo < 5) {
+      const m = best(); if (!m) break;
+      place(...m); if (toy.hot || discoveredWorlds.has('volcano')) wasLoud = true;
+      if (dealing) { runSteps(dealing.it); dealing = null; out.push(trayNo + ':' + tray.map(t => t && SHAPES.indexOf(t.s) + '.' + t.gi).join(' ')); }
+    }
+    rndSrc = null;
+    return { out, n, wasLoud };
+  }, { q, snap0 });
+  const on = await run(true), off = await run(false);
+  assert.ok(off.wasLoud && !on.wasLoud, 'the off run charged the crumb or earned Volcano, the quiet one did not: ' + off.wasLoud + ' ' + on.wasLoud);
+  assert.ok(on.out.length >= 3, 'a few trays dealt: ' + on.out.length);
+  assert.deepEqual(on.out, off.out, 'the same trays');
+  assert.equal(on.n, off.n, 'and the same number of rolls');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

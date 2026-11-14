@@ -51,6 +51,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['CH_PACE','Challenge: a friend\'s pace on the bar'],
   ['TILT','Crumb toy: tilt to roll'],
   ['TILT_FLIP','Crumb toy: flip the tilt direction'],
+  ['QUIET_START','Quiet opening: Volcano, cannonball charge and x2 meter wait for Day (Endless)'],
   ['AVALANCHE','Avalanche: the board falls on a streak (Endless)'],
   ['AVA_LEAN','Avalanche: falls toward a leaned phone (tilt)'],
   ['GUIDED_START','Guided first game for a new player (1.1 D)'],

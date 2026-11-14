@@ -227,8 +227,10 @@
   #bonusChip.tag .fill{display:none}
   #bonusChip.bump{animation:chipPop .3s ease-out}
   @keyframes chipPop{0%{transform:scale(1.12)}100%{transform:scale(1)}}
+  #bonusChip.arrive{animation:chipArrive .6s cubic-bezier(.2,1.3,.4,1)}   /* (quiet) Day: the meter slides in from below */
+  @keyframes chipArrive{0%{transform:translateY(60px);opacity:0}100%{transform:none;opacity:1}}
   @keyframes bonusGlow{0%,100%{opacity:.55}50%{opacity:1}}
-  @media (prefers-reduced-motion:reduce){ #bonusChip.full .fill{animation:none} #bonusChip.bump{animation:none} }
+  @media (prefers-reduced-motion:reduce){ #bonusChip.full .fill{animation:none} #bonusChip.bump{animation:none} #bonusChip.arrive{animation:none} }
   #noMoves{position:absolute;left:0;right:0;text-align:center;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:15px;font-weight:600;opacity:.8;pointer-events:none}
   #starNote{position:absolute;left:0;right:0;text-align:center;bottom:calc(58px + env(safe-area-inset-bottom,0px));font-size:15px;font-weight:600;opacity:.9;pointer-events:none}
   #goldChip{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(56px + env(safe-area-inset-bottom,0px));padding:5px 14px;border-radius:999px;font-size:15px;font-weight:700;white-space:nowrap;

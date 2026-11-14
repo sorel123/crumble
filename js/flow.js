@@ -59,7 +59,7 @@ function clearRunFx(){
   shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];stamps=[];bannerWait=0;sweepShow=null;
   chunks=[];rubble=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
-  bonus=null; bonusTag=null; clearTimeout(bonusTagT);
+  bonus=null; bonusTag=null; clearTimeout(bonusTagT); quietHid=false; quietIn=0; say.qSync=true;   // (quiet) a new or restored run: the meter's slide-in and Crumb's line start from where it is
   tags=[]; slams=[]; bands=[]; borderFlash=null; avaReset(); toyRunReset(); dareRunReset(); cookieRunReset();
   confetti=[]; goldenCele=null; goldRain=[]; goldenArrive=999; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   fireReset(); chaseKey=''; guide=null;                         // (7.5e) a new or restored run's marker appears without the pop

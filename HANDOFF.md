@@ -235,6 +235,7 @@ Top to bottom:
 | (lab) | The Lab: a slim Lab button beside Settings, a card of experiments. First one, Clear it in three: 60 fixed three-piece puzzles (20 easy, 20 medium, 20 hard) on the real board, no score or losing, Undo/Reset/hint, progress in `crumble.lab` (iCloud backup), a cookie every 5th new solve. `js/lab.js`, `tools/lab3-table.mjs`. See the Lab section at the end |
 | (sky bite) | The sky fights back: in Endless each journey stop deals a little leaner (shorter easy, longer lean stretches, later comeback help), past Space the stops go on as Deep space 1, 2, ...; JOURNEY_AT re-spaced for today's scoring; the game-over card says how far she got and her farthest. See the section at the end |
 | (rescue) | Rescue the Crumbs, the Lab's second game: three boards where crumbs sit on gems, a line clear drops them, the bottom row is the exit; fixed queues, stars by par, Undo/Reset/hint, progress in `crumble.lab` `.rescue` (iCloud backup), a cookie on each board's first rescue. `js/rescue.js`, `tools/rescue-check.mjs`. See the Rescue section at the end |
+| (quiet) | A quiet opening: in Endless, Volcano (and the other transformations), the cannonball's charge and the x2 bonus meter wait for the second sky stop (Day, about tray 8); the meter's chip is hidden until then and slides in, and Crumb says so once. `CFG.QUIET_START`. See the section at the end |
 
 Details for each, oldest first:
 
@@ -1942,3 +1943,54 @@ The Lab's second experiment. Baby crumbs are stuck on top of gems. Clear the lin
 - **Check on the phone:** Lab, Rescue, board 1. Does the crumb read as stuck and the exit as a way out? Is the fall and hop fun, and is the chirp too loud? Try board 2 the wrong way round (2 stars) and then the right way. Is board 3 hard but fair at par 7? Get stuck, then Reset three times for the hint; drop off the hint's path and see "from the top. watch." Check the HUD at the top on a small phone, and Reduce Motion.
 - **Known.** Board 2's par is 3 (the brief said about 4); kept for its order lesson. The stars and best merge by max and by the fewest across devices, so a merge can pair stars from one device with a best from another.
 - Tests: the nine "Rescue:" scenarios.
+## A quiet opening (2026-11-14)
+
+The review: "everything fires in the first minute". By drop 15 a good run had combo fire, Volcano at x1.5, the x2 meter, a
+charged crumb and popups all at once, so nothing felt like a step up. Jay approved holding three of the loud systems back.
+
+- **Rule** (`quietNow()`, game.js): Endless only, and only until the run reaches the second sky stop, Day (`skyStop() >= 1`:
+  2000 x `SCORE_SCALE` points, or a jump from a sweep or a beaten best; about tray 8 for the person-like bot). Not in Daily,
+  Challenge, Adventure, the Lab or the guided first game (the whole of it: `guide`, then `ck.off`, which the cookie already
+  saves for that run). It reads the score and the jumps only, so nothing new is saved and a resume past Day is past it.
+- **What waits:** (a) transformations: `triggerTransform` returns, so Volcano (and Starfield, which cannot come before tray 6
+  anyway) is neither unlocked nor live; a clean sweep jumps the sky to Day first, so its Rainbow still comes. (b) the
+  cannonball's charge: `toyCharge` charges nothing and the crumb does not swell toward it (`toySize`); he is still a toy to
+  grab and flick. A streak still going at Day charges him on its next clear (`toy.lastCombo` is held under `CANNON_COMBO`).
+  (c) the bonus meter: `chargeBonus` adds nothing and `#bonusChip` is hidden, so the first screen is calm.
+- **Untouched:** the combo and its fire, the sputter, sweeps, the Avalanche, the dares (a cannonball dare may still be the
+  run's dare; it waits for Day like the cannon), the cookie, the sky bite, the score.
+- **The last chance:** it has always needed a charged crumb (`toyLast()`), and before Day he cannot be charged, so out of room
+  before Day the run ends exactly as it does today for an uncharged crumb. From Day it works as before (test).
+- **Day.** The chip slides up into place (`#bonusChip.arrive`, 0.6 s; `quietIn` keeps `fxBusy()` at full frame rate only while
+  it moves; Reduce Motion: it is just there) and Crumb says one line, once a run (`SAY.quiet`: "ok. now it gets interesting.",
+  "warm-up's over.", "fine. now the fun stuff."). The line waits its turn like the sky stops' lines (`!dare.q.length &&
+  dareQuiet()`, never forced, dropped after 8 s). Not on a resume past Day (`say.qSync`, set by `clearRunFx`), not when the
+  switch is turned off mid-run, and a jump straight past Day to Night says Night's line instead. Day has no sky-stop line of
+  its own, so the two never double up. His own dice (`mascotRnd`).
+- **Dice.** Nothing new rolls. A test plays the same five trays from the same dealer stream with it on and off (with
+  `TRANSFORM_COMBO` and `CANNON_COMBO` at 2 so the off run does get loud) and compares trays and the number of rolls. In a real
+  Endless game the dealer draws from `Math.random`, which the cosmetic sounds also draw from (6.5's `jit`), so a Volcano
+  sting it holds back shifts that shared stream exactly as playing a different move would; the dealer's own logic is unchanged.
+- **Switch.** `CFG.QUIET_START` (on), Admin "Quiet opening: Volcano, cannonball charge and x2 meter wait for Day (Endless)".
+  Off: today's behaviour exactly (test).
+- **Tests.** The harness turns it off on load (real default in `window.__quietDefault`), as for the Avalanche and the cookie,
+  because many older tests charge the crumb, earn Volcano or fill the meter in the first trays. The five "quiet:" scenarios
+  turn it on. `tools/bot-sim.mjs` plays the game's real default (it puts `__quietDefault` back; `QUIET_START=0` for without).
+- **Measured** (`node tools/bot-sim.mjs 8000 <seed> BOT=human AVALANCHE=1`, then `QUIET_START=0`; games are trays to the end):
+
+  | person-like bot | games | p10 | median | p90 | Day reached (median tray) | Night | Space |
+  |---|---|---|---|---|---|---|---|
+  | seed 1, quiet on | 78 | 19 | 91 | 211 | 8 | 26 | 55 |
+  | seed 1, off | 79 | 21 | 88 | 177 | 9 | 28 | 61 |
+  | seed 2, quiet on | 85 | 24 | 68 | 216 | 9 | 27 | 51 |
+  | seed 2, off | 109 | 16 | 63 | 138 | 9 | 30 | 51 |
+
+  The sim plays the real `place()`, so the held-back x2 and x1.5 are in its scores. Day still comes at tray 8-9 (the bonus cannot
+  start before tray 6 and Volcano cannot go live before it either, so little early score is lost) and the later stops move by a
+  tray or two. Games are not shorter; if anything the long tail is a little longer, since a slower score means a slightly
+  later bite. The sim is noisy at this size (see the sky bite section): read it as "no change in difficulty".
+- **Check on the phone:** start Endless: no x2 chip under the board, and a streak of 5 neither lights the crumb nor brings
+  Volcano. Around tray 8 (the sky turns to day) the chip slides up and Crumb says it is getting interesting; from then on
+  the next streak charges him and earns Volcano. Things to judge: is Day the right line (try `JOURNEY_AT` / the switch), does
+  the run feel like it opens up there.
+

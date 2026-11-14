@@ -39,8 +39,15 @@ function canGoLive(id){
 // (round 6) the carrying combo: Endless and Daily only (Adventure goals and Challenge scores keep the 1.0 combo)
 let comboMiss=0;
 const comboCarries=()=>CFG.COMBO_CARRY&&paced()&&mode!=='challenge'&&!guide;
+/* (quiet) A quiet opening: the review found everything fired in the first minute (combo fire, Volcano, the x2 meter, a
+   charged crumb, all by drop 15). In Endless, until the run reaches the second sky stop (skyStop() >= 1, Day), three loud
+   systems wait: transformations are not earned, a streak does not charge the crumb (he is still a toy), and the bonus meter
+   neither fills nor shows. Read from the score and the jumps only, so nothing is saved and a resume is right by itself.
+   Not in Daily, Challenge, Adventure, the Lab or the guided first game (ck.off marks that whole run, cookie.js). */
+const quietNow=()=>!!CFG.QUIET_START&&mode==='endless'&&!guide&&!ck.off&&skyStop()<1;
+let quietHid=false, quietIn=0;                      // the meter is hidden by the quiet opening; when it slides in (ms, fxBusy)
 function triggerTransform(id){
-  if(!special('transform') || !ACHIEVE[id] || guide) return;   // (1.1 D) specials stay off in the guided first game
+  if(!special('transform') || !ACHIEVE[id] || guide || quietNow()) return;   // (1.1 D) specials stay off in the guided first game; (quiet) and in the quiet opening
   const first=!discoveredWorlds.has(id), live=canGoLive(id), name=TRANSFORMS[id].name;
   if(first){
     discoveredWorlds.add(id); newLook=true; syncLookDot(); saveSkinSave(); renderWorlds();
@@ -78,14 +85,19 @@ const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>sp
 let bonusMeter=0, specialEnd=-99, bonusTag=null;   // meter (saved); tray a special last ended in; {txt} the "+N bonus" tag after a bonus
 let bonusTagT=0;
 function chargeBonus(lines,comboNow){               // place(): a clear of `lines` lines at combo `comboNow`
-  if(!special('bonus')||bonus||trayNo<CFG.SPECIAL_FROM_TRAY||bonusMeter>=CFG.BONUS_METER) return;
+  if(!special('bonus')||bonus||trayNo<CFG.SPECIAL_FROM_TRAY||bonusMeter>=CFG.BONUS_METER||quietNow()) return;   // (quiet) nothing fills it before Day
   bonusMeter=Math.min(CFG.BONUS_METER,bonusMeter+lines+Math.min(Math.max(comboNow-1,0),CFG.BONUS_COMBO_MAX));
-  const c=el('bonusChip'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump');
+  const c=el('bonusChip'); c.classList.remove('bump','arrive'); void c.offsetWidth; c.classList.add('bump');
   if(bonusMeter>=CFG.BONUS_METER) Sfx.bonusReady();   // the one chime; after that it only glows
   syncBonusChip();
 }
 function syncBonusChip(){
-  const c=el('bonusChip'), on=special('bonus')||!!bonus||!!bonusTag;
+  const c=el('bonusChip'), q=quietNow(), on=special('bonus')&&!q||!!bonus||!!bonusTag;
+  if(c.hidden&&on&&quietHid&&state==='play'){       // (quiet) Day: the meter slides in (reduced motion: it is just there)
+    c.classList.remove('arrive','bump'); void c.offsetWidth; c.classList.add('arrive');
+    quietIn=reduce?0:performance.now()+700;
+  }
+  quietHid=q&&special('bonus');
   c.hidden=!on;
   const full=!bonus&&bonusMeter>=CFG.BONUS_METER;
   const f=bonus?1:clamp(bonusMeter/CFG.BONUS_METER,0,1);

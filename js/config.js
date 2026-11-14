@@ -353,6 +353,7 @@ const CFG = {
   TOY_SULK_MS:       14000,
   TOY_SULK_HOLD:     6000,   // (toy) how long the sulk lasts
   TOY_BACK_MS:       560,    // (toy) the hop from the floor back to the rim
+  QUIET_START:       true,   // (quiet) Endless: until the second sky stop (Day) no Volcano or other transformation, no cannonball charge and no bonus meter (hidden); the combo, fire, sweeps, Avalanche, dares and the cookie are as ever (game.js quietNow)
   AVALANCHE:         true,   // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). On since Jay tried it (2026-11-14)
   AVA_COMBO:         4,      // (Avalanche) the streak it can start from
   AVA_CHANCE:        .3,     // (Avalanche) odds at AVA_COMBO ...

@@ -58,6 +58,8 @@
 // The sky bite ('sky (bite):' line; Endless only, SKY_BITE_SCALE=0 turns it off): endedAt (finished games by the journey stop they
 // ended at: 0 dawn .. 5 space, 6+ Deep space), firstReached (per stop, the games that reached it and the median tray of the game it
 // was first dealt at), scoreMedian / scoreP90 and jumpsMedian (sweeps and beaten bests) of finished games, biteShare (trays by bite).
+// The quiet opening (QUIET_START, on by default here as in the game; the test harness turns it off): no Volcano, no cannonball and no
+// x2 meter before Day, so the early scoring, and so the trays each stop is reached at, are the game's own. QUIET_START=0 for without.
 import { serve, openGame, play } from '../tests/harness.mjs';
 
 const args = process.argv.slice(2), kv = args.filter(a => a.includes('=')), pos = args.filter(a => !a.includes('='));
@@ -66,6 +68,7 @@ const OVR = Object.fromEntries(kv.map(a => { const [k, v] = a.split('='); if (/^
 const BOT = OVR.BOT || 'casual', RESCUE = !!OVR.RESCUE; delete OVR.BOT; delete OVR.RESCUE;
 const srv = await serve();
 const { browser, page } = await openGame(srv.url, { seed: SEED });
+await page.evaluate(() => { CFG.QUIET_START = window.__quietDefault; });   // (quiet) the harness turns the quiet opening off for the old tests; the sim plays the game's real default (QUIET_START=0 to compare)
 await page.evaluate(o => Object.assign(CFG, o), OVR);
 await play(page);
 const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
