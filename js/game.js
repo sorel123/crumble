@@ -439,6 +439,7 @@ function place(idx,r,c){
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
   guideDrop(total,swept);                            // (1.1 D) the guided first game counts its lesson
   dareDrop(rows.length,cols.length,total+avaLines,swept,colourGone,avaHit,!!s.star);   // (dares) Crumb's dare checks this drop (dares.js)
+  cookieCheck();                                     // (cookie) a cookie whose gem this drop cleared is eaten (cookie.js)
   if(!dealing){ checkStuck(); saveRun(); }            // otherwise checked and saved once the new tray is dealt
 }
 const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
@@ -466,7 +467,7 @@ function stepDeal(){
   const end=performance.now()+CFG.DEAL_SLICE_MS;
   let r;
   do r=dealing.it.next(); while(!r.done && performance.now()<end);
-  if(r.done){ dealing=null; checkStuck(); syncActions(); saveRun(); journeyDealt(); }
+  if(r.done){ dealing=null; checkStuck(); cookieDealt(); syncActions(); saveRun(); journeyDealt(); }   // (cookie) a bite out of the cookie, or perhaps a new one
 }
 function cancelDeal(){ if(dealing){ dealing.it.return(); dealing=null; } }   // a new run or a rescue deals its own tray
 

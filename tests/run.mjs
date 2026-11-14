@@ -6262,6 +6262,195 @@ test('Lab: progress survives a reload, is checked on load, merges from iCloud (u
   await page.click('#l3Lab');
   assert.equal(await page.evaluate(() => document.querySelector('#labList button i').textContent), '5 of 60');
 });
+// ── A cookie on the board (js/cookie.js) ──
+// on, with every gate open (the tests choose what to close); ODDS 1 so a deal that may land one does
+const ckOn = page => page.evaluate(() => { CFG.COOKIE = true; CFG.COOKIE_ODDS = 1; CFG.COOKIE_START = 0; CFG.COOKIE_GAP = 0; CFG.COOKIE_MIN_GEMS = 8; CFG.TRANSFORM_COMBO = 99; ck.n = 0; ck.since = 999; ck.g = null; ck.off = false; });
+// a board with 16 gems: rows 3-6 half full (4/8), so every gem's best line is 4 of 8
+const CK_ROWS = ['00000000', '00000000', '00000000', '11110000', '11110000', '00001111', '00001111', '00000000'];
+const ckView = page => page.evaluate(() => { const at = cookieCell(); return { on: !!ck.g, at, left: ck.left, bites: cookieBites(), n: ck.n, since: ck.since, jar: dare.st.cookies }; });
+const ckSet = (page, r, c, left = 3) => page.evaluate(([r, c, left]) => { ck.g = grid[r][c]; ck.r = r; ck.c = c; ck.left = left; ck.at = 0; ck.wob = left === 1 ? performance.now() : 0; }, [r, c, left]);
+const ones = () => [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+test('cookie: lands only when the roll and the gates allow (odds, first trays, gap, gems, run cap, Settings, guided game); never in Daily, Adventure or Challenge', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [window.__cookieDefault, CFG.COOKIE]), [true, false], 'on by default, off for the older tests');
+  await ckOn(page);
+  await setup(page, { rows: CK_ROWS });
+  const tryDeal = (pre = '') => page.evaluate(pre => { (0, eval)(pre); ck.g = null; cookieDealt(); return !!ck.g; }, pre);
+  assert.equal(await tryDeal('CFG.COOKIE_ODDS = 0; ck.since = 999'), false, 'the roll says no');
+  assert.equal(await tryDeal('CFG.COOKIE_ODDS = 1; CFG.COOKIE_START = trayNo; ck.since = 999'), false, 'not in the first trays');
+  assert.equal(await tryDeal('CFG.COOKIE_START = 0; CFG.COOKIE_GAP = 6; ck.since = 4'), false, 'too soon after the last (the gap)');
+  assert.equal(await page.evaluate(() => ck.since), 5, 'a tray counted toward the gap');
+  assert.equal(await tryDeal('CFG.COOKIE_GAP = 0; CFG.COOKIE_MIN_GEMS = 17'), false, 'too few gems');
+  assert.equal(await tryDeal('CFG.COOKIE_MIN_GEMS = 8; ck.n = CFG.COOKIE_RUN_MAX'), false, 'the run cap');
+  assert.equal(await tryDeal('ck.n = 0; CFG.DARES = false'), false, 'dares (and cookies) off in Settings');
+  assert.equal(await tryDeal('CFG.DARES = true; CFG.FX_MASCOT = false'), false, 'no mascot, no cookie');
+  assert.equal(await tryDeal('CFG.FX_MASCOT = true; guide = { n: 1, ln: 0, sw: false, dn: 0 }'), false, 'the guided first game');
+  assert.equal(await tryDeal('guide = null'), false, 'and the rest of that game too');
+  assert.equal(await tryDeal('ck.off = false'), true, 'every gate open: it lands');
+  const v = await ckView(page);
+  assert.deepEqual([v.left, v.bites], [3, 0], 'whole, three trays to go');
+  assert.ok(await page.evaluate(() => { const [r, c] = cookieCell(); const b = Math.max(grid[r].filter(Boolean).length, grid.filter(row => row[c]).length); return b >= CFG.COOKIE_LINE[0] && b <= CFG.COOKIE_LINE[1]; }), 'on a gem whose line takes some work');
+  assert.ok(await page.evaluate(() => cookieBusy() && fxBusy()), 'the drop-in runs at full frame rate');
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.cookieLand.includes(el('crumbSay').textContent), null, { timeout: 9000 });
+  await page.waitForFunction(() => !cookieBusy(), null, { timeout: 3000 });
+  for (const go of ['playDaily()', 'playLevel(1)', "playChal('ck-test', true)"]) {
+    await page.evaluate(go);
+    await dealt(page); await frames(page, 3);
+    await setup(page, { rows: CK_ROWS });
+    assert.equal(await tryDeal('ck.since = 999; ck.n = 0; ck.off = false'), false, go + ': none');
+  }
+});
+
+test('cookie: a bite each tray (whole, one bite, two bites, then stale): it crumbles off, he grumbles, the jar is unchanged', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await ckOn(page);
+  await setup(page, { rows: CK_ROWS });
+  await ckSet(page, 3, 1);
+  const jar = (await ckView(page)).jar;
+  await page.evaluate(() => { cookieDealt(); });
+  assert.equal((await ckView(page)).bites, 1, 'one bite');
+  await page.evaluate(() => { cookieDealt(); });
+  const v = await ckView(page);
+  assert.deepEqual([v.left, v.bites, v.on], [1, 2, true], 'two bites, its last tray');
+  await page.waitForFunction(() => cookieBusy(), null, { timeout: 4000 });   // the wobble comes now and then, and only then runs the frames
+  await page.waitForFunction(() => !cookieBusy(), null, { timeout: 4000 });
+  await page.evaluate(() => { cookieDealt(); });
+  const w = await ckView(page);
+  assert.deepEqual([w.on, w.jar, w.since, w.n], [false, jar, 0, 0], 'stale: gone, nothing in the jar');
+  assert.ok(await page.evaluate(() => !!ck.fade), 'it crumbles off');
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.cookieGone.includes(el('crumbSay').textContent), null, { timeout: 9000 });
+});
+
+test('cookie: clearing its gem feeds the jar by exactly 1: it hops into Crumb, he chomps and says so', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await ckOn(page);
+  await setup(page, { rows: ['01111111', ...CK_ROWS.slice(1)] });
+  await ckSet(page, 0, 4, 2);
+  await page.waitForFunction(() => !el('mascot').hidden && toy.mode === 'rim', null, { timeout: 8000 });   // the crumb is on the rim (not still tumbling off the menu's logo)
+  const jar = (await ckView(page)).jar;
+  const r = await page.evaluate(() => { tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }]; place(0, 0, 0); return { jar: dare.st.cookies, on: !!ck.g, n: ck.n, eat: !!ck.eat, saved: JSON.parse(localStorage.getItem('crumble.dares')).cookies }; });
+  assert.deepEqual(r, { jar: jar + 1, on: false, n: 1, eat: true, saved: jar + 1 }, 'eaten: one cookie in the jar, saved');
+  await page.waitForFunction(() => !!ck.hop && !!document.querySelector('.dareCookie'), null, { timeout: 3000 });
+  assert.ok(await page.evaluate(() => fxBusy()), 'the hop runs at full frame rate');
+  await page.waitForFunction(() => !ck.hop && !document.querySelector('.dareCookie'), null, { timeout: 3000 });
+  await page.waitForFunction(() => el('mascot').classList.contains('chomp'), null, { timeout: 2000 });   // he chomps
+  assert.ok(await page.evaluate(() => dare.jarShown === dare.st.cookies), 'the jar shows it');
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.cookieYum.includes(el('crumbSay').textContent), null, { timeout: 9000 });
+  assert.equal(await page.evaluate(() => dare.st.cookies), jar + 1, 'exactly one');
+});
+
+test('cookie: rides its gem through an Avalanche (drawn where the gem falls); a gem the chain breaks is eaten', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await ckOn(page);
+  await page.evaluate(() => { CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; });
+  // which gems of the board survive the fall, and where they land (the rules run at once inside place)
+  const fall = cookie => page.evaluate(({ rows, cookie }) => {
+    if (ava.live) avaReset();
+    grid = rows.map(row => [...row].map(ch => (ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null)));
+    const ids = new Map(); grid.forEach((row, r) => row.forEach((g, c) => g && ids.set(g, r + ',' + c)));
+    if (cookie) { ck.g = grid[cookie[0]][cookie[1]]; ck.r = cookie[0]; ck.c = cookie[1]; ck.left = 3; }
+    combo = 4; tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+    place(0, 0, 0);
+    const out = {}; grid.forEach((row, r) => row.forEach((g, c) => { if (g && ids.has(g)) out[ids.get(g)] = [r, c]; }));
+    return { out, all: [...ids.values()], live: ava.live };
+  }, { rows: AVA_ROWS, cookie });
+  const first = await fall(null);
+  assert.ok(first.live, 'it fell');
+  const moved = Object.entries(first.out).find(([k, [r]]) => +k.split(',')[0] < r);
+  const broke = first.all.find(k => !first.out[k] && +k.split(',')[0] > 0);
+  assert.ok(moved && broke, 'a gem that falls and lives, and one the chain breaks');
+  await page.waitForFunction(() => !ava.live, null, { timeout: 8000 });
+  const jar = (await ckView(page)).jar;
+  await fall(moved[0].split(',').map(Number));
+  const v = await ckView(page);
+  assert.deepEqual([v.on, v.at, v.jar], [true, moved[1], jar], 'the cookie rode its gem to ' + moved[1]);
+  await frames(page, 4);
+  assert.ok(await page.evaluate(() => ava.live && ck.py < by + (ck.r + .5) * cell - 1), 'mid-fall it is drawn with its gem, above its landing cell');
+  await page.waitForFunction(() => !ava.live, null, { timeout: 8000 });
+  await frames(page, 2);
+  assert.ok(await page.evaluate(() => Math.abs(ck.py - (by + (ck.r + .5) * cell)) < 1.5 && !!ck.g), 'landed, on its gem');
+  await page.evaluate(() => { ck.g = null; });
+  await fall(broke.split(',').map(Number));
+  assert.deepEqual(await page.evaluate(() => [!!ck.g, dare.st.cookies, !!ck.eat]), [false, jar + 1, true], 'its gem broke in the chain: eaten');
+  await page.waitForFunction(() => !ck.eat && !ck.hop && !ava.live, null, { timeout: 9000 });
+});
+
+test('cookie: a cannonball through its gem eats it', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await ckOn(page);
+  await setup(page, { rows: CK_ROWS });
+  await ckSet(page, 4, 2);
+  const jar = (await ckView(page)).jar;
+  const r = await page.evaluate(() => {
+    const s = masc.s;                                      // its middle over the cookie's cell
+    toy.sc = 1; toy.x = bx + 2.5 * cell - masc.x - s / 2; toy.y = by + 4.5 * cell - masc.y - s / 2;
+    toy.fire = { n: 0, pts: 0, max: 1, b: 0 }; toy.vx = 0; toy.vy = 0;
+    toySmash();
+    return { gem: !!grid[4][2], on: !!ck.g, jar: dare.st.cookies };
+  });
+  assert.deepEqual(r, { gem: false, on: false, jar: jar + 1 }, 'the gem broke and the cookie went into the jar');
+  await page.waitForFunction(() => !ck.hop && !ck.eat, null, { timeout: 5000 });
+});
+
+test('cookie: saved in the run (ck) and restored on its gem; bad data or an older save means no cookie; a new run starts clean', async ({ page }) => {
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { CFG.COOKIE = true; }));   // on from the first frame after the reload
+  await play(page);
+  await dealt(page);
+  await ckOn(page);
+  await setup(page, { rows: CK_ROWS });
+  await ckSet(page, 5, 6, 2);
+  await page.evaluate(() => { ck.n = 1; ck.since = 0; saveRun(); });
+  assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('crumble.run'))).ck, { r: 5, c: 6, l: 2, n: 1, s: 0, o: 0 }, 'the save key');
+  await page.reload(); await toGame(page);
+  await page.evaluate(() => { CFG.COOKIE = true; });
+  await frames(page, 3);
+  assert.deepEqual(await ckView(page).then(v => [v.on, v.at, v.left, v.n]), [true, [5, 6], 2, 1], 'back on its gem, with its bites');
+  const load = ck0 => page.evaluate(ck0 => {
+    const o = JSON.parse(localStorage.getItem('crumble.run'));
+    if (ck0 === undefined) delete o.ck; else o.ck = ck0;
+    return restore(o) && { on: !!ck.g, n: ck.n };
+  }, ck0);
+  assert.deepEqual(await load({ r: 0, c: 0, l: 2, n: 1, s: 0, o: 0 }), { on: false, n: 1 }, 'its cell is empty: no cookie');
+  assert.deepEqual(await load({ r: 9, c: -1, l: 'x', n: 1e9, s: 'a' }), { on: false, n: 0 }, 'nonsense: no cookie');
+  assert.deepEqual(await load('junk'), { on: false, n: 0 }, 'not even an object');
+  assert.deepEqual(await load(undefined), { on: false, n: 0 }, 'an older save without one');
+  assert.deepEqual(await load({ r: 5, c: 6, l: 0, n: 0, s: 0, o: 0 }), { on: false, n: 0 }, 'no trays left: none');
+  await load({ r: 5, c: 6, l: 2, n: 2, s: 3, o: 0 });
+  await page.evaluate(() => start());
+  assert.deepEqual(await ckView(page).then(v => [v.on, v.n, v.since]), [false, 0, 999], 'a new run starts without one');
+});
+
+test('cookie: the run cap; the dealer deals the same trays with the cookie on or off', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await ckOn(page);
+  for (let k = 0; k < 3; k++) {                             // three eaten, then none lands
+    await setup(page, { rows: ['01111111', ...CK_ROWS.slice(1)] });
+    await page.evaluate(() => { ck.since = 999; ck.g = null; cookieDealt(); if (!ck.g) throw new Error('no cookie'); ck.g = grid[0][3]; ck.r = 0; ck.c = 3; tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }]; place(0, 0, 0); });
+  }
+  await setup(page, { rows: CK_ROWS });
+  assert.deepEqual(await page.evaluate(() => { ck.since = 999; cookieDealt(); return [ck.n, !!ck.g]; }), [3, false], 'COOKIE_RUN_MAX eaten: no more this run');
+  // the same board and dealer state, the same Math.random: 14 deals with the cookie on, then off
+  await setup(page, { rows: CK_ROWS });
+  const snap0 = await page.evaluate(() => { tray = [{ s: SHAPES[0], gi: 1 }, null, null]; return snapshot(); });
+  const deals = on => page.evaluate(({ on, snap0 }) => {
+    let a = 77; Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    restore(snap0); CFG.COOKIE = on; ck.n = 0; ck.since = 999;
+    const out = [], lands = [];
+    for (let k = 0; k < 14; k++) { tray = [null, null, null]; genTray(); cookieDealt(); out.push(tray.map(t => t && SHAPES.indexOf(t.s) + ':' + t.gi).join(' ')); lands.push(!!ck.g); if (ck.g && k % 2) ck.g = null; }
+    return { out, lands, next: Math.random() };
+  }, { on, snap0 });
+  const a = await deals(true), b = await deals(false);
+  assert.ok(a.lands.some(Boolean) && !b.lands.some(Boolean), 'cookies landed with it on, none with it off');
+  assert.deepEqual(a.out, b.out, 'the same trays');
+  assert.equal(a.next, b.next, 'and the stream is where it was');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

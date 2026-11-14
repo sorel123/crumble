@@ -58,6 +58,10 @@ const SAY={
   // (pace) js/challenge.js: a friend's Challenge link with their pace, at the end of a tray
   paceAhead:["ahead. don't look back.","ahead of them. keep going.","they were slower here. heh.","look at you, winning."],
   paceBehind:["they were faster here.","behind them. no panic.","they're pulling ahead. hmm.","catch up. I believe. mostly."],
+  // (cookie) js/cookie.js: a cookie on the board
+  cookieLand:["cookie! get it before it goes stale.","ooh. a cookie. clear it for me.","that cookie's mine. go get it.","cookie on the board. don't let it go stale."],
+  cookieYum:["mine. thank you.","okay that was worth it.","mmf. crunchy.","best part of my day.","nom. don't tell anyone.","into the jar. well. into me."],
+  cookieGone:["that was my cookie.","it's fine. i wasn't hungry.","stale. great.","bye, cookie."],
 };
 const say={el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){

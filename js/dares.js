@@ -106,7 +106,7 @@ function darePick(){                                   // the roll: a tier by th
   return set[set.length-1];
 }
 const sayOf=d=>d.say[Math.floor(dareRnd()*d.say.length)%d.say.length];
-function dareQueue(txt,ms){ if(CFG.FX_CRUMB_TALK) dare.q.push({txt,ms:ms||0}); }
+function dareQueue(txt,ms,ttl){ if(CFG.FX_CRUMB_TALK) dare.q.push({txt,ms:ms||0,exp:ttl?performance.now()+ttl:0}); }   // ttl: a line that is stale after this long is dropped (cookie.js)
 function dareIssue(){
   const d=darePick(); if(!d){ dare.off=true; return; }
   const next=dare.n>0;
@@ -175,27 +175,33 @@ function dareText(){                                   // the chip's words and p
   const counted=d.kind==='lines'||d.kind==='noflick'||(d.kind==='sweep'&&d.need>1)||(d.kind==='cannon'&&dare.p>0);
   return {t:d.chip,p:dare.s===1?'✓':dare.s===2?'✗':counted?dare.p+'/'+d.need:''};
 }
-function dareCookie(){                                 // a cookie hops from the crumb into the jar, a clink, a tap of haptics
-  const land=()=>{
-    dare.hop=null; dare.jarShown=dare.st.cookies; dare.key='';
-    toyPlay(0,t=>{ tone(t,{f0:1568,pdur:.02,dur:.12,vol:.05,type:'triangle'}); tone(t+.06,{f0:2093,pdur:.02,dur:.18,vol:.04,type:'triangle'}); });
-    haptic('achieve');
-    if(dare.jar&&!reduce) dare.jar.animate([{transform:'none'},{transform:'scale(1.35)'},{transform:'none'}],{duration:320,easing:'ease-out'});
-  };
-  if(reduce||!dare.el||dare.el.hidden||!masc.el||masc.el.hidden){ land(); return; }
-  const j=dare.jar.getBoundingClientRect(), s=masc.s*toy.sc;
-  const x0=masc.x+toy.x+masc.s/2, y0=masc.y+toy.y+masc.s-s*.6, x1=j.left+j.width/2, y1=j.top+j.height/2;
+// one cookie animation for the whole game: a cookie hops from (x0,y0) to (x1,y1), its scale [start, top of the hop, end], then done(). Dares: from the crumb
+// into the jar; a cookie on the board (cookie.js): from its gem into the crumb. Web Animations on one DOM element (~0.7 s)
+function cookieHop(x0,y0,x1,y1,[s0,sm,s1],done){
   const ck=document.createElement('div'); ck.className='dareCookie'; ck.innerHTML=COOKIE_SVG;
   ck.style.left=x0-9+'px'; ck.style.top=y0-9+'px';
   el('stage').appendChild(ck);
   const dx=x1-x0, dy=y1-y0, up=Math.min(y0,y1)-y0-60;
-  dare.hop=ck.animate([
-    {transform:'translate(0,0) scale(.6) rotate(0deg)'},
-    {transform:`translate(${dx*.35}px,${up}px) scale(1.15) rotate(200deg)`,offset:.4},
-    {transform:`translate(${dx}px,${dy}px) scale(.7) rotate(420deg)`}],{duration:720,easing:'cubic-bezier(.35,.1,.5,1)'});
+  const a=ck.animate([
+    {transform:`translate(0,0) scale(${s0}) rotate(0deg)`},
+    {transform:`translate(${dx*.35}px,${up}px) scale(${sm}) rotate(200deg)`,offset:.4},
+    {transform:`translate(${dx}px,${dy}px) scale(${s1}) rotate(420deg)`}],{duration:720,easing:'cubic-bezier(.35,.1,.5,1)'});
   toyPlay(0,t=>tone(t,{f0:700,f1:1300,pdur:.12,dur:.16,vol:.04,type:'triangle'}));
-  dare.hop.onfinish=()=>{ ck.remove(); land(); };
-  dare.hop.oncancel=()=>{ ck.remove(); land(); };
+  a.onfinish=()=>{ ck.remove(); done(); };
+  a.oncancel=()=>{ ck.remove(); done(); };
+  return a;
+}
+function jarTick(hap){                                 // the cookie is in: the jar counts it, a clink, a tap of haptics
+  dare.jarShown=dare.st.cookies; dare.key='';
+  toyPlay(0,t=>{ tone(t,{f0:1568,pdur:.02,dur:.12,vol:.05,type:'triangle'}); tone(t+.06,{f0:2093,pdur:.02,dur:.18,vol:.04,type:'triangle'}); });
+  haptic(hap);
+  if(dare.jar&&!reduce&&dare.el&&!dare.el.hidden) dare.jar.animate([{transform:'none'},{transform:'scale(1.35)'},{transform:'none'}],{duration:320,easing:'ease-out'});
+}
+function dareCookie(){                                 // a cookie hops from the crumb into the jar, a clink, a tap of haptics
+  const land=()=>{ dare.hop=null; jarTick('achieve'); };
+  if(reduce||!dare.el||dare.el.hidden||!masc.el||masc.el.hidden){ land(); return; }
+  const j=dare.jar.getBoundingClientRect(), s=masc.s*toy.sc;
+  dare.hop=cookieHop(masc.x+toy.x+masc.s/2,masc.y+toy.y+masc.s-s*.6,j.left+j.width/2,j.top+j.height/2,[.6,1.15,.7],land);
 }
 function dareQuiet(now){                               // nothing bigger is going on: a dare line may speak
   return state==='play'&&!paused&&!dealing&&!stuck&&!ava.live&&!toyHot()&&toy.mode==='rim'&&!masc.fainted&&!toy.sl&&!toy.demo   // (stakes) not while she aims the slingshot or its demo shows
@@ -212,6 +218,7 @@ function dareStep(now,shown){
       else dareIssue();
     }
     if(dare.q.length&&!CFG.FX_CRUMB_TALK) dare.q=[];
+    while(dare.q.length&&dare.q[0].exp&&now>dare.q[0].exp) dare.q.shift();   // (cookie) a cookie line that waited too long is old news
     if(dare.q.length&&dareQuiet(now)){ const l=dare.q.shift(); crumbSay(l.txt,l.ms,'say dare',true); }
   }
   const tx=on&&dare.id?dareText():null;

@@ -311,6 +311,14 @@ const CFG = {
   DARE_NEXT_MS:      2200,   // (dares) ms after one is beaten before the next is issued (it still waits for a quiet board)
   DARE_TIERS:        [[.6,.35,.05],[.2,.55,.25],[.1,.35,.55]],   // (dares) odds of easy / medium / hard for the run's 1st, 2nd, 3rd dare
   DARE_FADE:         .35,    // (dares) a dare she has beaten n times is picked 1/(1+DARE_FADE*n) as often
+  COOKIE:            true,   // (cookie) Endless: now and then a cookie lands on a gem; clear it in time and Crumb eats it, one into the jar (js/cookie.js). Needs the mascot and the dares
+  COOKIE_ODDS:       .3,     // (cookie) the roll at a new tray, once the gates below allow one
+  COOKIE_GAP:        6,      // (cookie) trays after one leaves (eaten or stale) before the next can land
+  COOKIE_START:      4,      // (cookie) none in a run's first this-many trays
+  COOKIE_MIN_GEMS:   8,      // (cookie) only on a board with at least this many gems
+  COOKIE_RUN_MAX:    3,      // (cookie) eaten this many in a run and no more land
+  COOKIE_TRAYS:      3,      // (cookie) full trays it stays; a bite each tray shows the time left
+  COOKIE_LINE:       [3,6],  // (cookie) it prefers a gem whose fullest line holds this many gems (a little work, not a gift)
   TILT:              true,   // (toy) with motion allowed, leaning the phone rolls the crumb along the board's rim
   TILT_FLIP:         false,  // (toy) if the crumb rolls uphill on some device, flip the sign
   TILT_DEAD:         .07,    // (toy) lean (share of gravity, ~4 degrees) the phone forgives before the crumb moves

@@ -30,6 +30,7 @@ function snapshot(){
     cb:chaseBest,                                     // (7.5e) the best this run chases (the live `best` is rewritten mid-run by saveStats)
     tl:tlSnap(),                                      // (7.5g) the timelapse's board pictures, capped (timelapse.js)
     dr:dareSnap(),                                    // (dares) this run's dare, its progress and how many it has had (dares.js)
+    ck:cookieSnap(),                                  // (cookie) the cookie on the board: its cell, trays left, eaten this run, trays since the last (cookie.js)
     gd:guide?{n:guide.n,ln:guide.ln,sw:guide.sw?1:0,dn:guide.dn}:null   // (1.1 D) the guided first game's lesson
   };
 }
@@ -68,6 +69,7 @@ function restore(o){
   toy.hot=o.cn===1&&mode==='endless'&&CFG.CRUMB_CANNON; toy.lastCombo=combo;
   toy.pow=toy.hot&&isInt(o.cp,0,999)?o.cp:0;          // its saved strength, never worked out again from the combo; older saves (no cp) resume at the plain charge
   dareLoad(o.dr);                                   // (dares) older saves have none: the run gets a fresh dare
+  cookieLoad(o.ck);                                 // (cookie) after the grid; bad data or an older save: no cookie
   const pc=o.pace, PH=['calm','building','edge','recovery','relief'];   // (6.1) older saves have none: start calm
   pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
   resetWave(); const w=o.wave;                       // (7.3) older saves have none: a fresh wave
