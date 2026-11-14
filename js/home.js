@@ -58,7 +58,7 @@ function homeFill(card){                               // the words on the card:
   const today=daily.d[dailyKey()], liveD=peekRun('daily'), st=streakNow();
   const advS=advStars()?'Level '+nextLevel().id+' · ★ '+advStars():'Goal levels, no timer';
   const dayS=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'New board today';
-  const golS=st?'🔥 '+st+(st===1?' day':' days')+' in a row':'Streak and unlocks';
+  const golS=goalsSub();
   const stats=homeStats(), sEl=card.querySelector('.homeStats');
   sEl.innerHTML=stats; sEl.hidden=!stats;
   if(card.id==='startCard'){

@@ -3601,6 +3601,7 @@ test('crumb last chance: out of room with a charged crumb the run holds; a canno
 const said = page => page.evaluate(() => el('crumbSay').hidden ? null : { txt: el('crumbSay').textContent, cls: el('crumbSay').className });
 test('crumb talks: a remark for a clean sweep, a sign when she stops playing, then asleep, a line when she is back; the switch (saved) silences it', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.DARES = false; });   // (dares) a dare's line would wait for a quiet moment and land in this test's silences
   await dealt(page);
   await page.evaluate(() => { say.until = 0; say.last = -1e9; });
   await frames(page, 3);
@@ -3632,6 +3633,275 @@ test('crumb talks: a remark for a clean sweep, a sign when she stops playing, th
   await page.evaluate(() => { lastInput = performance.now() - CFG.TALK_IDLE_MS - 200; });
   await frames(page, 6);
   assert.equal(await said(page), null, 'off: no sign');
+});
+
+// ── Crumb's dares (js/dares.js) ──
+const dareView = page => page.evaluate(() => ({ id: dare.id, s: dare.s, n: dare.n, p: dare.p, off: dare.off, chip: el('dareChip').hidden ? null : el('dareChip').textContent, cookies: dare.st.cookies }));
+// one drop straight through place(): the board as rows of '0'/'1' (gi of every gem: `gi`), the piece SHAPES[k] (gi `pgi`) at (r, c)
+const dareDrop1 = (page, o) => page.evaluate(({ id, rows, k, r, c, gi = 0, pgi = 0, extra, pre, p = 0 }) => {
+  dare.id = id; dare.s = 0; dare.p = p; dare.x = trayNo; dare.q = [];
+  if (pre) (0, eval)(pre);
+  grid = rows.map(row => [...row].map(ch => (ch === '1' ? { gi, t: 1, f: 0, l: 0 } : null)));
+  if (extra) for (const [rr, cc, g] of extra) grid[rr][cc] = { gi: g, t: 1, f: 0, l: 0 };
+  const s = typeof k === 'string' ? (0, eval)(k) : SHAPES[k];
+  tray = [{ s, gi: pgi }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
+  place(0, r, c);
+  return { s: dare.s, p: dare.p };
+}, o);
+const ROW0 = ['01111111', ...EMPTY.slice(1)];                         // one row a 1x1 completes
+test('dares: Endless gets one dare once the first tray is down (a line held longer, a chip); none in Daily, Adventure, Challenge; the Endless run keeps its own', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id && !el('dareChip').hidden);
+  const v = await dareView(page);
+  const d = await page.evaluate(id => dareDef(id), v.id);
+  assert.equal(v.n, 1, 'one dare');
+  assert.ok(v.chip.includes('DARE') && v.chip.includes(d.chip), 'the chip shows it: ' + v.chip);
+  await page.waitForFunction(() => !el('crumbSay').hidden && /\bdare\b/.test(el('crumbSay').className) && dareDef(dare.id).say.includes(el('crumbSay').textContent), null, { timeout: 9000 });
+  assert.ok(await page.evaluate(() => say.until - say.last >= CFG.DARE_SAY_MS - 1 && CFG.DARE_SAY_MS > CFG.TALK_MS), 'held longer than an ordinary line');
+  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('crumble.run'))).dr.i, v.id, 'it rides in the run save');
+  for (const [m, go] of [['daily', 'playDaily()'], ['adventure', 'playLevel(1)'], ['challenge', "playChal('dare-test', true)"]]) {
+    await page.evaluate(go);
+    await dealt(page); await frames(page, 8);
+    assert.deepEqual(await page.evaluate(() => [mode, dare.id, el('dareChip').hidden, !!JSON.parse(localStorage.getItem(runStore(mode)) || '{}').dr]), [m, '', true, false], m + ': no dare');
+  }
+  await page.evaluate(() => playEndless());
+  await frames(page, 4);
+  assert.deepEqual(await page.evaluate(() => [mode, dare.id, el('dareChip').hidden]), ['endless', v.id, false], 'back in Endless: the same run, the same dare');
+});
+
+test('dares: the guided first game has none (even after its lessons end); the next run does', async ({ page }) => {
+  await freshPlayer(page);
+  await play(page);
+  await page.waitForFunction(() => dare.off, null, { timeout: 8000 });
+  assert.ok(await page.evaluate(() => !!guide && dare.off && !dare.id && el('dareChip').hidden), 'guided: no dare');
+  await page.evaluate(() => { guide = null; });
+  await frames(page, 6);
+  assert.deepEqual(await page.evaluate(() => [dare.id, dare.off]), ['', true], 'the rest of that first game has none either');
+  await page.evaluate(() => start());
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id && !dare.off);
+});
+
+test('dares: each checker family pays a cookie (lines in one drop, a cross, combo, lines this run, sweeps, a colour, an avalanche, a cannonball, the sky, a new best, trays unflicked)', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id);
+  await page.evaluate(() => { CFG.DARE_MAX = 99; CFG.TRANSFORM_COMBO = 99; dare.n = 1; dare.st.cookies = 0; dare.st.won = {}; });
+  const V = 'SHAPES.find(s => s.rows === 3 && s.cols === 1 && s.n === 3)';
+  // three rows short of their first cell: a 3x1 bar completes them all
+  const THREE = ['01111111', '01111111', '01111111', ...EMPTY.slice(3)];
+  assert.equal((await dareDrop1(page, { id: 'drop3', rows: ROW0, k: 0, r: 0, c: 0, extra: [[5, 5, 2]] })).s, 0, 'one line is not three');
+  assert.equal((await dareDrop1(page, { id: 'drop3', rows: THREE, k: V, r: 0, c: 0, extra: [[5, 5, 2]] })).s, 1, '3 lines in one drop');
+  assert.equal((await dareDrop1(page, { id: 'drop2', rows: THREE, k: V, r: 0, c: 0, extra: [[5, 5, 2]] })).s, 1, '2 lines in one drop (three will do)');
+  const CROSS = ['01111111', ...Array(7).fill('10000000')];
+  assert.equal((await dareDrop1(page, { id: 'cross', rows: ROW0, k: 0, r: 0, c: 0, extra: [[5, 5, 2]] })).s, 0, 'a row alone is not a cross');
+  assert.equal((await dareDrop1(page, { id: 'cross', rows: CROSS, k: 0, r: 0, c: 0, extra: [[5, 5, 2]] })).s, 1, 'a row and a column in one drop');
+  assert.equal((await dareDrop1(page, { id: 'combo4', rows: ROW0, k: 0, r: 0, c: 0, extra: [[5, 5, 2]], pre: 'combo = 3' })).s, 1, 'combo 4');
+  assert.equal((await dareDrop1(page, { id: 'combo7', rows: ROW0, k: 0, r: 0, c: 0, extra: [[5, 5, 2]], pre: 'combo = 3' })).s, 0, 'combo 4 is not 7');
+  // lines this run: progress on the chip, then the cookie
+  let r = await dareDrop1(page, { id: 'lines15', rows: ROW0, k: 0, r: 0, c: 0, extra: [[5, 5, 2]] });
+  assert.deepEqual(r, { s: 0, p: 1 }, 'one line counted');
+  await frames(page, 3);
+  assert.ok((await dareView(page)).chip.includes('1/15'), 'the chip counts');
+  r = await dareDrop1(page, { id: 'lines15', rows: ROW0, k: 0, r: 0, c: 0, extra: [[5, 5, 2]], p: 14 });
+  assert.deepEqual(r, { s: 1, p: 15 }, '15 lines');
+  // sweeps: one sweep is half of "twice"
+  assert.deepEqual(await dareDrop1(page, { id: 'sweep2', rows: ROW0, k: 0, r: 0, c: 0 }), { s: 0, p: 1 }, 'one sweep of two');
+  assert.equal((await dareDrop1(page, { id: 'sweep', rows: ROW0, k: 0, r: 0, c: 0 })).s, 1, 'sweep the board');
+  // a colour: the row's colour leaves the board, another stays
+  assert.equal((await dareDrop1(page, { id: 'colour', rows: ROW0, k: 0, r: 0, c: 0, gi: 3, pgi: 3, extra: [[5, 5, 4], [6, 6, 3]] })).s, 0, 'colour 3 is still on the board');
+  assert.equal((await dareDrop1(page, { id: 'colour', rows: ROW0, k: 0, r: 0, c: 0, gi: 3, pgi: 3, extra: [[5, 5, 4]] })).s, 1, 'a colour wiped out');
+  // an avalanche
+  await page.evaluate(() => { CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; });
+  assert.equal((await dareDrop1(page, { id: 'ava', rows: AVA_ROWS, k: 0, r: 0, c: 0, pre: 'combo = 4' })).s, 1, 'an avalanche');
+  await page.waitForFunction(() => !ava.live, null, { timeout: 8000 });
+  await page.evaluate(() => { CFG.AVALANCHE = false; });
+  // a cannonball: the gems it broke
+  const cannon = n => page.evaluate(n => { dare.id = 'cannon8'; dare.s = 0; toy.fire = { n, pts: n * 100, max: 20, b: 0 }; toyFireEnd(); return { s: dare.s, p: dare.p }; }, n);
+  await page.evaluate(() => { dare.p = 0; });
+  assert.deepEqual(await cannon(5), { s: 0, p: 5 }, 'five is not eight');
+  await frames(page, 3);
+  assert.ok((await dareView(page)).chip.includes('5/8'), 'the chip has its best throw');
+  assert.deepEqual(await cannon(9), { s: 1, p: 8 }, 'cannonball 8 blocks');
+  // read off the game's state: the sky, a new best, trays without a flick
+  await page.evaluate(() => { dare.id = 'night'; dare.s = 0; score = CFG.JOURNEY_AT[3]; });
+  await page.waitForFunction(() => dare.s === 1);
+  await page.evaluate(() => { dare.id = 'best'; dare.s = 0; best = score + 10; bestBeaten = false; });
+  await frames(page, 3);
+  assert.equal((await dareView(page)).s, 0, 'not beaten yet');
+  await dareDrop1(page, { id: 'best', rows: ROW0, k: 0, r: 0, c: 0, extra: [[5, 5, 2]] });
+  await page.waitForFunction(() => bestBeaten && dare.s === 1);
+  await page.evaluate(() => { dare.id = 'noflick'; dare.s = 0; dare.x = trayNo - 14; });
+  await frames(page, 3);
+  assert.deepEqual(await page.evaluate(() => [dare.s, dare.p]), [0, 14], '14 trays of 15');
+  await page.evaluate(() => { trayNo++; });
+  await page.waitForFunction(() => dare.s === 1 && dare.p === 15);
+  const won = await page.evaluate(() => ({ c: dare.st.cookies, w: dare.st.won, saved: JSON.parse(localStorage.getItem('crumble.dares')) }));
+  assert.equal(won.c, 12, 'a cookie for each: ' + JSON.stringify(won.w));
+  assert.deepEqual(Object.keys(won.w).sort(), ['ava', 'best', 'cannon8', 'colour', 'combo4', 'cross', 'drop2', 'drop3', 'lines15', 'night', 'noflick', 'sweep']);
+  assert.deepEqual(won.saved.won, won.w, 'saved');
+});
+
+test('dares: beaten, a cookie hops into the jar, the chip ticks and a harder one follows (up to DARE_MAX); the jar and record persist across a reload and show on Goals', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id);
+  await page.evaluate(() => { CFG.TRANSFORM_COMBO = 99; CFG.DARE_NEXT_MS = 300; });
+  const first = (await dareView(page)).id;
+  await page.evaluate(() => { say.until = 0; dare.q = []; dareWin(); });   // whatever the first dare was, it is beaten now
+  assert.ok(await page.evaluate(() => !!dare.hop && !!document.querySelector('.dareCookie') && dareBusy() && fxBusy()), 'a cookie is on its way, and the frames run');
+  assert.equal(await page.evaluate(() => el('dareChip').querySelector('.jar b').textContent), '0', 'the jar counts it when it lands');
+  await page.waitForFunction(() => !dare.hop && el('dareChip').querySelector('.jar b').textContent === '1');
+  assert.ok(await page.evaluate(() => el('dareChip').classList.contains('won') && el('dareChip').textContent.includes('✓')), 'the chip ticks');
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.dareWin.includes(el('crumbSay').textContent), null, { timeout: 9000 });
+  await page.waitForFunction(() => dare.n === 2 && dare.s === 0, null, { timeout: 9000 });
+  const second = (await dareView(page)).id;
+  assert.notEqual(second, first, 'never the same twice in a row');
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.dareNext.includes(el('crumbSay').textContent), null, { timeout: 12000 });
+  // two more: the third is the last of the run
+  await page.evaluate(() => { dareWin(); });
+  await page.waitForFunction(() => dare.n === 3 && dare.s === 0, null, { timeout: 12000 });
+  await page.evaluate(() => { dareWin(); });
+  await page.waitForTimeout(900);
+  assert.deepEqual(await page.evaluate(() => [dare.n, dare.s]), [3, 1], 'DARE_MAX: no fourth');
+  const st = await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.dares')));
+  assert.equal(st.v, 1); assert.equal(st.cookies, 3);
+  assert.equal(Object.values(st.won).reduce((a, b) => a + b, 0), 3);
+  assert.equal(st.days.streak, 1); assert.match(st.days.last, /^\d{4}-\d\d-\d\d$/);
+  await page.reload(); await toGame(page);
+  assert.deepEqual(await page.evaluate(() => [dare.st.cookies, Object.values(dare.st.won).reduce((a, b) => a + b, 0), dare.st.days.streak]), [3, 3, 1], 'the jar survives a reload');
+  await page.evaluate(() => { saveRun(); openMenu(); });
+  assert.match(await page.textContent('#menuGoalsSub'), /^3 cookies/, 'the Goals tile mentions the cookies');
+  await page.click('#menuGoals');
+  assert.equal(await page.textContent('#goalsDares'), 'Dares won: 3 · Cookies: 3', 'one line on the Goals card');
+  // the iCloud copy (1.1 F) carries the jar: merged by max, never lowered
+  const m = await page.evaluate(() => { const ch = cloudMerge({ v: 1, dares: { cookies: 9, won: { drop2: 7, combo4: 0 }, days: { last: '2020-01-01', streak: 4, best: 6 } } });
+    const lower = cloudMerge({ v: 1, dares: { cookies: 1, won: {} } }); return { ch, lower, c: dare.st.cookies, w: dare.st.won.drop2, best: dare.st.days.best, blob: cloudBlob().dares.cookies }; });
+  assert.deepEqual(m, { ch: true, lower: false, c: 9, w: 7, best: 6, blob: 9 }, 'the cloud jar merges in');
+  // a broken save is ignored
+  await page.evaluate(() => localStorage.setItem('crumble.dares', '{"v":1,"cookies":-4,"won":{"x y":3,"drop2":"a"}}'));
+  await page.reload(); await toGame(page);
+  assert.deepEqual(await page.evaluate(() => [dare.st.cookies, Object.keys(dare.st.won).length]), [0, 0], 'bad data: an empty jar, no error');
+});
+
+test('dares: a resumed run keeps its dare and progress; an older save without one gets a fresh dare', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id);
+  await page.evaluate(() => { dare.id = 'lines40'; dare.p = 7; dare.s = 0; dare.n = 2; saveRun(); });
+  await page.reload(); await toGame(page);
+  await frames(page, 4);
+  const v = await dareView(page);
+  assert.deepEqual([v.id, v.p, v.s, v.n], ['lines40', 7, 0, 2], 'resumed with its dare');
+  assert.ok(v.chip.includes('40 lines') && v.chip.includes('7/40'), 'and the chip: ' + v.chip);
+  await page.click('#pauseBtn');
+  assert.equal(await page.textContent('#pauseDare'), "Crumb's dare: 40 lines · 7/40", 'the pause card shows it');
+  await page.click('#pauseResume');
+  // an older save (no `dr`), then a broken one: edited as the page loads, after its own save on the way out
+  await page.addInitScript(() => { const e = sessionStorage.getItem('dr-edit'); if (!e) return; sessionStorage.removeItem('dr-edit');
+    const o = JSON.parse(localStorage.getItem('crumble.run')); if (e === 'old') delete o.dr; else o.dr = JSON.parse(e); localStorage.setItem('crumble.run', JSON.stringify(o)); });
+  await page.evaluate(() => sessionStorage.setItem('dr-edit', 'old'));
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => state === 'play' && !!dare.id && dare.n === 1);
+  await page.evaluate(() => sessionStorage.setItem('dr-edit', JSON.stringify({ i: 'nope', p: -1, x: 0, s: 9, n: 1 })));
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => state === 'play' && !!dareDef(dare.id));
+});
+
+test("dares: \"don't flick me\" fails on a flick (\"knew it.\"), and no other dare comes that run; a run ending with a dare open gets \"told you.\"", async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id);
+  await page.evaluate(() => { dare.id = 'noflick'; dare.s = 0; dare.p = 0; dare.x = trayNo; dare.q = []; CFG.DARE_NEXT_MS = 100; });
+  await frames(page, 3);
+  await flickCrumb(page, 24, -16);
+  assert.equal(await page.evaluate(() => dare.s), 2, 'failed the moment it flew');
+  await frames(page, 3);
+  assert.ok(await page.evaluate(() => el('dareChip').classList.contains('lost') && el('dareChip').textContent.includes('✗')), 'the chip shows it lost');
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.dareFail.includes(el('crumbSay').textContent), null, { timeout: 12000 });
+  await page.waitForTimeout(600);
+  assert.deepEqual(await page.evaluate(() => [dare.id, dare.n, dare.s]), ['noflick', 1, 2], 'no next dare this run');
+  assert.equal(await page.evaluate(() => { const o = snapshot(); dareRunReset(); restore(o); return dare.s; }), 2, 'the loss rides in the save too');
+  // the next run: a dare again (not the same one); it ends with the dare open: "told you."
+  await page.evaluate(() => start());
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id && dare.s === 0);
+  assert.notEqual(await page.evaluate(() => dare.id), 'noflick');
+  const rows = Array.from({ length: 8 }, (_, r) => [...'11111111'].map((ch, c) => (c === r || c === (r + 1) % 8 ? '0' : ch)).join(''));
+  await setup(page, { rows, trayShapes: [0, 3, 9] });
+  await page.evaluate(() => { dare.id = 'drop4'; dare.s = 0; toy.hot = false; });
+  await dragPiece(page, 0, 0, 0);
+  await page.waitForFunction(() => state === 'over', null, { timeout: 5000 });
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.dareLost.includes(el('crumbSay').textContent), null, { timeout: 5000 });
+});
+
+test('dares: a dare line waits for a quiet board (a banner, an avalanche, a charged crumb), never talking over the moment', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id);
+  await page.evaluate(() => { say.until = 0; dare.q = []; });
+  await frames(page, 2);
+  for (const [what, on, off] of [['a banner', "pushBanner('CLEAN SWEEP','+1')", 'banners.length = 0'], ['an avalanche', 'ava.live = true; ava.t = 0; ava.end = 1e9', 'ava.live = false'], ['a charged crumb', 'toy.hot = true', 'toy.hot = false']]) {
+    await page.evaluate(([on]) => { say.until = 0; (0, eval)(on); dare.q = [{ txt: 'wait for it.', ms: 900 }]; }, [on]);
+    await frames(page, 8);
+    assert.equal(await page.evaluate(() => dare.q.length), 1, what + ': it waits');
+    assert.notEqual(await page.evaluate(() => el('crumbSay').hidden ? '' : el('crumbSay').textContent), 'wait for it.');
+    await page.evaluate(([off]) => (0, eval)(off), [off]);
+    await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'wait for it.', null, { timeout: 4000 });
+  }
+});
+
+test('dares: Settings > Look > Advanced switch (saved) turns them off; the mascot off means no dares', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id && !el('dareChip').hidden);
+  await openSet(page);
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#dareOn'), true, 'on by default');
+  await page.click('#dareOn');
+  await closeSet(page);
+  await frames(page, 3);
+  assert.ok(await page.evaluate(() => !CFG.DARES && JSON.parse(localStorage.getItem('crumble.skins')).dares === false && el('dareChip').hidden), 'off, saved, the chip gone');
+  await page.evaluate(() => start());
+  await dealt(page); await frames(page, 8);
+  assert.equal(await page.evaluate(() => dare.id), '', 'a new run: no dare');
+  await page.reload(); await toGame(page);
+  assert.equal(await page.evaluate(() => CFG.DARES), false, 'still off after a reload');
+  await page.evaluate(() => { CFG.DARES = true; CFG.FX_MASCOT = false; start(); });
+  await dealt(page); await frames(page, 8);
+  assert.deepEqual(await page.evaluate(() => [dare.id, el('dareChip').hidden]), ['', true], 'no mascot, no dares');
+});
+
+test('dares: the chip covers nothing (board, tray, score, chase bar, HUD buttons, x2 chip) at 390x844 and 375x667', async ({ page }) => {
+  for (const [w, h] of [[390, 844], [375, 667]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.evaluate(() => { if (state === 'play') start(); });
+    if (await page.evaluate(() => state !== 'play')) await play(page);
+    await dealt(page);
+    await page.waitForFunction(() => !!dare.id && !el('dareChip').hidden);
+    for (const [id, p, sc] of [['sweep2', 1, 1234567], ['cannon15', 12, 98765], ['cross', 0, 4321]]) {
+      await page.evaluate(([id, p, sc]) => { dare.id = id; dare.p = p; dare.s = 0; best = chaseBest = Math.round(sc / 0.76); score = shownScore = sc; el('scoreVal').textContent = sc; syncHud(); hudFit(); chaseSync(); }, [id, p, sc]);
+      await frames(page, 6);
+      const r = await page.evaluate(() => {
+        const R = e => { const b = e.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom }; };
+        const out = { chip: R(el('dareChip')), others: {} };
+        out.others.board = { l: bx - 9, t: by - 9, r: bx + B + 9, b: by + B + 9 };
+        [0, 1, 2].forEach(i => { const s = slotRect(i); out.others['tray' + i] = { l: s.x, t: s.y, r: s.x + s.w, b: s.y + s.h }; });
+        for (const id of ['scoreVal', 'bestVal', 'pauseBtn', 'musicBtn', 'mute', 'bonusChip', 'chase']) if (!el(id).hidden && el(id).offsetParent) out.others[id] = R(el(id));
+        for (const e of el('chase').children) out.others['chase-' + e.className] = R(e);
+        out.text = el('dareChip').textContent; out.chase = !el('chase').hidden; out.hud = hudH;
+        return out;
+      });
+      const c = r.chip;
+      assert.ok(c.r <= w && c.l >= 0 && c.b <= r.hud && c.b <= r.others.board.t, `${w}x${h} ${id}: on screen, inside the HUD band, above the board: ${JSON.stringify(c)}`);
+      for (const [k, o] of Object.entries(r.others)) {
+        const hit = c.l < o.r && c.r > o.l && c.t < o.b && c.b > o.t;
+        assert.ok(!hit, `${w}x${h} ${id} (${r.text}): the chip overlaps ${k} ${JSON.stringify(o)} vs ${JSON.stringify(c)}`);
+      }
+      assert.ok(r.chase, 'the chase bar is up for the check');
+    }
+  }
 });
 
 // ── Avalanche (js/avalanche.js) ──

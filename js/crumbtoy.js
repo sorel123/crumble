@@ -61,11 +61,12 @@ function toyFireEnd(){                                              // out of st
   const f=toy.fire; if(!f) return; toy.fire=null; toy.shotN=f.n;
   if(stuck&&state==='play'&&!f.n){ toy.hot=true; return; }           // the last chance missed the board entirely: it is still charged, try again
   if(!f.n) return;
+  dareCannon(f.n);                                                  // (dares) "cannonball 8 blocks"
   if(f.n>=4) sayLine('cannon',true);
   pops.push({x:bx+B/2,y:by+cell*1.2,t:0,txt:'+'+f.pts,sub:'CANNONBALL ×'+f.n,combo:1,lines:1});
   glowT=Math.max(glowT,.8);
   if(state==='play'&&boardEmpty()){                                 // it broke the last gem: a clean sweep, with everything a drop's sweep brings (game.js)
-    score+=sweepPayoff(f.n,6,true); stats.sweeps++; mascotAct('sweep'); checkGoals();
+    score+=sweepPayoff(f.n,6,true); stats.sweeps++; mascotAct('sweep'); checkGoals(); dareDrop(0,0,0,true,false,false,false);   // (dares) a cannonball's sweep counts for a sweep dare
   }
   if(state==='play') bestCheck(true);                               // and passing her best is NEW BEST, as for a drop
   updateDbg(); tlRecord();
@@ -167,6 +168,7 @@ function toyUp(e){
   if(toy.speed<CFG.TOY_FLICK_MIN&&Math.abs(toy.y)<10&&toy.x>-masc.s*.5&&toy.x<toyXMax()+masc.s*.5){   // put down where it stood: a poke
     toy.mode='rim'; toy.y=0; toy.vx=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); mascotAct('nod'); sayLine('poke'); return;
   }
+  if(toy.speed>=CFG.TOY_FLICK_MIN) dareFlick();                   // (dares) "don't flick me": a throw ends it
   toy.mode='air'; toy.vx=vx; toy.vy=vy; toy.va=reduce?0:(vx*.5+(vy<0?vx:-vx)*.2)+(vx>=0?90:-90);
   if(toy.speed>=CFG.TOY_FLICK_MIN*3){
     toySnd('whee');

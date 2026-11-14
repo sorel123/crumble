@@ -30,6 +30,11 @@ const SAY={
   poke:["hey!","rude.","do you mind?","I'm working here."],
   dizzy:["not. cool.","the room is spinning.","why."],
   sulk:["nope.","I'm on a break.","ask nicely."],
+  // (dares) js/dares.js: each dare's own line lives with it in DARES; these are how he takes the result
+  dareWin:["fine. one cookie.","ugh. you earned it.","I didn't think you'd do it."],
+  dareNext:["double or nothing.","beginner's luck. again.","ok. a harder one."],
+  dareFail:["knew it.","ha. knew it.","couldn't resist, huh?"],
+  dareLost:["told you.","next time. maybe."],
 };
 const say={el:null,txt:'',kind:'',until:0,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){
@@ -57,7 +62,7 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
   }
   // ── what just happened, read off the game's own state ──
   if(state!==say.state){
-    if(state==='over') sayLine('over',true);
+    if(state==='over') sayLine(dareOpen()?'dareLost':'over',true);   // (dares) a run that ends with a dare open: "told you."
     else if(state==='play'&&say.state==='idle'&&mascotRnd()<.5) sayLine('start');
     say.state=state;
   }

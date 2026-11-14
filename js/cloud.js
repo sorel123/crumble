@@ -2,7 +2,7 @@
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ iCloud key-value backup ═══════
    Progress, not runs: the best score, lifetime stats, goals and the streak, unlocked skins and discovered looks,
-   Adventure records and Daily results. One JSON value under one key in the player's own iCloud key-value store
+   Adventure records and Daily results, and (dares) the cookie jar `crumble.dares`. One JSON value under one key in the player's own iCloud key-value store
    (NSUbiquitousKeyValueStore, through the in-app CloudStore plugin, ios/App/App/CloudStore.swift). It never reaches us.
    No UI: a new phone (or a reinstall) signed in to the same Apple account picks her progress up by itself.
 
@@ -26,7 +26,8 @@ function cloudBlob(){
   return {v:1, sc:SCORE_SCALE, best:Math.max(best,state==='play'&&mode==='endless'?score:0), stats:{...stats},
     goals:{streak:{...goals.streak}, days:goals.days, done:[...goals.done].sort()},
     unlocked:[...unlocked].sort(), disc:[...discoveredWorlds].sort(), adv:adv.lv, daily:daily.d,
-    chal:{s:chalRec.s, won:chalRec.won, gold:chalRec.gold}, gd:guideSeen()?1:0};
+    chal:{s:chalRec.s, won:chalRec.won, gold:chalRec.gold}, gd:guideSeen()?1:0,
+    dares:{cookies:dare.st.cookies, won:{...dare.st.won}, days:{...dare.st.days}}};   // (dares) crumble.dares: the cookie jar
 }
 
 // Folds a cloud copy into this phone's progress. Returns true if anything here changed. Bad data changes nothing.
@@ -83,13 +84,27 @@ function cloudMerge(o){
     if(isInt(c.won,0,1e6)) up(chalRec,'won',c.won);
     if(isInt(c.gold,0,1e6)) up(chalRec,'gold',c.gold);
   }
+  const dr=o.dares, js=dare.st;                          // (dares) the jar: cookies by max, each dare's wins by max, the dare-day streak like the play streak
+  if(dr&&typeof dr==='object'){
+    if(isInt(dr.cookies,0,1e6)) up(js,'cookies',dr.cookies);
+    if(dr.won&&typeof dr.won==='object') for(const id in dr.won) if(/^[a-z0-9]{1,16}$/.test(id)&&isInt(dr.won[id],0,1e6)&&dr.won[id]>(js.won[id]|0)){ js.won[id]=dr.won[id]; ch=true; }
+    const s=dr.days, me=js.days;
+    if(s&&/^\d{4}-\d\d-\d\d$/.test(s.last||'')&&isInt(s.streak,0,1e5)&&isInt(s.best,0,1e5)){
+      let cur=me.streak, last=me.last;
+      if(s.last>me.last){ cur=me.last&&addDays(me.last,1)===s.last?Math.max(s.streak,me.streak+1):s.streak; last=s.last; }
+      else if(s.last===me.last) cur=Math.max(cur,s.streak);
+      else if(addDays(s.last,1)===me.last) cur=Math.max(cur,s.streak+1);
+      const bst=Math.max(me.best,s.best,cur);
+      if(cur!==me.streak||last!==me.last||bst!==me.best){ js.days={last,streak:cur,best:bst}; ch=true; }
+    }
+  }
   if(o.gd===1&&!guideSeen()){ guideMark(); ch=true; }   // (1.1 D) she has had the guided first game on another phone
   return ch;
 }
 
 // after a merge changed something: store it here, and let the screens that show it catch up
 function cloudApply(){
-  saveStats(); saveGoals(); saveAdv(); saveSkinSave(); saveChal();
+  saveStats(); saveGoals(); saveAdv(); saveSkinSave(); saveChal(); saveDares(); dare.jarShown=dare.st.cookies;
   try{ localStorage.setItem(DAILY_STORE,JSON.stringify({v:1,d:daily.d})); }catch(e){}
   checkUnlocks(); checkGoals(false); gcSync(); syncHud();
   if(!el('menuCard').hidden) openMenu();
