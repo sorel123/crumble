@@ -2,7 +2,7 @@
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ iCloud key-value backup ═══════
    Progress, not runs: the best score, lifetime stats, goals and the streak, unlocked skins and discovered looks,
-   Adventure records and Daily results, and (dares) the cookie jar `crumble.dares`. One JSON value under one key in the player's own iCloud key-value store
+   Adventure records and Daily results, (dares) the cookie jar `crumble.dares` and (closet) `crumble.closet`. One JSON value under one key in the player's own iCloud key-value store
    (NSUbiquitousKeyValueStore, through the in-app CloudStore plugin, ios/App/App/CloudStore.swift). It never reaches us.
    No UI: a new phone (or a reinstall) signed in to the same Apple account picks her progress up by itself.
 
@@ -27,7 +27,8 @@ function cloudBlob(){
     goals:{streak:{...goals.streak}, days:goals.days, done:[...goals.done].sort()},
     unlocked:[...unlocked].sort(), disc:[...discoveredWorlds].sort(), adv:adv.lv, daily:daily.d,
     chal:{s:chalRec.s, won:chalRec.won, gold:chalRec.gold}, gd:guideSeen()?1:0,
-    dares:{cookies:dare.st.cookies, won:{...dare.st.won}, days:{...dare.st.days}}};   // (dares) crumble.dares: the cookie jar
+    dares:{cookies:dare.st.cookies, won:{...dare.st.won}, days:{...dare.st.days}},   // (dares) crumble.dares: the cookie jar
+    closet:{own:[...closet.own].sort(), spent:closet.spent, on:{...closet.on}, ot:closet.ot}};   // (closet) crumble.closet: what she bought, spent and wears
 }
 
 // Folds a cloud copy into this phone's progress. Returns true if anything here changed. Bad data changes nothing.
@@ -98,17 +99,28 @@ function cloudMerge(o){
       if(cur!==me.streak||last!==me.last||bst!==me.best){ js.days={last,streak:cur,best:bst}; ch=true; }
     }
   }
+  const cl=o.closet, me=closet;                          // (closet) bought items by union, spent by max (cookies are never lowered), the outfit from the later change
+  if(cl&&typeof cl==='object'){
+    if(Array.isArray(cl.own)) for(const id of cl.own){ const d=closetDef(id); if(d&&!d.feat&&!me.own.has(id)){ me.own.add(id); ch=true; } }
+    if(isInt(cl.spent,0,1e6)&&cl.spent>me.spent){ me.spent=cl.spent; ch=true; }
+    if(isInt(cl.ot,0,1e15)&&cl.ot>me.ot&&cl.on&&typeof cl.on==='object'){   // no time on either side (an older copy): this phone's outfit stays
+      const on={head:'',face:'',neck:''};
+      for(const s of CLOSET_SLOTS){ const id=cl.on[s], d=closetDef(id); if(d&&d.slot===s&&closetOwns(id)) on[s]=id; }
+      me.on=on; me.ot=cl.ot; ch=true;
+    }
+  }
   if(o.gd===1&&!guideSeen()){ guideMark(); ch=true; }   // (1.1 D) she has had the guided first game on another phone
   return ch;
 }
 
 // after a merge changed something: store it here, and let the screens that show it catch up
 function cloudApply(){
-  saveStats(); saveGoals(); saveAdv(); saveSkinSave(); saveChal(); saveDares(); dare.jarShown=dare.st.cookies;
+  saveStats(); saveGoals(); saveAdv(); saveSkinSave(); saveChal(); saveDares(); dare.jarShown=dare.st.cookies; saveCloset(); closetDressAll();
   try{ localStorage.setItem(DAILY_STORE,JSON.stringify({v:1,d:daily.d})); }catch(e){}
   checkUnlocks(); checkGoals(false); gcSync(); syncHud();
   if(!el('menuCard').hidden) openMenu();
   if(!el('goalsCard').hidden) renderGoals();
+  if(!el('closetCard').hidden) renderCloset();
 }
 
 // read the cloud copy and fold it in; then, if this phone has anything the cloud lacks, write it back

@@ -3,8 +3,8 @@
 loadSkinSave(); applyTheme(); buildSkinsUI(); buildSettingsUI();
 initDev();
 
-migrateScale(); loadStats(); hesLoad(); checkUnlocks(); loadModes(); loadGoals(); loadDares(); gcStart(); cloudStart();     // best score first: it decides which skins are open
-mascotInit(); layout(); grid=empty(); resetWorld();
+migrateScale(); loadStats(); hesLoad(); checkUnlocks(); loadModes(); loadGoals(); loadDares(); loadCloset(); gcStart(); cloudStart();     // best score first: it decides which skins are open
+mascotInit(); closetDressAll(); layout(); grid=empty(); resetWorld();   // (closet) every crumb on screen wears her pick
 if(mode==='adventure'){ const o=peekRun('adventure'); if(o&&o.lv) lvl=LEVELS[o.lv.id-1]||null; if(!lvl) mode='endless'; }
 let resumed=loadRun();
 if(!resumed){ if(mode!=='endless'){ mode='endless'; lvl=null; } resumed=loadRun(); if(!resumed){ genTray(); updateDbg(); } }   // a saved run reopens exactly as it was (no opening is dealt)

@@ -29,7 +29,7 @@ function homeInit(){
   });
   const c=document.createElement('div'); c.id='heroCrumb'; c.className='idle'; c.setAttribute('aria-hidden','true');
   c.innerHTML='<div class="mb">'+MASCOT_SVG+'</div>';
-  c.onclick=e=>{ e.stopPropagation(); homeCrumbAct('smug',1300); };
+  c.onclick=e=>{ e.stopPropagation(); homeCrumbAct('smug',1300); closetFromHero(); };   // (closet) he smirks, then opens his closet
   h.append(logo,c);
   hero.el=h; hero.crumb=c; hero.pp=c.querySelector('.pp');
   el('menuSettings').onclick=e=>{ e.stopPropagation(); openSettings(); };
@@ -180,14 +180,15 @@ function homeCrumble(){
   const cr=hero.crumb.getBoundingClientRect();             // the crumb rides the fall
   hero.crumb.style.cssText='position:absolute;left:'+(cr.left-sr.left)+'px;top:'+(cr.top-sr.top)+'px;right:auto';
   hero.crumb.className='hop'; fx.append(hero.crumb);
-  anims.push(hero.crumb.animate([{transform:'none'},{transform:'translate(-10px,-46px) rotate(-90deg)',offset:.3},
+  const fall=hero.crumb.animate([{transform:'none'},{transform:'translate(-10px,-46px) rotate(-90deg)',offset:.3},
     {transform:'translate(-40px,'+(sr.height-cr.top+40)+'px) rotate(-540deg)'}],
-    {duration:1100,delay:200,easing:'cubic-bezier(.35,0,.75,.6)',fill:'both'}));
+    {duration:1100,delay:200,easing:'cubic-bezier(.35,0,.75,.6)',fill:'both'});
+  anims.push(fall);
   st.append(fx);
   hero.falling=true;
   Promise.all(anims.map(a=>a.finished))   // only ours: the crumb's breathing loops forever
     .catch(()=>{}).then(()=>{
-    fx.remove(); hero.falling=false;
+    fx.remove(); hero.falling=false; fall.cancel();   // (closet) always: its fill would otherwise keep the crumb off screen if the menu took it back first
     if(hero.crumb.parentNode!==hero.el){ hero.crumb.getAnimations().forEach(a=>a.cancel()); hero.crumb.style.cssText=''; hero.el.append(hero.crumb); }
   });
 }

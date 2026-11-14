@@ -86,6 +86,7 @@ function mascotTight(){
 }
 function mascotStep(now){                             // draw.js frame(): writes only when something it shows changes
   const m=masc; if(!m.el) return;
+  closetStep(now);                                  // (closet) the Goals dot, and a feat item earned mid-run
   const on=CFG.FX_MASCOT&&state!=='idle'&&!hero.card&&!hero.falling;   // (8.3) the menu has its own crumb (and it is still tumbling off the logo)
   dareStep(now,on);                                 // (dares) the dare chip, the cookie and the dare's lines
   if(!on){ sayStep(now,false,false); if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
