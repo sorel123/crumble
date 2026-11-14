@@ -3904,6 +3904,210 @@ test('dares: the chip covers nothing (board, tray, score, chase bar, HUD buttons
   }
 });
 
+// ── Crumb's closet (js/closet.js) ──
+const closetView = page => page.evaluate(() => ({ own: [...closet.own].sort(), on: { ...closet.on }, spent: closet.spent, cookies: dare.st.cookies, spend: closetSpendable(),
+  saved: (() => { try { return JSON.parse(localStorage.getItem('crumble.closet') || 'null'); } catch (e) { return 'unreadable'; } })() }));
+const tileText = (page, id) => page.textContent(`.clTile[data-id="${id}"] span`);
+const openClosetFromStart = async page => { await page.click('#startGoals'); await page.click('#goalsCloset'); await page.waitForSelector('#closetCard:not([hidden])'); };
+
+test('closet: buying with enough and not enough cookies (tap, "Get it", tap again); spent persists, spendable = cookies - spent, the jar is never lowered', async ({ page }) => {
+  await page.evaluate(() => { dare.st.cookies = 3; saveDares(); });
+  await openClosetFromStart(page);
+  assert.equal(await page.textContent('#closetJar'), '🍪 3 cookies to spend');
+  assert.equal(await tileText(page, 'party'), '🍪 2');
+  assert.equal(await tileText(page, 'round'), '🍪 4 · 1 more', 'not enough: the tile says how many more');
+  await page.click('.clTile[data-id="round"]');
+  assert.deepEqual((await closetView(page)).own, [], 'not bought');
+  assert.match(await page.textContent('#closetSay'), /1 more cookie/);
+  await page.click('.clTile[data-id="party"]');
+  assert.equal(await tileText(page, 'party'), 'Get it · 2 cookies', 'the first tap asks');
+  assert.equal((await closetView(page)).spent, 0);
+  await page.click('.clTile[data-id="party"]');
+  let v = await closetView(page);
+  assert.deepEqual([v.own, v.on.head, v.spent, v.cookies, v.spend], [['party'], 'party', 2, 3, 1], 'bought and worn; the jar keeps its 3');
+  assert.ok(await page.evaluate(() => SAY.closetBuy.includes(el('closetSay').textContent)), 'he has a word about it');
+  assert.equal(await page.textContent('#closetJar'), '🍪 1 cookie to spend');
+  assert.equal(await tileText(page, 'bow'), '🍪 3 · 2 more');
+  await page.click('.clTile[data-id="bow"]'); await page.click('.clTile[data-id="bow"]');
+  assert.deepEqual((await closetView(page)).own, ['party'], 'cannot buy what she cannot afford, however often she taps');
+  assert.equal(await page.evaluate(() => closetBuy('bow')), false);
+  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('crumble.dares'))).cookies, 3, 'crumble.dares is untouched');
+  await page.reload(); await page.waitForFunction(() => typeof closet !== 'undefined' && !!closet.met);
+  v = await closetView(page);
+  assert.deepEqual([v.own, v.on.head, v.spent, v.spend, v.saved.v], [['party'], 'party', 2, 1, 1], 'spent survives a reload');
+  assert.equal(await page.textContent('#startGoalsSub'), '1 cookie', 'the Goals tile counts the cookies she can spend');
+  await page.evaluate(() => { dare.st.cookies = 5; });          // two more dares won: 3 to spend, the bow tie now
+  await openClosetFromStart(page);
+  await page.click('.clTile[data-id="bow"]'); await page.click('.clTile[data-id="bow"]');
+  v = await closetView(page);
+  assert.deepEqual([v.own, v.on, v.spent, v.spend], [['bow', 'party'], { head: 'party', face: '', neck: 'bow' }, 5, 0]);
+});
+
+test('closet: feat items unlock from what is already recorded and can never be bought', async ({ page }) => {
+  await page.evaluate(() => { dare.st.cookies = 99; stats.sweeps = 9; dare.st.won = { drop2: 4, combo4: 5 }; dare.st.days.best = 6; });
+  const feats = ['crown', 'goggles', 'hard', 'pirate', 'patch', 'cape', 'top'];
+  assert.deepEqual(await page.evaluate(f => f.map(id => [closetOwns(id), closetCanBuy(id), closetBuy(id)]), feats), feats.map(() => [false, false, false]), 'cookies do not buy a feat item');
+  await openClosetFromStart(page);
+  assert.equal(await tileText(page, 'cape'), '🔒 Clear the whole board 10 times · 9/10');
+  assert.equal(await tileText(page, 'crown'), '🔒 Beat a dare 7 days in a row · 6/7');
+  assert.equal(await tileText(page, 'patch'), '🔒 Beat 10 dares · 9/10');
+  assert.equal(await tileText(page, 'goggles'), '🔒 Win the "reach Space" dare');
+  await page.click('.clTile[data-id="cape"]'); await page.click('.clTile[data-id="cape"]');
+  assert.deepEqual(await closetView(page).then(v => [v.own, v.spent, v.on.neck]), [[], 0, ''], 'a tap on a feat item buys nothing');
+  await page.click('#closetBack');
+  await page.evaluate(() => { stats.sweeps = 10; dare.st.days.best = 7; dare.st.won = { drop2: 4, combo4: 4, space: 1, ava: 1, cannon15: 1 };
+    for (let i = 1; i <= 10; i++) Object.assign(advRec(i), { s: 3, n: 1 }); });
+  assert.deepEqual(await page.evaluate(f => f.map(id => closetOwns(id)), feats), feats.map(() => true), 'each from its own record');
+  assert.equal(await page.evaluate(() => advStars()), 30);
+  await page.click('#goalsCloset');
+  await page.click('.clTile[data-id="cape"]'); await page.click('.clTile[data-id="top"]');
+  assert.deepEqual(await closetView(page).then(v => [v.on.neck, v.on.head, v.spent, v.saved.own]), ['cape', 'top', 0, []], 'worn for free, never stored as bought');
+});
+
+test('closet: wear and take off per slot; persists across a reload; the board mascot, the menu crumb and the closet crumb all wear it', async ({ page, errors }) => {
+  await page.evaluate(() => { dare.st.cookies = 20; closet.own = new Set(['party', 'beanie', 'shades']); closet.spent = 15; saveCloset(); });
+  await openClosetFromStart(page);
+  await page.click('.clTile[data-id="party"]');
+  assert.ok(await page.evaluate(() => SAY.closetOn.includes(el('closetSay').textContent)), 'one line in his voice');
+  await page.click('.clTile[data-id="beanie"]');
+  await page.click('.clTile[data-id="shades"]');
+  assert.deepEqual((await closetView(page)).on, { head: 'beanie', face: 'shades', neck: '' }, 'one item a slot: the beanie took the party hat\'s place');
+  assert.equal(await page.getAttribute('.clTile[data-id="beanie"]', 'aria-pressed'), 'true');
+  const worn = sel => page.evaluate(sel => [...document.querySelectorAll(sel + ' svg .cl')].map(g => g.getAttribute('class')).sort().join(' '), sel);
+  for (const sel of ['#closetCrumb', '#heroCrumb', '#mascot']) {
+    const w = await worn(sel);
+    assert.ok(w.includes('cl-beanie') && w.includes('cl-shades') && !w.includes('cl-party'), sel + ' wears it: ' + w);
+  }
+  await page.reload(); await page.waitForFunction(() => typeof closet !== 'undefined' && !!closet.met);
+  assert.deepEqual((await closetView(page)).on, { head: 'beanie', face: 'shades', neck: '' }, 'kept across a reload');
+  await page.waitForFunction(() => hero.card === el('startCard'));
+  assert.ok((await worn('#startCard #heroCrumb')).includes('cl-beanie'), 'the menu crumb wears it after a reload');
+  await play(page); await dealt(page); await frames(page, 4);
+  await page.waitForFunction(() => !el('mascot').hidden);
+  assert.ok((await worn('#mascot')).includes('cl-beanie') && (await worn('#mascot')).includes('cl-shades'), 'the board mascot wears it');
+  // every mood keeps it (the toy's held face, fainted, a charged cannonball)
+  await page.evaluate(() => { toy.mode = 'held'; }); await frames(page, 3);
+  assert.ok(await page.evaluate(() => el('mascot').classList.contains('grab') && !!el('mascot').querySelector('.cl-beanie')));
+  await page.evaluate(() => { toy.mode = 'rim'; gameOver(); }); await frames(page, 3);
+  assert.ok(await page.evaluate(() => el('mascot').classList.contains('faint') && !!el('mascot').querySelector('.cl-beanie')), 'fainted, hat askew but on');
+  // take it off from the menu (Home), mid-run state kept
+  await page.click('#overMenuBtn'); await page.waitForFunction(() => hero.card === el('menuCard'));
+  await page.waitForTimeout(1700);                          // the crumb has dropped onto the logo
+  await page.click('#menuCard #heroCrumb', { force: true });   // (it breathes, so it is never "stable")
+  await page.waitForSelector('#closetCard:not([hidden])');
+  assert.equal(await page.evaluate(() => hero.crumb.className.startsWith('smug')), true, 'he smirks first, as before');
+  await page.click('.clTile[data-id="beanie"]');
+  assert.ok(await page.evaluate(() => SAY.closetOff.includes(el('closetSay').textContent)));
+  assert.deepEqual((await closetView(page)).on, { head: '', face: 'shades', neck: '' });
+  for (const sel of ['#heroCrumb', '#mascot']) assert.ok(!(await worn(sel)).includes('cl-beanie'), sel + ' took it off');
+  await page.click('#closetBack');
+  assert.equal(await page.isVisible('#menuCard'), true, 'back to the menu she came from');
+  // the mascot switched off: nothing on the board, the closet still works from the menu
+  await page.evaluate(() => { CFG.FX_MASCOT = false; });
+  await page.click('#menuCard #heroCrumb', { force: true }); await page.waitForSelector('#closetCard:not([hidden])');
+  await page.click('.clTile[data-id="party"]');
+  assert.equal((await closetView(page)).on.head, 'party');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
+test('closet: bad or old closet data is dropped safely (unknown ids, unearned feat items, wrong types)', async ({ page, errors }) => {
+  const bad = [
+    'not json', '[]', '{"v":2,"own":["party"],"spent":1}',
+    JSON.stringify({ v: 1, own: ['party', 'bogus', 'crown', 7, null], on: { head: 'crown', face: 'party', neck: 'bow', hat: 'party' }, spent: -3, ot: 'x', seen: 'all' }),
+    JSON.stringify({ v: 1, own: 'party', on: 'party', spent: 1.5 }),
+  ];
+  const want = [[[], { head: '', face: '', neck: '' }, 0], [[], { head: '', face: '', neck: '' }, 0], [[], { head: '', face: '', neck: '' }, 0],
+    [['party'], { head: '', face: '', neck: '' }, 0], [[], { head: '', face: '', neck: '' }, 0]];
+  for (let i = 0; i < bad.length; i++) {
+    await page.evaluate(s => localStorage.setItem('crumble.closet', s), bad[i]);
+    await page.reload(); await page.waitForFunction(() => typeof closet !== 'undefined' && !!closet.met);
+    const v = await closetView(page);
+    assert.deepEqual([v.own, v.on, v.spent], want[i], 'case ' + i + ': ' + bad[i]);
+  }
+  await page.evaluate(() => localStorage.setItem('crumble.closet', JSON.stringify({ v: 1, own: ['party'], on: { head: 'party', face: '', neck: '' }, spent: 2, ot: 5 })));
+  await page.reload(); await page.waitForFunction(() => typeof closet !== 'undefined' && !!closet.met);
+  assert.deepEqual(await closetView(page).then(v => [v.own, v.on.head, v.spent]), [['party'], 'party', 2], 'a good save loads');
+  assert.ok(await page.evaluate(() => !!document.querySelector('#heroCrumb svg .cl-party')));
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
+});
+
+test('closet: iCloud merge: bought items by union, spent by max, the outfit from the later change (or this phone\'s when unknown)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    dare.st.cookies = 10; closet.own = new Set(['party']); closet.spent = 2; closet.on = { head: 'party', face: '', neck: '' }; closet.ot = 1000;
+    const out = {};
+    out.older = cloudMerge({ v: 1, closet: { own: ['bow', 'bogus', 'crown'], spent: 1, on: { head: '', face: '', neck: 'bow' }, ot: 500 } });
+    out.a = { own: [...closet.own].sort(), spent: closet.spent, on: { ...closet.on } };
+    out.noTime = cloudMerge({ v: 1, closet: { own: [], spent: 5, on: { head: '', face: '', neck: 'bow' } } });
+    out.b = { spent: closet.spent, on: { ...closet.on } };
+    out.newer = cloudMerge({ v: 1, closet: { own: [], spent: 3, on: { head: 'crown', face: 'round', neck: 'bow' }, ot: 2000 } });
+    out.c = { spent: closet.spent, on: { ...closet.on }, ot: closet.ot };
+    out.same = cloudMerge({ v: 1, closet: cloudBlob().closet });
+    out.junk = cloudMerge({ v: 1, closet: { own: 'x', spent: 'y', on: 3, ot: -1 } });
+    out.blob = cloudBlob().closet;
+    out.saved = JSON.parse(localStorage.getItem('crumble.closet') || 'null');
+    return out;
+  });
+  assert.equal(r.older, true);
+  assert.deepEqual(r.a, { own: ['bow', 'party'], spent: 2, on: { head: 'party', face: '', neck: '' } }, 'union of what was bought (no unknown or feat ids), spent by max, an older outfit loses');
+  assert.equal(r.noTime, true);
+  assert.deepEqual(r.b, { spent: 5, on: { head: 'party', face: '', neck: '' } }, 'no time on the copy: this phone keeps its outfit');
+  assert.deepEqual(r.c, { spent: 5, on: { head: '', face: '', neck: 'bow' }, ot: 2000 }, 'the later outfit wins, without what this phone does not own (crown unearned, round glasses not bought)');
+  assert.equal(r.same, false); assert.equal(r.junk, false, 'bad data changes nothing');
+  assert.deepEqual(r.blob, { own: ['bow', 'party'], spent: 5, on: { head: '', face: '', neck: 'bow' }, ot: 2000 });
+});
+
+test('closet: the card fits and scrolls at 390x844 and 375x667, and Back returns to where she came from', async ({ page }) => {
+  await page.evaluate(() => { dare.st.cookies = 6; });
+  for (const [w, h] of [[390, 844], [375, 667]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await openClosetFromStart(page);
+    const r = await page.evaluate(() => {
+      const R = id => el(id).getBoundingClientRect(), L = el('closetList');
+      return { back: R('closetBack').bottom, crumb: R('closetCrumb').top, list: L.scrollHeight > L.clientHeight, listH: L.clientHeight, card: el('closetCard').scrollHeight <= innerHeight + 1,
+        tiles: document.querySelectorAll('.clTile').length, wide: Math.max(...[...document.querySelectorAll('.clTile')].map(t => t.getBoundingClientRect().right)) };
+    });
+    assert.ok(r.back <= h && r.crumb >= 0 && r.card, `${w}x${h}: everything on screen ${JSON.stringify(r)}`);
+    assert.ok(r.list && r.listH >= 200, `${w}x${h}: the items scroll in their own list ${JSON.stringify(r)}`);
+    assert.ok(r.wide <= w && r.tiles >= 14, `${w}x${h}: ${r.tiles} tiles inside the screen`);
+    await page.evaluate(() => { el('closetList').scrollTop = 1e4; });
+    assert.ok(await page.evaluate(() => { const b = document.querySelector('.clTile[data-id="cape"]').getBoundingClientRect(); return b.bottom <= el('closetBack').getBoundingClientRect().top; }), 'the last tile scrolls into view above Back');
+    await page.click('#closetBack');
+    assert.deepEqual(await page.evaluate(() => [el('closetCard').hidden, el('goalsCard').hidden]), [true, false], 'back to Goals');
+    await page.click('#goalsBack');
+    await page.evaluate(() => { el('menuCard').hidden = true; el('startCard').hidden = false; });
+  }
+});
+
+test('closet: the dot shows on the Goals tile and the closet button when something new is in reach, and clears when she opens the closet; a feat earned mid-run gets one quiet line', async ({ page }) => {
+  const dots = () => page.evaluate(() => ['startGoals', 'menuGoals', 'goalsCloset'].map(id => el(id).classList.contains('dot')));
+  await frames(page, 2);
+  assert.deepEqual(await dots(), [false, false, false], 'nothing in reach');
+  await page.evaluate(() => { dare.st.cookies = 2; });
+  await page.waitForFunction(() => el('startGoals').classList.contains('dot'));
+  assert.deepEqual(await dots(), [true, true, true], 'she can afford the party hat');
+  await openClosetFromStart(page);
+  assert.deepEqual(await dots(), [false, false, false], 'seen: gone');
+  await page.click('#closetBack'); await page.click('#goalsBack');
+  await page.reload(); await page.waitForFunction(() => typeof closet !== 'undefined' && !!closet.met);
+  await frames(page, 40);
+  assert.deepEqual(await dots(), [false, false, false], 'and stays gone after a reload');
+  await page.evaluate(() => { dare.st.cookies = 3; });                  // the bow tie is new in reach
+  await page.waitForFunction(() => el('startGoals').classList.contains('dot'));
+  // a feat earned in a run: a dot and one line at a quiet moment, play not interrupted
+  await page.evaluate(() => { CFG.DARES = false; });
+  await play(page); await dealt(page); await page.waitForFunction(() => !el('mascot').hidden && !hero.falling);
+  await page.evaluate(() => { say.last = -1e9; say.until = 0; stats.sweeps = 10; });
+  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === "there's something new in my closet.", null, { timeout: 8000 })
+    .catch(async e => { throw new Error(e.message + ' ' + JSON.stringify(await page.evaluate(() => ({ tell: closet.tell, met: [...closet.met], q: dare.q.length, quiet: dareQuiet(performance.now()), state, paused, dealing, banners: banners.length, say: el('crumbSay').textContent, hid: el('crumbSay').hidden, hc: !!hero.card, last: say.last, now: performance.now() })))); });
+  assert.deepEqual(await page.evaluate(() => [state, paused, el('closetCard').hidden, el('menuGoals').classList.contains('dot')]), ['play', false, true, true], 'no interruption; the dot is up');
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => closet.tell), false, 'said once');
+  await page.click('#pauseBtn'); await page.click('#pauseHome'); await page.waitForFunction(() => hero.card === el('menuCard'));
+  await page.click('#menuGoals'); await page.click('#goalsCloset');
+  assert.deepEqual(await dots(), [false, false, false]);
+  assert.equal(await tileText(page, 'cape'), 'Tap to wear');
+});
+
 // ── Avalanche (js/avalanche.js) ──
 const AVA_ROWS = ['01111111', '10000000', '11100000', '00011100', '00000011', '11011000', '00100111', '10110110'];
 const boardStr = page => page.evaluate(() => grid.map(r => r.map(g => g ? 1 : 0).join('')));

@@ -60,8 +60,8 @@ function checkGoals(announce=true){
 }
 
 /* ── the card ── */
-function goalsSub(){                                   // the Goals tile's line on the menus; (dares) the cookie jar once she has any
-  const st=streakNow(), ck=dare.st.cookies;
+function goalsSub(){                                   // the Goals tile's line on the menus; (dares) the cookie jar once she has any; (closet) the ones she can spend
+  const st=streakNow(), ck=dare.st.cookies?closetSpendable():0;
   if(ck) return ck+(ck===1?' cookie':' cookies')+(st?' · Streak '+st:'');
   return st?'🔥 '+st+(st===1?' day':' days')+' in a row':'Streak and unlocks';
 }
@@ -94,8 +94,8 @@ function renderGoals(){
   const gl=el('goalList'); gl.textContent='';
   for(const f of GOAL_FAMILIES){ const n=goalRung(f); if(n) gl.append(goalRow(f.text(n),f.val(),n)); }
   if(!gl.children.length) gl.append(Object.assign(document.createElement('p'),{className:'setnote',textContent:'Every goal done. Wow.'}));
-  const dw=daresWon(), dl=el('goalsDares');           // (dares) one line for the jar; hats come later
-  dl.hidden=!(dw||dare.st.cookies); dl.textContent='Dares won: '+dw+' · Cookies: '+dare.st.cookies;
+  const dw=daresWon(), dl=el('goalsDares');           // (dares) one line for the jar; (closet) the cookies she can spend
+  dl.hidden=!(dw||dare.st.cookies); dl.textContent='Dares won: '+dw+' · Cookies: '+closetSpendable();
   el('goalsDone').textContent=goals.done.size?goals.done.size+(goals.done.size===1?' goal':' goals')+' reached':'';
 }
 function openGoals(){

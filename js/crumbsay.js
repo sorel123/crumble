@@ -35,6 +35,11 @@ const SAY={
   dareNext:["double or nothing.","beginner's luck. again.","ok. a harder one."],
   dareFail:["knew it.","ha. knew it.","couldn't resist, huh?"],
   dareLost:["told you.","next time. maybe."],
+  // (closet) js/closet.js: dressing up, and a feat item earned mid-run
+  closetOn:["I look ridiculous.","...fine. I like it.","don't tell anyone.","this was your idea.","is this a look? it's a look."],
+  closetOff:["finally.","free at last.","...I kind of miss it."],
+  closetBuy:["you spent cookies on THIS?","worth every crumb.","ok. it's mine now."],
+  closetNew:["there's something new in my closet."],
 };
 const say={el:null,txt:'',kind:'',until:0,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){
