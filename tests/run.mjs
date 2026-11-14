@@ -4178,8 +4178,11 @@ test('C1 slot tick: selection haptics in the app, one per new landing cell, none
   assert.deepEqual(await take(), [], 'same cell: no tick');
   p = at(3, 4); await page.mouse.move(p.x, p.y);
   assert.deepEqual(await take(), ['tick'], 'a different cell: a tick');
+  const tickMs = await page.evaluate(() => { const v = CFG.SLOT_TICK_MS; CFG.SLOT_TICK_MS = 5000; return v; });   // the window stretched for this one step: two test round-trips inside a real 40 ms is a race on a slow runner
+  assert.equal(tickMs, 40, 'ticks are 40 ms apart at least');
   p = at(3, 5); await page.mouse.move(p.x, p.y);
-  assert.deepEqual(await take(), [], 'inside 40 ms: no second tick');
+  assert.deepEqual(await take(), [], 'inside the window: no second tick');
+  await page.evaluate(v => { CFG.SLOT_TICK_MS = v; }, tickMs);
   p = at(40, 3); await page.mouse.move(p.x, p.y); await page.evaluate(() => new Promise(r => setTimeout(r, 60)));
   assert.deepEqual(await take(), [], 'slot gone: no tick');
   await page.mouse.up();
