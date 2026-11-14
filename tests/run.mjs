@@ -3573,6 +3573,25 @@ test('crumb last chance: out of room with a charged crumb the run holds; a canno
   await page.waitForFunction(() => !toy.fire && banners.some(b => b.txt === 'SAVED!'), null, { timeout: 9000 });
   await page.waitForFunction(() => toy.mode === 'rim', null, { timeout: 9000 });
   assert.deepEqual(await page.evaluate(() => [state, stuck, toyHot()]), ['play', false, false], 'room was made: the run goes on');
+  // while the run holds no piece can be picked up (none fits; a stray touch on the tray must not leave a piece hanging)
+  await jam(true);
+  const g = await geometry(page);
+  await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
+  assert.equal(await page.evaluate(() => drag === null && pendingPress === null), true, 'no pickup during the last chance');
+  await page.mouse.up();
+  await page.evaluate(() => { toy.hot = false; stuck = false; syncActions(); });
+  // a held piece whose lift went missing: the lift is heard even if the crumb's own handler stops it, and the next first finger sends a stale piece home
+  await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
+  assert.equal(await page.evaluate(() => !!drag), true, 'a piece is held');
+  await page.evaluate(() => { toy.id = drag.id; el('mascot').dispatchEvent(new PointerEvent('pointerup', { pointerId: drag.id, bubbles: true })); toy.id = -1; });
+  assert.equal(await page.evaluate(() => drag), null, 'a lift on the crumb still ends the drag');
+  await page.mouse.up();
+  await page.waitForFunction(() => !ret);
+  await page.evaluate(() => { startDrag(77, slotRect(1).x + slotRect(1).w / 2, slotRect(1).y + slotRect(1).h / 2, 'touch'); });
+  assert.equal(await page.evaluate(() => !!drag && drag.id === 77), true, 'a piece held by a finger that is gone');
+  await page.evaluate(() => dispatchEvent(new PointerEvent('pointerdown', { pointerId: 78, isPrimary: true, pointerType: 'touch', clientX: 5, clientY: 5, bubbles: true })));
+  assert.equal(await page.evaluate(() => drag === null && !!ret), true, 'the next first finger sends it home');
+  await page.waitForFunction(() => !ret);
   // no charge: the same jam ends the run
   await jam(false);
   await page.waitForFunction(() => state === 'over', null, { timeout: 4000 });
@@ -4159,8 +4178,11 @@ test('C1 slot tick: selection haptics in the app, one per new landing cell, none
   assert.deepEqual(await take(), [], 'same cell: no tick');
   p = at(3, 4); await page.mouse.move(p.x, p.y);
   assert.deepEqual(await take(), ['tick'], 'a different cell: a tick');
+  const tickMs = await page.evaluate(() => { const v = CFG.SLOT_TICK_MS; CFG.SLOT_TICK_MS = 5000; return v; });   // the window stretched for this one step: two test round-trips inside a real 40 ms is a race on a slow runner
+  assert.equal(tickMs, 40, 'ticks are 40 ms apart at least');
   p = at(3, 5); await page.mouse.move(p.x, p.y);
-  assert.deepEqual(await take(), [], 'inside 40 ms: no second tick');
+  assert.deepEqual(await take(), [], 'inside the window: no second tick');
+  await page.evaluate(v => { CFG.SLOT_TICK_MS = v; }, tickMs);
   p = at(40, 3); await page.mouse.move(p.x, p.y); await page.evaluate(() => new Promise(r => setTimeout(r, 60)));
   assert.deepEqual(await take(), [], 'slot gone: no tick');
   await page.mouse.up();
