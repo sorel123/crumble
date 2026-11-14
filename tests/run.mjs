@@ -7072,6 +7072,155 @@ test('voice: a transformation no longer multiplies the score by default; no copy
   assert.equal(r.oldPips, '×1.5'); assert.deepEqual(r.oldBanner, ['×1.5 · 9 MOVES']);
 });
 
+/* ── (report) Crumb's report card on the Endless game-over card ── */
+const RC_RUN = { score: 0, best: 100000, stop: 0, combo: 0, sweeps: 0, dares: 0, cookies: 0, offered: 0, throws: 1, gems: 0, stale: 0, deflates: 0, toy: true };
+const rcOver = (page, o = {}) => page.evaluate(o => {
+  el('overCard').hidden = true; tlStop(); state = 'play'; rescuesUsed = 0;
+  Object.assign(rc, { t: 1, g: 0, s: 0, d: 0, w: 0, c: 0, p: 0 }, o.rc || {});
+  score = o.score ?? 50000; chaseBest = o.best ?? 100000; best = Math.max(best, chaseBest); jJumps = o.jumps || 0;
+  gameOver();
+  return { shown: !el('rcBox').hidden, grade: el('rcStamp').textContent, line: el('rcLine').hidden || el('rcTxt').hidden ? null : el('rcTxt').textContent,
+    face: !el('rcFace').hidden && !!el('rcFace').querySelector('svg'), tip: el('overMsg').hidden ? '' : el('overMsg').textContent,
+    stopIn: el('overStop').parentNode.id, stop: el('overStop').textContent };
+}, o);
+
+test('report: the grade table (a dozen runs, a new best, a first game), nine steps D to A+, never an F', async ({ page }) => {
+  await play(page); await dealt(page);
+  const rows = [
+    // [run, grade]: score vs best 100k, stop, best combo, sweeps, dares + cookies
+    [{ score: 5000, stop: 0, combo: 2 }, 'D'],
+    [{ score: 20000, stop: 1, combo: 4 }, 'D'],
+    [{ score: 40000, stop: 1, combo: 5, sweeps: 1 }, 'C'],
+    [{ score: 50000, stop: 2, combo: 6, sweeps: 1 }, 'C+'],
+    [{ score: 60000, stop: 3, combo: 6, sweeps: 1 }, 'B−'],
+    [{ score: 60000, stop: 3, combo: 6, sweeps: 1, dares: 1 }, 'B'],
+    [{ score: 70000, stop: 4, combo: 8, sweeps: 2, dares: 1 }, 'B+'],
+    [{ score: 90000, stop: 4, combo: 10, sweeps: 2, dares: 2 }, 'A−'],
+    [{ score: 92000, stop: 5, combo: 10, sweeps: 2, dares: 2 }, 'A'],
+    [{ score: 90000, stop: 5, combo: 11, sweeps: 3, dares: 2 }, 'A+'],
+    [{ score: 100001, stop: 0, combo: 0 }, 'A−'],                         // a new best is never below A-
+    [{ score: 150000, stop: 5, combo: 12, sweeps: 3, dares: 3 }, 'A+'],           // a great new best
+    [{ score: 30000, best: 0, stop: 3, combo: 8, sweeps: 2, dares: 1 }, 'B'],    // a first game: the other parts scaled up
+    [{ score: 0, best: 0, stop: 0, combo: 0 }, 'D'],                               // the worst there is: still a D
+  ];
+  const got = await page.evaluate(rows => rows.map(([r]) => reportGrade({ best: 100000, sweeps: 0, dares: 0, cookies: 0, ...r })), rows);
+  rows.forEach(([r, g], i) => assert.equal(got[i].grade, g, JSON.stringify(r) + ' -> mark ' + got[i].mark));
+  assert.ok(got.every(g => g.mark >= 0 && g.mark <= 100));
+  const all = await page.evaluate(() => { const s = new Set(); for (let m = 0; m <= 100; m++) s.add(reportGrade({ score: m * 1000, best: 100000, stop: m / 20, combo: m / 8, sweeps: m / 30, dares: m / 30 }).grade); return [...s]; });
+  assert.deepEqual(all, ['D', 'C', 'C+', 'B−', 'B', 'B+', 'A−', 'A', 'A+'], 'nine steps, in order, and no F');
+  assert.ok(await page.evaluate(() => Array.isArray(CFG.REPORT_W) && Array.isArray(CFG.REPORT_CUTS) && CFG.REPORT_CUTS.length === 9 && CFG.REPORT_W.reduce((a, b) => a + b, 0) === 100));
+});
+
+test('report: each quip has its own condition, they come in priority order, else the grade band; the same run always gets the same line', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate(R => {
+    const L = (o) => reportLine({ ...R, ...o }).key;
+    return {
+      best: L({ score: 120000, stop: 5, gems: 12 }), space: L({ stop: 5, gems: 12 }), cannon: L({ stop: 2, gems: 10, stale: 1 }), cannon9: L({ stop: 2, gems: 9 }),
+      dares: L({ stop: 2, offered: 2, dares: 2, stale: 1 }), daresSome: L({ stop: 2, offered: 2, dares: 1 }), stale: L({ stop: 2, stale: 1, deflates: 1 }),
+      deflate: L({ stop: 2, deflates: 1, throws: 0 }), ignored: L({ stop: 2, throws: 0 }), ignoredNoToy: L({ stop: 2, throws: 0, toy: false, score: 90000 }),
+      quick: L({ stop: 0, throws: 0 }), low: L({ stop: 1, score: 10000 }), mid: L({ stop: 3, score: 60000, combo: 8, sweeps: 1, dares: 1 }), high: L({ stop: 4, score: 99000, combo: 12, sweeps: 3, dares: 3 }),
+      same: [1, 2, 3].map(() => reportLine({ ...R, stop: 3, score: 61234, combo: 7 }).txt), other: reportLine({ ...R, stop: 3, score: 61235, combo: 7 }).txt,
+      lines: Object.keys(SAY).filter(k => /^rc/.test(k)).map(k => [k, SAY[k].length, Math.max(...SAY[k].map(s => s.length)), SAY[k].every(s => s === s.toLowerCase() || /[A-Z]{2}/.test(s))]),
+    }; }, RC_RUN);
+  assert.deepEqual([r.best, r.space, r.cannon, r.cannon9, r.dares, r.daresSome, r.stale, r.deflate, r.ignored, r.ignoredNoToy, r.quick],
+    ['rcBest', 'rcSpace', 'rcCannon', 'rcLow', 'rcDares', 'rcLow', 'rcStale', 'rcDeflate', 'rcIgnored', 'rcMid', 'rcQuick']);
+  assert.deepEqual([r.low, r.mid, r.high], ['rcLow', 'rcMid', 'rcHigh']);
+  assert.ok(r.same.every(t => t === r.same[0]), 'the same run, the same line');
+  for (const [k, n, len, lower] of r.lines) { assert.ok(n >= 2 && n <= 3, k + ': ' + n + ' lines'); assert.ok(len <= 44, k + ' fits the card: ' + len); assert.ok(lower, k + ' is lowercase'); }
+  assert.ok(await page.evaluate(() => { let n = 0; const r0 = rndSrc, mr = Math.random; rndSrc = () => { n++; return .5; }; Math.random = () => { n++; return .5; };
+    reportLine({ score: 1, best: 2, stop: 1, combo: 1 }); reportShow(); rndSrc = r0; Math.random = mr; return n === 0; }), 'no dice at all');
+});
+
+test('report: the card shows the grade, his face and his line beside the sky line on an Endless game over; the counters survive a resume; old saves load', async ({ page }) => {
+  await play(page); await dealt(page);
+  await rcOver(page, { score: 30000, best: 100000 });   // the first one may name new skins
+  const a = await rcOver(page, { score: 30000, best: 100000, rc: { t: 0, c: 5 } });
+  assert.match(a.stop, /^You reached Day\./);
+  assert.deepEqual({ ...a, line: !!a.line, stop: true }, { shown: true, grade: 'C', line: true, face: true, tip: '', stopIn: 'rcR', stop: true }, 'Endless: stamp, face and line, the sky line beside the stamp, no tip');
+  assert.ok(await page.evaluate(t => SAY.rcIgnored.includes(t), a.line), 'never threw him: ' + a.line);
+  // the counters ride in the run save and come back; an older save has zeros
+  const s = await page.evaluate(() => { el('overCard').hidden = true; state = 'play'; tray = [{ s: SHAPES[0], gi: 1 }, null, null];
+    Object.assign(rc, { t: 3, g: 11, s: 1, d: 2, w: 1, c: 9, p: 2 }); const snap = JSON.parse(JSON.stringify(snapshot()));
+    start(); const fresh = { ...rc }; restore(snap); const back = { ...rc };
+    delete snap.rc; start(); restore(snap); const old = { ...rc };
+    const bad = JSON.parse(JSON.stringify(snap)); bad.rc = { t: -1, g: 'x', s: 1.5, d: 2 }; start(); restore(bad);
+    return { saved: snapshot.toString().includes('rc:'), fresh, back, old, bad: { ...rc } }; });
+  assert.deepEqual(s.fresh, { t: 0, g: 0, s: 0, d: 0, w: 0, c: 0, p: 0 }, 'a new run starts at zero');
+  assert.deepEqual(s.back, { t: 3, g: 11, s: 1, d: 2, w: 1, c: 9, p: 2 }, 'a resumed run grades right');
+  assert.deepEqual(s.old, { t: 0, g: 0, s: 0, d: 0, w: 0, c: 0, p: 0 }, 'an older save loads with zeros');
+  assert.deepEqual(s.bad, { t: 0, g: 0, s: 0, d: 2, w: 0, c: 0, p: 0 }, 'bad values are dropped');
+  // the hooks: a throw, a cannonball's best, a stale cookie, a deflate, a dare beaten, a combo, a sweep
+  const h = await page.evaluate(() => { rcReset(); dareFlick(); dareFlick(); dareCannon(7); dareCannon(4); CFG.CANNON_DEFLATE = true; toy.hot = true; toy.pow = 2; toyDeflate(); toy.hot = false;
+    ck.g = grid.flat().find(Boolean) || null; cookieGone();
+    dare.id = 'drop2'; dare.s = 0; dareWin();
+    grid = empty(); grid[0] = grid[0].map((_, c) => c ? { gi: 0, t: 1, f: 0, l: 0 } : null); tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, null]; combo = 3; place(0, 0, 0);
+    return { ...rc }; });
+  assert.deepEqual(h, { t: 2, g: 7, s: 1, d: 1, w: 1, c: 4, p: 1 }, 'each hook bumps its counter');
+});
+
+test('report: not in Daily, Challenge or Adventure; the switch off hides it (and the tip is back); mascot off: no face; talk off: no line', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { mode = 'daily'; dk = dailyKey(); lv = { lines: 0, pieces: 0, combo: 0, swept: false }; });
+  assert.equal((await rcOver(page)).shown, false, 'Daily: none');
+  await page.evaluate(() => { mode = 'adventure'; lvl = LEVELS[0]; lv = { lines: 0, pieces: 0, combo: 0, swept: false }; });
+  const adv = await rcOver(page); assert.equal(adv.shown, false, 'Adventure: none'); assert.notEqual(adv.tip, '', 'its own message stays');
+  await page.evaluate(() => { mode = 'endless'; lvl = null; dk = ''; });
+  const ch = await page.evaluate(() => typeof chalOver === 'function' && /reportShow/.test(chalOver.toString()));
+  assert.equal(ch, false, 'Challenge has its own card');
+  assert.equal(await page.evaluate(() => /reportShow/.test(l3After.toString())), false, 'the Lab never reaches it');
+  await page.evaluate(() => { CFG.REPORT_CARD = false; });
+  const off = await rcOver(page);
+  assert.equal(off.shown, false); assert.ok(off.tip.length > 10, 'switched off: the old tip is back: ' + off.tip); assert.equal(off.stopIn, 'overCard');
+  await page.evaluate(() => { CFG.REPORT_CARD = true; CFG.FX_MASCOT = false; });
+  const nm = await rcOver(page); assert.deepEqual([nm.shown, nm.face, !!nm.line], [true, false, true], 'mascot off: the grade and the line, no face');
+  await page.evaluate(() => { CFG.FX_MASCOT = true; CFG.FX_CRUMB_TALK = false; });
+  const nt = await rcOver(page); assert.deepEqual([nt.shown, nt.face, nt.line], [true, true, null], 'talk off: the grade without the line');
+  await page.evaluate(() => { CFG.FX_MASCOT = false; });
+  const both = await page.evaluate(() => { el('overCard').hidden = true; state = 'play'; gameOver(); return [!el('rcBox').hidden, el('rcLine').hidden]; });
+  assert.deepEqual(both, [true, true], 'both off: the stamp alone beside the sky line');
+});
+
+test('report: the stamp thumps in after the score (fxBusy only while it moves; Reduce Motion: it just appears), and the card fits 390x844 and 375x667 with the sky line, the replay and Second chance', async ({ page }) => {
+  await play(page); await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => tlReset());
+  for (const [r, c] of [[0, 0], [1, 1], [2, 2], [3, 3]]) await tlPlace(page, r, c);
+  await dealt(page);
+  const lay = async () => page.evaluate(() => { const r = id => el(id).getBoundingClientRect();
+    return { box: r('rcBox'), stamp: r('rcStamp'), score: r('overScore'), tl: r('tlBoard'), tlShown: !el('tlBoard').hidden, revive: !el('reviveBox').hidden, btns: ['reviveBtn', 'shareBtn', 'againBtn', 'overMenuBtn'].map(r), h: innerHeight, w: innerWidth }; });
+  const fits = (l, tag) => {
+    assert.ok(l.tlShown && l.revive, tag + ': the replay and Second chance are on the card');
+    assert.ok(l.box.top >= l.score.bottom - 2 && l.box.bottom <= l.tl.top + 1, tag + ': the report row sits between the score and the replay: ' + JSON.stringify([l.score, l.box, l.tl]));
+    assert.ok(l.box.left >= 0 && l.box.right <= l.w, tag + ': inside the screen');
+    assert.ok(l.btns.every(b => b.bottom <= l.h), tag + ': every button on screen: ' + JSON.stringify(l.btns.map(b => Math.round(b.bottom))) + ' / ' + l.h);
+  };
+  const over = (o) => page.evaluate(o => { el('overCard').hidden = true; tlStop(); state = 'play'; rescuesUsed = 0; score = o.score; chaseBest = best = o.best; Object.assign(rc, { t: 0, g: 12, c: 6 });
+    el('overMsg').textContent = ''; gameOver(); return { busy: fxBusy(), inCls: el('rcStamp').classList.contains('in'), reportIn: reportIn - performance.now() }; }, o);
+  const a = await over({ score: 61234, best: 100000 });
+  assert.ok(a.inCls && a.busy && a.reportIn > 800, 'it thumps in, at full frame rate while it moves');
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => performance.now() < reportIn), false, 'then pacing idles again');
+  fits(await lay(), '390x844');
+  // a long new-skin message too
+  await page.evaluate(() => { el('overMsg').hidden = false; el('overMsg').textContent = 'New skin unlocked: Candy, Glass!'; });
+  fits(await lay(), '390x844 + new skin');
+  await page.setViewportSize({ width: 375, height: 667 }); await frames(page, 4);
+  await over({ score: 61234, best: 100000 });
+  await page.evaluate(() => { el('overMsg').hidden = false; el('overMsg').textContent = 'New skin unlocked: Candy!'; });
+  fits(await lay(), '375x667');
+  await page.setViewportSize({ width: 390, height: 844 }); await frames(page, 4);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
+  if (await page.evaluate(() => state) !== 'play') await play(page);
+  await dealt(page);
+  assert.equal(await page.evaluate(() => reduce), true);
+  const rm = await over({ score: 61234, best: 100000 });
+  assert.deepEqual([rm.inCls, rm.reportIn > 0], [false, false], 'Reduce Motion: it is just there');
+  assert.ok(await page.evaluate(() => typeof shareText === 'function' && !/[A-D][+−]?\b.*grade/i.test(shareText())), 'the share text is unchanged');
+});
+
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

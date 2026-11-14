@@ -75,6 +75,18 @@ const SAY={
   rsStar3:["perfect. don't get smug."],
   rsTop:["from the top. watch."],
   rsCookie:["fine. one cookie. for the cousins."],
+  // (report) Crumb's report card on the game-over card (flow.js reportLine): a quip when one applies, else the grade's band
+  rcBest:["new best. don't let it go to your head.","new best. i'll allow it.","new best. i'm telling everyone."],
+  rcSpace:["space. fine. i'm impressed.","you took me to space. wow.","space! okay, that was cool."],
+  rcCannon:["that cannonball carried you. you're welcome.","that was all me. the cannonball.","you're welcome. for the cannonball."],
+  rcDares:["every dare. fine. you win.","all my dares. who ARE you?","beat them all. show-off."],
+  rcStale:["you let my cookie go stale. noted.","my cookie went stale. i saw.","a stale cookie. unforgivable."],
+  rcDeflate:["i was HUGE once. remember?","you let me deflate. hmm.","i had so much air in me."],
+  rcIgnored:["you ignored me the whole time.","not one throw. rude.","i'm a toy. throw me sometimes."],
+  rcQuick:["that was quick.","blink and you missed it.","warm-up. right?"],
+  rcLow:["we'll call that practice.","the board won. this time.","deep breath. go again."],
+  rcMid:["solid. not legendary.","decent. i've seen worse.","respectable. barely."],
+  rcHigh:["okay. that was really good.","i'd frame that one.","you're kind of good at this."],
   quiet:["ok. now it gets interesting.","warm-up's over.","fine. now the fun stuff."],   // (quiet) Day: Volcano, the cannonball and the x2 meter are awake
 };
 const say={stop:0,stopDue:'',stopT:0,quiet:false,qSync:true,qDue:false,qT:0,el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};

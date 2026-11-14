@@ -119,7 +119,7 @@ function dareIssue(){
 }
 function dareWin(){
   const d=dareDef(dare.id); if(!d||dare.s!==0) return;
-  dare.s=1; dare.nextAt=performance.now()+CFG.DARE_NEXT_MS;
+  dare.s=1; dare.nextAt=performance.now()+CFG.DARE_NEXT_MS; rc.w++;   // (report) dares beaten this run
   const s=dare.st; s.cookies++; s.won[d.id]=(s.won[d.id]|0)+1;
   const t=dailyKey(), dy=s.days;
   if(dy.last!==t){ dy.streak=dy.last===addDays(t,-1)?dy.streak+1:1; dy.last=t; dy.best=Math.max(dy.best,dy.streak); }
@@ -147,11 +147,13 @@ function dareDrop(rows,cols,all,swept,gone,avaHit,star){
   else dareTick();
 }
 function dareCannon(n){                                // crumbtoy.js toyFireEnd: a cannonball broke n gems
+  rc.g=Math.max(rc.g,n);                               // (report) the run's best throw
   if(!dareOpen()) return;
   const d=dareDef(dare.id); if(d.kind!=='cannon') return;
   dare.p=Math.max(dare.p,Math.min(n,d.need)); if(n>=d.need) dareWin();
 }
 function dareFlick(){                                  // crumbtoy.js toyUp: she threw the crumb
+  rc.t++;                                              // (report) throws this run
   if(dareOpen()&&dareDef(dare.id).kind==='noflick') dareFail();
 }
 function dareTick(){                                   // the ones read off the game's state

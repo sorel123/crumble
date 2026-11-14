@@ -355,6 +355,11 @@ const CFG = {
   TOY_SULK_MS:       14000,
   TOY_SULK_HOLD:     6000,   // (toy) how long the sulk lasts
   TOY_BACK_MS:       560,    // (toy) the hop from the floor back to the rim
+  REPORT_CARD:       true,   // (report) Endless game-over card: a grade (D .. A+, never an F) stamped beside the sky line and one line from Crumb (flow.js reportGrade)
+  REPORT_W:          [45,25,15,10,5],   // (report) points of the 0-100 mark: score vs her best before the run, sky stop, best combo, sweeps, dares beaten + cookies eaten
+  REPORT_TOP:        [1,5,12,3,3],      // (report) ... each part is full at: (score: her best), stop 5 (Space), combo 12, 3 sweeps, 3 dares + cookies
+  REPORT_CUTS:       [0,25,35,45,55,65,75,84,92],   // (report) the mark each grade starts at: D, C, C+, B-, B, B+, A-, A, A+. A new best is never below A- (REPORT_CUTS[6])
+  REPORT_CANNON:     10,     // (report) gems one cannonball must break for "that cannonball carried you."
   QUIET_START:       true,   // (quiet) Endless: until the second sky stop (Day) no Volcano or other transformation, no cannonball charge and no bonus meter (hidden); the combo, fire, sweeps, Avalanche, dares and the cookie are as ever (game.js quietNow)
   AVALANCHE:         true,   // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). On since Jay tried it (2026-11-14)
   AVA_COMBO:         4,      // (Avalanche) the streak it can start from

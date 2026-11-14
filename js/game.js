@@ -447,7 +447,7 @@ function place(idx,r,c){
   }
   recDrop(idx,r,c,total,swept);                      // the play recorder (save.js; nothing when off)
   tlRecord();                                        // (7.5g) the board as this drop left it, for the game-over timelapse
-  if(mode!=='lab'){ stats.placed++; stats.lines+=total+avaLines; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++; }   // (Lab) puzzles count in no stats
+  if(mode!=='lab'){ stats.placed++; stats.lines+=total+avaLines; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++; rc.c=Math.max(rc.c,combo); if(swept) rc.p++; }   // (Lab) puzzles count in no stats
   playedToday(); checkGoals();                       // (4.2) the day counts, a reached goal gets its banner
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
   guideDrop(total,swept);                            // (1.1 D) the guided first game counts its lesson

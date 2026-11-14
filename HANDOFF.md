@@ -237,6 +237,7 @@ Top to bottom:
 | (rescue) | Rescue the Crumbs, the Lab's second game: three boards where crumbs sit on gems, a line clear drops them, the bottom row is the exit; fixed queues, stars by par, Undo/Reset/hint, progress in `crumble.lab` `.rescue` (iCloud backup), a cookie on each board's first rescue. `js/rescue.js`, `tools/rescue-check.mjs`. See the Rescue section at the end |
 | (quiet) | A quiet opening: in Endless, Volcano (and the other transformations), the cannonball's charge and the x2 bonus meter wait for the second sky stop (Day, about tray 8); the meter's chip is hidden until then and slides in, and Crumb says so once. `CFG.QUIET_START`. See the section at the end |
 | (voice) | Crumb is the one voice: the praise words (GOOD!, NICE!, GREAT! ...) are off by default (`CFG.PRAISE_WORDS`), Crumb remarks on big clears and now and then on a double; transformations no longer multiply the score (`TRANSFORM_MULT` 1.5 to 1). See the section at the end |
+| (report) | Crumb's report card: the Endless game-over card stamps a grade (D to A+, never an F) beside the sky line, with Crumb's face and one line (a quip when one applies, else one for the grade). `CFG.REPORT_CARD`, run counters saved as `rc`. See the section at the end |
 
 Details for each, oldest first:
 
@@ -2023,3 +2024,40 @@ multiplier beside the x2 bonus and the streak. Jay approved both changes.
 - **Check on the phone:** clear one, two and three lines: no word on the board, the stars still burst; a 3-line clear gets a
   Crumb line, a double now and then. A streak of 3 with three lines: COMBO 3 slams at once. Earn Volcano twice: the second card
   says "9 MOVES", and the score does not jump while it is live.
+
+## Crumb's report card (2026-11-14)
+
+The Endless game-over card used to end on a generic tip. Now Crumb grades the run: a stamped grade, his face and one line,
+in one row between the score and the replay. Endless only (Daily, Adventure, Challenge and the Lab keep their own cards).
+
+- **Switch.** `CFG.REPORT_CARD` (on), Admin "Crumb's report card on game over (Endless)". Off: the old tip is back and the
+  sky line sits where it did. `FX_MASCOT` off: no face. `FX_CRUMB_TALK` off: no line (the stamp alone beside the sky line).
+  A new-skin message is still shown above the row; the tip is dropped. The share card and share text are unchanged.
+- **The mark** (`reportGrade(run)` in flow.js, pure: no dice, no state). Five parts, each 0..1, weighted by `CFG.REPORT_W`
+  `[45,25,15,10,5]` and full at `CFG.REPORT_TOP` `[1,5,12,3,3]`:
+  score / her best before this run (`chaseBest`), sky stop / 5 (Space), best combo / 12, sweeps / 3, (dares beaten +
+  cookies eaten) / 3. Mark = weighted sum, 0..100, rounded.
+  - A new best (score > best before the run) counts the score part full and is never below A- (`REPORT_CUTS[6]`).
+  - A first game (no best yet) has no score part: the other four are scaled up to 100.
+- **Grades** by `CFG.REPORT_CUTS` `[0,25,35,45,55,65,75,84,92]`: D, C, C+, B-, B, B+, A-, A, A+ (the card uses a real minus
+  sign). No F. Bands for the colour and the fallback line: D..C+ low (orange), B-..B+ mid (gold), A-..A+ high (green).
+  Examples (best 100k): 5k at stop 0 = D; 40k, Day, combo 5, a sweep = C; 60k, Golden hour, combo 6, a sweep, a dare = B;
+  90k, Night, combo 10, 2 sweeps, 2 dares = A-; 90k, Space, combo 11, 3 sweeps, 2 dares = A+.
+  Admin sliders for each weight and each cut.
+- **The line** (`reportLine(run)`): the first quip that applies, in order: new best (`rcBest`), reached Space (`rcSpace`), a
+  cannonball broke `REPORT_CANNON` (10) gems or more (`rcCannon`), every dare offered was beaten (`rcDares`), a cookie went
+  stale (`rcStale`), he deflated (`rcDeflate`), the toy was on, she reached Day and never threw him (`rcIgnored`), it ended
+  before Day (`rcQuick`); else `rcLow` / `rcMid` / `rcHigh` by band. Three lines each in `SAY` (crumbsay.js), lowercase.
+  Which of the three: `hashStr` of score, stop, combo, sweeps, throws and gems, so the same run always reads the same.
+- **Counters** (`rc` in flow.js): `t` throws, `g` most gems one cannonball broke, `s` cookies gone stale, `d` deflates, `w`
+  dares beaten, `c` best combo, `p` sweeps (place and cannonball). Bumped from the existing hooks (dares.js `dareFlick`,
+  `dareCannon`, `dareWin`; cookie.js `cookieGone`; crumbtoy.js `toyDeflate` and the cannonball sweep; game.js `place()`),
+  reset in `clearRunFx`, saved with the run as **`rc`** (Endless only). An older save loads with zeros; bad values are dropped.
+- **Motion.** The stamp thumps in (scale and spin down to -9deg) 0.45 s after the card, 0.5 s long; `reportIn` keeps
+  `fxBusy()` on only for those ~1.05 s. Reduce Motion: it is just there.
+- **Fit.** At 390x844 and 375x667 the whole card (score, row, replay, Second chance, share, again, home) is on screen, with a
+  new-skin message too. Under 720 px tall the stamp is 46 px and the text a little tighter (test).
+- **Tests:** the five "report:" scenarios.
+- **Check on the phone:** lose an Endless run early (a D or C, "that was quick." or a low line), a middling one and a new best
+  (A- or better): the stamp lands after the score, the colour reads, the line is funny rather than mean, and the Home button
+  is on screen on a small phone. Admin "Mascot crumb" off: the stamp and line stay, the face goes.

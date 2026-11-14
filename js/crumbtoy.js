@@ -52,7 +52,7 @@ const toyHow=()=>CFG.CANNON_SLING?'pull Crumb back and let go':'flick Crumb at t
 /* (stakes) Fire now, or get greedy: the growth a charged crumb gained on this streak is lost when the streak dies (game.js place) */
 function toyDeflate(){
   if(!CFG.CANNON_DEFLATE||!toy.hot||toy.pow<1) return;
-  toy.pow=0;                                                        // the charge stays; toySize() eases it back to the plain charged size; place() saves the run after
+  toy.pow=0; rc.d++;                                                // (report) deflated this run. The charge stays; toySize() eases it back to the plain charged size; place() saves the run after
   toyPlay(0,t=>{ tone(t,{f0:620,f1:110,pdur:.36,dur:.4,vol:.022,type:'square'}); tone(t+.02,{f0:300,f1:80,pdur:.34,dur:.38,vol:.03,type:'triangle'}); });   // pffft
   if(!reduce&&masc.body) masc.body.animate([{transform:'scale(1.06,.9)'},{transform:'scale(.95,1.04)',offset:.5},{transform:'none'}],{duration:460,easing:'ease-out'});
   sayLine('deflate',true,true);
@@ -115,7 +115,7 @@ function toyFireEnd(){                                              // out of st
   pops.push({x:bx+B/2,y:by+cell*1.2,t:0,txt:'+'+f.pts,sub:'CANNONBALL ×'+f.n,combo:1,lines:1});
   glowT=Math.max(glowT,.8);
   if(state==='play'&&boardEmpty()){                                 // it broke the last gem: a clean sweep, with everything a drop's sweep brings (game.js)
-    score+=sweepPayoff(f.n,6,true); stats.sweeps++; mascotAct('sweep'); checkGoals(); dareDrop(0,0,0,true,false,false,false);   // (dares) a cannonball's sweep counts for a sweep dare
+    score+=sweepPayoff(f.n,6,true); stats.sweeps++; rc.p++; mascotAct('sweep'); checkGoals(); dareDrop(0,0,0,true,false,false,false);   // (dares) a cannonball's sweep counts for a sweep dare
   }
   if(state==='play') bestCheck(true);                               // and passing her best is NEW BEST, as for a drop
   updateDbg(); tlRecord();
