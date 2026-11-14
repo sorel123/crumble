@@ -49,6 +49,12 @@ const SAY={
   sputter:["one more miss and it's gone.","careful."],
   useme:["use me or lose me."],
   deflate:["pfff.","I was HUGE.","that was your fault."],
+  // (Lab) Clear it in three: js/lab.js
+  l3Open:["three pieces. empty board. go."],
+  l3Fail:["nope.","so close. not really."],
+  l3Solve:["...ok, that was clean."],
+  l3Hint:["want a hint? fine."],
+  l3Cookie:["fine. one cookie."],
 };
 const say={el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){

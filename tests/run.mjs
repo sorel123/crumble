@@ -5953,6 +5953,180 @@ test('stakes: Last Chance with the slingshot: a deflated crumb still holds the r
   await page.waitForFunction(() => toy.mode === 'rim', null, { timeout: 9000 });
   assert.deepEqual(await page.evaluate(() => [state, stuck, toyHot()]), ['play', false, false], 'room was made: the run goes on');
 });
+
+/* ── the Lab and "Clear it in three" (js/lab.js) ── */
+const L3_PRINT = 665944305;                                   // hashStr of the whole puzzle table: the 60 puzzles everyone plays. Change it on purpose only
+const labOpen = async (page, k) => {                  // the Lab from the start card, then puzzle k
+  await page.click('#startLab'); await page.click('#labList button[data-id=three]');
+  await page.evaluate(k => playL3(k), k);
+  await page.waitForFunction(k => mode === 'lab' && state === 'play' && l3 && l3.k === k, k);
+};
+const labPlay = (page, moves) => page.evaluate(moves => { for (const [i, r, c] of moves) place(i, r, c); }, moves);
+test('Lab: a slim Lab button beside Settings opens the Lab card (one tile per experiment) and Back returns; the menus fit 390x844 and 375x667', async ({ page }) => {
+  for (const [w, h] of [[390, 844], [375, 667]]) {
+    await page.setViewportSize({ width: w, height: h }); await frames(page, 2);
+    const r = await page.evaluate(() => { const s = el('startSettings').getBoundingClientRect(), l = el('startLab').getBoundingClientRect();
+      return { row: Math.abs(s.top - l.top) < 1 && l.left > s.right, fits: l.bottom <= innerHeight && s.bottom <= innerHeight, h: Math.abs(s.height - l.height) < 1 }; });
+    assert.deepEqual(r, { row: true, fits: true, h: true }, w + 'x' + h);
+  }
+  await page.click('#startLab');
+  const c = await page.evaluate(() => ({ card: !el('labCard').hidden, line: el('labCard').querySelector('.sub').textContent,
+    tiles: [...document.querySelectorAll('#labList button')].map(b => [...b.children].map(x => x.textContent).join(' | ')) }));
+  assert.deepEqual(c, { card: true, line: "New things we are trying. Tell us what's fun.", tiles: ['🧩 Clear it in three | Three pieces. Leave the board empty. | 0 of 60'] });
+  assert.equal(await page.evaluate(() => LAB.length), 1, 'the registry has the one experiment');
+  await page.click('#labBack');
+  assert.deepEqual(await page.evaluate(() => ({ lab: el('labCard').hidden, menu: !el('menuCard').hidden, fits: el('menuClose').getBoundingClientRect().bottom <= innerHeight && el('menuLab').getBoundingClientRect().bottom <= innerHeight })),
+    { lab: true, menu: true, fits: true });
+  await page.setViewportSize({ width: 390, height: 844 }); await frames(page, 2);
+  assert.ok(await page.evaluate(() => el('menuClose').getBoundingClientRect().bottom <= innerHeight), 'the mode menu fits at 390x844');
+  // its own card: the big Play and the 60 numbers, only puzzle 1 open
+  await page.click('#menuLab'); await page.click('#labList button[data-id=three]');
+  const g = await page.evaluate(() => ({ play: el('l3Play').querySelector('b').textContent, n: document.querySelectorAll('#l3Grid .l3n').length,
+    open: [...document.querySelectorAll('#l3Grid .l3n')].filter(b => !b.disabled).map(b => b.dataset.k), back: el('l3Back').getBoundingClientRect().bottom <= innerHeight }));
+  assert.deepEqual(g, { play: 'Puzzle 1', n: 60, open: ['1'], back: true });
+  await page.click('#l3Back'); assert.equal(await page.isVisible('#labCard'), true, 'Back goes to the Lab card');
+});
+test('Lab: all 60 Clear-it-in-three puzzles are solvable, in their band, distinct, never swept early, and the table is what the generator makes', async ({ page, server }) => {
+  const r = await page.evaluate(() => {
+    let rolls = 0; const mr = Math.random; Math.random = () => { rolls++; return mr(); };
+    const made = l3MakeAll(); Math.random = mr;
+    const out = { match: JSON.stringify(made) === JSON.stringify(L3_TABLE), rolls, print: hashStr(JSON.stringify(L3_TABLE)), bad: [], keys: new Set(), bands: {} };
+    for (let k = 1; k <= 60; k++) {
+      const p = l3Puzzle(k), shapes = p.pieces.map(x => x.s), sol = l3Solve(p.lo, p.hi, shapes, 99), sets = [...sol.sets.values()];
+      const b = p.band, cap = L3_MAX[L3_BANDS.indexOf(b)];
+      let lo = p.lo, hi = p.hi, rows = 0, cols = 0;                  // the build's own solution, played out with clears
+      for (const [i, r, c] of p.sol) { const m = placeMasks(shapes[i]).find(x => x.r === r && x.c === c); if (!m || (lo & m.lo) || (hi & m.hi)) { lo = -1; break; } const ids = lineIds(lo | m.lo, hi | m.hi); for (let q = 0; q < 16; q++) if (ids & (1 << q)) { if (q < 8) rows++; else cols++; } applyBits(lo, hi, shapes[i], m); lo = _lo; hi = _hi; }
+      const blocked = s => s.seq.some(([i, r, c]) => { const m = placeMasks(shapes[i]).find(x => x.r === r && x.c === c); return (m.lo & p.lo) || (m.hi & p.hi); });
+      const ok = sol.n >= 1 && sol.n <= cap && !sol.early && lo === 0 && hi === 0 && p.n === sol.n
+        && (b === 'easy' ? sets.every(s => s.orders === 6) && !(rows && cols) && rows + cols <= 2
+          : b === 'medium' ? rows >= 1 && cols >= 1 && rows + cols <= 3 && !sets.every(blocked)
+          : sets.every(blocked));
+      if (!ok) out.bad.push(k + ':' + JSON.stringify({ n: sol.n, early: sol.early, rows, cols }));
+      out.keys.add(l3Key(p.lo, p.hi, p.pieces.map(x => SHAPES.indexOf(x.s))));
+      out.bands[b] = (out.bands[b] || 0) + 1;
+    }
+    const t = performance.now(); l3Cache.clear(); for (let k = 1; k <= 60; k++) l3Puzzle(k); out.openMs = performance.now() - t;
+    out.keys = out.keys.size; out.json = JSON.stringify([1, 21, 41, 60].map(k => l3Puzzle(k)));
+    return out;
+  });
+  assert.equal(r.match, true, 'L3_TABLE is exactly what l3MakeAll() makes (node tools/lab3-table.mjs rewrites it)');
+  assert.equal(r.rolls, 0, 'the generator never rolls Math.random');
+  assert.deepEqual(r.bad, [], 'every puzzle solvable and in its band');
+  assert.equal(r.keys, 60, 'no puzzle is a turned, flipped or shifted copy of another');
+  assert.deepEqual(r.bands, { easy: 20, medium: 20, hard: 20 });
+  assert.ok(r.openMs < 50, 'reading all 60 from the table is quick: ' + r.openMs.toFixed(1) + ' ms');
+  if (L3_PRINT) assert.equal(r.print, L3_PRINT, 'the puzzles changed: on purpose? then update L3_PRINT');
+  await page.reload(); await page.waitForFunction(() => typeof l3Puzzle === 'function' && !!cell);
+  assert.equal(await page.evaluate(() => JSON.stringify([1, 21, 41, 60].map(k => l3Puzzle(k)))), r.json, 'the same puzzle on a second page load');
+});
+test('Lab: puzzle 1 played to its solution sweeps the board, says Solved, and is marked done; no score, stats, best, dares, bonus, Avalanche, cannonball or saved run', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { CFG.AVALANCHE = true; saveRun(); });
+  const before = await page.evaluate(() => ({ stats: JSON.stringify(stats), best, cookies: dare.st.cookies, run: localStorage.getItem('crumble.run'), mode: localStorage.getItem('crumble.mode') }));
+  await page.click('#pauseBtn'); await page.click('#pauseHome');
+  await page.click('#menuLab'); await page.click('#labList button[data-id=three]'); await page.click('#l3Play');
+  await page.waitForFunction(() => mode === 'lab' && state === 'play' && l3 && l3.k === 1);
+  const hud = await page.evaluate(() => ({ cls: el('stage').classList.contains('lab'), num: el('labNum').textContent, score: getComputedStyle(el('scoreVal')).display,
+    best: getComputedStyle(el('bestBox')).display, undo: el('labUndo').disabled, reset: el('labReset').disabled, bonus: el('bonusChip').hidden, dare: el('dareChip').hidden,
+    tray: tray.length, empties: tray.every(Boolean), sky: curWorld === CFG.HOME_WORLD }));
+  assert.deepEqual(hud, { cls: true, num: '1', score: 'none', best: 'none', undo: true, reset: false, bonus: true, dare: true, tray: 3, empties: true, sky: true });
+  const sol = await page.evaluate(() => l3.p.sol);
+  for (const [i, r, c] of sol) { await dragPiece(page, i, r, c); await frames(page, 2); }
+  const s = await page.evaluate(() => ({ solved: l3.solved, empty: boardEmpty(), sweep: banners.some(b => b.txt === 'CLEAN SWEEP'), done: lab.three.done, at: lab.three.at,
+    store: JSON.parse(localStorage.getItem('crumble.lab')), score, combo: combo > 0, dealing: !!dealing, trayNo, bonusMeter, ava: ava.live, hot: toy.hot, dareId: dare.id }));
+  assert.deepEqual(s, { solved: true, empty: true, sweep: true, done: [1], at: 2, store: { v: 1, three: { done: [1], at: 2 } }, score: 0, combo: true, dealing: false, trayNo: 1, bonusMeter: 0, ava: false, hot: false, dareId: '' });
+  await page.waitForSelector('#l3Done:not([hidden])', { timeout: 5000 });
+  assert.deepEqual(await page.evaluate(() => ({ eye: el('l3DoneEye').textContent, title: el('l3DoneTitle').textContent, next: !el('l3Next').hidden })), { eye: 'Puzzle 1 of 60', title: 'Solved!', next: true });
+  const after = await page.evaluate(() => ({ stats: JSON.stringify(stats), best, cookies: dare.st.cookies, run: localStorage.getItem('crumble.run'), mode: localStorage.getItem('crumble.mode'), lab: localStorage.getItem('crumble.run.lab') }));
+  assert.deepEqual(after, { ...before, lab: null }, 'nothing else was counted or saved');
+  await page.click('#l3Next');
+  await page.waitForFunction(() => mode === 'lab' && l3.k === 2 && !l3.over);
+  await page.click('#pauseBtn');
+  assert.deepEqual(await page.evaluate(() => ({ eye: el('pauseEye').textContent, score: el('pauseScore').hidden, home: el('pauseHome').textContent, end: el('pauseNew').hidden, set: !el('setBtn').hidden })),
+    { eye: 'Paused · Puzzle 2', score: true, home: 'Lab', end: true, set: true }, 'pause: Resume / Lab / Settings');
+  await page.click('#pauseHome'); await page.click('#labBack'); await page.click('#menuEndless');
+  await page.waitForFunction(() => mode === 'endless' && state === 'play');
+  assert.equal(await page.evaluate(() => JSON.stringify(snapshot()) === localStorage.getItem('crumble.run') || score === JSON.parse(localStorage.getItem('crumble.run')).score), true, 'the Endless run is back as it was');
+  assert.equal(await page.evaluate(() => el('stage').classList.contains('lab')), false, 'the score is back');
+});
+test('Lab: a wrong finish says "Not quite" and the board puts itself back; Undo takes back one drop, Reset the lot', async ({ page }) => {
+  await labOpen(page, 1);
+  const start = await page.evaluate(() => JSON.stringify(grid.map(r => r.map(g => g ? g.gi : -1))));
+  const board = () => page.evaluate(() => JSON.stringify(grid.map(r => r.map(g => g ? g.gi : -1))));
+  await dragPiece(page, 0, 0, 0); await frames(page, 2);
+  assert.equal(await page.evaluate(() => tray[0] === null && !el('labUndo').disabled), true, 'a drop, and Undo lights up');
+  await page.click('#labUndo');
+  assert.equal(await board(), start); assert.equal(await page.evaluate(() => tray.every(Boolean) && el('labUndo').disabled), true, 'Undo: the piece is back in the tray');
+  await dragPiece(page, 0, 0, 0); await frames(page, 2); await dragPiece(page, 1, 2, 0); await frames(page, 2);
+  await page.click('#labUndo');
+  assert.equal(await page.evaluate(() => !!tray[1] && !tray[0] && el('labUndo').disabled), true, 'one step only');
+  await page.click('#labReset');
+  assert.equal(await board(), start); assert.equal(await page.evaluate(() => tray.every(Boolean)), true, 'Reset: the start again');
+  // three pieces down and gems left: Not quite, then the start again; a piece that cannot fit anywhere is a fail too
+  await labPlay(page, [[0, 0, 0], [1, 2, 0], [2, 4, 0]]);
+  const f = await page.evaluate(() => ({ over: l3.over, fails: l3.fails, banner: banners.some(b => b.txt === 'Not quite'), say: say.txt, state, overCard: el('overCard').hidden, busy: l3Busy() }));
+  assert.deepEqual(f, { over: true, fails: 1, banner: true, say: f.say, state: 'play', overCard: true, busy: true });
+  assert.ok(['nope.', 'so close. not really.'].includes(f.say), 'Crumb: ' + f.say);
+  await page.waitForFunction(() => !l3.over, null, { timeout: 4000 });
+  assert.equal(await board(), start); assert.equal(await page.evaluate(() => tray.every(Boolean) && state === 'play' && el('labHint').hidden), true);
+  await page.evaluate(() => { grid = grid.map((row, r) => row.map((g, c) => (r + c) % 2 ? { gi: 1, t: 1, f: 0, l: 0 } : g)); });   // a checkerboard: no 1x2 fits
+  await labPlay(page, [[2, 0, 0]]);
+  assert.deepEqual(await page.evaluate(() => ({ over: l3.over, fails: l3.fails })), { over: true, fails: 2 }, 'a piece that fits nowhere ends the try');
+});
+test('Lab: after three failed tries Crumb offers a hint; it shows a right drop, and playing on from it solves the puzzle', async ({ page }) => {
+  await page.evaluate(() => { lab.three.done = Array.from({ length: 40 }, (_, i) => i + 1); });   // a hard one: 1-40 solved, so 41 is open
+  await labOpen(page, 41);
+  for (let n = 1; n <= 3; n++) {
+    await page.evaluate(() => { l3Fail(); });
+    await page.waitForFunction(() => !l3.over, null, { timeout: 4000 });
+    assert.equal(await page.isVisible('#labHint'), n === 3, 'the Hint button after fail ' + n);
+  }
+  assert.equal(await page.evaluate(() => say.txt), 'want a hint? fine.');
+  await page.click('#labHint');
+  const h = await page.evaluate(() => {
+    const p = l3.p, h = l3.hint, shapes = p.pieces.map(x => x.s), m = placeMasks(shapes[h.i]).find(x => x.r === h.r && x.c === h.c);
+    const free = !(m.lo & p.lo) && !(m.hi & p.hi); applyBits(p.lo, p.hi, shapes[h.i], m);
+    const rest = shapes.map((s, i) => i === h.i ? null : s), after = l3Solve(_lo, _hi, rest, 9);
+    return { free, solvable: after.n > 0, pulse: l3Pulse(), busy: fxBusy() };
+  });
+  assert.deepEqual(h, { free: true, solvable: true, pulse: true, busy: true }, 'the ghost sits on a seat that leads to a solution');
+  // play it: the hinted drop, then the rest of a solution from there
+  const moves = await page.evaluate(() => { const h = l3.hint, shapes = tray.map(t => t.s), m = placeMasks(shapes[h.i]).find(x => x.r === h.r && x.c === h.c);
+    applyBits(l3.p.lo, l3.p.hi, shapes[h.i], m); const s = l3Solve(_lo, _hi, shapes.map((x, i) => i === h.i ? null : x), 1); return [[h.i, h.r, h.c], ...[...s.sets.values()][0].seq]; });
+  await dragPiece(page, ...moves[0]); await frames(page, 2);
+  assert.equal(await page.evaluate(() => l3.hint), null, 'a drop spends the hint');
+  await labPlay(page, moves.slice(1));
+  assert.equal(await page.evaluate(() => l3.solved && lab.three.done.includes(41)), true, 'a hint costs nothing');
+});
+test('Lab: progress survives a reload, is checked on load, merges from iCloud (union, max); every 5th new solve pays one cookie', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1, 2, 3, 4, 4, 99, 'x', 0], at: 5 } })));
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => lab.three), { done: [1, 2, 3, 4], at: 5 }, 'bad entries dropped');
+  assert.equal(await page.evaluate(() => [l3Open(5), l3Open(6), l3Next()].join()), 'true,false,5');
+  await page.evaluate(() => localStorage.setItem('crumble.lab', '{"v":1,"three":"no"}'));
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => lab.three), { done: [], at: 1 }, 'a broken save starts fresh');
+  const m = await page.evaluate(() => {
+    lab.three = { done: [1, 2, 3, 4], at: 5 };
+    const ch = cloudMerge({ v: 1, lab: { three: { done: [2, 9, 61, -1, 'a'], at: 12 } } }), ch2 = cloudMerge({ v: 1, lab: { three: { done: [1], at: 3 } } });
+    return { ch, ch2, three: lab.three, blob: cloudBlob().lab };
+  });
+  assert.deepEqual(m, { ch: true, ch2: false, three: { done: [1, 2, 3, 4, 9], at: 12 }, blob: { three: { done: [1, 2, 3, 4, 9], at: 12 } } });
+  await page.evaluate(() => { lab.three = { done: [1, 2, 3, 4], at: 5 }; saveLab(); dare.st.cookies = 7; saveDares(); });
+  await labOpen(page, 5);
+  await page.evaluate(() => { for (const [i, r, c] of l3.p.sol) place(i, r, c); });
+  await page.waitForFunction(() => dare.st.cookies === 8, null, { timeout: 4000 });
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.dares')).cookies), 8, 'the jar is saved');
+  await page.waitForFunction(() => say.txt === 'fine. one cookie.', null, { timeout: 2000 });
+  await page.waitForSelector('#l3Done:not([hidden])', { timeout: 5000 });
+  assert.match(await page.evaluate(() => el('l3DoneMsg').textContent), /cookie/);
+  await page.evaluate(() => playL3(5));                            // solving it again pays nothing
+  await page.evaluate(() => { for (const [i, r, c] of l3.p.sol) place(i, r, c); });
+  await page.waitForSelector('#l3Done:not([hidden])', { timeout: 5000 });
+  assert.equal(await page.evaluate(() => dare.st.cookies), 8);
+  await page.click('#l3Lab');
+  assert.equal(await page.evaluate(() => document.querySelector('#labList button i').textContent), '5 of 60');
+});
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

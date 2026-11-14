@@ -64,7 +64,7 @@ function endTransform(){
 /* ═══════ the specials (plan 4.5) ═══════
    One switch each in CFG.SPECIALS. Rules shared by all of them: never in trays 1-5, at most one live at a time,
    and never two in a row (the tray right after one ends carries none). specialOk() is that gate. */
-const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name])&&!(mode==='challenge'&&(name==='golden'||name==='transform'));   // (E1) a Challenge's deal is frozen: no golden hands or transformations
+const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name])&&mode!=='lab'&&!(mode==='challenge'&&(name==='golden'||name==='transform'));   // (E1) a Challenge's deal is frozen: no golden hands or transformations; (Lab) a puzzle has no specials
 const specialLive=()=>!!(bonus||transform||golden||tray.some(t=>t&&t.s.star));
 const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>specialEnd+1;
 
@@ -181,7 +181,7 @@ function sweepPayoff(cleared,lead,quiet){            // returns the bonus; the c
   ambientBurst=1.8;
   if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
   for(const sh of shatters) if(sh.t<=0) sh.tier=4;   // (7.5) the sweep's gems all crumble at the biggest size
-  pushBanner('CLEAN SWEEP','+'+bonus);         // the achievement first, then the world it earns
+  pushBanner('CLEAN SWEEP',mode==='lab'?'':'+'+bonus);   // the achievement first, then the world it earns ((Lab) a puzzle has no points)
   journeySweep();                              // (7.5b) the sky jumps a stage (before a Rainbow may take it over)
   triggerTransform('rainbow');
   for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
@@ -205,6 +205,7 @@ function bestCheck(quiet){                           // after the points are add
   if(CFG.FX_CHASE && chaseBest>=CFG.CHASE_SKY_MIN) journeySweep();   // (7.5e) beating her best takes the sky a stage further, with the bright wipe
 }
 function place(idx,r,c){
+  if(mode==='lab') l3Before();                     // (Lab) the board before this drop, for Undo (lab.js)
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
@@ -303,7 +304,7 @@ function place(idx,r,c){
     const gone=[...colorsBefore].filter(gi=>!colorsAfter.has(gi));
     colourGone=gone.length>0&&colorsAfter.size>0;
     let colorBonus=0;
-    if(loud && gone.length && colorsAfter.size>0 && CFG.COLOR_GONE_BONUS>0){
+    if(loud && gone.length && colorsAfter.size>0 && CFG.COLOR_GONE_BONUS>0 && mode!=='lab'){   // (Lab) no points, so no COLOR GONE bonus
       colorBonus=Math.round(CFG.COLOR_GONE_BONUS*gone.length*(1+(combo-1)*0.25));
       gained+=colorBonus;
       bands.push({t:-(oneV&&!reduce?vEnd:maxDelay+8),txt:gone.length>1?gone.length+' COLORS GONE!':'COLOR GONE!',sub:'+'+colorBonus,
@@ -312,7 +313,7 @@ function place(idx,r,c){
       if(!reduce) for(let k=0;k<gone.length+1;k++) spawnFirework(bx+B*(0.2+0.6*Math.random()),by+B*(0.15+0.4*Math.random()),null,maxDelay+10+k*5);
     }
     // the point value on every cleared cell, rippling out with the collapse
-    if(CFG.FX_CELL_TAGS && !reduce && cleared && !single){   // a single line gets just the one score label
+    if(CFG.FX_CELL_TAGS && !reduce && cleared && !single && mode!=='lab'){   // a single line gets just the one score label
       const per=Math.max(1,Math.round((gained-s.n*SCORE_SCALE-colorBonus)/cleared));
       cellsGone.forEach(([rr,cc,delay])=>tags.push({x:bx+(cc+.5)*cell,y:by+(rr+.5)*cell,txt:String(per),t:-(delay+4)}));
     }
@@ -340,7 +341,7 @@ function place(idx,r,c){
     const slammed=CFG.FX_COMBO_SLAM&&loud;
     const corner=slammed||(oneV&&!single);            // (A) a big clear's points sit in the corner, out of the headline's way
     const popY=corner?by+cell*1.2:by+cr*cell, popX=corner?bx+B-cell*1.6:bx+cc0*cell;
-    pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n*SCORE_SCALE),
+    if(mode!=='lab') pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n*SCORE_SCALE),
                sub:slammed?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
     const aDir=s.star?'down':avaDir();             // (lean) which way it would fall, read once, now: the fall keeps it
@@ -419,11 +420,12 @@ function place(idx,r,c){
   }
   if(transform) gained=Math.round(gained*CFG.TRANSFORM_MULT);
   if(bonus){ const g1=gained; gained=Math.round(gained*CFG.BONUS_MULT); bonus.extra+=gained-g1; }   // (the doubling's share is what the end tag reports)
+  if(mode==='lab') gained=0;                         // (Lab) a puzzle keeps no score
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
   bestCheck();
-  if(tray.every(v=>!v) && !dealing){
+  if(tray.every(v=>!v) && !dealing && mode!=='lab'){   // (Lab) three pieces and no more: nothing is dealt
     if(bonus){ bonus.left--; if(bonus.left<=0) endBonus(); else syncBonusChip(); }   // one bonus tray played
     goldenNext = goldenNext || special('golden') && goldenCool<=0 && !transform && !bonus      // a live transformation already is the moment
       && (trayHadSweep || trayCombo>=CFG.GOLDEN_COMBO || rnd()<CFG.GOLDEN_CHANCE);   // (8.2) a queued one waits for the special gate, it is not rerolled away
@@ -432,7 +434,7 @@ function place(idx,r,c){
   }
   recDrop(idx,r,c,total,swept);                      // the play recorder (save.js; nothing when off)
   tlRecord();                                        // (7.5g) the board as this drop left it, for the game-over timelapse
-  stats.placed++; stats.lines+=total+avaLines; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
+  if(mode!=='lab'){ stats.placed++; stats.lines+=total+avaLines; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++; }   // (Lab) puzzles count in no stats
   playedToday(); checkGoals();                       // (4.2) the day counts, a reached goal gets its banner
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
   guideDrop(total,swept);                            // (1.1 D) the guided first game counts its lesson
@@ -443,6 +445,7 @@ const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
 // Stuck (plan 7.1): no tray piece fits. The pieces dim and "No moves" shows while the last drop lands; after 700 ms
 // the run ends (the timer re-checks, so a piece that fits by then keeps it going). The game-over card has the one rescue.
 function checkStuck(){
+  if(mode==='lab'){ l3After(); return; }             // (Lab) a puzzle is never game over: it is judged (lab.js)
   if(chDone) return;                                 // (E1) a finished Challenge round is not stuck: its end card is on the way
   stuck=!anyFits();
   syncActions();
@@ -497,6 +500,7 @@ function onDown(e){
   }
   if(state!=='play'||paused||drag) return;   // one drag at a time (a second finger can't pick up another piece)
   if(stuck&&toyLast()) return;               // (toy) the last chance: no piece fits, the only move is the crumb
+  if(l3Busy()) return;                       // (Lab) a try is being judged
   if(e.target&&e.target.closest&&e.target.closest('button')) return;
   if(dealing||avaBusy()){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY,pt:e.pointerType}; return; }   // taken the moment the new tray appears (stepPending)
   startDrag(e.pointerId,e.clientX,e.clientY,e.pointerType);
@@ -515,7 +519,7 @@ function startDrag(id,x,y,pt){
 function stepPending(){                               // called each frame: the deal finished and her finger is still down
   if(!pendingPress||dealing||avaBusy()||drag) return;
   const p=pendingPress; pendingPress=null;
-  if(state==='play'&&!paused&&!(stuck&&toyLast())) startDrag(p.id,p.x,p.y,p.pt);
+  if(state==='play'&&!paused&&!(stuck&&toyLast())&&!l3Busy()) startDrag(p.id,p.x,p.y,p.pt);
 }
 function onMove(e){
   if(pendingPress&&e.pointerId===pendingPress.id){ pendingPress.x=e.clientX; pendingPress.y=e.clientY; }

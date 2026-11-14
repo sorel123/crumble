@@ -539,7 +539,7 @@ function paceStep(a0){
   return pace.ph;
 }
 const edgeHold=()=>CFG.EDGE_HOLD_MIN+((rnd()*(CFG.EDGE_HOLD_MAX-CFG.EDGE_HOLD_MIN+1))|0);
-const paced=()=>mode!=='adventure';                    // Adventure keeps the tension wave its levels were tuned on
+const paced=()=>mode!=='adventure'&&mode!=='lab';     // Adventure keeps the tension wave its levels were tuned on; (Lab) a puzzle has no dealer, pressure or journey sky
 // what each phase deals: honest (calm, building), edge (every piece has a spot now, no promise the three fit in
 // sequence), recovery, guided (relief; the first relief tray tries a planned sweep), and now and then a calm gift
 function paceTier(a0){

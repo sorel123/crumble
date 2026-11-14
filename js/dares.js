@@ -126,6 +126,9 @@ function dareWin(){
   dare.q=[]; dareQueue(sayPick('dareWin'),2600);
   dareCookie();
 }
+// (Lab) a cookie into the jar from outside the dares (Clear it in three pays one for every 5th puzzle solved): the clink and
+// the haptic, a hop if the chip is up. It only ever adds: cookies merge across devices by max (cloud.js)
+function dareGift(){ dare.st.cookies++; saveDares(); dareCookie(); return dare.st.cookies; }
 function dareFail(){ if(dare.s!==0) return; dare.s=2; dare.q=[]; dareQueue(sayPick('dareFail'),2600); if(state==='play'&&!dealing) saveRun(); }
 
 /* ── the checkers, fed by the game ── */
