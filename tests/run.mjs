@@ -3525,11 +3525,21 @@ test('crumb cannonball: a streak charges the crumb (Endless only, once per strea
   await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9000 });
   const after = await page.evaluate(() => ({ score, gems: grid.flat().filter(Boolean).length, hot: toyHot(), saved: JSON.parse(localStorage.getItem('crumble.run')).grid.flat().filter(v => v >= 0).length }));
   const broke = before.gems - after.gems;
-  assert.ok(broke >= 2 && broke <= 10, 'it broke some gems, never more than CANNON_MAX: ' + broke);
+  assert.ok(broke >= 5 && broke <= 10, 'its whole body bites and it bounces inside the board: a good handful of gems, never more than CANNON_MAX: ' + broke);
   assert.equal(after.score - before.score, broke * await page.evaluate(() => CFG.CANNON_PER_GEM), 'paid per gem');
   assert.equal(after.hot, false, 'cold again');
   assert.equal(after.saved, after.gems, 'the run is saved with the broken board');
   assert.equal(await streak(() => { combo = 6; toy.lastCombo = 6; }), false, 'the same streak does not charge it twice');
+  // grown big by a longer streak, it cuts a wider path and breaks more
+  await dealt(page);
+  await setup(page, { rows: FULL, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { toy.hot = true; toy.pow = 5; toy.sulkTo = 0; toy.throws = []; });
+  await page.waitForFunction(() => toy.sc > 1.75);
+  const g1 = await page.evaluate(() => grid.flat().filter(Boolean).length);
+  await flickCrumb(page, 10, 26);
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9000 });
+  const broke2 = g1 - await page.evaluate(() => grid.flat().filter(Boolean).length);
+  assert.ok(broke2 > broke && broke2 >= 15 && broke2 <= 25, 'bigger crumb, more blocks: ' + broke2 + ' > ' + broke);
   // an uncharged throw over the board breaks nothing
   await dealt(page);
   const g0 = await page.evaluate(() => grid.flat().filter(Boolean).length);

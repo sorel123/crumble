@@ -33,16 +33,23 @@ function toyCharge(comboNow){                                       // mascot.js
   haptic('bonusReady');
   toyPlay(.25,t=>{ tone(t,{f0:330,f1:660,pdur:.18,dur:.22,vol:.06,type:'triangle'}); tone(t+.16,{f0:660,f1:990,pdur:.14,dur:.2,vol:.05,type:'triangle'}); });
 }
-function toySmash(){                                                // in flight, charged: the gem under its middle breaks
-  const f=toy.fire, s=masc.s, cx=masc.x+toy.x+s/2, cy=masc.y+toy.y+s/2;
-  const c=Math.floor((cx-bx)/cell), r=Math.floor((cy-by)/cell);
-  if(r<0||c<0||r>=N||c>=N) return;
-  const g=grid[r][c]; if(!g) return;
-  grid[r][c]=null;
-  shatters.push({r,c,gi:g.gi,horiz:Math.abs(toy.vx)>Math.abs(toy.vy),star:false,big:true,tier:3,t:0,t0:0,ox:cx,oy:cy});
-  const pts=CFG.CANNON_PER_GEM; score+=pts; f.n++; f.pts+=pts;
-  tags.push({x:bx+(c+.5)*cell,y:by+(r+.5)*cell,txt:String(pts),t:0});
-  toy.vx*=CFG.CANNON_KEEP; toy.vy*=CFG.CANNON_KEEP; shake=Math.max(shake,3*CFG.SHAKE);
+function toySmash(){                                                // in flight, charged: every gem its body covers breaks (a bigger crumb cuts a wider path)
+  const f=toy.fire, s=masc.s, cx=masc.x+toy.x+s/2, cy=masc.y+toy.y+s-s*toy.sc/2;   // it grows from its feet, so its middle rides higher
+  const reach=Math.max(cell*.5,s*toy.sc*.5*CFG.CANNON_REACH);
+  const c0=Math.max(0,Math.floor((cx-reach-bx)/cell)), c1=Math.min(N-1,Math.floor((cx+reach-bx)/cell));
+  const r0=Math.max(0,Math.floor((cy-reach-by)/cell)), r1=Math.min(N-1,Math.floor((cy+reach-by)/cell));
+  let hit=0;
+  for(let r=r0;r<=r1&&toy.fire&&f.n<f.max;r++) for(let c=c0;c<=c1&&f.n<f.max;c++){
+    const g=grid[r][c]; if(!g) continue;
+    const gx=bx+(c+.5)*cell, gy=by+(r+.5)*cell;
+    if(Math.hypot(gx-cx,gy-cy)>reach+cell*.2) continue;
+    grid[r][c]=null; hit++;
+    shatters.push({r,c,gi:g.gi,horiz:Math.abs(toy.vx)>Math.abs(toy.vy),star:false,big:true,tier:3,t:0,t0:0,ox:cx,oy:cy});
+    const pts=CFG.CANNON_PER_GEM; score+=pts; f.n++; f.pts+=pts;
+    tags.push({x:gx,y:gy,txt:String(pts),t:0});
+  }
+  if(!hit) return;
+  toy.vx*=CFG.CANNON_KEEP; toy.vy*=CFG.CANNON_KEEP; shake=Math.max(shake,3*CFG.SHAKE);   // one bite slows it once, however many gems were in it
   toy.sndAt=0; toySnd('boing',.9); toyPlay(0,t=>tone(t,{f0:1500,f1:500,pdur:.05,dur:.07,vol:.05,type:'square'}));
   if(f.n>=f.max) toyFireEnd();
 }
@@ -129,7 +136,7 @@ function toyUp(e){
   if(sp>cap){ vx*=cap/sp; vy*=cap/sp; }
   toy.speed=Math.min(sp,cap); toy.bounces=0; toy.restT=0; toy.shotN=0;
   const shot=toy.hot&&toy.speed>=CFG.TOY_FLICK_MIN*3&&state==='play'&&!stuck;   // charged and thrown: a cannonball
-  if(shot){ toy.hot=false; toy.fire={n:0,pts:0,max:toyPower()}; }
+  if(shot){ toy.hot=false; toy.fire={n:0,pts:0,max:toyPower(),b:0}; }
   if(toy.speed<CFG.TOY_FLICK_MIN&&Math.abs(toy.y)<10&&toy.x>-masc.s*.5&&toy.x<toyXMax()+masc.s*.5){   // put down where it stood: a poke
     toy.mode='rim'; toy.y=0; toy.vx=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); mascotAct('nod'); sayLine('poke'); return;
   }
@@ -177,6 +184,14 @@ function toyStep(now){
       const n=Math.max(1,Math.ceil(Math.hypot(toy.vx,toy.vy)*dt/(cell*.45)));
       for(let k=0;k<n&&toy.fire;k++){ toy.x+=toy.vx*dt/n; toy.y+=toy.vy*dt/n; toySmash(); }
       if(!toy.fire){ /* spent mid-step: the rest of the flight is an ordinary one */ }
+      if(toy.fire){                                                 // still hot: it ricochets inside the board (CANNON_BOUNCES times off the bottom) instead of dropping straight through
+        const f=toy.fire, bl=bx-masc.x, br=bx+B-s-masc.x, bb=by+B-s-masc.y;
+        if(toy.y>0&&toy.y<bb+s){
+          if(toy.x<bl&&toy.vx<0){ toy.x=bl; toy.vx=-toy.vx; toySnd('boing',.6); }
+          if(toy.x>br&&toy.vx>0){ toy.x=br; toy.vx=-toy.vx; toySnd('boing',.6); }
+          if(toy.y>bb&&toy.vy>0&&f.b<CFG.CANNON_BOUNCES){ f.b++; toy.y=bb; toy.vy=-Math.max(toy.vy*.85,cell*22); toy.va=toy.vx*1.2; toySnd('boing',.8); }
+        }
+      }
     } else { toy.x+=toy.vx*dt; toy.y+=toy.vy*dt; }
     toy.a+=toy.va*dt;
     const L=-masc.x, R=W-s-masc.x, T=-masc.y, F=H-s-masc.y, e=CFG.TOY_BOUNCE;
