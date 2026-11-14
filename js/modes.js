@@ -7,7 +7,7 @@
    switching never loses a game. Progress lives in `crumble.adv`, plain data meant to be extended:
      {v:1, lv:{ "7":{s:2, p:14, n:3, f:1} }}    s best stars (0-3), p fewest pieces, n times cleared, f failed tries */
 const MODE_STORE='crumble.mode', ADV_STORE='crumble.adv', DAILY_STORE='crumble.daily';
-const runStore=m=>m==='adventure'?'crumble.run.adv':m==='daily'?'crumble.run.daily':m==='challenge'?'crumble.run.chal':'crumble.run';
+const runStore=m=>m==='adventure'?'crumble.run.adv':m==='daily'?'crumble.run.daily':m==='challenge'?'crumble.run.chal':m==='lab'?'crumble.run.lab':'crumble.run';   // (Lab) never written: a puzzle keeps no run
 const CHAPTERS=['First steps','Warming up','Getting good','Tricky boards','Crumble master'];
 // [goal type, goal n, gems already on the board]: fill 0 opens like Endless (a nearly full line and a first move that clears it,
 // which is also a clean sweep, so a score level always has a scatter instead);
@@ -184,7 +184,7 @@ function syncHud(){
     else { lbl='Goal'; val='Empty it'; }
   }
   el('bestLbl').textContent=lbl; el('bestVal').textContent=val; hudFit();
-  chaseSync(); chHud();
+  chaseSync(); chHud(); l3Sync();                   // (Lab) Puzzle n, Undo and Reset take the score's place
 }
 // place() calls this after every placement
 function goalStep(total,swept){
@@ -225,12 +225,12 @@ function levelFailed(){
 }
 
 /* ── switching modes ── */
-function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard','chalCard','devPanel','closetCard'].some(id=>!el(id).hidden); }
+function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard','chalCard','devPanel','closetCard',...LAB_CARDS].some(id=>!el(id).hidden); }
 function pauseForMenu(){ if(state==='play'){ paused=true; hapSelect('end'); drag=null; shake=0; hesVoid(); } }
-function hideMenus(){ el('closetCard').hidden=true; el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('chalCard').hidden=true; el('winCard').hidden=true; paused=false; }
-function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; }      // keep what she was doing; it is waiting when she comes back
+function hideMenus(){ el('closetCard').hidden=true; el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('chalCard').hidden=true; el('winCard').hidden=true; labHide(); paused=false; }
+function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; labLeave(); }      // keep what she was doing; it is waiting when she comes back
 function openMenu(){
-  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('goalsCard').hidden=true; el('chalCard').hidden=true;
+  pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('goalsCard').hidden=true; el('chalCard').hidden=true; labHide();
   el('menuChalSub').textContent=chTileSub();
   const today=daily.d[dailyKey()], liveD=peekRun('daily');
   el('menuDailySub').textContent=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'New board today';
@@ -286,12 +286,14 @@ function pauseNewReset(){ clearTimeout(pauseNewT); const b=el('pauseNew'); b.tex
 function openPause(){
   if(state!=='play'||overlayOpen()) return;
   pauseForMenu(); pauseNewReset();
-  const adventure=mode==='adventure'&&lvl;
-  el('pauseEye').textContent='Paused · '+(adventure?'Level '+lvl.id:mode==='daily'?'Daily':mode==='challenge'&&chal?chLabel(chal.seed):'Endless');
+  const adventure=mode==='adventure'&&lvl, puzzle=mode==='lab'&&l3;
+  el('pauseEye').textContent='Paused · '+(puzzle?'Puzzle '+l3.k:adventure?'Level '+lvl.id:mode==='daily'?'Daily':mode==='challenge'&&chal?chLabel(chal.seed):'Endless');
   el('pauseScore').textContent=score.toLocaleString('en-US');
   el('pauseMsg').textContent=adventure?goalText(lvl.goal)+'. Your game is saved.':mode==='challenge'&&chal?'Tray '+Math.min(trayNo,CH_TRAYS)+' of '+CH_TRAYS+'. Your game is saved.':'Your game is saved.';
   { const t=darePauseText(), p=el('pauseDare'); p.hidden=!t; p.textContent=t; }   // (dares) the run's dare
   el('pauseNew').dataset.lbl=mode==='challenge'?'Restart':'End game'; pauseNewReset();
+  el('pauseScore').hidden=el('pauseNew').hidden=!!puzzle; el('pauseHome').textContent=puzzle?'Lab':'Home';   // (Lab) Resume / Lab / Settings
+  if(puzzle) el('pauseMsg').textContent='Clear it in three. Leaving starts this puzzle again.';
   el('pauseCard').hidden=false;
 }
 function closePause(){ pauseNewReset(); el('pauseCard').hidden=true; if(!overlayOpen()) paused=false; }
@@ -303,7 +305,7 @@ addEventListener('keydown',e=>{                          // (C4) desktop: Escape
 });
 el('pauseBtn').onclick=e=>{ e.stopPropagation(); openPause(); };
 el('pauseResume').onclick=e=>{ e.stopPropagation(); closePause(); };
-el('pauseHome').onclick=e=>{ e.stopPropagation(); pauseNewReset(); el('pauseCard').hidden=true; saveRun(); openMenu(); };
+el('pauseHome').onclick=e=>{ e.stopPropagation(); pauseNewReset(); el('pauseCard').hidden=true; if(mode==='lab'){ openLab(); return; } saveRun(); openMenu(); };
 el('pauseNew').onclick=e=>{
   e.stopPropagation(); const b=el('pauseNew');
   const restart=mode==='challenge';

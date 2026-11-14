@@ -123,6 +123,7 @@ function syncActions(){
 }
 let lastRunJson=null;
 function saveRun(){
+  if(mode==='lab') return;                                        // (Lab) a puzzle keeps no run: leaving it starts it again
   if(state!=='play'||dealing||tray.every(v=>!v)) return;          // mid-deal there is nothing consistent to keep; the deal saves when it ends
   try{ const j=JSON.stringify(snapshot()); if(j!==lastRunJson){ localStorage.setItem(runStore(mode),j); lastRunJson=j; } }catch(e){}
   saveStats();
