@@ -1372,6 +1372,19 @@ The mascot can be grabbed, flicked and rolled by leaning the phone. Code is `js/
 - **Check on the phone:** flick the crumb hard at a wall: it should bounce around and land dizzy. Flick it five times quickly: it sulks. After the first flick iOS asks for motion; allow it, then lean the phone right: the crumb should roll to the right end of the rim and stay there when the phone is level again. **Not yet tried on a real phone**: the motion prompt inside the app's web view, and the tilt direction.
 - Tests: the two "crumb toy" scenarios.
 
+## Avalanche (2026-11-14, concept 1 of the new feature concepts; off by default)
+
+At the peak of a streak the whole board falls. Code is `js/avalanche.js`; `place()` calls `avaDue()` / `avalanche()` after its own lines are gone and before the clean-sweep check; `draw.js` reads `g.av` on a gem and `s.av` on a shatter.
+
+- **Rule.** Endless only (not Daily, Challenge, Adventure or the guided first game). A clear at combo `AVA_COMBO` (4) or more rolls for it: `AVA_CHANCE` (.3) plus `AVA_STEP` (.1) per combo step above, capped at `AVA_MAX` (.7). Never a fixed rule (Jay's dealer taste). It only fires when at least `AVA_MIN_MOVE` gems would actually fall. A star does not start one.
+- **What happens.** Every gem drops straight down as far as it can. Rows that are full after the landing clear; what was above falls again; and so on until nothing moves. Each chain step is one more combo step (the fire grows) and pays like a clear of that many lines at that combo. If the board ends empty it is a clean sweep, with everything a sweep brings.
+- **Why.** It is the name of the game, and it packs the scattered strays together, which the dealer work could not do (see the 2026-11-12 dealing notes). It makes Endless easier and good games much longer, so it ships off until Jay has felt it. One bot run (`node tools/bot-sim.mjs 1200 1 BOT=human`, then with `AVALANCHE=1`; one seed, noisy): a board wipe every 39 trays (was 67), 20 gems on the board at the deal (was 24), median game 49 trays (was 47) but the 90th percentile 300 (was 92).
+- **How it is built.** The rules run at once inside `place()`: the grid and score are final when it returns, so save, undo, the dealer, the timelapse and the stuck check all see a settled board. Only the picture is delayed: each moved gem carries `av`, a list of `[start frame, cells]` falls on the avalanche clock (`ava.t`, stepped by `avaStep` in `frame()`); `avaOff()` gives its height above its cell. A gem that falls into a clearing row is a shatter with the same list: it lands, flashes, breaks. While `ava.live` a touch on the tray waits (like a touch during a deal) and `fxBusy()` holds the frame rate.
+- **Show.** AVALANCHE! banner, a shake through the rumble (`AVA_RUMBLE`), a low boom, a haptic, CHAIN xN tags, and the crumb is thrown off its perch (the toy).
+- **Switch.** `CFG.AVALANCHE`, Settings → Look → Advanced "Avalanche (new)" (saved `ava`), also in Admin. Timing knobs: `AVA_G`, `AVA_LEAD`, `AVA_RUMBLE`, `AVA_BEAT`, `AVA_GAP`.
+- **Check on the phone:** turn it on, build a streak of 4+, and keep clearing: within a few clears the board should shake and drop. Things to judge: is it too frequent, does it make the game too easy, is the fall readable.
+- Tests: the two "Avalanche" scenarios.
+
 ## Timelapse (plan 7.5, seventh zazz idea)
 
 The whole run in a few seconds on the game-over card. Code is `js/timelapse.js`; it is fed by `tlReset()` in `start()`, `tlRecord()` at the end of `place()`, `tlSnap()`/`tlLoad()` in the run save, and `tlShow()` in `gameOver()`. All modes.

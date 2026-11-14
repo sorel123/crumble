@@ -293,6 +293,17 @@ const CFG = {
   TOY_SULK_MS:       14000,
   TOY_SULK_HOLD:     6000,   // (toy) how long the sulk lasts
   TOY_BACK_MS:       560,    // (toy) the hop from the floor back to the rim
+  AVALANCHE:         false,  // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). Off while it is tried
+  AVA_COMBO:         4,      // (Avalanche) the streak it can start from
+  AVA_CHANCE:        .3,     // (Avalanche) odds at AVA_COMBO ...
+  AVA_STEP:          .1,     // ... plus this per combo step above it ...
+  AVA_MAX:           .7,     // ... up to this. A roll, never a rule
+  AVA_MIN_MOVE:      6,      // (Avalanche) only when at least this many gems would fall
+  AVA_G:             .016,   // (Avalanche) gravity, cells per frame squared
+  AVA_LEAD:          10,     // (Avalanche) frames after the clear's own pop before the rumble
+  AVA_RUMBLE:        22,     // (Avalanche) frames the board shakes before it lets go
+  AVA_BEAT:          6,      // (Avalanche) frames a landed row waits before it breaks
+  AVA_GAP:           10,     // (Avalanche) frames between a chain clear and the next fall
   FX_TIMELAPSE:      true,   // (7.5g) the run's boards are recorded (capped, in the run save) and replay on the game-over card (js/timelapse.js)
   FX_ANTICIPATION:   true,   // (7.5c) while she drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
   ANTIC_REACH:       2.5,    // (7.5c) cells from a completing landing where the shiver starts; it peaks as the piece arrives
