@@ -109,6 +109,7 @@ function toyFireEnd(){                                              // out of st
   if(stuck&&state==='play'&&!f.n){ toy.hot=true; return; }           // the last chance missed the board entirely: it is still charged, try again
   if(!f.n) return;
   dareCannon(f.n);                                                  // (dares) "cannonball 8 blocks"
+  cookieCheck();                                                    // (cookie) it ate the cookie's gem
   if(f.n>=4) sayLine('cannon',true);
   pops.push({x:bx+B/2,y:by+cell*1.2,t:0,txt:'+'+f.pts,sub:'CANNONBALL ×'+f.n,combo:1,lines:1});
   glowT=Math.max(glowT,.8);

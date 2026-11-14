@@ -140,6 +140,10 @@
   #mascot.glance .m0,#mascot.worry .m0{display:none} #mascot.glance .m4,#mascot.worry .m5{display:inline}   /* (stakes) the streak's last life */
   #mascot.glance .bL,#mascot.worry .bL{transform:translateY(-.6px) rotate(-17deg)} #mascot.glance .bR,#mascot.worry .bR{transform:translateY(-.6px) rotate(17deg)}
   #mascot.worry .sw{opacity:1}
+  #mascot.chomp .m0{display:none} #mascot.chomp .m1,#mascot.chomp .ld{display:inline} #mascot.chomp .bl{transform:translateY(-1.6px)}   /* (cookie) eats a cookie from the board: js/cookie.js */
+  #mascot.chomp .m1{transform-box:fill-box;transform-origin:50% 20%;animation:mChomp .15s ease-in-out 8 alternate}
+  #mascot.chomp.rm .m1{animation:none}
+  @keyframes mChomp{from{transform:none}to{transform:scaleY(.2)}}
   #crumbAim{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible}   /* (stakes) the slingshot's band and dots: js/crumbtoy.js */
   #crumbAim line{stroke:#7A3E12;stroke-linecap:round}
   #stage.aiming #dareChip{filter:opacity(.2)}   /* the dare chip makes way for the slingshot's aim (a filter: its entrance animation owns opacity) */
@@ -600,7 +604,7 @@
         <label class="tog"><span>Golden hand: a rare gold tray that pays triple</span><input type="checkbox" id="goldOn"></label>
         <label class="tog"><span>Crumb is a toy: grab it and flick it</span><input type="checkbox" id="toyOn"></label>
         <label class="tog"><span>Crumb talks: signs and remarks</span><input type="checkbox" id="talkOn"></label>
-        <label class="tog"><span>Crumb's dares: one a run, a cookie if you win</span><input type="checkbox" id="dareOn"></label>
+        <label class="tog"><span>Crumb's dares and cookies: win them for hats</span><input type="checkbox" id="dareOn"></label>
         <label class="tog"><span>Tilt: lean the phone and the crumb rolls</span><input type="checkbox" id="tiltOn"></label>
         <label class="tog"><span>Timelapse: replay your run on game over</span><input type="checkbox" id="tlOn"></label>
         <p class="lbl section-lbl">World</p>
@@ -781,6 +785,7 @@
 <script src="js/crumbtoy.js"></script>
 <script src="js/crumbsay.js"></script>
 <script src="js/dares.js"></script>
+<script src="js/cookie.js"></script>
 <script src="js/lab.js"></script>
 <script src="js/home.js"></script>
 <script src="js/goals.js"></script>

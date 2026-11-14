@@ -872,7 +872,7 @@ function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
     ||slams.length||bursts.length||praises.length||banners.length||stamps.length||sweepShow||goldRain.length||orbs.length||rings.length||dust.length
-    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||(fire.k>0&&!fire.out&&Math.abs(fire.k-fireTarget())>0.01)||guideHintOn()||l3Pulse()||trayPopping()||toyBusy()||ava.live||dareBusy());
+    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||(fire.k>0&&!fire.out&&Math.abs(fire.k-fireTarget())>0.01)||guideHintOn()||l3Pulse()||trayPopping()||toyBusy()||ava.live||dareBusy()||cookieBusy());
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
@@ -1044,6 +1044,7 @@ function frame(now){
         const q=Math.sin(g.l*Math.PI)*0.11;
         gem(g.gi,bx+c*cell+_ax,by+r*cell+_ay,cell,base*(1+q),1,fl,false,base*(1-q*0.7));
       } else gem(g.gi,bx+c*cell+_ax,by+r*cell+_ay,cell,base,1,fl);
+      if(g===ck.g) cookieAt(bx+c*cell+_ax,by+r*cell+_ay);   // (cookie) the cookie sits where its gem is drawn
     }
   }
 
@@ -1238,6 +1239,7 @@ function frame(now){
     }
     ctx.globalAlpha=1;
   }
+  cookieDraw(now,dt);                                // (cookie) on its gem, over the board, under the tray and the held piece (cookie.js)
   if(guide) guideDraw(now);                          // (1.1 D) the guided first game's ghost pulse, on empty cells only
   if(l3) l3Draw(now);                                // (Lab) Clear it in three's hint, on empty cells only
   drawRubble(dt);                                    // (7.5) the broken pieces: over the board and its gems, under the tray and the held piece

@@ -53,6 +53,8 @@ export async function openGame(url, { seed = 1 } = {}) {
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { CFG.MOUSE_LIFT = CFG.LIFT; }));
   // Avalanche is on by default, but the pinned-seed dealer and bot tests were measured without it: tests run with it off (the real default kept in __avaDefault) and the Avalanche tests turn it on
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__avaDefault = CFG.AVALANCHE; CFG.AVALANCHE = false; }));
+  // the cookie on the board (js/cookie.js) is on by default too; the older tests were written without it (a cookie line in the crumb's bubble, a cookie drawn on a pinned board), so it is off here (real default in __cookieDefault) and the cookie tests turn it on
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__cookieDefault = CFG.COOKIE; CFG.COOKIE = false; }));
   await page.goto(url);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   return { browser, page, errors };

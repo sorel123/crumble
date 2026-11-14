@@ -12,6 +12,7 @@
      tight  the board is cramped (Endless/Daily: the pace is edge or recovery; Adventure: room below ROOM_EDGE): worried brows, a sweat drop
      faint  no moves / game over: X eyes, it tips over on the rim; a rescue or a new run stands it back up
      glance (stakes) a carried streak is on its last life: worried brows, a wobbly mouth, its eyes on the board
+     chomp  (cookie) it eats a cookie from the board: happy lids, munching
      worry  (stakes) the same while it is charged and grown: it looks down at itself, with a bead of sweat (use me or lose me)
    Plain DOM (an inline SVG) over the canvas: no canvas drawing. Faces are class swaps written only when the mood changes;
    motion is CSS / Web Animations on transform and opacity only. The pupils follow the drag in quantised steps (an attribute
@@ -50,6 +51,7 @@ const MASCOT_ACT={                                   // ms the face holds, and t
   flat: {ms:1500, move:null},
   glance:{ms:1700, move:[{transform:'none'},{transform:'rotate(6deg) translateX(4%)',offset:.3},{transform:'rotate(4deg) translateX(3%)',offset:.8},{transform:'none'}], dur:1300},
   worry:{ms:1900, move:[{transform:'none'},{transform:'translateX(-3%)',offset:.2},{transform:'translateX(3%)',offset:.4},{transform:'translateX(-2%)',offset:.6},{transform:'none'}], dur:700},
+  chomp:{ms:1200, move:[{transform:'none'},{transform:'translateY(-10%) scale(1.05,.95)',offset:.25},{transform:'scale(.97,1.03)',offset:.55},{transform:'translateY(-5%)',offset:.75},{transform:'none'}], dur:700},   // (cookie) a cookie from the board, eaten
   phew: {ms:1300, move:[{transform:'none'},{transform:'scale(1.04,.95)',offset:.3},{transform:'translateY(1px) scale(.98,1.02)',offset:.6},{transform:'none'}], dur:900},
   sweep:{ms:1700, move:[{transform:'none'},{transform:'translateY(2px) scale(1.08,.86)',offset:.12},{transform:'translateY(-55%) rotate(-180deg)',offset:.45},{transform:'translateY(-30%) rotate(-360deg)',offset:.7},{transform:'translateY(1px) scale(1.06,.92) rotate(-360deg)',offset:.88},{transform:'rotate(-360deg)'}], dur:1100},
 };
@@ -93,6 +95,7 @@ function mascotStep(now){                             // draw.js frame(): writes
   closetStep(now);                                  // (closet) the Goals dot, and a feat item earned mid-run
   const on=CFG.FX_MASCOT&&state!=='idle'&&!hero.card&&!hero.falling;   // (8.3) the menu has its own crumb (and it is still tumbling off the logo)
   dareStep(now,on);                                 // (dares) the dare chip, the cookie and the dare's lines
+  cookieStep(now);                                  // (cookie) a cookie on the board: js/cookie.js
   if(!on){ sayStep(now,false,false); if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
   if(state==='won'&&m.lastState!=='won') mascotAct('sweep');   // a level won: the big one
   m.lastState=state;
