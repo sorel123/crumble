@@ -66,6 +66,14 @@ const SAY={
   aurora:["pretty, huh? don't look.","it's not getting easier."],
   space:["nobody gets past space.","space. it bites.","this is where runs go to die."],
   deep:["ok, now you're showing off.","how are you still here?","nobody's been out this far."],
+  // (Lab) Rescue the Crumbs: js/rescue.js
+  rsOpen:["my cousins are stuck. obviously."],
+  rsOut:["one out.","go go go."],
+  rsLast:["fine. I was worried. a little."],
+  rsStuck:["you trapped them. nice."],
+  rsStar3:["perfect. don't get smug."],
+  rsTop:["from the top. watch."],
+  rsCookie:["fine. one cookie. for the cousins."],
 };
 const say={stop:0,stopDue:'',stopT:0,el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){

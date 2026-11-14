@@ -205,7 +205,7 @@ function bestCheck(quiet){                           // after the points are add
   if(CFG.FX_CHASE && chaseBest>=CFG.CHASE_SKY_MIN) journeySweep();   // (7.5e) beating her best takes the sky a stage further, with the bright wipe
 }
 function place(idx,r,c){
-  if(mode==='lab') l3Before();                     // (Lab) the board before this drop, for Undo (lab.js)
+  if(mode==='lab') labBefore(idx,r,c);             // (Lab) the board before this drop, for Undo (lab.js)
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
   const t=tray[idx],s=t.s;
@@ -276,7 +276,7 @@ function place(idx,r,c){
     let lastGi=t.gi, cleared=0, maxDelay=0; const cellsGone=[];
     marked.forEach((horiz,key)=>{
       const [rr,cc]=key.split(',').map(Number);
-      const g=grid[rr][cc]; if(!g) return;
+      const g=grid[rr][cc]; if(!g||g.cr) return;     // (Lab) a rescue crumb fills its line but is never cleared (rescue.js)
       lastGi=g.gi; cleared++;
       // optional blink, then the collapse ripples outward from the placed piece
       const d=Math.hypot(rr+0.5-cr,cc+0.5-cc0);
@@ -446,7 +446,7 @@ const anyFits=()=>tray.some(v=>v&&fitsAnywhere(v.s,grid));
 // Stuck (plan 7.1): no tray piece fits. The pieces dim and "No moves" shows while the last drop lands; after 700 ms
 // the run ends (the timer re-checks, so a piece that fits by then keeps it going). The game-over card has the one rescue.
 function checkStuck(){
-  if(mode==='lab'){ l3After(); return; }             // (Lab) a puzzle is never game over: it is judged (lab.js)
+  if(mode==='lab'){ labAfter(); return; }            // (Lab) a puzzle is never game over: it is judged (lab.js)
   if(chDone) return;                                 // (E1) a finished Challenge round is not stuck: its end card is on the way
   stuck=!anyFits();
   syncActions();
@@ -501,7 +501,7 @@ function onDown(e){
   }
   if(state!=='play'||paused||drag) return;   // one drag at a time (a second finger can't pick up another piece)
   if(stuck&&toyLast()) return;               // (toy) the last chance: no piece fits, the only move is the crumb
-  if(l3Busy()) return;                       // (Lab) a try is being judged
+  if(labBusy()) return;                      // (Lab) a try is being judged
   if(e.target&&e.target.closest&&e.target.closest('button')) return;
   if(dealing||avaBusy()){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY,pt:e.pointerType}; return; }   // taken the moment the new tray appears (stepPending)
   startDrag(e.pointerId,e.clientX,e.clientY,e.pointerType);
@@ -520,7 +520,7 @@ function startDrag(id,x,y,pt){
 function stepPending(){                               // called each frame: the deal finished and her finger is still down
   if(!pendingPress||dealing||avaBusy()||drag) return;
   const p=pendingPress; pendingPress=null;
-  if(state==='play'&&!paused&&!(stuck&&toyLast())&&!l3Busy()) startDrag(p.id,p.x,p.y,p.pt);
+  if(state==='play'&&!paused&&!(stuck&&toyLast())&&!labBusy()) startDrag(p.id,p.x,p.y,p.pt);
 }
 function onMove(e){
   if(pendingPress&&e.pointerId===pendingPress.id){ pendingPress.x=e.clientX; pendingPress.y=e.clientY; }

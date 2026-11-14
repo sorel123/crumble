@@ -6107,8 +6107,8 @@ test('Lab: a slim Lab button beside Settings opens the Lab card (one tile per ex
   await page.click('#startLab');
   const c = await page.evaluate(() => ({ card: !el('labCard').hidden, line: el('labCard').querySelector('.sub').textContent,
     tiles: [...document.querySelectorAll('#labList button')].map(b => [...b.children].map(x => x.textContent).join(' | ')) }));
-  assert.deepEqual(c, { card: true, line: "New things we are trying. Tell us what's fun.", tiles: ['🧩 Clear it in three | Three pieces. Leave the board empty. | 0 of 60'] });
-  assert.equal(await page.evaluate(() => LAB.length), 1, 'the registry has the one experiment');
+  assert.deepEqual(c, { card: true, line: "New things we are trying. Tell us what's fun.", tiles: ['🧩 Clear it in three | Three pieces. Leave the board empty. | 0 of 60', '🛟 Rescue the Crumbs | Clear a path. Get them out. | 0 of 3 · ☆☆☆☆☆☆☆☆☆'] });
+  assert.equal(await page.evaluate(() => LAB.length), 2, 'the registry has the two experiments');
   await page.click('#labBack');
   assert.deepEqual(await page.evaluate(() => ({ lab: el('labCard').hidden, menu: !el('menuCard').hidden, fits: el('menuClose').getBoundingClientRect().bottom <= innerHeight && el('menuLab').getBoundingClientRect().bottom <= innerHeight })),
     { lab: true, menu: true, fits: true });
@@ -6169,7 +6169,7 @@ test('Lab: puzzle 1 played to its solution sweeps the board, says Solved, and is
   for (const [i, r, c] of sol) { await dragPiece(page, i, r, c); await frames(page, 2); }
   const s = await page.evaluate(() => ({ solved: l3.solved, empty: boardEmpty(), sweep: banners.some(b => b.txt === 'CLEAN SWEEP'), done: lab.three.done, at: lab.three.at,
     store: JSON.parse(localStorage.getItem('crumble.lab')), score, combo: combo > 0, dealing: !!dealing, trayNo, bonusMeter, ava: ava.live, hot: toy.hot, dareId: dare.id }));
-  assert.deepEqual(s, { solved: true, empty: true, sweep: true, done: [1], at: 2, store: { v: 1, three: { done: [1], at: 2 } }, score: 0, combo: true, dealing: false, trayNo: 1, bonusMeter: 0, ava: false, hot: false, dareId: '' });
+  assert.deepEqual(s, { solved: true, empty: true, sweep: true, done: [1], at: 2, store: { v: 1, three: { done: [1], at: 2 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] } }, score: 0, combo: true, dealing: false, trayNo: 1, bonusMeter: 0, ava: false, hot: false, dareId: '' });
   await page.waitForSelector('#l3Done:not([hidden])', { timeout: 5000 });
   assert.deepEqual(await page.evaluate(() => ({ eye: el('l3DoneEye').textContent, title: el('l3DoneTitle').textContent, next: !el('l3Next').hidden })), { eye: 'Puzzle 1 of 60', title: 'Solved!', next: true });
   const after = await page.evaluate(() => ({ stats: JSON.stringify(stats), best, cookies: dare.st.cookies, run: localStorage.getItem('crumble.run'), mode: localStorage.getItem('crumble.mode'), lab: localStorage.getItem('crumble.run.lab') }));
@@ -6246,7 +6246,7 @@ test('Lab: progress survives a reload, is checked on load, merges from iCloud (u
     const ch = cloudMerge({ v: 1, lab: { three: { done: [2, 9, 61, -1, 'a'], at: 12 } } }), ch2 = cloudMerge({ v: 1, lab: { three: { done: [1], at: 3 } } });
     return { ch, ch2, three: lab.three, blob: cloudBlob().lab };
   });
-  assert.deepEqual(m, { ch: true, ch2: false, three: { done: [1, 2, 3, 4, 9], at: 12 }, blob: { three: { done: [1, 2, 3, 4, 9], at: 12 } } });
+  assert.deepEqual(m, { ch: true, ch2: false, three: { done: [1, 2, 3, 4, 9], at: 12 }, blob: { three: { done: [1, 2, 3, 4, 9], at: 12 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] } } });
   await page.evaluate(() => { lab.three = { done: [1, 2, 3, 4], at: 5 }; saveLab(); dare.st.cookies = 7; saveDares(); });
   await labOpen(page, 5);
   await page.evaluate(() => { for (const [i, r, c] of l3.p.sol) place(i, r, c); });
@@ -6613,6 +6613,253 @@ test('sky bite: the crumb says a line on arriving at night and at space (its own
   assert.ok(!lines.night.includes(r.off), 'with the bite off there is nothing to warn about: ' + r.off);
 });
 
+/* ── (Lab) Rescue the Crumbs: js/rescue.js ── */
+const rsOpenBoard = async (page, k) => {
+  await page.evaluate(k => { for (let j = 0; j < k; j++) if (!lab.rescue.stars[j]) { lab.rescue.stars[j] = 1; lab.rescue.best[j] = 9; } playRS(k); }, k);
+  await page.waitForFunction(k => mode === 'lab' && state === 'play' && rs && rs.k === k && !rs.over, k);
+};
+// a test board in place of board 1 (rows as in RS_BOARDS: '.', a gem colour digit, a/b/c a crumb) and a tray of shape indices
+const rsTestBoard = (page, rows, shapes) => page.evaluate(({ rows, shapes }) => {
+  RS_BOARDS[0] = { ...RS_BOARDS[0], rows }; playRS(0);
+  tray = shapes.map((si, i) => si == null ? null : { s: SHAPES[si], gi: i + 1 });
+}, { rows, shapes });
+const rsView = page => page.evaluate(() => ({ rows: grid.map(r => r.map(g => g ? (g.cr ? 'c' : 'g') : '.').join('')), cr: rs.cr.map(x => x.out ? 'out' : x.r + ',' + x.c) }));
+test('Rescue: the Lab lists both games; its card shows the three boards (only the first open); the HUD reads Pieces with Undo, Reset and the target; fits 390x844 and 375x667', async ({ page }) => {
+  await page.click('#startLab');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#labList button')].map(b => b.dataset.id)), ['three', 'rescue']);
+  await page.click('#labList button[data-id=rescue]');
+  const c = await page.evaluate(() => ({ card: !el('rsCard').hidden, tiles: [...document.querySelectorAll('#rsGrid .rsTile')].map(b => [...b.children].map(x => x.textContent).join(' | ') + (b.disabled ? ' (locked)' : '')) }));
+  assert.deepEqual(c, { card: true, tiles: ['1 | ☆☆☆ | ★★★ in 2', '🔒 | ☆☆☆ | Locked (locked)', '🔒 | ☆☆☆ | Locked (locked)'] });
+  await page.click('#rsBack'); assert.equal(await page.isVisible('#labCard'), true, 'Back goes to the Lab card');
+  await page.click('#labList button[data-id=rescue]'); await page.click('#rsGrid .rsTile[data-k="0"]');
+  await page.waitForFunction(() => mode === 'lab' && rs && rs.k === 0 && state === 'play');
+  for (const [w, h] of [[390, 844], [375, 667]]) {
+    await page.setViewportSize({ width: w, height: h }); await frames(page, 3);
+    const hud = await page.evaluate(() => {
+      const r = id => el(id).getBoundingClientRect(), par = r('labPar'), pause = r('pauseBtn');
+      return { cls: el('stage').classList.contains('lab'), lbl: el('labLbl').textContent, n: el('labNum').textContent, par: el('labPar').textContent, parShown: !el('labPar').hidden,
+        undo: el('labUndo').disabled, reset: el('labReset').disabled, score: getComputedStyle(el('scoreVal')).display, best: getComputedStyle(el('bestBox')).display,
+        clear: par.right < pause.left && par.bottom < by && el('labPar').scrollWidth <= Math.ceil(par.width) + 1 };
+    });
+    assert.deepEqual(hud, { cls: true, lbl: 'Pieces', n: '0', par: '★★★ in 2', parShown: true, undo: true, reset: false, score: 'none', best: 'none', clear: true }, w + 'x' + h);
+  }
+  await page.click('#pauseBtn');
+  assert.deepEqual(await page.evaluate(() => ({ eye: el('pauseEye').textContent, home: el('pauseHome').textContent, end: el('pauseNew').hidden })), { eye: 'Paused · Board 1', home: 'Lab', end: true });
+  await page.click('#pauseHome'); await page.click('#labList button[data-id=rescue]');
+  const tiles = await page.evaluate(() => [...document.querySelectorAll('#rsGrid .rsTile')].map(b => b.getBoundingClientRect()).map(r => r.right <= innerWidth && r.bottom <= innerHeight));
+  assert.deepEqual(tiles, [true, true, true], 'the tiles fit at 375x667');
+  // Clear it in three still shows its own HUD
+  await page.evaluate(() => playL3(1)); await page.waitForFunction(() => l3 && mode === 'lab');
+  assert.deepEqual(await page.evaluate(() => ({ lbl: el('labLbl').textContent, n: el('labNum').textContent, par: el('labPar').hidden, rs })), { lbl: 'Puzzle', n: '1', par: true, rs: null });
+});
+test('Rescue: crumbs fall through empty cells, rest on gems and on each other, stay when their line clears and then fall; the bottom row is the exit; nothing goes on a crumb', async ({ page }) => {
+  // the rule on its own (bitboards)
+  const u = await page.evaluate(() => {
+    const B = rows => { let lo = 0, hi = 0; const cr = []; rows.forEach((row, r) => [...row].forEach((ch, c) => { const i = r * 8 + c; if (ch === '1') { if (i < 32) lo |= 1 << i; else hi |= 1 << (i - 32); } if (ch === 'a') cr.push(i); })); return [lo, hi, cr]; };
+    const f = rows => rsFallBits(...B(rows)).map(p => (p >> 3) + ',' + (p & 7));
+    return {
+      onGem: f(['........', '...a....', '........', '........', '...1....', '........', '........', '........']),
+      stack: f(['...a....', '...a....', '........', '........', '........', '........', '...1....', '........']),
+      out: f(['........', '...a....', '........', '........', '........', '........', '........', '........']),
+      stackOut: f(['........', '...a....', '...a....', '...a....', '........', '........', '........', '........']),
+      onTopOfOut: f(['........', '...a....', '...1....', '........', '........', '........', '........', '...a....']),
+    };
+  });
+  assert.deepEqual(u, { onGem: ['3,3'], stack: ['4,3', '5,3'], out: [], stackOut: [], onTopOfOut: ['1,3'] });
+  // in the game: c sits on a shelf, b on a, a on the bottom row's gem; a dot fills the shelf, a bar row 6, a dot row 7
+  await rsTestBoard(page, ['........', '........', '......c.', '1111.111', '........', '...b....', '..1a1111', '1111111.'], [0, 1, 0]);
+  await page.waitForTimeout(700);
+  const s0 = await rsView(page);
+  assert.deepEqual(s0.cr, ['2,6', '5,3', '6,3'], 'the crumbs start where the board puts them');
+  assert.equal(await page.evaluate(() => [[2, 6], [5, 3], [6, 3]].every(([r, c]) => !canPlace(SHAPES[0], r, c, grid))), true, 'nothing can be placed on a crumb');
+  const g = await geometry(page);                          // and a drag right over a crumb never seats there
+  await page.mouse.move(g.trayCenters[0].x, g.trayCenters[0].y); await page.mouse.down();
+  const f = fingerFor(g, { rows: 1, cols: 1 }, 2, 6); await page.mouse.move(f.x, f.y, { steps: 6 }); await frames(page, 2);
+  const slot = await page.evaluate(() => drag && drag.slot && [drag.slot.r, drag.slot.c]);
+  assert.notDeepEqual(slot, [2, 6], 'no seat on the crumb');
+  await page.evaluate(() => { if (drag && tray[drag.i]) sendBack(); drag = null; }); await page.mouse.up(); await frames(page, 2);
+  await page.evaluate(() => { tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[1], gi: 2 }, { s: SHAPES[0], gi: 3 }]; place(0, 3, 4); });
+  const s1 = await rsView(page);
+  assert.deepEqual(s1.cr, ['5,6', '5,3', '6,3'], 'its shelf cleared: c falls through the empty cells onto the gem at 6,6');
+  assert.equal(s1.rows[3], '........'); assert.equal(s1.rows[2], '........');
+  await page.evaluate(() => place(1, 6, 0));
+  const s2 = await rsView(page);
+  assert.deepEqual(s2.cr, ['6,6', '5,3', '6,3'], 'row 6 cleared around a, which stays (it counts as filled); c falls one more onto the bottom row\'s gem');
+  assert.equal(s2.rows[6], '...c..c.', 'the crumbs are all that is left of row 6');
+  assert.deepEqual(await page.evaluate(() => ({ won: rs.won, used: rs.used, pieces: el('labNum').textContent })), { won: false, used: 2, pieces: '2' });
+  await page.evaluate(() => place(2, 7, 7));
+  const s3 = await rsView(page);
+  assert.deepEqual(s3.cr, ['out', 'out', 'out'], 'the bottom row cleared: all three reach it and go out through the exit (b on top of a too)');
+  assert.deepEqual(s3.rows, Array(8).fill('........'));
+  assert.deepEqual(await page.evaluate(() => ({ won: rs.won, over: rs.over, stars: rs.stars })), { won: true, over: true, stars: 2 });
+  await page.waitForFunction(() => rs.cr.every(x => x.done), null, { timeout: 4000 });
+  assert.equal(await page.evaluate(() => say.txt), 'fine. I was worried. a little.', 'the last one out');
+});
+test('Rescue: board 1 played with the drag engine wins with 3 stars at par; the card says Rescued!; a longer win earns 2 stars and keeps the best', async ({ page }) => {
+  assert.deepEqual(await page.evaluate(() => [1, 2, 3, 4, 5, 6].map(n => rsStarsFor(1, n))), [3, 3, 3, 2, 2, 1], 'par 3: 3 stars up to 3 pieces, 2 up to 5, then 1');
+  await rsOpenBoard(page, 0);
+  await page.waitForTimeout(700);
+  assert.equal(await page.evaluate(() => say.txt), 'my cousins are stuck. obviously.');
+  for (const [i, r, c] of await page.evaluate(() => rs.b.sol)) { await dragPiece(page, i, r, c); await frames(page, 2); }
+  assert.deepEqual(await page.evaluate(() => ({ won: rs.won, stars: rs.stars, used: rs.used, lab: lab.rescue, busy: labBusy(), fx: fxBusy() })),
+    { won: true, stars: 3, used: 2, lab: { stars: [3, 0, 0], best: [2, 0, 0] }, busy: true, fx: true });
+  await page.waitForSelector('#rsDone:not([hidden])', { timeout: 6000 });
+  assert.deepEqual(await page.evaluate(() => ({ eye: el('rsDoneEye').textContent, title: el('rsDoneTitle').textContent, stars: el('rsDoneStars').textContent, on: el('rsDoneStars').querySelectorAll('.on').length,
+    msg: el('rsDoneMsg').textContent, next: !el('rsNext').hidden, again: !el('rsAgain').hidden })),
+    { eye: 'Board 1 of 3', title: 'Rescued!', stars: '★★★', on: 3, msg: '2 pieces · best 2', next: true, again: true });
+  await page.click('#rsNext');
+  await page.waitForFunction(() => rs && rs.k === 1 && !rs.over);
+  // board 2 the long way (the bottom row first): 4 pieces, 2 stars
+  await page.evaluate(() => { for (const [i, r, c] of [[1, 7, 4], [0, 0, 6], [2, 0, 0], [1, 7, 5]]) place(i, r, c); });
+  assert.deepEqual(await page.evaluate(() => ({ won: rs.won, stars: rs.stars, lab: lab.rescue })), { won: true, stars: 2, lab: { stars: [3, 2, 0], best: [2, 4, 0] } });
+  await page.waitForSelector('#rsDone:not([hidden])', { timeout: 6000 });
+  assert.equal(await page.evaluate(() => el('rsDoneMsg').textContent), '4 pieces · best 4 · ★★★ in 3');
+  await page.click('#rsAgain'); await page.waitForFunction(() => rs && rs.k === 1 && !rs.over && rs.used === 0);
+  await page.evaluate(() => { for (const [i, r, c] of rs.b.sol) place(i, r, c); });
+  assert.deepEqual(await page.evaluate(() => lab.rescue), { stars: [3, 3, 0], best: [2, 3, 0] }, 'the better try counts');
+  await page.evaluate(() => { playRS(1); for (const [i, r, c] of [[1, 7, 4], [0, 0, 6], [2, 0, 0], [1, 7, 5]]) place(i, r, c); });
+  assert.deepEqual(await page.evaluate(() => lab.rescue), { stars: [3, 3, 0], best: [2, 3, 0] }, 'a worse one never lowers it');
+  await page.waitForSelector('#rsDone:not([hidden])', { timeout: 6000 });
+  await page.click('#rsLab');
+  assert.equal(await page.evaluate(() => document.querySelector('#labList button[data-id=rescue] i').textContent), '2 of 3 · ★★★★★★☆☆☆');
+});
+test('Rescue: no piece fits: "Not quite", Crumb says so and the board resets; no game over', async ({ page }) => {
+  await rsOpenBoard(page, 0);
+  const start = await rsView(page);
+  // a 3x3 that cannot fit once the dot is down (gems on every third cell of the top rows)
+  await page.evaluate(() => { for (let r = 0; r < 5; r++) for (let c = 0; c < 8; c++) if ((r * 3 + c) % 3 === 0 && !grid[r][c]) grid[r][c] = { gi: 5, t: 1, f: 0, l: 0 }; tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[10], gi: 2 }, null]; });
+  assert.equal(await page.evaluate(() => fitsAnywhere(SHAPES[10], grid)), true, 'the 3x3 still fits before the drop');
+  await page.evaluate(() => { const free = []; for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (!grid[r][c]) free.push([r, c]);
+    for (const [r, c] of free) { const g = grid.map(x => x.slice()); g[r][c] = { gi: 1 }; if (!fitsAnywhere(SHAPES[10], g) && !linesFor(g).rows.length && !linesFor(g).cols.length) { place(0, r, c); return; } } });
+  const f = await page.evaluate(() => ({ over: rs.over, fails: rs.fails, banner: banners.some(b => b.txt === 'Not quite'), say: say.txt, state, overCard: el('overCard').hidden, busy: labBusy(), undo: el('labUndo').disabled }));
+  assert.deepEqual(f, { over: true, fails: 1, banner: true, say: 'you trapped them. nice.', state: 'play', overCard: true, busy: true, undo: true });
+  await page.waitForFunction(() => !rs.over, null, { timeout: 4000 });
+  assert.deepEqual(await rsView(page), start, 'the board as it started');
+  assert.deepEqual(await page.evaluate(() => ({ used: rs.used, tray: tray.map(t => SHAPES.indexOf(t.s)), hint: el('labHint').hidden, n: el('labNum').textContent })), { used: 0, tray: [1, 1, 9], hint: true, n: '0' });
+});
+test('Rescue: Undo takes back one drop and puts a rescued crumb back; Reset starts again; the queue deals three at a time in order', async ({ page }) => {
+  await rsOpenBoard(page, 1);
+  await page.waitForTimeout(800);
+  const start = await rsView(page);
+  assert.equal(await page.evaluate(() => el('labUndo').disabled), true);
+  await page.evaluate(() => place(0, 0, 6));                // the tall bar clears the tower's column: b goes out
+  assert.deepEqual((await rsView(page)).cr, ['out', '6,2']);
+  assert.equal(await page.evaluate(() => el('labUndo').disabled), false);
+  await page.click('#labUndo');
+  assert.deepEqual(await rsView(page), start, 'b is back on its tower, the column too');
+  assert.deepEqual(await page.evaluate(() => ({ used: rs.used, tray: tray.map(t => t && SHAPES.indexOf(t.s)), undo: el('labUndo').disabled, n: el('labNum').textContent, hist: rs.hist.length })),
+    { used: 0, tray: [4, 1, 2], undo: true, n: '0', hist: 0 });
+  // three drops that do not win: the next three come in queue order; Undo after the deal takes the tray back too
+  await page.evaluate(() => { place(1, 0, 0); place(0, 1, 0); place(2, 4, 0); });
+  assert.deepEqual(await page.evaluate(() => ({ tray: tray.map(t => t && SHAPES.indexOf(t.s)), qi: rs.qi, n: el('labNum').textContent })), { tray: [4, 1, 2], qi: 6, n: '3' });
+  await page.click('#labUndo');
+  assert.deepEqual(await page.evaluate(() => ({ tray: tray.map(t => t && SHAPES.indexOf(t.s)), qi: rs.qi, used: rs.used })), { tray: [null, null, 2], qi: 3, used: 2 });
+  await page.click('#labReset');
+  assert.deepEqual(await rsView(page), start);
+  assert.deepEqual(await page.evaluate(() => ({ used: rs.used, fails: rs.fails, tray: tray.map(t => SHAPES.indexOf(t.s)) })), { used: 0, fails: 1, tray: [4, 1, 2] }, 'a reset after a drop counts as a try');
+});
+test('Rescue: after three tries a Hint shows the next drop of the stored solution; off its path it starts the board again ("from the top. watch.")', async ({ page }) => {
+  await rsOpenBoard(page, 2);
+  for (let n = 1; n <= 3; n++) {
+    if (n === 2) { await page.evaluate(() => place(1, 0, 0)); await page.click('#labReset'); }   // a reset try counts
+    else { await page.evaluate(() => rsFail()); await page.waitForFunction(() => !rs.over, null, { timeout: 4000 }); }
+    assert.equal(await page.isVisible('#labHint'), n === 3, 'the Hint button after try ' + n);
+  }
+  assert.equal(await page.evaluate(() => say.txt), 'want a hint? fine.');
+  await page.click('#labHint');
+  const sol = await page.evaluate(() => rs.b.sol);
+  assert.deepEqual(await page.evaluate(() => [rs.hint.i, rs.hint.r, rs.hint.c]), sol[0]);
+  assert.deepEqual(await page.evaluate(() => ({ pulse: rsFx(), busy: fxBusy() })), { pulse: true, busy: true });
+  await dragPiece(page, ...sol[0]); await frames(page, 2);
+  assert.deepEqual(await page.evaluate(() => ({ hint: rs.hint, used: rs.used })), { hint: null, used: 1 }, 'a drop spends the hint');
+  await page.click('#labHint');
+  assert.deepEqual(await page.evaluate(() => [rs.hint.i, rs.hint.r, rs.hint.c]), sol[1], 'still on the path: the next drop');
+  await page.evaluate(() => place(1, 0, 0));                // off the path
+  await page.click('#labHint');
+  assert.deepEqual(await page.evaluate(() => ({ used: rs.used, hint: [rs.hint.i, rs.hint.r, rs.hint.c], say: say.txt })), { used: 0, hint: sol[0], say: 'from the top. watch.' });
+  for (let j = 0; j < sol.length; j++) {                    // follow the hints to the end
+    if (j) await page.click('#labHint');
+    const h = await page.evaluate(() => [rs.hint.i, rs.hint.r, rs.hint.c]);
+    assert.deepEqual(h, sol[j]);
+    await page.evaluate(h => place(...h), h);
+  }
+  assert.deepEqual(await page.evaluate(() => ({ won: rs.won, stars: rs.stars, best: lab.rescue.best[2] })), { won: true, stars: 3, best: 7 }, 'a hint costs nothing');
+});
+test('Rescue: progress is saved, checked on load (older saves without it load), merged from iCloud (stars by max, best by the fewest)', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1, 2], at: 3 } })));
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => lab), { three: { done: [1, 2], at: 3 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] } }, 'an older save loads; no rescues yet');
+  await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1], at: 2 }, rescue: { stars: [3, 9, 2], best: [2, 4, 'x'] } })));
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => lab.rescue), { stars: [3, 0, 0], best: [2, 0, 0] }, 'bad values dropped (stars without a best are not a rescue)');
+  assert.deepEqual(await page.evaluate(() => [rsOpen(0), rsOpen(1), rsOpen(2), rsNext()]), [true, true, false, 1]);
+  await page.evaluate(() => localStorage.setItem('crumble.lab', '{"v":1,"rescue":"no"}'));
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => lab.rescue), { stars: [0, 0, 0], best: [0, 0, 0] });
+  const m = await page.evaluate(() => {
+    lab.rescue = { stars: [3, 1, 0], best: [2, 6, 0] };
+    const ch = cloudMerge({ v: 1, lab: { rescue: { stars: [2, 2, 1], best: [3, 5, 12] } } });
+    const ch2 = cloudMerge({ v: 1, lab: { rescue: { stars: [1, 1, 0], best: [4, 9, 0] } } });
+    const bad = cloudMerge({ v: 1, lab: { rescue: { stars: [3, 3, 3, 3], best: [1, 'x', -2] } } });
+    return { ch, ch2, bad, r: lab.rescue, blob: cloudBlob().lab.rescue, three: !!cloudBlob().lab.three };
+  });
+  assert.deepEqual(m, { ch: true, ch2: false, bad: true, r: { stars: [3, 2, 1], best: [1, 5, 12] }, blob: { stars: [3, 2, 1], best: [1, 5, 12] }, three: true });
+  await page.evaluate(() => saveLab());
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('crumble.lab')).rescue), { stars: [3, 2, 1], best: [1, 5, 12] });
+});
+test('Rescue: the first rescue of a board pays one cookie, a replay none; nothing of the real game leaks in (dares, stats, saved run, Endless dealing)', async ({ page }) => {
+  const deal = () => page.evaluate(() => {                 // an Endless opening from a pinned seed: the board, the tray and the dealer's state
+    let a = 4242; const mr = Math.random;
+    Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    leaveMode(); hideMenus(); mode = 'endless'; lvl = null; start();
+    const out = JSON.stringify({ g: grid.map(r => r.map(g => g ? g.gi : -1)), t: tray.map(t => t && [SHAPES.indexOf(t.s), t.gi]), pace, trayNo, starCool, goldenCool, transformCool, tension, rndSrc: !!rndSrc, fairDeal, bonusMeter });
+    Math.random = mr; return out;
+  });
+  await play(page); await dealt(page);
+  const dealt0 = await deal();
+  await dealt(page); await page.evaluate(() => saveRun());
+  const before = await page.evaluate(() => ({ stats: JSON.stringify(stats), best, run: localStorage.getItem('crumble.run'), mode: localStorage.getItem('crumble.mode'), dares: localStorage.getItem('crumble.dares') }));
+  await page.evaluate(() => { dare.st.cookies = 4; saveDares(); });
+  await page.click('#pauseBtn'); await page.click('#pauseHome');
+  await page.click('#menuLab'); await page.click('#labList button[data-id=rescue]'); await page.click('#rsGrid .rsTile[data-k="0"]');
+  await page.waitForFunction(() => mode === 'lab' && rs && rs.k === 0 && !rs.over);
+  const live = await page.evaluate(() => ({ bonus: el('bonusChip').hidden, dare: el('dareChip').hidden, dareId: dare.id, sky: curWorld === CFG.HOME_WORLD }));
+  assert.deepEqual(live, { bonus: true, dare: true, dareId: '', sky: true });
+  await page.evaluate(() => { for (const [i, r, c] of rs.b.sol) place(i, r, c); });
+  await page.waitForFunction(() => dare.st.cookies === 5, null, { timeout: 5000 });
+  await page.waitForFunction(() => say.txt === 'fine. one cookie. for the cousins.', null, { timeout: 3000 });
+  await page.waitForSelector('#rsDone:not([hidden])', { timeout: 6000 });
+  assert.equal(await page.evaluate(() => el('rsDoneCookie').hidden), false, 'the card says a cookie went in the jar');
+  await page.click('#rsAgain'); await page.waitForFunction(() => rs && !rs.over && rs.used === 0);
+  await page.evaluate(() => { for (const [i, r, c] of rs.b.sol) place(i, r, c); });
+  await page.waitForSelector('#rsDone:not([hidden])', { timeout: 6000 });
+  assert.deepEqual(await page.evaluate(() => ({ cookies: dare.st.cookies, card: el('rsDoneCookie').hidden })), { cookies: 5, card: true }, 'a replay pays nothing');
+  const after = await page.evaluate(() => ({ stats: JSON.stringify(stats), best, run: localStorage.getItem('crumble.run'), mode: localStorage.getItem('crumble.mode'), dareId: dare.id, score, bonusMeter, ava: ava.live, hot: toy.hot }));
+  assert.deepEqual(after, { stats: before.stats, best: before.best, run: before.run, mode: before.mode, dareId: '', score: 0, bonusMeter: 0, ava: false, hot: false }, 'no stats, best, saved run or mode touched');
+  await page.click('#rsLab'); await page.click('#labBack'); await page.click('#menuEndless');
+  await page.waitForFunction(() => mode === 'endless' && state === 'play');
+  assert.equal(await page.evaluate(() => el('stage').classList.contains('lab') || !!rs), false, 'the Lab is gone from the HUD');
+  assert.equal(await deal(), dealt0, 'Endless deals the same opening for the same seed after a Rescue game');
+});
+test('Rescue: every board\'s stored solution wins with 3 stars in the real game, the crumbs start at rest, and par is the fewest pieces that win (rsSolve)', async ({ page }) => {
+  for (let k = 0; k < 3; k++) {
+    await rsOpenBoard(page, k);
+    const r = await page.evaluate(() => { const c = rsCells(rs.k); return { rest: JSON.stringify(rsFallBits(c.lo, c.hi, c.cr)) === JSON.stringify(c.cr.slice().sort((a, b) => a - b)), crumbs: rs.cr.length }; });
+    assert.deepEqual(r, { rest: true, crumbs: k + 1 }, 'board ' + (k + 1));
+    await page.evaluate(() => { for (const [i, r, c] of rs.b.sol) place(i, r, c); });
+    assert.deepEqual(await page.evaluate(() => ({ won: rs.won, stars: rs.stars, used: rs.used, par: rs.b.par })), { won: true, stars: 3, used: [2, 3, 7][k], par: [2, 3, 7][k] }, 'board ' + (k + 1));
+  }
+  const s = await page.evaluate(() => {
+    let rolls = 0; const mr = Math.random; Math.random = () => { rolls++; return mr(); };
+    const out = [0, 1, 2].map(k => { const t = performance.now(), r = rsSolve(k, 9, 90000); return { min: r.min, over: r.over, par: RS_BOARDS[k].par, ms: Math.round(performance.now() - t) }; });
+    Math.random = mr; return { out, rolls };
+  });
+  for (const [k, r] of s.out.entries()) {
+    if (k === 2 && r.over) { console.log('     (board 3: the search ran out of time; proved no win in fewer than ' + r.min + ')'); assert.ok(r.min >= r.par - 1); continue; }
+    assert.deepEqual({ min: r.min, over: r.over }, { min: r.par, over: false }, 'board ' + (k + 1) + ': par is the fewest pieces (' + r.ms + ' ms)');
+  }
+  assert.equal(s.rolls, 0, 'the solver never rolls Math.random');
+});
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
