@@ -55,6 +55,9 @@ const SAY={
   l3Solve:["...ok, that was clean."],
   l3Hint:["want a hint? fine."],
   l3Cookie:["fine. one cookie."],
+  // (pace) js/challenge.js: a friend's Challenge link with their pace, at the end of a tray
+  paceAhead:["ahead. don't look back.","ahead of them. keep going.","they were slower here. heh.","look at you, winning."],
+  paceBehind:["they were faster here.","behind them. no panic.","they're pulling ahead. hmm.","catch up. I believe. mostly."],
 };
 const say={el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){

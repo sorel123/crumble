@@ -2487,6 +2487,141 @@ test('Challenge link (E2): a link without a readable deal works the deal out fro
   assert.equal(await page.evaluate(() => el('chalCard').hidden), true);
 });
 
+/* ── a friend's pace on a Challenge link (pace) ── */
+// a friend link for `seed` whose sender scored `beat` (under bronze, so "🎯" is the next target) at an even pace; p overrides the pace
+const paceLink = (page, seed, p) => page.evaluate(([seed, p]) => {
+  const d = chMake(seed), beat = Math.round(d.med[0] * 0.8 / 10) * 10;
+  const fp = Array.from({ length: 12 }, (_, i) => i === 11 ? beat : Math.round(beat * (i + 1) / 12 / 10) * 10);
+  return { q: '?c=' + seed + '&s=' + beat + '&d=' + chPack(d) + '&p=' + (p === undefined ? chPacePack(fp) : p), beat, fp, med: d.med };
+}, [seed, p]);
+const paceOpen = async (page, server, q) => {
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(server.url + q);
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && !el('chalCard').hidden);
+  await page.click('#chalFriend'); await page.waitForFunction(() => state === 'play' && mode === 'challenge'); await dealt(page);
+};
+
+test('pace: a pace packs into twelve short base-36 gains and back; anything off is refused', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const a = [120, 120, 450, 900, 900, 1530, 2010, 2010, 2600, 3300, 3990, 4200], s = chPacePack(a);
+    const big = Array.from({ length: 12 }, (_, i) => (i + 1) * 83000);
+    return { s, back: chPaceUnpack(s, 4200), big: chPaceUnpack(chPacePack(big), big[11]), bigLen: chPacePack(big).length,
+      wrongS: chPaceUnpack(s, 4210), eleven: chPaceUnpack(s.split('.').slice(1).join('.'), 4080), neg: chPaceUnpack(s.replace(/^c/, '-c'), 4200),
+      upper: chPaceUnpack(s.toUpperCase(), 4200), empty: chPaceUnpack('', 0), notStr: chPaceUnpack(5, 0), long: chPaceUnpack('zzzzzzz' + s.slice(1), 4200),
+      offGrid: chPacePack([5, ...a.slice(1)]), short: chPacePack(a.slice(0, 11)), down: chPacePack([...a.slice(0, 10), 3000, 4200]),
+      link: chLinkFor('pk01', 4200, chMake('pk01'), a), linkBad: chLinkFor('pk01', 4300, chMake('pk01'), a), linkNone: chLinkFor('pk01', 4200, chMake('pk01')) };
+  });
+  assert.equal(r.s, 'c.0.x.19.0.1r.1c.0.1n.1y.1x.l');
+  assert.deepEqual(r.back, [120, 120, 450, 900, 900, 1530, 2010, 2010, 2600, 3300, 3990, 4200]);
+  assert.equal(r.big[11], 996000); assert.ok(r.bigLen < 60, 'short: ' + r.bigLen);
+  assert.deepEqual([r.wrongS, r.eleven, r.neg, r.upper, r.empty, r.notStr, r.long], [null, null, null, null, null, null, null]);
+  assert.deepEqual([r.offGrid, r.short, r.down], ['', '', ''], 'only a whole, rising pace on the score grid packs');
+  assert.match(r.link, /&d=A[\w-]+&p=c\.0\.x\.19\.0\.1r\.1c\.0\.1n\.1y\.1x\.l$/);
+  assert.doesNotMatch(r.linkBad, /&p=/, 'a pace that does not end on the score is left out');
+  assert.doesNotMatch(r.linkNone, /&p=/);
+});
+
+test('pace: a 12-tray round records her score after every tray; the best run keeps it and Share sends it', async ({ page }) => {
+  await chalStart(page, 'pace01');
+  const r = await chPlayRound(page, 'casual');
+  assert.equal(r.done, true);
+  await page.waitForSelector('#overCard:not([hidden])', { timeout: 4000 });
+  const c = await page.evaluate(() => ({ pace: chal.pace, score, rec: chalRec.s.pace01, saved: JSON.parse(localStorage.getItem('crumble.chal')).s.pace01, text: shareText() }));
+  assert.equal(c.pace.length, 12);
+  assert.ok(c.pace.every((v, i) => !i || v >= c.pace[i - 1]), 'rising: ' + c.pace);
+  assert.equal(c.pace[11], c.score);
+  assert.equal(c.saved.p, c.rec.p);
+  assert.deepEqual(await page.evaluate(p => chPaceUnpack(p, score), c.rec.p), c.pace, 'the record keeps the best run\'s pace');
+  assert.ok(c.text.endsWith('&p=' + c.rec.p), c.text);
+  // a lower score keeps the best run's pace; a round that runs out of moves pads its pace with the score that stands
+  await page.click('#againBtn'); await dealt(page);
+  await chPlayRound(page, 'casual', 4);
+  const low = await page.evaluate(() => { const t = trayNo; score = 10; gameOver(); return { t, pace: chal.pace, p: chalRec.s.pace01.p }; });
+  assert.equal(low.p, c.rec.p);
+  assert.equal(low.pace.length, 12); assert.deepEqual(low.pace.slice(low.t - 1), Array(13 - low.t).fill(10));
+});
+
+test('pace: a friend\'s pace shows as a mark on the bar and ahead/behind in the HUD; the crumb says one line each way', async ({ page, server }) => {
+  const L = await paceLink(page, 'pace02');
+  await paceOpen(page, server, L.q);
+  const s0 = await page.evaluate(() => ({ fp: chal.fp, beat: chal.beat, hidden: el('chalInfo').querySelector('.fp').hidden, left: el('chalInfo').querySelector('.fp').style.left,
+    lbl: el('bestLbl').textContent, val: el('bestVal').textContent, info: el('chalInfo').textContent }));
+  assert.deepEqual(s0, { fp: L.fp, beat: L.beat, hidden: false, left: '0%', lbl: '🎯 Beat', val: L.beat.toLocaleString('en-US'), info: 'Tray 1 of 12' });
+  // the bar's scale: inside the stretch, pinned below and above it, and with gold
+  const b = await page.evaluate(m => [chBarAt(m[0] / 2, 0, m), chBarAt(m[0] + 10, 0, m), chBarAt(m[0] - 10, m[0], m), chBarAt(m[1] + (m[2] - m[1]) / 4, m[1], m), chBarAt(m[2], m[2], m), chBarAt(0, m[2], m)], L.med);
+  assert.deepEqual(b, [{ x: 0.5, out: false }, { x: 1, out: true }, { x: 0, out: true }, { x: 0.25, out: false }, { x: 1, out: true }, { x: 0, out: true }]);
+  // a tray boundary, ahead of them: the mark moves to their score after tray 1, the HUD says by how much, the crumb says so once
+  await page.evaluate(() => { CFG.FX_CRUMB_TALK = true; CFG.FX_MASCOT = true; say.last = -1e9; });
+  const t2 = await page.evaluate(() => {
+    trayNo = 2; score = chal.fp[0] + 50; chPaceTalk(); syncHud();
+    const f = el('chalInfo').querySelector('.fp');
+    return { left: f.style.left, out: f.classList.contains('out'), lbl: el('bestLbl').textContent, said: say.txt, ahead: SAY.paceAhead.includes(say.txt), pa: chal.pa, pw: chal.pw };
+  });
+  assert.equal(t2.left, Math.round(L.fp[0] / L.med[0] * 100) + '%'); assert.equal(t2.out, false);
+  assert.equal(t2.lbl, '🎯\u00a0+50'); assert.ok(t2.ahead, t2.said); assert.deepEqual([t2.pa, t2.pw], [1, 1]);
+  // the HUD is not touched again while nothing changed
+  const writes = await page.evaluate(() => new Promise(res => { let n = 0; const mo = new MutationObserver(l => { n += l.length; }); mo.observe(el('chalInfo'), { subtree: true, childList: true, attributes: true, characterData: true }); chHud(); chHud(); setTimeout(() => { mo.disconnect(); res(n); }, 30); }));
+  assert.equal(writes, 0);
+  // falling behind after being ahead: one line; ahead again, and behind again: no more
+  const t3 = await page.evaluate(() => {
+    say.txt = ''; trayNo = 3; score = chal.fp[1] - 20; chPaceTalk(); syncHud();
+    const r = { lbl: el('bestLbl').textContent, said: say.txt, behind: SAY.paceBehind.includes(say.txt), pw: chal.pw };
+    say.txt = ''; trayNo = 4; score = chal.fp[2] + 10; chPaceTalk(); trayNo = 5; score = chal.fp[3] - 10; chPaceTalk();
+    r.again = say.txt; return r;
+  });
+  assert.deepEqual(t3, { lbl: '🎯\u00a0−20', said: t3.said, behind: true, pw: 3, again: '' });
+  // talk off: the mark and the HUD stay, no line; CH_PACE off: no mark, "🎯 Beat" as before
+  const off = await page.evaluate(() => {
+    chal.pw = 0; chal.pa = 0; CFG.FX_CRUMB_TALK = false; say.txt = ''; trayNo = 6; score = chal.fp[4] + 10; chPaceTalk();
+    const r = { said: say.txt, pw: chal.pw }; CFG.FX_CRUMB_TALK = true;
+    CFG.CH_PACE = false; syncHud(); r.hidden = el('chalInfo').querySelector('.fp').hidden; r.lbl = el('bestLbl').textContent; CFG.CH_PACE = true; syncHud();
+    r.back = el('chalInfo').querySelector('.fp').hidden; return r;
+  });
+  assert.deepEqual(off, { said: '', pw: 1, hidden: true, lbl: '🎯 Beat', back: false });
+});
+
+test('pace: a run with a friend\'s pace saves and resumes with it; an older run save without one still loads', async ({ page, server }) => {
+  const L = await paceLink(page, 'pace03');
+  await paceOpen(page, server, L.q);
+  await chPlayRound(page, 'casual', 7);
+  const before = await page.evaluate(() => { chal.pa = 1; chal.pw = 1; saveRun(); return { fp: chal.fp, pace: chal.pace, trayNo, beat: chal.beat }; });
+  assert.equal(before.pace.length, before.trayNo - 1);
+  await reloadGame(page);
+  assert.deepEqual(await page.evaluate(() => ({ fp: chal.fp, pace: chal.pace, trayNo, beat: chal.beat, pa: chal.pa, pw: chal.pw, mark: !el('chalInfo').querySelector('.fp').hidden })),
+    { ...before, pa: 1, pw: 1, mark: true });
+  // Retry keeps the friend's pace, as it keeps their target
+  await page.evaluate(() => { start(); });
+  await dealt(page);
+  assert.deepEqual(await page.evaluate(() => [chal.beat, chal.fp, chal.pace]), [before.beat, before.fp, []]);
+  // an older save: no pc/fp/pa/pw in ch
+  await chPlayRound(page, 'casual', 4);
+  await page.evaluate(() => { saveRun(); const o = JSON.parse(localStorage.getItem('crumble.run.chal')); for (const k of ['pc', 'fp', 'pa', 'pw']) delete o.ch[k]; localStorage.setItem('crumble.run.chal', JSON.stringify(o)); });
+  await reloadGame(page);
+  const old = await page.evaluate(() => ({ state, mode, beat: chal.beat, fp: chal.fp, pace: chal.pace, mark: el('chalInfo').querySelector('.fp').hidden, lbl: el('bestLbl').textContent }));
+  assert.deepEqual(old, { state: 'play', mode: 'challenge', beat: before.beat, fp: null, pace: null, mark: true, lbl: old.lbl });
+  assert.doesNotMatch(old.lbl, /[+−]/);
+  await chPlayRound(page, 'casual');
+  await page.waitForSelector('#overCard:not([hidden])', { timeout: 4000 });
+  assert.doesNotMatch(await page.evaluate(() => shareText()), /&p=/, 'no pace was recorded for that round, so the link has none');
+});
+
+test('pace: a bad p is ignored and the link still opens as before; old links and old records still work', async ({ page, server }) => {
+  for (const p of ['garbage', '1.2.3', 'c.0.x.19.0.1r.1c.0.1n.1y.1x.l', '0.0.0.0.0.0.0.0.0.0.0.0', '']) {
+    const L = await paceLink(page, 'pace04', p);
+    await paceOpen(page, server, L.q);
+    const r = await page.evaluate(() => ({ beat: chal.beat, fp: chal.fp, q: location.search, mark: el('chalInfo').querySelector('.fp').hidden, lbl: el('bestLbl').textContent }));
+    assert.deepEqual(r, { beat: L.beat, fp: null, q: '', mark: true, lbl: '🎯 Beat' }, 'p=' + p);
+  }
+  // a link from before (no p at all)
+  const L = await paceLink(page, 'pace04');
+  await paceOpen(page, server, L.q.replace(/&p=.*$/, ''));
+  assert.deepEqual(await page.evaluate(() => [chal.beat, chal.fp]), [L.beat, null]);
+  // an older results record (no p) and one with a broken p load; the broken p is dropped
+  await page.evaluate(() => { localStorage.setItem('crumble.chal', JSON.stringify({ v: 1, s: { old01: { b: 900, m: 0, n: 2, t: 5 }, old02: { b: 900, m: 0, n: 1, t: 6, p: 'zz.1' }, old03: { b: 120, m: 0, n: 1, t: 7, p: 'c.0.0.0.0.0.0.0.0.0.0.0' } }, won: 0, gold: 0 })); });
+  await reloadGame(page);
+  assert.deepEqual(await page.evaluate(() => [chalRec.s.old01, chalRec.s.old02, chalRec.s.old03.p]), [{ b: 900, m: 0, n: 2, t: 5 }, { b: 900, m: 0, n: 1, t: 6 }, 'c.0.0.0.0.0.0.0.0.0.0.0']);
+});
+
 let failed = 0;
 const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;   // ONLY=adventure npm test: just the scenarios whose name matches
 test('whole-screen mode looks (6.7): bonus, golden, Adventure and Daily each tint the screen around the board, never a gem, and fade out', async ({ page }) => {

@@ -17,7 +17,8 @@
    dealer dealt one); golden hands and transformations are off (they depend on live dealing). No rescue.
    Saved: the run in `crumble.run.chal` (with its whole deal, so an update to the dealer never changes a round in
    progress) and results in `crumble.chal` = {v:1, s:{"<seed>":{b:best score, m:best medal 0-3, n:plays}}, won, gold}
-   (won: challenges with a medal, gold: with gold; counted once per seed, kept when old seeds are pruned). */
+   (won: challenges with a medal, gold: with gold; counted once per seed, kept when old seeds are pruned). A seed's
+   best run also keeps its pace (p: the score after each tray, packed as in a link; see "friend's pace" below). */
 const CH_TRAYS=12, CHAL_STORE='crumble.chal', CH_KEEP=60;
 const MEDALS=[{name:'Bronze',icon:'🥉',col:'#F0A86A'},{name:'Silver',icon:'🥈',col:'#E4ECF5'},{name:'Gold',icon:'🥇',col:'#FFD45C'}];
 let chal=null;           // the round in play: {seed, deal:{open, trays, med}, won: medals reached so far (0-3)}
@@ -25,6 +26,7 @@ let chGen=false;         // generating a deal: commitTray only records the hand 
 let chSeed='';           // the seed the next start() deals
 let chDone=false;        // the twelfth tray has been played: the round is over, the end card is on its way
 let chBeat=0;            // (E2) the score a friend's link asks her to beat (0: none); the next start() takes it
+let chFp=null;           // (pace) that friend's pace (their score after each of the 12 trays) or null; the next start() takes it
 const chalRec={s:{},won:0,gold:0};
 const chCache=new Map(); // seed -> deal (with medals), so a retry starts at once
 
@@ -257,7 +259,7 @@ function chOpen(){
   const seed=chSeed||chToday(), deal=chDeal(seed);
   chResetDealer();
   grid=deal.open.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0}));
-  chal={seed,deal,won:0,beat:chBeat,beaten:false}; chDone=false; chBeat=0;
+  chal={seed,deal,won:0,beat:chBeat,beaten:false,pace:[],fp:chBeat&&chPaceOk(chFp,chBeat)?chFp:null,pa:0,pw:0}; chDone=false; chBeat=0; chFp=null;
   trayNo=1; chCommit(deal.trays[0]);
   pushBanner('CHALLENGE',chal.beat?'Beat '+chal.beat.toLocaleString():CH_TRAYS+' trays · '+MEDALS[0].icon+' '+deal.med[0].toLocaleString(),'#FFE9A8');
 }
@@ -268,6 +270,8 @@ function chCommit(T){
 // dealSteps(), between trays: the next frozen hand, or the end of the round
 function chDealNext(){
   if(!chal) return;
+  if(chal.pace&&chal.pace.length===trayNo-2) chal.pace.push(score);   // (pace) her score after the tray just played
+  chPaceTalk();
   if(trayNo>CH_TRAYS){                               // the twelfth tray is played: the round is over
     trayNo=CH_TRAYS; chDone=true; tray=[null,null,null];
     const m=chMedalOf(score,chal.deal.med);
@@ -279,7 +283,7 @@ function chDealNext(){
   chCommit(chal.deal.trays[trayNo-1]);
   if(chal.deal.trays[trayNo-1].l==='CLOSER') specialEnd=trayNo;   // the same special spacing the live dealer keeps after a closer
   roomNow=roomOf(packGrid(grid));
-  chHud();
+  if(chPaceOn()) syncHud(); else chHud();             // (pace) the friend's mark moves on a tray, so the right box may too
 }
 // goalStep(), after every drop: a medal she has just reached
 function chStep(){
@@ -304,16 +308,46 @@ function chHud(){
   if(box.hidden===on) box.hidden=!on;
   if(!on){ chHudKey=''; return; }
   const med=chal.deal.med, m=chMedalOf(score,med), lo=m?med[m-1]:0, f=m>=3?1:clamp((score-lo)/(med[m]-lo),0,1);
-  const txt='Tray '+Math.min(trayNo,CH_TRAYS)+' of '+CH_TRAYS, q=Math.round(f*100)/100, key=txt+'|'+q+'|'+m;
+  const fb=chPaceOn()?chBarAt(chFriendAt(),score,med):null;
+  const txt='Tray '+Math.min(trayNo,CH_TRAYS)+' of '+CH_TRAYS, q=Math.round(f*100)/100, key=txt+'|'+q+'|'+m+'|'+(fb?fb.x+(fb.out?'o':''):'');
   if(key===chHudKey) return;
   chHudKey=key;
   box.querySelector('.to').textContent=txt;
   box.style.setProperty('--mc',MEDALS[Math.min(m,2)].col);
   box.querySelector('.fill').style.transform='scaleX('+q+')';
+  const fp=box.querySelector('.fp');                 // (pace) the friend's mark on the same bar
+  if(fp.hidden===!!fb) fp.hidden=!fb;
+  if(fb){ fp.style.left=Math.round(fb.x*100)+'%'; fp.classList.toggle('out',fb.out); }
+}
+/* (pace) A friend's link with their pace: where they stood when they started this tray (0 on tray 1, their final once the
+   round is done), and where that falls on the bar (the stretch from her last medal to the next; off it: pinned to the
+   nearer end and faded). */
+const chPaceOn=()=>!!(CFG.CH_PACE&&chal&&chal.fp);
+function chFriendAt(){ const i=chDone?CH_TRAYS-1:Math.min(trayNo,CH_TRAYS)-2; return i<0?0:chal.fp[i]; }
+function chBarAt(v,sc,med){
+  const m=chMedalOf(sc,med);
+  if(m>=3) return {x:v>=med[2]?1:0,out:true};
+  const lo=m?med[m-1]:0, raw=(v-lo)/(med[m]-lo);
+  return {x:Math.round(clamp(raw,0,1)*100)/100,out:raw<0||raw>1};
+}
+/* At the end of trays 1-11 the crumb says one line the first time she is ahead of the friend's pace (from level or
+   behind), and one the first time she falls behind it after being ahead. pa: -1 behind / 0 level / 1 ahead at the
+   last tray end; pw: lines said (1 ahead, 2 behind). The line is picked with the mascot's dice (sayPick). */
+function chPaceTalk(){
+  const i=trayNo-2; if(!chPaceOn()||i<0||i>=CH_TRAYS-1) return;
+  const f=chal.fp[i], st=score>f?1:score<f?-1:0;
+  let k='';
+  if(st===1&&chal.pa!==1&&!(chal.pw&1)){ chal.pw|=1; k='paceAhead'; }
+  else if(st===-1&&chal.pa===1&&!(chal.pw&2)){ chal.pw|=2; k='paceBehind'; }
+  if(st) chal.pa=st;
+  if(k&&CFG.FX_CRUMB_TALK&&CFG.FX_MASCOT) crumbSay(sayPick(k),0,'say',true);
 }
 function chHudRight(){                               // syncHud(): [label, value]
   const m=chMedalOf(score,chal.deal.med);
-  if(chal.beat&&score<=chal.beat&&(m>=3||chal.beat<=chal.deal.med[m])) return ['🎯 Beat',chal.beat.toLocaleString()];   // (E2) the friend's score, when it is the next thing to pass
+  if(chal.beat&&score<=chal.beat&&(m>=3||chal.beat<=chal.deal.med[m])){   // (E2) the friend's score, when it is the next thing to pass
+    const d=chPaceOn()?score-chFriendAt():0;                                // (pace) and how far ahead (+) or behind (−) their pace she is
+    return [d?'🎯\u00a0'+(d>0?'+':'−')+Math.abs(d).toLocaleString():'🎯 Beat',chal.beat.toLocaleString()];
+  }
   if(m>=3) return [MEDALS[2].icon+' Gold','Got it!'];
   return [MEDALS[m].icon+' '+MEDALS[m].name,chal.deal.med[m].toLocaleString()];
 }
@@ -323,7 +357,8 @@ function loadChal(){
   try{
     const o=JSON.parse(localStorage.getItem(CHAL_STORE)||'{}');
     if(o&&o.s&&typeof o.s==='object') for(const k in o.s){ const r=o.s[k]; if(!r||!/^[\w-]{1,24}$/.test(k)) continue;
-      chalRec.s[k]={b:isInt(r.b,0,1e9)?r.b:0,m:isInt(r.m,0,3)?r.m:0,n:isInt(r.n,0,1e6)?r.n:0,t:isInt(r.t,0,1e15)?r.t:0}; }
+      chalRec.s[k]={b:isInt(r.b,0,1e9)?r.b:0,m:isInt(r.m,0,3)?r.m:0,n:isInt(r.n,0,1e6)?r.n:0,t:isInt(r.t,0,1e15)?r.t:0};
+      if(chPaceUnpack(r.p,chalRec.s[k].b)) chalRec.s[k].p=r.p; }   // (pace) an older record has none
     if(o&&isInt(o.won,0,1e6)) chalRec.won=o.won;
     if(o&&isInt(o.gold,0,1e6)) chalRec.gold=o.gold;
   }catch(e){}
@@ -334,9 +369,10 @@ function saveChal(){
   try{ localStorage.setItem(CHAL_STORE,JSON.stringify({v:1,s:chalRec.s,won:chalRec.won,gold:chalRec.gold})); }catch(e){}
   cloudDirty();                                     // (1.1 F) the iCloud backup follows
 }
-function recordChal(seed,sc,med){
+function recordChal(seed,sc,med,pace){
   const r=chalRec.s[seed]||(chalRec.s[seed]={b:0,m:0,n:0,t:0}), m=chMedalOf(sc,med), prevB=r.b, prevM=r.m;
   r.n++; r.t=Date.now(); r.b=Math.max(r.b,sc); r.m=Math.max(r.m,m);
+  if(sc>prevB){ const p=chPaceOk(pace,sc)?chPacePack(pace):''; if(p) r.p=p; else delete r.p; }   // (pace) the best run's pace, packed
   if(prevM<1&&m>=1) chalRec.won++;
   if(prevM<3&&m>=3) chalRec.gold++;
   saveChal();
@@ -344,7 +380,9 @@ function recordChal(seed,sc,med){
 }
 // gameOver() (flow.js): the end card for a round, finished or out of moves
 function chalOver(){
-  const done=chDone, {r,m,prevB}=recordChal(chal.seed,score,chal.deal.med); chDone=false;
+  const P=chal.pace;                                 // (pace) a round that ran out of moves: the score stands for the trays left
+  if(P&&P.length===(chDone?CH_TRAYS:trayNo-1)) while(P.length<CH_TRAYS) P.push(score);
+  const done=chDone, {r,m,prevB}=recordChal(chal.seed,score,chal.deal.med,P); chDone=false;
   checkGoals();
   const med=chal.deal.med, M=m?MEDALS[m-1]:null;
   el('overEye').textContent=chLabel(chal.seed);
@@ -370,7 +408,7 @@ function chTileSub(){
 }
 function openChal(){
   pauseForMenu(); el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true; el('goalsCard').hidden=true;
-  el('chalFriend').hidden=true; chFriend=null;
+  el('chalFriend').hidden=true; chFriend=null; chFp=null;
   const live=peekRun('challenge'), liveSeed=live&&live.ch&&live.ch.seed, today=chToday(), t=chalRec.s[today];
   el('chalCont').hidden=!liveSeed;
   if(liveSeed) el('chalCont').innerHTML='<b>Continue</b><span></span>', el('chalCont').lastChild.textContent=chLabel(liveSeed)+' · tray '+Math.min(live.trayNo,CH_TRAYS)+' of '+CH_TRAYS;
@@ -401,7 +439,7 @@ function playChal(seed,fresh){                    // fresh: a friend's link alwa
   leaveMode(); hideMenus(); mode='challenge'; lvl=null; saveMode();
   const o=peekRun('challenge');
   if(fresh||!(o&&o.ch&&(seed===undefined||o.ch.seed===seed)&&loadRun())){ chSeed=seed||chToday(); start(); }   // today's, already under way: carry on
-  chBeat=0;
+  chBeat=0; chFp=null;
   syncHud();
 }
 el('menuChal').onclick=e=>{ e.stopPropagation(); openChal(); };
@@ -410,7 +448,7 @@ el('chalCont').onclick=e=>{ e.stopPropagation(); homeCrumble(); playChal(); };
 el('chalToday').onclick=e=>{ e.stopPropagation(); const s=chToday(); chReady(s,e.currentTarget,()=>{ homeCrumble(); playChal(s); }); };
 el('chalNew').onclick=e=>{ e.stopPropagation(); const s=chFresh(); chReady(s,e.currentTarget,()=>{ homeCrumble(); playChal(s); }); };
 el('chalBack').onclick=e=>{ e.stopPropagation(); openMenu(); };
-el('chalNewBtn').onclick=e=>{ e.stopPropagation(); const s=chFresh(); chReady(s,e.currentTarget,()=>{ el('overCard').hidden=true; chSeed=s; chBeat=0; start(); }); };
+el('chalNewBtn').onclick=e=>{ e.stopPropagation(); const s=chFresh(); chReady(s,e.currentTarget,()=>{ el('overCard').hidden=true; chSeed=s; chBeat=0; chFp=null; start(); }); };
 
 /* ═══════ friend links (1.1 task E2) ═══════
    Share on a Challenge's end card sends https://crumble.win/?c=<seed>&s=<score>&d=<deal>. Opening it starts that
@@ -420,7 +458,10 @@ el('chalNewBtn').onclick=e=>{ e.stopPropagation(); const s=chFresh(); chReady(s,
    the link opens the web game (universal links are out of scope).
    d = 'A' + base64url of: 64 board cells (3 bits: 0 empty, else gem+1), 36 pieces (6 bits shape, 63 = star; 3 bits
    gem), 12 tray marks (2 bits: 0 plain, 1 closer, 2 sweep, which keep the tray's shimmer), 3 medal targets (24 bits
-   each, in tens of points). */
+   each, in tens of points).
+   (pace) An optional p carries the sender's pace, their score after each of the 12 trays: the per-tray gains in
+   SCORE_SCALE units, base 36, joined by '.' (e.g. p=k.1w.0.2s.f.1c.0.3g.a.u.0.1m, 20-40 characters). It is read strictly
+   (twelve gains, the total equal to s); anything else is no pace, and the link works as one without p. */
 const CH_LINK='https://crumble.win/', CH_MARKS=['DEAL','CLOSER','SWEEP'];
 function chPack(deal){
   const bits=[]; const put=(v,n)=>{ for(let i=n-1;i>=0;i--) bits.push((v>>i)&1); };
@@ -445,16 +486,37 @@ function chUnpack(d){
     return validDeal(deal)&&med[0]<med[1]&&med[1]<med[2]?deal:null;
   }catch(e){ return null; }
 }
-function chLinkFor(seed,sc,deal){ return CH_LINK+'?c='+encodeURIComponent(seed)+'&s='+(sc|0)+'&d='+chPack(deal); }
-// the link she arrived with, if any: {seed, beat, deal (null: work it out from the seed)}; the address bar is tidied
+function chPaceOk(p,sc){ return Array.isArray(p)&&p.length===CH_TRAYS&&p.every((v,i)=>isInt(v,0,1e9)&&(!i||v>=p[i-1]))&&p[CH_TRAYS-1]===sc; }
+function chPacePack(p){                             // '' when it cannot be packed (not a full pace, or a gain off the SCORE_SCALE grid)
+  if(!chPaceOk(p,p&&p[CH_TRAYS-1])) return '';
+  const d=p.map((v,i)=>v-(i?p[i-1]:0));
+  return d.every(x=>x%SCORE_SCALE===0)?d.map(x=>(x/SCORE_SCALE).toString(36)).join('.'):'';
+}
+function chPaceUnpack(s,sc){
+  if(typeof s!=='string'||s.length>100) return null;
+  const d=s.split('.'); if(d.length!==CH_TRAYS||!d.every(x=>/^[0-9a-z]{1,6}$/.test(x))) return null;
+  let t=0; const p=d.map(x=>t+=parseInt(x,36)*SCORE_SCALE);
+  return chPaceOk(p,sc)?p:null;
+}
+// the pace to send with a score: this round's, else the seed's best run's when that is the score
+function chPaceFor(seed,sc){
+  if(chal&&chal.seed===seed&&chPaceOk(chal.pace,sc)) return chal.pace;
+  const r=chalRec.s[seed]; return r&&r.b===sc?chPaceUnpack(r.p,sc):null;
+}
+function chLinkFor(seed,sc,deal,pace){
+  const p=chPaceOk(pace,sc|0)?chPacePack(pace):'';
+  return CH_LINK+'?c='+encodeURIComponent(seed)+'&s='+(sc|0)+'&d='+chPack(deal)+(p?'&p='+p:'');
+}
+// the link she arrived with, if any: {seed, beat, deal (null: work it out from the seed), pace (null: none)}; the address bar is tidied
 function chReadLink(){
   try{
     const q=new URLSearchParams(location.search), seed=q.get('c');
     if(!seed||!/^[\w-]{1,24}$/.test(seed)) return null;
     const beat=Math.max(0,Math.min(1e9,parseInt(q.get('s'),10)||0)), deal=chUnpack(q.get('d'));
-    q.delete('c'); q.delete('s'); q.delete('d');
+    const pace=beat?chPaceUnpack(q.get('p'),beat):null;
+    q.delete('c'); q.delete('s'); q.delete('d'); q.delete('p');
     const rest=q.toString(); history.replaceState(null,'',location.pathname+(rest?'?'+rest:'')+location.hash);
-    return {seed,beat,deal};
+    return {seed,beat,deal,pace};
   }catch(e){ return null; }
 }
 let chFriend=null;                                    // the link's challenge, waiting on the card for her to play it
@@ -469,5 +531,5 @@ function openFriend(link){
 el('chalFriend').onclick=e=>{
   e.stopPropagation(); const f=chFriend; if(!f) return;
   if(f.deal) chCache.set(f.seed,f.deal);
-  chReady(f.seed,e.currentTarget,()=>{ chBeat=f.beat; homeCrumble(); playChal(f.seed,true); chFriend=null; });
+  chReady(f.seed,e.currentTarget,()=>{ chBeat=f.beat; chFp=f.pace||null; homeCrumble(); playChal(f.seed,true); chFriend=null; });
 };

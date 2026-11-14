@@ -221,6 +221,7 @@ Top to bottom:
 | (1.1 E1) | Challenge mode: 12 trays from a frozen, seeded deal (the real dealer dealt to the casual bot), bronze/silver/gold targets from bot runs, Today's and New challenge, its own run, results and goal rung. Settings left the tile grid for a slim button. See the Challenge section |
 | (1.1) | Split `index.html` (365 KB) into `index.html` (12 KB) + `js/*.js`; no behaviour change |
 | (review fixes) | Cannonball strength saved (`cp`); the cannonball and last chance work under Reduce Motion; `GUIDED_START` (the guided first game) split from `GUIDE` (the dealing weight); the win card's star target; Avalanche chain clears fill the meter, earn Volcano/star and COLOR GONE; a cannonball can raise NEW BEST and clean sweep; Golden hand switch in Settings. See the section at the end |
+| (pace) | Friend's pace: a Challenge link also carries the sender's score after each tray (`&p=`); the friend sees a tick on the medal bar where the sender stood, "🎯 +350" / "🎯 −200" in the HUD, and one crumb line each way. `CFG.CH_PACE`. See "Friend's pace" in the Challenge section |
 | (closet) | Crumb's closet: 16 hats, glasses and neckwear for the crumb, bought with dare cookies (`spent` kept apart, `crumble.closet`, in the iCloud backup) or earned by feats; worn everywhere he is drawn. `js/closet.js`. See the closet section at the end |
 | (dares) | Crumb's dares (Endless): one dare a run in his voice, a chip with its progress, a cookie into a jar for beating it (`crumble.dares`, in the iCloud backup), a harder one next, up to 3 a run. `js/dares.js`. See the dares section at the end |
 | (stakes) | The streak has stakes: the combo fire sputters as a carried streak nears its end (a notch down, then guttering embers with a tick and a nervous glance); a charged crumb that grew on a streak deflates when the streak dies; the charged crumb is a slingshot (pull back, let go) with a band and a dotted path, a tap shows how. See the section at the end |
@@ -630,6 +631,7 @@ ad targeting, limited analytics.
 | `GEMS` hues | recolor everything |
 | `THEME` / `STYLE` / `HOME_WORLD` / `MOTIF` | default look (a saved Settings choice overrides) |
 | `SHOW_TENSION` / `DEV_MODE` | debug readout (off by default) / Admin panel (needs `?dev`) |
+| `CH_PACE` | (pace) a friend's pace on the Challenge bar, the HUD's +/− and the crumb's two lines (links carry it either way) |
 
 Most of these are live sliders in the Admin panel, with a "Copy settings"
 button to paste back into `CFG`.
@@ -1521,6 +1523,8 @@ A short round with a finish: 12 trays (36 pieces), no timer, the fourth mode til
 - **Saved.** The run in `crumble.run.chal`, with its whole deal (`ch` in the snapshot), so resuming never re-deals.
   Results in `crumble.chal`: per seed best score, best medal, plays (last 60 seeds), plus `won` (challenges with a
   medal) and `gold`, each counted once per seed. Goals: one family, "Win a challenge medal" / 5 / 15.
+  (pace) A seed's best run also keeps `p`, its pace packed as in a link (only when that run set the best; dropped on
+  load if it does not read or does not end on `b`; the iCloud merge takes it with a higher best).
 - **Rules.** No rescue (`rescueAllowed`), no chase bar, no golden hand, no transformation. Bonus trays and the star
   work as anywhere. The pause card's New game reads Restart (same seed). Share makes the picture with the round's name
   and medal; E2 adds the link (below).
@@ -1542,6 +1546,34 @@ A short round with a finish: 12 trays (36 pieces), no timer, the fourth mode til
   "YOU BEAT IT!", and the end card leads with "You beat their N!" or "N more to beat their N". Retry and Restart keep
   the target; the run saves it (`ch.beat`, `ch.bt`). In the app the link opens the web game.
 - Tests: the three "Challenge link (E2)" scenarios.
+
+### Friend's pace (pace)
+
+Turns "Beat 4,200" into a race from the first tray.
+- **Link.** `chLinkFor` adds an optional `&p=`: the sender's score after each of the 12 trays, as per-tray gains in
+  `SCORE_SCALE` units, base 36, joined by `.` (`chPacePack`), e.g.
+  `https://crumble.win/?c=k3x9qa&s=4200&d=A…&p=c.0.x.19.0.1r.1c.0.1n.1y.1x.l` (20-50 characters). `chReadLink` reads
+  it strictly (`chPaceUnpack`: exactly twelve `[0-9a-z]{1,6}` gains, the total equal to `s`); anything else is no pace
+  and the link works as before. Links without `p` are unchanged. Share sends this round's pace, or the seed's best run's
+  when that is the score (`chPaceFor`).
+- **Recorded.** `chal.pace`: `chDealNext` pushes her score as each tray ends; a round that runs out of moves is padded
+  with the score that stands (`chalOver`). `recordChal` keeps it with a new best (`p` in `crumble.chal`).
+- **Shown** (only with a valid `p` and `CFG.CH_PACE`): `chal.fp` is the friend's pace. `chFriendAt()` is where they
+  stood when they started this tray (0 on tray 1, their final once the round is done). A white tick with a small 🎯
+  (`#chalInfo .fp`) sits on the medal bar at that score on the same scale (`chBarAt`: last medal to next); off the
+  stretch it is pinned to the nearer end at 45% opacity. It is part of `chHudKey`, so the DOM is written only on a
+  change. The right box keeps "🎯 Beat N" while the friend's final is the next target; once she has points it reads
+  "🎯 +350" / "🎯 −200" (her score minus the friend's at this tray, a no-break space after the target) over their final.
+- **Crumb.** At the end of trays 1-11 (`chPaceTalk`): one line the first time she is ahead of their pace (from level or
+  behind), one the first time she falls behind after being ahead (`SAY.paceAhead` / `paceBehind`, picked with the
+  mascot's dice). Needs `FX_CRUMB_TALK` and `FX_MASCOT`; the mark shows either way.
+- **Saved.** The run keeps `ch.pc` (her pace so far), `ch.fp`, `ch.pa` (behind/level/ahead at the last tray end) and
+  `ch.pw` (lines said); an older save has none, and that round records and shows no pace. Retry and Restart keep the
+  friend's pace with their target (`chFp`, like `chBeat`). The end card is unchanged (it already says "You beat
+  their N!" / "N more to beat their N").
+- **Switch.** `CFG.CH_PACE` (Admin "Challenge: a friend's pace on the bar") hides the mark, the +/− and the lines; links
+  still carry `p`.
+- Tests: the five "pace:" scenarios.
 
 ## Coaster dealing (1.1 task G)
 

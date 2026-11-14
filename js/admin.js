@@ -47,6 +47,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['CANNON_SLING','Crumb cannonball: a slingshot (pull back, let go)'],
   ['CANNON_DEFLATE','Crumb cannonball: a dead streak deflates it'],
   ['FX_SPUTTER','Streak sputters: the fire dies down near the end'],
+  ['CH_PACE','Challenge: a friend\'s pace on the bar'],
   ['TILT','Crumb toy: tilt to roll'],
   ['TILT_FLIP','Crumb toy: flip the tilt direction'],
   ['AVALANCHE','Avalanche: the board falls on a streak (Endless)'],
