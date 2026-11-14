@@ -1365,6 +1365,7 @@ The mascot can be grabbed, flicked and rolled by leaning the phone. Code is `js/
 - **Dizzy.** A throw faster than `TOY_DIZZY_V`, or three bounces, lands with spiral eyes for `TOY_DIZZY_MS`.
 - **Sulk.** `TOY_SULK_N` throws within `TOY_SULK_MS` and it frowns for `TOY_SULK_HOLD`; a grab then gets a head shake.
 - **Cannonball (Endless only).** A clear that takes the combo to `CANNON_COMBO` (5) charges the crumb, once per streak: it glows (`#mascot.hot`) and a banner says "CRUMB IS CHARGED / flick it at the board". Thrown while charged it is a cannonball: every gem its middle passes over breaks (`toySmash`: the gem leaves `grid`, a shatter, `CANNON_PER_GEM` points and a tag), each one costs it speed (`CANNON_KEEP`), up to `CANNON_MAX` gems. It passes through the rim while it is a cannonball. When it lands or is spent, a "+N CANNONBALL xN" pop shows and the run is saved. A slow put-down keeps the charge; the charge is in the run save (`cn`). It never completes a line and gives no sweep credit; it only opens room, so it is a skill-shot rescue. Switch: `CFG.CRUMB_CANNON` (Admin; it also needs the toy on). This is the one way the toy changes the game.
+- **Cannonball you cannot miss (Jay 2026-11-14: "hard to know what's happening, and that you can do it").** The crumb swells as the streak builds (`toySize()`: from combo 2 toward `CANNON_BIG` 1.45 at the charge, then `CANNON_BIG_STEP` more per combo step up to `CANNON_BIG_TOP` 1.85; written as `style.scale`, eased in `toyStep`). At the charge the banner reads "CANNONBALL READY! / flick Crumb at the blocks" and jumps the banner queue, with a haptic, and a bouncing "FLICK ME!" bubble stays beside the crumb until it is thrown. A longer streak also makes it stronger: `toy.pow` (combo steps past the charge) adds `CANNON_GROW` gems each to what it can break, up to `CANNON_MAX_TOP` (`toyPower()`).
 - **Tilt.** `devicemotion` gravity along the screen's x axis rolls it along the rim (`TILT_PUSH`, dead zone `TILT_DEAD`, friction `TOY_RIM_DRAG`); it stays where it stops, so a lean to the right leaves it on the right. iOS reports gravity with the opposite sign to the spec, so the sign is chosen by platform; `TILT_FLIP` (Admin) reverses it if a device rolls uphill. iOS only grants motion from a user gesture: the request rides on the first finger lifted off the crumb (once per launch), or on turning the Tilt switch on. A "Don't Allow" turns the switch off and it is not asked again.
 - **Where it stands.** `toy.x` is its offset along the rim from the left corner (0..`toyXMax()`); `mascotPlace()` clamps it on a layout.
 - **Sound.** Small synthesized squeak / whee / boing / dizzy warble through `play()` (so the Sound effects button mutes them), and a light haptic on a bounce in the app.
@@ -1373,7 +1374,7 @@ The mascot can be grabbed, flicked and rolled by leaning the phone. Code is `js/
 - **Check on the phone:** flick the crumb hard at a wall: it should bounce around and land dizzy. Flick it five times quickly: it sulks. After the first flick iOS asks for motion; allow it, then lean the phone right: the crumb should roll to the right end of the rim and stay there when the phone is level again. **Not yet tried on a real phone**: the motion prompt inside the app's web view, and the tilt direction.
 - Tests: the two "crumb toy" scenarios and "crumb cannonball".
 
-## Avalanche (2026-11-14, concept 1 of the new feature concepts; off by default)
+## Avalanche (2026-11-14, concept 1 of the new feature concepts; on by default since Jay tried it)
 
 At the peak of a streak the whole board falls. Code is `js/avalanche.js`; `place()` calls `avaDue()` / `avalanche()` after its own lines are gone and before the clean-sweep check; `draw.js` reads `g.av` on a gem and `s.av` on a shatter.
 
@@ -1382,7 +1383,8 @@ At the peak of a streak the whole board falls. Code is `js/avalanche.js`; `place
 - **Why.** It is the name of the game, and it packs the scattered strays together, which the dealer work could not do (see the 2026-11-12 dealing notes). It makes Endless easier and good games much longer, so it ships off until Jay has felt it. One bot run (`node tools/bot-sim.mjs 1200 1 BOT=human`, then with `AVALANCHE=1`; one seed, noisy): a board wipe every 39 trays (was 67), 20 gems on the board at the deal (was 24), median game 49 trays (was 47) but the 90th percentile 300 (was 92).
 - **How it is built.** The rules run at once inside `place()`: the grid and score are final when it returns, so save, undo, the dealer, the timelapse and the stuck check all see a settled board. Only the picture is delayed: each moved gem carries `av`, a list of `[start frame, cells]` falls on the avalanche clock (`ava.t`, stepped by `avaStep` in `frame()`); `avaOff()` gives its height above its cell. A gem that falls into a clearing row is a shatter with the same list: it lands, flashes, breaks. While `ava.live` a touch on the tray waits (like a touch during a deal) and `fxBusy()` holds the frame rate.
 - **Show.** AVALANCHE! banner, a shake through the rumble (`AVA_RUMBLE`), a low boom, a haptic, CHAIN xN tags, and the crumb is thrown off its perch (the toy).
-- **Switch.** `CFG.AVALANCHE`, Settings → Look → Advanced "Avalanche (new)" (saved `ava`), also in Admin. Timing knobs: `AVA_G`, `AVA_LEAD`, `AVA_RUMBLE`, `AVA_BEAT`, `AVA_GAP`.
+- **Switch.** `CFG.AVALANCHE` (on; Jay 2026-11-14: "on by default is okay"), Settings → Look → Advanced "Avalanche" (saved `av2`; the old `ava` key from the off-by-default build is ignored), also in Admin. Timing knobs: `AVA_G`, `AVA_LEAD`, `AVA_RUMBLE`, `AVA_BEAT`, `AVA_GAP`.
+- **Dice and tests.** The roll uses its own seeded dice (`avaRnd`), not the dealer's `rnd()`, so it never shifts a pinned deal. The test harness turns Avalanche off on load (the real default is kept in `window.__avaDefault`) because the pinned dealer and bot tests were measured without it; the Avalanche tests turn it on.
 - **Check on the phone:** turn it on, build a streak of 4+, and keep clearing: within a few clears the board should shake and drop. Things to judge: is it too frequent, does it make the game too easy, is the fall readable.
 - Tests: the two "Avalanche" scenarios.
 
@@ -1397,6 +1399,15 @@ The whole run in a few seconds on the game-over card. Code is `js/timelapse.js`;
 - **Switch.** `CFG.FX_TIMELAPSE`, Settings → Look → Advanced "Timelapse: replay your run on game over" (saved as `tl`), also in Admin. Off: nothing is recorded, no replay, no strip.
 - **Check on the phone:** play a run out; the small board should replay it while the buttons already work; tap it to jump to the end; Share should show the four-board strip.
 - Tests: the three "7.5g timelapse" scenarios.
+
+## The crumb talks (2026-11-14)
+
+Jay: "can we make him do more snarky animations... if you stop playing for a bit, he holds a sign hey where'd you go... maybe even when you do something good too not just idle".
+
+- **File.** `js/crumbsay.js`: one DOM element `#crumbSay` beside the mascot, a speech bubble or a wooden sign. The lines live in `SAY` at the top of the file; add or reword them there. Wry, never mean, one short line at a time.
+- **When.** Idle: no touch for `TALK_IDLE_MS` (20 s) and it holds up a sign, a second sign at 2.4x, asleep ("z z z") at 4.5x; the next touch gets a "you're back" line. Good plays: a clean sweep, an even combo from `TALK_COMBO`, a 3+ line clear, a new best, an avalanche, a cannonball that broke 4+. Teasing: `TALK_DRY` drops with no clear, a piece picked up and put back `TALK_DITHER` times, a tight board, game over. The toy: poked, dizzy, sulking. Charged: the "FLICK ME!" hint (the only line that is an instruction).
+- **How.** `sayStep` (called from `mascotStep`) watches the game's own state (`stats`, `combo`, `bestBeaten`, `ava.live`, `ret`, `lastInput`), so game.js is untouched. Lines are picked with `mascotRnd`, never Math.random. At most one line per `TALK_GAP` (9 s) except the forced ones (signs, sweep, best, avalanche, toy moments).
+- **Switch.** `CFG.FX_CRUMB_TALK`, Settings → Look → Advanced "Crumb talks" (saved `talk`), also in Admin.
 
 ## Front menu showpiece (plan 8.3)
 

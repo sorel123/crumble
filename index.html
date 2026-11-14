@@ -131,6 +131,25 @@
   :is(#mascot,#heroCrumb).rm svg,:is(#mascot,#heroCrumb).rm .sw,:is(#mascot,#heroCrumb).rm .pp{animation:none}
   :is(#mascot,#heroCrumb).rm,:is(#mascot,#heroCrumb).rm *{transition:none}
   :is(#mascot,#heroCrumb).rm.tight .sw,:is(#mascot,#heroCrumb).rm.phew .sw{opacity:1}
+  /* (talk) the crumb's bubble and signs: js/crumbsay.js */
+  #crumbSay{position:absolute;z-index:1;pointer-events:none;max-width:200px;padding:3px 9px 4px;border-radius:11px;white-space:nowrap;
+    font:600 13px/1.25 var(--font);color:#3A2010;background:#FFF6E3;border:1.5px solid #6E4220;box-shadow:0 2px 0 rgba(0,0,0,.25);
+    transform-origin:0 100%;animation:sayIn .22s cubic-bezier(.3,1.5,.6,1) both}
+  #crumbSay[hidden]{display:none}
+  #crumbSay.fromR{transform-origin:100% 100%}
+  #crumbSay::after{content:"";position:absolute;bottom:5px;width:7px;height:7px;background:inherit;border:inherit;border-width:0 0 1.5px 1.5px;transform:rotate(45deg)}
+  #crumbSay.fromL::after{left:-5px} #crumbSay.fromR::after{right:-5px;transform:rotate(225deg)}
+  #crumbSay.sign{border-radius:4px;background:#D9A05B;color:#3A2010;border-color:#6E4220;padding:3px 8px;animation:sayIn .22s cubic-bezier(.3,1.5,.6,1) both,saySway 2.2s ease-in-out .3s infinite alternate}
+  #crumbSay.sign::after{bottom:-9px;left:10px;right:auto;width:3px;height:9px;border:0;background:#6E4220;transform:none}
+  #crumbSay.sign.fromR::after{left:auto;right:10px;transform:none}
+  #crumbSay.hot{background:#FFB347;border-color:#8A3B00;color:#4A1B00;font-size:14px;animation:sayIn .22s cubic-bezier(.3,1.5,.6,1) both,sayBob .45s ease-in-out .25s infinite alternate}
+  #crumbSay.zz{background:none;border:0;box-shadow:none;color:#fff;opacity:.8;letter-spacing:2px;animation:sayZ 2.4s ease-in-out infinite}
+  #crumbSay.zz::after{display:none}
+  #crumbSay.rm{animation:none}
+  @keyframes sayIn{from{transform:scale(.2);opacity:0}to{transform:none;opacity:1}}
+  @keyframes saySway{from{rotate:-3deg}to{rotate:3deg}}
+  @keyframes sayBob{from{translate:0 0}to{translate:0 -4px}}
+  @keyframes sayZ{0%{translate:0 2px;opacity:.2}50%{opacity:.85}100%{translate:6px -8px;opacity:.2}}
   @keyframes mHot{from{transform:scale(.82);opacity:.7}to{transform:scale(1.12);opacity:1}}
   @keyframes mSpin{to{transform:rotate(360deg)}}
   @keyframes mWobble{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(9deg)}}
@@ -476,8 +495,9 @@
         <label class="tog"><span>Combo fire: the board burns on a streak</span><input type="checkbox" id="fireOn"></label>
         <label class="tog"><span>Chase your best: a bar to your best score</span><input type="checkbox" id="chaseOn"></label>
         <label class="tog"><span>Mascot: a crumb that reacts to your game</span><input type="checkbox" id="mascotOn"></label>
-        <label class="tog"><span>Avalanche (new): a long streak brings the board down</span><input type="checkbox" id="avaOn"></label>
+        <label class="tog"><span>Avalanche: a long streak brings the board down</span><input type="checkbox" id="avaOn"></label>
         <label class="tog"><span>Crumb is a toy: grab it and flick it</span><input type="checkbox" id="toyOn"></label>
+        <label class="tog"><span>Crumb talks: signs and remarks</span><input type="checkbox" id="talkOn"></label>
         <label class="tog"><span>Tilt: lean the phone and the crumb rolls</span><input type="checkbox" id="tiltOn"></label>
         <label class="tog"><span>Timelapse: replay your run on game over</span><input type="checkbox" id="tlOn"></label>
         <p class="lbl section-lbl">World</p>
@@ -620,6 +640,7 @@
 <script src="js/challenge.js"></script>
 <script src="js/mascot.js"></script>
 <script src="js/crumbtoy.js"></script>
+<script src="js/crumbsay.js"></script>
 <script src="js/home.js"></script>
 <script src="js/goals.js"></script>
 <script src="js/share.js"></script>

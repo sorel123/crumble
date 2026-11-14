@@ -279,9 +279,21 @@ const CFG = {
   FX_CRUMB_TOY:      true,   // (toy) the crumb can be grabbed and flicked: it flies, bounces, lands dizzy, sulks if overdone (js/crumbtoy.js)
   CRUMB_CANNON:      true,   // (toy) Endless: a streak of CANNON_COMBO charges the crumb; thrown charged, it breaks the gems it flies over
   CANNON_COMBO:      5,      // (toy) the streak that charges it (once per streak)
-  CANNON_MAX:        10,     // (toy) gems one cannonball can break
+  CANNON_MAX:        10,     // (toy) gems one cannonball can break ...
+  CANNON_GROW:       2,      // ... plus this many per combo step past CANNON_COMBO while it waits charged ...
+  CANNON_MAX_TOP:    20,     // ... up to this
+  CANNON_BIG:        1.45,   // (toy) how big a charged crumb is (it swells part of the way there as the streak builds) ...
+  CANNON_BIG_STEP:   .08,    // ... plus this per combo step past CANNON_COMBO ...
+  CANNON_BIG_TOP:    1.85,   // ... up to this
   CANNON_KEEP:       .88,    // (toy) share of its speed left after each gem
   CANNON_PER_GEM:    10*SCORE_SCALE,   // (toy) points per gem it breaks
+  FX_CRUMB_TALK:     true,   // (talk) the crumb's bubble and signs: snark when she is away, dithers or misses; credit when she does something good (js/crumbsay.js)
+  TALK_GAP:          9000,   // (talk) ms between ordinary lines, so it never chatters
+  TALK_MS:           2600,   // (talk) ms a line stays up
+  TALK_IDLE_MS:      20000,  // (talk) ms without a touch before the first sign; the second comes at 2.4x, sleep at 4.5x
+  TALK_COMBO:        4,      // (talk) from this streak (every other step) it remarks on the combo
+  TALK_DRY:          7,      // (talk) drops in a row without a clear before "bold strategy."
+  TALK_DITHER:       3,      // (talk) pieces picked up and put back in a row before "any day now."
   TILT:              true,   // (toy) with motion allowed, leaning the phone rolls the crumb along the board's rim
   TILT_FLIP:         false,  // (toy) if the crumb rolls uphill on some device, flip the sign
   TILT_DEAD:         .07,    // (toy) lean (share of gravity, ~4 degrees) the phone forgives before the crumb moves
@@ -298,7 +310,7 @@ const CFG = {
   TOY_SULK_MS:       14000,
   TOY_SULK_HOLD:     6000,   // (toy) how long the sulk lasts
   TOY_BACK_MS:       560,    // (toy) the hop from the floor back to the rim
-  AVALANCHE:         false,  // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). Off while it is tried
+  AVALANCHE:         true,   // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). On since Jay tried it (2026-11-14)
   AVA_COMBO:         4,      // (Avalanche) the streak it can start from
   AVA_CHANCE:        .3,     // (Avalanche) odds at AVA_COMBO ...
   AVA_STEP:          .1,     // ... plus this per combo step above it ...

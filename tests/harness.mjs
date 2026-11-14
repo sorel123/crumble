@@ -51,6 +51,8 @@ export async function openGame(url, { seed = 1 } = {}) {
   await page.addInitScript(() => { try { if (!sessionStorage.getItem('crumble.test.fresh')) localStorage.setItem('crumble.guide', '1'); } catch (e) {} });
   // the scripted drags use a mouse but were written for a thumb's lift, so every load (reloads too) gives the mouse LIFT; the C2 test sets it back
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { CFG.MOUSE_LIFT = CFG.LIFT; }));
+  // Avalanche is on by default, but the pinned-seed dealer and bot tests were measured without it: tests run with it off (the real default kept in __avaDefault) and the Avalanche tests turn it on
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__avaDefault = CFG.AVALANCHE; CFG.AVALANCHE = false; }));
   await page.goto(url);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   return { browser, page, errors };
