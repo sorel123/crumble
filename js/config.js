@@ -338,6 +338,8 @@ const CFG = {
   AVA_RUMBLE:        22,     // (Avalanche) frames the board shakes before it lets go
   AVA_BEAT:          6,      // (Avalanche) frames a landed row waits before it breaks
   AVA_GAP:           10,     // (Avalanche) frames between a chain clear and the next fall
+  AVA_LEAN:          true,   // (Avalanche) with tilt live, a leaned phone sends the gems to the low wall and full columns clear (else it falls down)
+  AVA_LEAN_MIN:      .3,     // (Avalanche) the lean that counts, share of gravity (.3 = about 17 degrees; held in the hand reads under ~.15, a deliberate 25 degree lean ~.42)
   FX_TIMELAPSE:      true,   // (7.5g) the run's boards are recorded (capped, in the run save) and replay on the game-over card (js/timelapse.js)
   FX_ANTICIPATION:   true,   // (7.5c) while she drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
   ANTIC_REACH:       2.5,    // (7.5c) cells from a completing landing where the shiver starts; it peaks as the piece arrives

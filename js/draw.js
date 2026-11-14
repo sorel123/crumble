@@ -1036,8 +1036,8 @@ function frame(now){
     } else {
       if(antAny) antCell(r,c,now); else _ax=_ay=_af=0;   // (7.5c) a line one piece from clearing shivers and glints
       const lf=g.f?g.f*g.f*0.45:0, fl=lf>_af?lf:_af;
-      if(g.av){                                     // (Avalanche) still falling to this cell; a thump when it lands
-        const o=avaOff(g.av,ava.t); if(o===0&&g.avo<0) g.l=1; g.avo=o; _ay+=o*cell;
+      if(g.av){                                     // (Avalanche) still falling (or sliding, with a lean) to this cell; a thump when it lands
+        const o=avaOff(g.av,ava.t); if(o===0&&g.avo<0) g.l=1; g.avo=o; avaAt(o); _ax+=avaDX*cell; _ay+=avaDY*cell;
       }
       if(g.l>0){                                    // landing thump: wide-and-short on impact, springs back over ~8 frames
         g.l=Math.max(0,g.l-dt*0.17);                // ~6 frames, about 100 ms
@@ -1145,8 +1145,8 @@ function frame(now){
   const squash=CFG.CLEAR_STYLE==='squash'||(CFG.CLEAR_STYLE==='crumble'&&reduce), POP=crumble?CRUMBLE_CRACK:squash?6:7;
   for(let i=shatters.length-1;i>=0;i--){
     const s=shatters[i]; s.t+=dt;
-    if(s.t<0&&s.av){                                 // (Avalanche) a gem that falls into a clearing row: it lands, flashes, then breaks
-      gem(s.gi,bx+s.c*cell,by+(s.r+avaOff(s.av,ava.t))*cell,cell,1,1,s.t>-5?0.95:0); continue;
+    if(s.t<0&&s.av){                                 // (Avalanche) a gem that falls (slides) into a clearing line: it lands, flashes, then breaks
+      avaAt(avaOff(s.av,ava.t)); gem(s.gi,bx+(s.c+avaDX)*cell,by+(s.r+avaDY)*cell,cell,1,1,s.t>-5?0.95:0); continue;
     }
     if(s.t<0){                                       // blink phase, timed from the clear itself so the line flashes in unison
       const since=s.t-s.t0, on=since<3||since>=5;

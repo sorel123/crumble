@@ -103,7 +103,7 @@ function toyFly(p,dt,gx,virt){
     if(p.y>bb&&p.vy>0&&f.b<CFG.CANNON_BOUNCES){ f.b++; p.y=bb; p.vy=-Math.max(p.vy*.85,cell*22); if(!virt){ toy.va=toy.vx*1.2; toySnd('boing',.8); } }
   }
 }
-const toyGx=()=>Math.abs(toy.gx)>CFG.TILT_DEAD?toy.gx-Math.sign(toy.gx)*CFG.TILT_DEAD:0;   // the tilt's pull along the screen, past its dead zone
+const toyGx=()=>reduce?0:Math.abs(toy.gx)>CFG.TILT_DEAD?toy.gx-Math.sign(toy.gx)*CFG.TILT_DEAD:0;   // the tilt's pull along the screen, past its dead zone (reduced motion: no tilt roll; toy.gx itself still reads the lean for avaDir())
 function toyFireEnd(){                                              // out of steam, or landed: the board is the player's again
   const f=toy.fire; if(!f) return; toy.fire=null; toy.shotN=f.n;
   if(stuck&&state==='play'&&!f.n){ toy.hot=true; return; }           // the last chance missed the board entirely: it is still charged, try again
@@ -343,11 +343,11 @@ function toyLand(now,hard){                                         // on the ri
 }
 function toyStep(now){
   const dt=Math.min(.05,Math.max(0,(now-toy.last)/1000)); toy.last=now;
+  if(!paused) toy.gx+=((CFG.TILT&&toy.tiltOn?toy.gRaw:0)-toy.gx)*Math.min(1,dt*10);   // the smoothed lean: the roll below, and (lean) avaDir() for an Avalanche, toy or not, Reduce Motion or not
   if(!toyOn()){ toy.sc=1; if(toy.mode!=='rim'||toy.a||toy.y||toy.css.slice(-2)!==',1') toyReset(); return; }
   { const tg=toySize(); toy.sc=reduce||Math.abs(tg-toy.sc)<.004?tg:toy.sc+(tg-toy.sc)*Math.min(1,dt*7); }   // reduced motion: it is its size at once, no swelling
   if(paused||!dt) return;
   const s=masc.s, xmax=toyXMax(), G=CFG.TOY_GRAVITY;
-  toy.gx+=(( CFG.TILT&&toy.tiltOn&&!reduce?toy.gRaw:0)-toy.gx)*Math.min(1,dt*10);   // reduced motion: no tilt roll
   const gx=toyGx();
   if(masc.fainted&&toy.mode!=='rim'){ toyReset(); return; }
   if(toy.demo){                                                     // (stakes) the hint's demo: the band and the dots by themselves, about a second

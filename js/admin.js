@@ -50,6 +50,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['TILT','Crumb toy: tilt to roll'],
   ['TILT_FLIP','Crumb toy: flip the tilt direction'],
   ['AVALANCHE','Avalanche: the board falls on a streak (Endless)'],
+  ['AVA_LEAN','Avalanche: falls toward a leaned phone (tilt)'],
   ['GUIDED_START','Guided first game for a new player (1.1 D)'],
   ['FX_TIMELAPSE','Timelapse on game over (7.5g)'],
   ['SHOW_TENSION','Debug readout']
@@ -224,7 +225,8 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['MAGNET_HOLD','Magnet hold (cells)',0,0.5,0.05],
   ['GHOST_ALPHA','Landing ghost strength',0.2,1,0.05],
   ['ANTIC_REACH','Anticipation reach (cells)',1,5,0.25],
-  ['ANTIC_SHIVER','Anticipation shiver (px)',0,3,0.1]
+  ['ANTIC_SHIVER','Anticipation shiver (px)',0,3,0.1],
+  ['AVA_LEAN_MIN','Avalanche: lean that sends it sideways (share of g)',0.1,0.8,0.05]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const cfgGet=k=>{ const [a,b]=k.split('.'); return b?CFG[a][b]:CFG[a]; };

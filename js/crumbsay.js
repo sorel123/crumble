@@ -25,6 +25,8 @@ const SAY={
   big:["not bad.","I taught you that.","clean."],
   best:["new best. I'll allow it.","look at you go."],
   ava:["WHOA.","I did NOT sign up for this.","warn me next time!"],
+  avaSide:["which way is DOWN?","you did that on purpose.","whoa, sideways!"],   // (lean) an avalanche that fell toward a leaned phone
+  avaHint:["next time, lean the phone."],                                         // (lean) once ever: tilt is live, the phone was flat
   cannon:["that was ME.","you're welcome.","ow. worth it."],
   dry:["bold strategy.","interesting choice.","sure, put it there."],
   dither:["any day now.","it's a block. just pick.","make up your mind."],
@@ -83,7 +85,7 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
   if(stats.placed!==say.placed){                           // a drop
     const got=stats.lines-say.lines; say.backs=0;
     if(stats.sweeps>say.sweeps) sayLine('sweep',true);
-    else if(ava.live&&!say.avaOn) sayLine('ava',true);
+    else if(ava.live&&!say.avaOn){ if(ava.hint){ if(sayLine('avaHint',true)) avaHintDone(); } else sayLine(ava.dir!=='down'?'avaSide':'ava',true); }   // (lean) sideways has its own lines; the hint is spent only once it shows
     else if(bestBeaten&&!say.best) sayLine('best',true);
     else if(got>0&&combo>=CFG.TALK_COMBO&&combo%2===0) sayLine('combo');
     else if(got>=3) sayLine('big');
