@@ -125,6 +125,23 @@ const CFG = {
   LEAN_DRY:       3,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
   LEAN_ROOM:      0.3,   //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
   SOUND_ROOM:     0.12,  // a piece's sound spot may cost at most this much room (0..1) when it clears nothing
+  // (sky bite) "The sky fights back": in Endless each journey stop deals a little leaner than the last (solver.js skyBite).
+  // bite = SKY_BITE_SCALE x SKY_BITE[stop], past Space SKY_BITE[5] + SKY_DEEP_BITE per Deep space stop, uncapped. It only
+  // shifts the tide's odds and lengths (BITE_*: how far each moves at bite 1, Space); every tray still has a solution. The
+  // person-like bot's game is very sensitive to these (a few percent per knob changes its hazard a lot), hence the small
+  // BITE_* values. 0 = today's dealing exactly.
+  SKY_BITE_SCALE: 1,     // 1 = on, 0 = off (the dealer is exactly as before)
+  SKY_BITE:       [0,.05,.15,.25,.4,.7], // per stop: dawn, day, golden hour, night, aurora, space (dawn stays a warm-up; bite 1 is reached at Deep space 1)
+  SKY_DEEP_BITE:  .5,    // each Deep space stop past Space adds this (Deep space 4 = bite 2.7)
+  SKY_DEEP_EVERY: 12000*SCORE_SCALE,     // points per Deep space stop past the last JOURNEY_AT threshold (sweeps still jump a stop each)
+  BITE_EASY:      .08,   // EASY stretches this much shorter at bite 1 (at most 90%)
+  BITE_LEAN:      .12,   // LEAN stretches this much longer at bite 1
+  BITE_SMALL:     .1,    // pieces of 3 cells or fewer this much rarer at bite 1 (bigger pieces; at most 90%)
+  BITE_CROWD:     .1,    // comeback keys: the crowded-board line this much tighter at bite 1 (room x (1-k), gems + 8k), two keys rarer
+  BITE_RESCUE:    .1,    // LEAN's quiet rescue: its room line this much tighter, and 2k more dry trays before it (rounded)
+  BITE_KEY:       .05,   // EASY: odds a candidate carries a clearing key this much lower at bite 1
+  BITE_RUN:       .1,    // sweep steering: EASY's sweep-run board size, its sweep pull and the chain after a board clear, this much less at bite 1
+  BITE_EDGE:      .06,   // the 6.1 edge (and its recovery trays) starts at this much less room at bite 1
 
   // the home dealer (solver.js "The home dealer"): every piece has a home and the tray is cut from the board. Replaces the
   // tide in Endless and Daily when on; Challenge and Adventure never use it. Also on with ?dealer=home in the URL (off: ?dealer=tide).
@@ -359,7 +376,7 @@ const CFG = {
   SND_PICKUP:     'soft',     // 'original' | 'slide' | 'soft' | 'swish' (recorded) | 'off'
   SND_PLACE:      'drop',     // 'original' | 'drop' | 'wood' | 'soft' (recorded) | 'off'
   JOURNEY_SKY:    true,       // (7.5b) Endless/Daily: the sky travels dawn -> day -> golden hour -> night -> aurora -> space (Settings -> Look, Advanced)
-  JOURNEY_AT:     [0,500,1500,3000,6000,10000].map(n=>n*SCORE_SCALE),   // score where each journey stage starts; every clean sweep also jumps one stage
+  JOURNEY_AT:     [0,2000,6000,12000,20000,30000].map(n=>n*SCORE_SCALE),   // score where each journey stage starts; every clean sweep also jumps one stage. (sky bite) Was 500..10000 when a game scored ~3500; with the carrying combo and the avalanche a person-like player makes ~3000 points a tray, so the old stops all passed by tray ~35. Now Space is ~tray 70-100 of a good game (sooner with sweeps)
   JOURNEY_WAIT:   30,         // frames after a deal (or a sweep's confetti) before a stage change starts, so it never lands on a clear
   HAPTICS:        true,       // (5.1) the iPhone app buzzes on pickup, place, clears, combos (js/native.js); the web build has nothing to buzz
   MUSIC:          true,       // (6.8) calm background music (Settings -> Sound); its own switch, independent of Sound effects

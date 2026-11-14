@@ -114,6 +114,22 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['CURVE_HEAT','Curve: heat strength (luck dial)',0,1,0.05],
   ['CURVE_MULTI','Curve: multi-line weight',0,4,0.1],
   ['CURVE_GIVE','Curve: generosity (CLEAR share offset)',-0.3,0.3,0.01],
+  ['SKY_BITE_SCALE','Sky bite: overall (0 = off, Endless)',0,2,0.05],
+  ['SKY_BITE.1','Sky bite: day',0,2,0.05],
+  ['SKY_BITE.2','Sky bite: golden hour',0,2,0.05],
+  ['SKY_BITE.3','Sky bite: night',0,2,0.05],
+  ['SKY_BITE.4','Sky bite: aurora',0,2,0.05],
+  ['SKY_BITE.5','Sky bite: space',0,2,0.05],
+  ['SKY_DEEP_BITE','Sky bite: added per Deep space stop',0,2,0.05],
+  ['SKY_DEEP_EVERY','Sky bite: points per Deep space stop',1000*SCORE_SCALE,40000*SCORE_SCALE,1000*SCORE_SCALE],
+  ['BITE_EASY','Sky bite at 1: easy stretch shorter by',0,0.9,0.01],
+  ['BITE_LEAN','Sky bite at 1: lean stretch longer by',0,1,0.01],
+  ['BITE_SMALL','Sky bite at 1: small pieces rarer by',0,0.9,0.01],
+  ['BITE_CROWD','Sky bite at 1: comeback keys later by',0,1,0.01],
+  ['BITE_RESCUE','Sky bite at 1: lean rescue later by',0,1,0.01],
+  ['BITE_KEY','Sky bite at 1: easy clearing keys rarer by',0,1,0.01],
+  ['BITE_RUN','Sky bite at 1: sweep steering less by',0,1,0.01],
+  ['BITE_EDGE','Sky bite at 1: edge help later by',0,1,0.01],
   ['TIDE_EASY_MIN','Coaster: easy stretch min (trays)',2,30,1],
   ['TIDE_EASY_MAX','Coaster: easy stretch max (trays)',2,30,1],
   ['TIDE_LEAN_MIN','Coaster: lean stretch min (trays)',0,30,1],
@@ -257,7 +273,7 @@ function devLoad(){
 function devSnippet(){
   const f=v=>typeof v==='number'?+v.toFixed(4):typeof v==='string'?JSON.stringify(v):v;
   return '// dev panel snapshot — paste over the matching CFG entries\n'+DEV_KEYS.filter(k=>!k.includes('.')).map(k=>`  ${k}: ${f(CFG[k])},`).join('\n')
-    +`\n  SPECIALS: ${JSON.stringify(CFG.SPECIALS).replace(/"/g,'')},`;
+    +`\n  SPECIALS: ${JSON.stringify(CFG.SPECIALS).replace(/"/g,'')},`+`\n  SKY_BITE: ${JSON.stringify(CFG.SKY_BITE)},`;
 }
 function initDev(){
   el('adminBtn').hidden=!CFG.DEV_MODE;                   // the admin panel is reached from Settings, in dev mode only
@@ -334,9 +350,9 @@ function initDev(){
     const dp=(String(step).split('.')[1]||'').length;
     name.textContent=label;
     Object.assign(inp,{type:'range',min,max,step});
-    const show=()=>{ out.textContent=(+CFG[k]).toFixed(dp); };
-    inp.oninput=()=>{ CFG[k]=+inp.value; show(); devSave(); };
-    refresh.push(()=>{ inp.value=CFG[k]; show(); });
+    const show=()=>{ out.textContent=(+cfgGet(k)).toFixed(dp); };   // ('A.i': an entry of an array, e.g. SKY_BITE.3)
+    inp.oninput=()=>{ cfgSet(k,+inp.value); show(); devSave(); };
+    refresh.push(()=>{ inp.value=cfgGet(k); show(); });
     head.append(name,out); box.append(head,inp); list.append(box);
   }
   const sync=()=>refresh.forEach(f=>f());

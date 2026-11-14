@@ -1066,7 +1066,7 @@ test('points boost (8.0): one clear pays SCORE_SCALE times the old points, and t
   const r = await page.evaluate(() => ({ s: SCORE_SCALE, line: CFG.LINE_POINTS, sweep: CFG.SWEEP_BONUS, floor: CFG.RESCUE_FLOOR, at: CFG.JOURNEY_AT, candy: SKINS.find(k => k.id === 'candy').unlock,
     goal: LEVELS[2].goal, nScore: LEVELS.filter(l => l.goal.type === 'score').map(l => l.goal.n) }));
   assert.equal(r.s, 10); assert.equal(r.line, 100); assert.equal(r.sweep, 3000); assert.equal(r.floor, 3000);
-  assert.deepEqual(r.at, [0, 5000, 15000, 30000, 60000, 100000]); assert.equal(r.candy, 4000);
+  assert.deepEqual(r.at, [0, 20000, 60000, 120000, 200000, 300000], '(sky bite) re-spaced for today\'s scoring'); assert.equal(r.candy, 4000);
   assert.deepEqual(r.goal, { type: 'score', n: 1500 }, 'Adventure level 3 asks for 150 old points');
   assert.ok(r.nScore.every(n => n >= 1500), 'every score goal is boosted');
   await dealt(page);
@@ -3020,7 +3020,7 @@ test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, save
   const st = () => page.evaluate(() => ({ w: curWorld, stage: jStage, shown: jShown, wipe: !!jw, sweep: !!(jw && jw.sweep), jumps: jJumps }));
   const done = () => page.waitForFunction(() => !jw && !jPend, null, { timeout: 5000 });
   assert.equal((await st()).w, 'j0', 'a run starts at dawn');
-  await page.evaluate(() => { score = 6000; journeyDealt(); });                           // past 5000: day, after the next deal
+  await page.evaluate(() => { score = CFG.JOURNEY_AT[1] + 1000; journeyDealt(); });       // past the first threshold: day, after the next deal
   assert.equal((await st()).w, 'j0', 'nothing changes on the clear itself');
   await page.waitForFunction(() => !!jw, null, { timeout: 3000 });
   assert.deepEqual(await st(), { w: 'j1', stage: 1, shown: 1, wipe: true, sweep: false, jumps: 0 }, 'a calm wipe to day');
@@ -3030,11 +3030,11 @@ test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, save
   assert.deepEqual(await st(), { w: 'j2', stage: 2, shown: 2, wipe: true, sweep: true, jumps: 1 }, 'a sweep wipe to golden hour');
   await done();
   const r = await page.evaluate(() => {
-    score = 30000; jStage = journeyTarget();                                              // night by score, plus the sweep: aurora
+    score = CFG.JOURNEY_AT[3]; jStage = journeyTarget();                                  // night by score, plus the sweep: aurora
     const snap = JSON.parse(JSON.stringify(snapshot())), out = { jy: snap.jy };
     jJumps = 0; restore(snap); out.resumed = [curWorld, !!jw];
     delete snap.jy; restore(snap); out.old = curWorld;
-    score = 99999; jJumps = 5; out.cap = journeyTarget();
+    score = CFG.JOURNEY_AT[5] - 1; jJumps = 5; out.cap = journeyTarget();
     mode = 'adventure'; syncHomeSky(); out.adv = curWorld === CFG.HOME_WORLD;
     mode = 'endless'; syncHomeSky(); out.back = curWorld;
     el('journeyOn').checked = false; el('journeyOn').dispatchEvent(new Event('change'));
@@ -3063,7 +3063,7 @@ test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back wi
   await page.waitForTimeout(400);
   const base = await px();
   await watchFrames(page); await frameLog(page);
-  await page.evaluate(() => { score = 6000; journeyDealt(); jPend.t = 1; });
+  await page.evaluate(() => { score = CFG.JOURNEY_AT[1] + 1000; journeyDealt(); jPend.t = 1; });
   await page.waitForFunction(() => jw && jw.t > jw.dur * 0.5, null, { timeout: 3000 });
   const mid = await px();
   assert.ok(moved(mid.gem, base.gem) <= 5, 'a gem pixel is untouched mid-wipe: ' + base.gem + ' vs ' + mid.gem);
@@ -3074,7 +3074,7 @@ test('journey sky (7.5b): the wipe stays behind the board, a bonus hands back wi
   console.log(`     (wipe: ${work.length} frames, p90 ${p90.toFixed(1)} ms, max ${work[work.length - 1].toFixed(1)} ms)`);
   assert.ok(p90 < 12, 'wipe frames stay cheap: p90 ' + p90.toFixed(1) + ' ms');
   const b = await page.evaluate(async () => {
-    startBonus(); score = 20000; journeyDealt(); jPend.t = 1;
+    startBonus(); score = CFG.JOURNEY_AT[2]; journeyDealt(); jPend.t = 1;
     await new Promise(res => setTimeout(res, 300));
     const during = [curWorld, jStage, jShown];
     endBonus(); const after = [curWorld, !!jw, jShown];
@@ -6449,6 +6449,168 @@ test('cookie: the run cap; the dealer deals the same trays with the cookie on or
   assert.ok(a.lands.some(Boolean) && !b.lands.some(Boolean), 'cookies landed with it on, none with it off');
   assert.deepEqual(a.out, b.out, 'the same trays');
   assert.equal(a.next, b.next, 'and the stream is where it was');
+});
+
+// ── (sky bite) the sky fights back ──
+test('sky bite: the stop counts past Space; bite is 0 at dawn, with the scale at 0 and outside Endless, and then dawn deals exactly as before', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const o = {}, AT = CFG.JOURNEY_AT, E = CFG.SKY_DEEP_EVERY;
+    const at = (sc, j) => { score = sc; jJumps = j; return [skyStop(), skyBite()]; };
+    o.dawn = at(0, 0); o.night = at(AT[3], 0); o.space = at(AT[5], 0); o.deep2 = at(AT[5] + 2 * E, 0); o.jumped = at(AT[1], 3);
+    o.names = [0, 3, 5, 6, 7].map(stopName); score = AT[5] + 3 * E; jJumps = 2; o.target = journeyTarget();
+    score = AT[3]; jJumps = 0; CFG.SKY_BITE_SCALE = 0; o.off = skyBite(); CFG.SKY_BITE_SCALE = 1;
+    for (const m of ['daily', 'challenge', 'adventure']) { mode = m; o[m] = skyBite(); } mode = 'endless';
+    guide = { n: 1, ln: 0, sw: false, dn: 0 }; o.guide = skyBite(); guide = null;
+    CFG.TIDE = false; o.noTide = skyBite(); CFG.TIDE = true;
+    // the same seed deals the same trays at dawn with the bite on, and at night with the scale at 0, and rolls the same dice
+    const board = ['00000000','00000000','11000011','11100111','11000011','11100111','11011011','11011011'];
+    const deal = (sc, scale) => { score = sc; jJumps = 0; CFG.SKY_BITE_SCALE = scale; W73(); resetTide(); closerCool = 99; sweepCool = 99;
+      let n = 0; const src = mulberry(11); rndSrc = () => { n++; return src(); }; const out = [];
+      for (let k = 0; k < 40; k++) { B73(board); tray = [null, null, null]; genTray(); out.push(lastTier + ':' + tray.map(t => SHAPES.indexOf(t.s)).join(',')); }
+      const b = biteNow; rndSrc = null; CFG.SKY_BITE_SCALE = 1; return { out: out.join(' '), n, bite: b }; };
+    const off = deal(0, 0), dawn = deal(0, 1), nightOff = deal(AT[3], 0), night = deal(AT[5] + 3 * E, 1);
+    o.same = dawn.out === off.out && dawn.n === off.n && nightOff.out === off.out && nightOff.n === off.n;
+    o.bites = [off.bite, dawn.bite, nightOff.bite, night.bite]; o.nightDiffers = night.out !== off.out || night.n !== off.n;
+    score = 0; return o; })()`);
+  assert.deepEqual(r.dawn, [0, 0], 'dawn: stop 0, no bite');
+  assert.equal(r.night[0], 3); assert.ok(r.night[1] > 0 && r.night[1] < r.space[1], 'night bites, space more: ' + r.night[1] + ' / ' + r.space[1]);
+  assert.equal(r.space[0], 5); assert.equal(r.deep2[0], 7, 'past Space the stops keep counting with the score');
+  assert.ok(Math.abs(r.deep2[1] - r.space[1] - 2 * (await page.evaluate(() => CFG.SKY_DEEP_BITE))) < 1e-9, 'each Deep space stop adds SKY_DEEP_BITE');
+  assert.equal(r.jumped[0], 4, 'jumps (sweeps, a beaten best) add a stop each');
+  assert.deepEqual(r.names, ['Dawn', 'Night', 'Space', 'Deep space 1', 'Deep space 2']);
+  assert.equal(r.target, 5, 'the sky art stays at Space');
+  assert.equal(r.off, 0, 'SKY_BITE_SCALE 0 turns it off');
+  assert.deepEqual([r.daily, r.challenge, r.adventure, r.guide, r.noTide], [0, 0, 0, 0, 0], 'Endless only, coaster dealer only');
+  assert.deepEqual(r.bites.slice(0, 3), [0, 0, 0]); assert.ok(r.bites[3] > 0);
+  assert.ok(r.same, 'bite 0 deals the very same trays from the same dice (dawn with it on, night with the scale at 0)');
+  assert.ok(r.nightDiffers, 'and deep in space with it on the deal moves');
+});
+
+test('sky bite: a late stop deals leaner (shorter EASY, longer LEAN, fewer small pieces, comeback keys later), and every tray still has a solution', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate('(() => {' + B73 + `
+    const AT = CFG.JOURNEY_AT, E = CFG.SKY_DEEP_EVERY;
+    const board = ['11000011','10000001','00011000','00100100','10000001','00011000','11000011','10011001'];
+    const tight = ['11111110','11111110','11111110','11111110','11111100','00000000','00000000','00000000'];   // 34 gems: crowded at dawn (CROWD_GEMS), not once the bite moves the line
+    const run = (sc, seed) => { score = sc; jJumps = 0; W73(); resetTide(); closerCool = 99; sweepCool = 99; rndSrc = mulberry(seed);
+      const o = { seq: '', small: 0, pieces: 0, bad: 0, bite: 0, keys: 0 }, crowd0 = CFG.CROWD_ROOM; CFG.CROWD_ROOM = 0;
+      for (let k = 0; k < 160; k++) { const a0 = B73(board); tray = [null, null, null]; dryN = 0; genTray(); closerCool = 99; sweepCool = 99;
+        o.seq += tide.st === 'easy' ? 'E' : 'L'; for (const t of tray) { o.pieces++; if (t.s.n <= 3) o.small++; }
+        if (!evalHand(a0, tray.map(t => t.s), 400000).ok) o.bad++; }
+      CFG.CROWD_ROOM = crowd0; o.bite = biteNow;
+      // a crowded board (CROWD_GEMS gems): at dawn its comeback keys come; deep in space the line has moved past it
+      const rs0 = waveStats.rescues;
+      for (let k = 0; k < 6; k++) { W73(); const a0 = B73(tight); tide = { st: 'easy', n: 1, len: 99 }; genTray(); if (!evalHand(a0, tray.map(t => t.s), 400000).ok) o.bad++; }
+      o.keys = waveStats.rescues - rs0; o.room = roomOf(B73(tight));
+      rndSrc = null; const runs = o.seq.match(/E+|L+/g).slice(1, -1), avg = c => { const a = runs.filter(x => x[0] === c).map(x => x.length); return a.reduce((x, y) => x + y, 0) / a.length; };
+      o.easy = avg('E'); o.lean = avg('L'); return o; };
+    const o = { dawn: run(0, 5), deep: run(AT[5] + 4 * E, 5) }; score = 0; return o; })()`);
+  const { dawn, deep } = r;
+  console.log(`     (dawn: easy ${dawn.easy.toFixed(1)} lean ${dawn.lean.toFixed(1)} small ${dawn.small}/${dawn.pieces} keys ${dawn.keys}; deep space 4, bite ${deep.bite}: easy ${deep.easy.toFixed(1)} lean ${deep.lean.toFixed(1)} small ${deep.small}/${deep.pieces} keys ${deep.keys}; crowded board room ${dawn.room.toFixed(2)}, gems 34)`);
+  assert.equal(dawn.bite, 0); assert.ok(deep.bite >= 2, 'deep space bites hard: ' + deep.bite);
+  assert.ok(deep.easy < dawn.easy - 1, 'EASY stretches are shorter: ' + dawn.easy.toFixed(1) + ' -> ' + deep.easy.toFixed(1));
+  assert.ok(deep.lean > dawn.lean + 1, 'LEAN stretches are longer: ' + dawn.lean.toFixed(1) + ' -> ' + deep.lean.toFixed(1));
+  assert.ok(deep.small < dawn.small, 'fewer small pieces: ' + dawn.small + ' -> ' + deep.small);
+  assert.ok(dawn.keys === 6 && deep.keys === 0, 'comeback keys come later: ' + dawn.keys + ' -> ' + deep.keys);
+  assert.equal(dawn.bad + deep.bad, 0, 'every tray dealt has a solution');
+});
+
+test('sky bite: the game-over card names the stop and her farthest (saved, past Space too, an older save without it), and still fits', async ({ page }) => {
+  await play(page); await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => tlReset());
+  for (const [r, c] of [[0, 0], [1, 1], [2, 2], [3, 3]]) await tlPlace(page, r, c);
+  await dealt(page);
+  const over = (sc, j) => page.evaluate(([sc, j]) => { score = sc; jJumps = j; rescuesUsed = 0; gameOver(); const s = JSON.parse(localStorage.getItem('crumble.stats'));
+    return { line: el('overStop').textContent, shown: !el('overStop').hidden, far: s.farStop }; }, [sc, j]);
+  const again = () => page.evaluate(() => { el('overCard').hidden = true; tlStop(); state = 'play'; });
+  const AT = await page.evaluate(() => CFG.JOURNEY_AT), E = await page.evaluate(() => CFG.SKY_DEEP_EVERY);
+  await page.evaluate(() => { stats.farStop = 0; saveStats(); });
+  assert.deepEqual(await over(AT[3], 0), { line: 'You reached Night.', shown: true, far: 4 }, 'the first stop on record claims nothing');
+  await again();
+  assert.deepEqual(await over(AT[2], 0), { line: 'You reached Golden hour. Your best is Night.', shown: true, far: 4 });
+  await again();
+  assert.deepEqual(await over(AT[5] + 2 * E, 0), { line: 'You reached Deep space 2. Farthest yet!', shown: true, far: 8 }, 'past Space it keeps counting');
+  await again();
+  assert.deepEqual(await over(AT[1], 1), { line: 'You reached Golden hour. Your best is Deep space 2.', shown: true, far: 8 }, 'a sweep jump counts');
+  // the card still fits a phone with the line, the replay, the rescue and a long message
+  const lay = await page.evaluate(() => { el('overMsg').textContent = 'New skin unlocked: Candy, Glass! That is a serious run.'; const r = id => el(id).getBoundingClientRect();
+    return { stop: r('overStop'), tl: r('tlBoard'), revive: !el('reviveBox').hidden, btns: ['reviveBtn', 'againBtn', 'overMenuBtn'].map(r), h: innerHeight, tlShown: !el('tlBoard').hidden }; });
+  assert.ok(lay.tlShown && lay.revive, 'the replay and the rescue are on the card');
+  assert.ok(lay.stop.bottom <= lay.tl.top && lay.btns.every(b => b.bottom <= lay.h), 'everything fits on a 390x844 screen: ' + JSON.stringify(lay));
+  fs.mkdirSync('tests/out', { recursive: true });
+  await page.screenshot({ path: 'tests/out/sky-bite-over-card.png' });
+  await page.setViewportSize({ width: 375, height: 667 }); await frames(page, 4);   // a small phone (iPhone SE)
+  const sm = await page.evaluate(() => { const r = id => el(id).getBoundingClientRect(), c = el('overCard');
+    return { stop: r('overStop'), tl: r('tlBoard'), btns: ['reviveBtn', 'againBtn', 'overMenuBtn'].map(r), h: innerHeight, scrollable: c.scrollHeight > c.clientHeight, sh: c.scrollHeight, ch: c.clientHeight }; });
+  await page.screenshot({ path: 'tests/out/sky-bite-over-card-375x667.png' });
+  console.log(`     (375x667: card ${sm.sh}/${sm.ch} px, last button bottom ${Math.round(sm.btns[2].bottom)})`);
+  assert.ok(sm.stop.top >= 0 && sm.stop.bottom <= sm.tl.top && sm.btns.every(b => b.bottom <= sm.h), 'on a small phone everything is on screen too: ' + JSON.stringify(sm));
+  await page.setViewportSize({ width: 390, height: 844 }); await frames(page, 4);
+  // other modes: no line
+  await again();
+  await page.evaluate(() => { mode = 'daily'; dk = dailyKey(); lv = { lines: 0, pieces: 0, combo: 0, swept: false }; });
+  assert.equal((await over(AT[4], 0)).shown, false, 'Daily shows no stop line');
+  // an older stats save without the field loads as none on record
+  await page.evaluate(() => { localStorage.setItem('crumble.stats', JSON.stringify({ v: 1, best: 500, games: 4, lines: 9, placed: 30, sweeps: 0, bestCombo: 2, totalScore: 900, bonuses: 0 })); clearRun('endless'); clearRun('daily'); });
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => ({ far: stats.farStop, games: stats.games, best })), { far: 0, games: 4, best: 500 }, 'an older save loads, farStop 0');
+  await page.evaluate(() => { localStorage.setItem('crumble.stats', JSON.stringify({ v: 1, best: 500, farStop: 'x' })); loadStats(); });
+  assert.equal(await page.evaluate(() => stats.farStop), 0, 'a bad value is ignored');
+});
+
+test('sky bite: a resumed run keeps its stop and deals at the same bite', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate(() => {
+    const AT = CFG.JOURNEY_AT; score = AT[4]; jJumps = 2; saveRun();
+    const o = { stop: skyStop(), bite: skyBite() };
+    const snap = JSON.parse(localStorage.getItem(runStore('endless')));
+    start(); o.fresh = [skyStop(), skyBite()];
+    o.ok = restore(snap); o.back = skyStop(); o.biteBack = skyBite(); o.sky = journeyTarget();
+    return o; });
+  assert.equal(r.stop, 6, 'aurora by score plus two jumps: Deep space 1');
+  assert.deepEqual(r.fresh, [0, 0], 'a new run is back at dawn');
+  assert.ok(r.ok); assert.equal(r.back, 6, 'the stop survives the save'); assert.ok(r.bite > 0 && r.biteBack === r.bite, 'and so does the bite'); assert.equal(r.sky, 5);
+});
+
+test('sky bite: Admin (?dev) has the scale, a slider per stop and the knobs; a moved stop slider is saved and comes back', async ({ page, server }) => {
+  await page.goto(server.url + '?dev');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  const r = await page.evaluate(() => {
+    const keys = ['SKY_BITE_SCALE', 'SKY_BITE.1', 'SKY_BITE.5', 'SKY_DEEP_BITE', 'SKY_DEEP_EVERY', 'BITE_EASY', 'BITE_LEAN', 'BITE_CROWD'];
+    const o = { has: keys.map(k => DEV_SLIDERS.some(s => s[0] === k)) };
+    const box = [...document.querySelectorAll('#devList > div')].find(d => /Sky bite: night/.test(d.textContent));
+    const inp = box.querySelector('input'); inp.value = '0.9'; inp.dispatchEvent(new Event('input'));
+    o.set = CFG.SKY_BITE[3]; o.shown = box.querySelector('output').textContent; o.saved = JSON.parse(localStorage.getItem(DEV_STORE))['SKY_BITE.3'];
+    o.snippet = /SKY_BITE: \[0,0.05,0.15,0.9,/.test(devSnippet());
+    return o; });
+  assert.deepEqual(r.has, Array(8).fill(true));
+  assert.deepEqual([r.set, r.shown, r.saved, r.snippet], [0.9, '0.90', 0.9, true], 'an entry of the per-stop array is a slider like any other');
+  await page.reload(); await toGame(page);
+  assert.equal(await page.evaluate(() => CFG.SKY_BITE[3]), 0.9, 'and it comes back');
+  await page.evaluate(() => localStorage.removeItem(DEV_STORE));
+});
+
+test('sky bite: the crumb says a line on arriving at night and at space (its own dice), not on a resume, not with the bite off', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.waitForFunction(() => !el('mascot').hidden);
+  await page.evaluate(() => { CFG.DARES = false; dareRunReset(); });   // (dares) a "reach Night" dare would be won by the jump and its line would speak first
+  const r = await page.evaluate(async () => {
+    const AT = CFG.JOURNEY_AT, o = {}, wait = () => new Promise(res => setTimeout(res, 120)), seen = () => el('crumbSay').hidden ? '' : el('crumbSay').textContent;
+    const r0 = rndSrc; let dealerDice = 0; rndSrc = () => { dealerDice++; return Math.random(); };
+    say.until = 0; say.last = -1e9; score = AT[3]; await wait(); o.night = seen();
+    say.until = 0; say.last = -1e9; score = AT[5]; await wait(); o.space = seen();
+    rndSrc = r0; o.dice = dealerDice;
+    say.until = 0; say.last = -1e9; o.ok = restore(JSON.parse(JSON.stringify(snapshot()))); await wait(); o.resumed = seen();   // no new stop on a resume
+    start(); say.until = 0; say.last = -1e9; await wait(); CFG.SKY_BITE_SCALE = 0; score = AT[3]; await wait(); o.off = seen(); CFG.SKY_BITE_SCALE = 1;
+    return o; });
+  const lines = await page.evaluate(() => ({ night: SAY.night, space: SAY.space }));
+  assert.ok(lines.night.includes(r.night), 'night: ' + r.night);
+  assert.ok(lines.space.includes(r.space), 'space: ' + r.space);
+  assert.equal(r.dice, 0, 'the lines never touch the dealer\'s dice');
+  assert.ok(r.ok); assert.equal(r.resumed, '', 'a resume says nothing');
+  assert.ok(!lines.night.includes(r.off), 'with the bite off there is nothing to warn about: ' + r.off);
 });
 
 for (const { name, fn } of tests) {
