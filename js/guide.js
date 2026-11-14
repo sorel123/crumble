@@ -59,7 +59,7 @@ let guide=null;          // the live lesson: {n: 1-3, ln: lines cleared by this 
 let guideIdleT=0;        // when she last did something (the tray arrived, a pickup, a drop): the hint waits CFG.GUIDE_HINT_MS from here
 function guideSeen(){ try{ return localStorage.getItem(GUIDE_STORE)==='1'; }catch(e){ return true; } }   // no storage: never (it would show every launch)
 function guideMark(){ try{ localStorage.setItem(GUIDE_STORE,'1'); }catch(e){} }
-const guideFresh=()=>CFG.GUIDE&&mode==='endless'&&stats.games===0&&!best&&!guideSeen();   // start() asks before it counts the game
+const guideFresh=()=>CFG.GUIDED_START&&mode==='endless'&&stats.games===0&&!best&&!guideSeen();   // start() asks before it counts the game
 // can lesson n be laid on this board? no gem already there may sit in one of its gaps
 const guideFits=n=>GUIDE_LESSONS[n-1].board.every((row,r)=>[...row].every((v,c)=>v==='X'||v==='.'||!grid[r][c]));
 // lay lesson n: the gems it needs pop in around what is already on the board, then its tray and its line

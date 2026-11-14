@@ -44,6 +44,12 @@ const levelOpen=id=>id===1||levelDone(id-1)||!!(adv.lv[id-1]&&adv.lv[id-1].f>=3)
 const nextLevel=()=>LEVELS.find(L=>levelOpen(L.id)&&!levelDone(L.id))||LEVELS[LEVELS.length-1];
 const advStars=()=>LEVELS.reduce((a,L)=>a+(adv.lv[L.id]?adv.lv[L.id].s:0),0);
 const starsFor=(L,pieces)=>pieces<=L.par[0]?3:pieces<=L.par[1]?2:1;
+// the win card's next target, read from the same thresholds as starsFor: one star points at two (par[1]), two stars at three
+// (par[0]); where both are the same number the next step from one star is three
+function starTarget(L,stars){
+  const three=stars>=2||L.par[1]<=L.par[0], n=three?L.par[0]:L.par[1];
+  return 'Finish in '+n+(n===1?' piece':' pieces')+' or fewer for '+(three?'three stars.':'two stars.');
+}
 const starStr=n=>'★'.repeat(n)+'☆'.repeat(3-n);
 
 function loadModes(){
@@ -204,7 +210,7 @@ function showWin(stars,first){
   el('winTitle').textContent=last?'You did it!':'Cleared!';
   el('winStars').textContent=starStr(stars);
   el('winMsg').textContent=last?'That is every level. You are a Crumble master.'
-    :stars===3?'Perfect! Three stars.':'Beat '+L.par[1]+' pieces or fewer for more stars. You used '+lv.pieces+'.';
+    :stars===3?'Perfect! Three stars.':starTarget(L,stars)+' You used '+lv.pieces+'.';
   el('winNext').hidden=last; el('winNext').textContent='Next level';
   el('winCard').hidden=false;
 }

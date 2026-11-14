@@ -7,7 +7,7 @@
    dealer and the stuck check see a settled board); only the picture plays out over the next second or two:
    every gem that moved carries `av`, a list of [start frame, cells] falls on the avalanche clock (ava.t), and a gem that
    fell into a clearing row is a shatter that falls first and breaks on landing. Touches wait until it has landed.
-   Endless only. Switch: CFG.AVALANCHE (Settings > Look > Advanced "Avalanche", saved `ava`; default off while it is tried). */
+   Endless only. Switch: CFG.AVALANCHE (Settings > Look > Advanced "Avalanche", saved `av2`; on by default). */
 const ava={t:0,end:0,live:false};
 const avaBusy=()=>ava.live;
 let avaSeed=20261114;                                    // its own dice: the dealer's (rnd) must deal the same trays with or without it
@@ -28,9 +28,11 @@ function avaDue(comboNow){
   return avaRnd()<Math.min(CFG.AVA_MAX,CFG.AVA_CHANCE+CFG.AVA_STEP*(comboNow-CFG.AVA_COMBO));
 }
 /* place() calls this after its own lines are gone. `lead` = frames until that clear has popped.
-   Returns {gained, cleared, lines, end}: points and gems the chain took, lines it cleared, frames until the last landing. */
+   Returns {gained, cleared, lines, end, steps, banner}: points and gems the chain took, lines it cleared, frames until the
+   last landing, [lines, combo] for each chain clear (place() gives each the rewards of an ordinary clear: the bonus meter,
+   Volcano, the star), and the AVALANCHE! banner (a COLOR GONE from the fall queues right behind it). */
 function avalanche(lead,gi0){
-  const out={gained:0,cleared:0,lines:0,end:0};
+  const out={gained:0,cleared:0,lines:0,end:0,steps:[],banner:null};
   let T=lead+CFG.AVA_RUMBLE;                             // the board shakes for a beat, then lets go
   ava.t=0; ava.live=true;
   for(let step=0;step<N;step++){
@@ -49,7 +51,7 @@ function avalanche(lead,gi0){
     const rows=[]; for(let r=0;r<N;r++) if(grid[r].every(v=>v)) rows.push(r);
     if(!rows.length) break;
     combo++; trayCombo=Math.max(trayCombo,combo); fireCombo();
-    out.lines+=rows.length;
+    out.lines+=rows.length; out.steps.push([rows.length,combo]);
     out.gained+=Math.round(CFG.LINE_POINTS*rows.length*rows.length*(1+(combo-1)*CFG.COMBO_STEP));
     const pop=land+CFG.AVA_BEAT;
     for(const r of rows){
@@ -68,12 +70,13 @@ function avalanche(lead,gi0){
   }
   ava.end=out.end+6;
   // the show: a word, a shake that lasts through the rumble, a low boom, the crumb is thrown off its perch
-  banners.splice(banners.length&&banners[0].t>0?1:0,0,{t:0,txt:'AVALANCHE!',sub:out.lines?out.lines+(out.lines===1?' more line':' more lines'):'',col:'#FFB36B',k:1.2});   // next in the queue (behind one already showing): the word belongs to the fall, not after it
+  out.banner={t:0,txt:'AVALANCHE!',sub:out.lines?out.lines+(out.lines===1?' more line':' more lines'):'',col:'#FFB36B',k:1.2};
+  banners.splice(banners.length&&banners[0].t>0?1:0,0,out.banner);   // next in the queue (behind one already showing): the word belongs to the fall, not after it
   shake=Math.max(shake,13*CFG.SHAKE); hitWait=0;
   if(!reduce) borderFlash={t:-lead,col:'255,179,107'};
   toyPlay(lead/60,t=>{ boom(t,.2); tone(t+.05,{f0:90,f1:48,pdur:.4,dur:.5,vol:.12}); });
   haptic('sweep');
-  if(typeof toyOn==='function'&&toyOn()&&toy.mode==='rim'&&!masc.fainted){ toy.mode='air'; toy.vy=-900; toy.vx=(toy.x<toyXMax()/2?1:-1)*160; toy.va=420; toy.speed=0; toy.bounces=0; }
+  if(typeof toyOn==='function'&&toyOn()&&!reduce&&toy.mode==='rim'&&!masc.fainted){ toy.mode='air'; toy.vy=-900; toy.vx=(toy.x<toyXMax()/2?1:-1)*160; toy.va=420; toy.speed=0; toy.bounces=0; }
   return out;
 }
 function avaStep(dt){                                    // draw.js frame(): the avalanche clock

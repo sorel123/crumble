@@ -109,7 +109,7 @@ function mascotStep(now){                             // draw.js frame(): writes
     const cx=m.x+toy.x+m.s/2, cy=m.y+toy.y+m.s*.45, dx=drag.cx-cx, dy=drag.cy-cy, d=Math.hypot(dx,dy)||1;
     lx=dx/d; ly=dy/d; dim=d<m.s*1.6+cell*1.2;
   }
-  const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'')+(toyOn()&&!faint?' toy':'')+(toyHot()&&!faint?' hot':'');
+  const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'')+(toyGrabbable()&&!faint?' toy':'')+(toyHot()&&!faint?' hot':'');
   if(key!==m.key){ m.el.hidden=false; m.el.className=key; m.key=key; }
   sayStep(now,true,faint);                          // (talk) a line beside it, if it has one
   const look=mood==='faint'||mood==='sweep'||mood==='flat'||mood==='dizzy'?'0,0':(Math.round(lx*1.3*4)/4)+','+(Math.round(ly*1.1*4)/4);

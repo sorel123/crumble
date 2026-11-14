@@ -171,6 +171,39 @@ function goldenSparkle(n){                             // twinkles only on empty
   for(let k=0;k<n&&free.length;k++){ const [r,c]=free.splice((Math.random()*free.length)|0,1)[0];
     sparkles.push({x:bx+(c+.2+Math.random()*.6)*cell,y:by+(r+.2+Math.random()*.6)*cell,t:Math.random()*0.5}); }
 }
+/* The clean sweep's payoff and NEW BEST, shared by place() and the cannonball (crumbtoy.js toyFireEnd), so a board the
+   crumb empties, or a best it passes, gets the same moment as a drop's. `quiet`: the cannonball's own sounds (toyPlay; a sound
+   outside place() still must not roll Math.random for the dealer, see crumbtoy.js). */
+const boardEmpty=()=>grid.every(row=>row.every(v=>!v));
+function sweepPayoff(cleared,lead,quiet){            // returns the bonus; the caller adds it to the points and counts the sweep
+  const bonus=CFG.SWEEP_BONUS+cleared*CFG.SWEEP_PER_GEM;
+  trayHadSweep=true;
+  ambientBurst=1.8;
+  if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
+  for(const sh of shatters) if(sh.t<=0) sh.tier=4;   // (7.5) the sweep's gems all crumble at the biggest size
+  pushBanner('CLEAN SWEEP','+'+bonus);         // the achievement first, then the world it earns
+  journeySweep();                              // (7.5b) the sky jumps a stage (before a Rainbow may take it over)
+  triggerTransform('rainbow');
+  for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
+  shake=16*CFG.SHAKE; glowT=1.6;
+  if(quiet) toySweepSnd(); else Sfx.sweep();
+  tension=0;
+  if(CFG.FX_SWEEP_SHOW&&!reduce){              // (B) the show; the new sky and look wait for its end
+    const hold=lead+CFG.SWEEP_SHOW_LEN;
+    sweepShow={t:-lead,n:jJumps};          // jJumps: this run's sweeps (draw.js)
+    if(jPend) jPend.t=Math.max(jPend.t,hold);
+    if(flip&&flip.t<=1) flip.t=-hold;
+  }
+  return bonus;
+}
+function bestCheck(quiet){                           // after the points are added: the run just became her best, celebrate it now, not at game over
+  if(bestBeaten || mode!=='endless' || !(best>0) || score<=best) return;
+  bestBeaten=true;
+  pushBanner('NEW BEST!','',"#8FF7FF");
+  if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
+  glowT=Math.max(glowT,1.4); if(quiet) toyFanfare(); else Sfx.fanfare();
+  if(CFG.FX_CHASE && chaseBest>=CFG.CHASE_SKY_MIN) journeySweep();   // (7.5e) beating her best takes the sky a stage further, with the bright wipe
+}
 function place(idx,r,c){
   // countdown first, on whatever was already active — a fresh trigger below overrides this placement's result
   if(transform){ transform.remaining--; if(transform.remaining<=0) endTransform(); }
@@ -310,32 +343,28 @@ function place(idx,r,c){
                sub:slammed?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
     if(!s.star&&avaDue(combo)){                    // (Avalanche) the streak brings the board down: gems fall, rows that fill clear, and again
-      const a=avalanche(maxDelay+CFG.AVA_LEAD,lastGi);
+      const combo0=combo, a=avalanche(maxDelay+CFG.AVA_LEAD,lastGi);
       gained+=a.gained; cleared+=a.cleared; avaLines=a.lines; maxDelay=Math.max(maxDelay,a.end);
+      // each chain clear counts like an ordinary clear: it fills the bonus meter, a combo it reaches can earn Volcano and the star
+      for(const [n,cmb] of a.steps) chargeBonus(n,cmb);
+      if(a.steps.length){
+        if(special('star') && combo>=CFG.STAR_COMBO) starForced=true;
+        if(combo0<CFG.TRANSFORM_COMBO && combo>=CFG.TRANSFORM_COMBO) triggerTransform('volcano');   // (the clear itself already tried, at its own combo)
+      }
+      // COLOR GONE for a colour the fall wiped out (the clear's own was paid above). Its words queue right behind the
+      // AVALANCHE! banner, so one headline shows at a time and none of it is drawn over the chain's falling gems
+      const left=new Set(); for(let rr=0;rr<N;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]) left.add(grid[rr][cc].gi);
+      const goneA=[...colorsAfter].filter(gi=>!left.has(gi));
+      if(combo>=CFG.BIG_COMBO && goneA.length && left.size>0 && CFG.COLOR_GONE_BONUS>0){
+        const cb=Math.round(CFG.COLOR_GONE_BONUS*goneA.length*(1+(combo-1)*0.25));
+        gained+=cb;
+        banners.splice(Math.max(0,banners.indexOf(a.banner))+1,0,{t:0,txt:goneA.length>1?goneA.length+' COLORS GONE!':'COLOR GONE!',sub:'+'+cb,col:`hsl(${GEMS[goneA[0]].h} 95% 72%)`,k:1.2});
+      }
     }
     // clean sweep — board completely emptied
-    let anyLeft=false;
-    for(let rr=0;rr<N&&!anyLeft;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]){anyLeft=true;break;}
-    if(!anyLeft){
-      const bonus=CFG.SWEEP_BONUS+cleared*CFG.SWEEP_PER_GEM;
-      gained+=bonus;
-      swept=true; trayHadSweep=true;
-      ambientBurst=1.8;
-      if(CFG.FX_SWEEP_FX){ sweepFxT=1; spawnConfetti(); }
-      for(const sh of shatters) if(sh.t<=0) sh.tier=4;   // (7.5) the sweep's gems all crumble at the biggest size
-      pushBanner('CLEAN SWEEP','+'+bonus);         // the achievement first, then the world it earns
-      journeySweep();                              // (7.5b) the sky jumps a stage (before a Rainbow may take it over)
-      triggerTransform('rainbow');
-      for(let k=0;k<4;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.18});
-      shake=16*CFG.SHAKE; glowT=1.6;
-      Sfx.sweep();
-      tension=0;
-      if(CFG.FX_SWEEP_SHOW&&!reduce){              // (B) the show; the new sky and look wait for its end
-        const lead=maxDelay+6, hold=lead+CFG.SWEEP_SHOW_LEN;
-        sweepShow={t:-lead,n:jJumps};          // jJumps: this run's sweeps (draw.js)
-        if(jPend) jPend.t=Math.max(jPend.t,hold);
-        if(flip&&flip.t<=1) flip.t=-hold;
-      }
+    if(boardEmpty()){
+      gained+=sweepPayoff(cleared,maxDelay+6);
+      swept=true;
     }
     const escaped=wasTight&&!swept&&roomOf(packGrid(grid))>=CFG.ROOM_EDGE;   // (6.3) out of the edge or a recovery
     if(CFG.FX_NARROW_ESCAPE&&escaped){   // (6.3) a narrow escape: out of the edge or a recovery. Its own short flourish: a gold rim, two soft rings, one word
@@ -389,13 +418,7 @@ function place(idx,r,c){
   updateDbg(); renderPips();
 
   score+=gained;                                     // the HUD counts up to it (frame)
-  if(!bestBeaten && mode==='endless' && best>0 && score>best){           // the run just became her best: celebrate it now, not at game over
-    bestBeaten=true;
-    pushBanner('NEW BEST!','',"#8FF7FF");
-    if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
-    glowT=Math.max(glowT,1.4); Sfx.fanfare();
-    if(CFG.FX_CHASE && chaseBest>=CFG.CHASE_SKY_MIN) journeySweep();   // (7.5e) beating her best takes the sky a stage further, with the bright wipe
-  }
+  bestCheck();
   if(tray.every(v=>!v) && !dealing){
     if(bonus){ bonus.left--; if(bonus.left<=0) endBonus(); else syncBonusChip(); }   // one bonus tray played
     goldenNext = goldenNext || special('golden') && goldenCool<=0 && !transform && !bonus      // a live transformation already is the moment
