@@ -3,7 +3,7 @@
 //
 // ASSET_HASH must change whenever a precached file changes, or phones keep the old game.
 // `npm run stamp` rewrites it; `npm test` fails if it is stale.
-const ASSET_HASH='78fa0ca6be';
+const ASSET_HASH='19aa64ab6a';
 const CACHE='crumble-'+ASSET_HASH;
 const MUSIC_CACHE='crumble-music';          // recorded loops (7.4): fetched when first played, kept across game updates (rename a file if its audio changes)
 const ASSETS=["./","index.html","manifest.json","icon-120.png","icon-152.png","icon-180.png","icon-192.png","icon-512.png","js/config.js","js/native.js","js/worlds.js","js/shapes.js","js/solver.js","js/render.js","js/samples.js","js/audio.js","js/music.js","js/game.js","js/avalanche.js","js/draw.js","js/flow.js","js/save.js","js/timelapse.js","js/modes.js","js/guide.js","js/challenge.js","js/mascot.js","js/crumbtoy.js","js/home.js","js/goals.js","js/share.js","js/ui.js","js/admin.js","js/cloud.js","js/main.js","js/update.js"];
