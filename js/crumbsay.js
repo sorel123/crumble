@@ -22,7 +22,8 @@ const SAY={
   start:["ok. try to keep up.","let's see what you've got.","no pressure."],
   sweep:["ok, that was actually good.","...did you mean to do that?","fine. I'm impressed."],
   combo:["show-off.","ok ok, we get it.","who ARE you?","don't stop now."],
-  big:["not bad.","I taught you that.","clean."],
+  big:["not bad.","I taught you that.","clean.","ok, who ARE you?","three at once. sure. fine.","did you practice? be honest.","that was my move. you stole it."],
+  two:["two. cute.","a double. noted.","ok, that one was fine.","not bad. not great."],   // (voice) a 2-line clear, now and then (TALK_TWO), with the praise words off
   best:["new best. I'll allow it.","look at you go."],
   ava:["WHOA.","I did NOT sign up for this.","warn me next time!"],
   avaSide:["which way is DOWN?","you did that on purpose.","whoa, sideways!"],   // (lean) an avalanche that fell toward a leaned phone
@@ -117,6 +118,7 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
     else if(bestBeaten&&!say.best) sayLine('best',true);
     else if(got>0&&combo>=CFG.TALK_COMBO&&combo%2===0) sayLine('combo');
     else if(got>=3) sayLine('big');
+    else if(got===2&&!CFG.PRAISE_WORDS&&now-say.last>=CFG.TALK_GAP&&mascotRnd()<CFG.TALK_TWO) sayLine('two');   // (voice) only when the gap allows, and only now and then
     say.dry=got>0?0:say.dry+1;
     if(say.dry>=CFG.TALK_DRY){ say.dry=0; sayLine('dry'); }
     say.placed=stats.placed; say.lines=stats.lines; say.sweeps=stats.sweeps; say.best=bestBeaten;

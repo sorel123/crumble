@@ -400,6 +400,7 @@ const THREE_LINES = ['01111111', '01111111', '01111111', '00000000', '00000000',
 
 test('calm clears: an everyday clear is a squash, point tags and one praise word; combo 3+ brings the loud stuff', async ({ page }) => {
   await play(page);
+  await page.evaluate(() => { CFG.PRAISE_WORDS = true; });   // (voice) the words are off by default now; this is the classic calm clear with them on ("voice:" covers the default)
   const loud = () => page.evaluate(() => ({ flashes: lineFlashes.length, waves: waves.length, shake, pops: pops.length, tags: tags.length, praises: praises.length, slams: slams.length, orbs: orbs.length, bands: bands.length, punch: punchT, combo }));
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1, 7), '10000000'], trayShapes: [0, 0, 0] });
   await dragPiece(page, 0, 0, 0);
@@ -1611,7 +1612,7 @@ test('achievements: ending one sets the no-special-next-tray rule and the cooldo
   });
   assert.deepEqual(r.first, [['RAINBOW', 'NEW LOOK UNLOCKED', 1]]); assert.equal(r.dot, true);
   assert.equal(r.ended.live, false); assert.equal(r.ended.cool, 8); assert.equal(r.ended.end, r.ended.tn, 'the next tray carries no special');
-  assert.equal(r.repeat.length, 1); assert.match(r.repeat[0][1], /×1\.5 · 9 MOVES/); assert.ok(r.repeat[0][2] > 1, 'repeats are shorter');
+  assert.equal(r.repeat.length, 1); assert.equal(r.repeat[0][1], '9 MOVES', '(voice) at x1 no multiplier is named'); assert.ok(r.repeat[0][2] > 1, 'repeats are shorter');
   await openSet(page);
   assert.deepEqual(await page.evaluate(() => [el('setBtn').classList.contains('dot'), el('pauseBtn').classList.contains('dot')]), [false, false], 'opening Settings clears the dot');
 });
@@ -6982,6 +6983,93 @@ test('quiet: dealing for a pinned seed is unchanged with it on or off (it never 
   assert.ok(on.out.length >= 3, 'a few trays dealt: ' + on.out.length);
   assert.deepEqual(on.out, off.out, 'the same trays');
   assert.equal(on.n, off.n, 'and the same number of rolls');
+});
+
+/* ── (voice) Crumb is the one voice: no praise words by default, transformations no longer multiply the score ── */
+// n full rows but column 0, a gem of colour 3 in each; a 1xn bar (or 1x1) dropped at column 0 clears them; one gem of colour 0 stays (no sweep)
+const VOICE = n => `grid = empty(); for (let r = 0; r < ${n}; r++) for (let c = 1; c < 8; c++) grid[r][c] = { gi: 3, t: 1, f: 0, l: 0 }; grid[7][7] = { gi: 0, t: 1, f: 0, l: 0 };
+  tray = [{ s: SHAPES.find(s => s.cols === 1 && s.rows === ${n} && s.n === ${n}), gi: 3 }, { s: SHAPES[0], gi: 1 }, null]; banners.length = 0; bands.length = 0; slams.length = 0; praises.length = 0; bursts.length = 0; pops.length = 0; bannerWait = 0;`;
+const voiceClear = (page, n, k, words) => page.evaluate(({ src, k, words }) => {
+  CFG.PRAISE_WORDS = words; eval(src); combo = k - 1; trayNo = 10;
+  const stings = []; const sp = Sfx.praise; Sfx.praise = t => { stings.push(t); };
+  let rolls = 0; const r0 = rndSrc; rndSrc = () => { rolls++; return 0.5; };
+  const fr = fxRoom; fxRoom = () => 40;                      // the same particle room each time (the bursts roll per particle)
+  place(0, 0, 0);
+  rndSrc = r0; Sfx.praise = sp; fxRoom = fr;
+  return { praises: praises.map(p => p.word), pops: pops.length, slams: slams.map(s => [s.txt, -s.t]), bands: bands.map(b => [b.txt, -b.t]), bursts: bursts.length, stings, rolls, wait: bannerWait };
+}, { src: VOICE(n), k, words });
+
+test('voice: no praise word after 1-, 2- and 3-line clears by default; bursts, stings, the COMBO slam and COLOR GONE stay, and nothing waits for the missing word', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.evaluate(() => { CFG.DARES = false; });
+  assert.equal(await page.evaluate(() => CFG.PRAISE_WORDS), false, 'off by default');
+  for (const n of [1, 2, 3]) {
+    const off = await voiceClear(page, n, 1, false);
+    assert.deepEqual(off.praises, [], n + ' lines: no word');
+    assert.equal(off.pops, 1, n + ' lines: the points still pop');
+    assert.ok(off.bursts > 0, n + ' lines: the praise stars still burst');
+    const on = await voiceClear(page, n, 1, true);
+    assert.equal(on.praises.length, 1, n + ' lines: the switch on brings the word back');
+    assert.deepEqual(off.stings, on.stings, n + ' lines: the same sting either way (music, not voice)');
+    assert.equal(off.rolls, on.rolls, n + ' lines: the same dealer dice either way');
+    assert.ok(off.wait <= on.wait, n + ' lines: the headline is never longer without the word: ' + off.wait + ' vs ' + on.wait);
+  }
+  assert.deepEqual((await voiceClear(page, 3, 1, false)).stings, [2], 'a 3-line clear still has its sting');
+  // combo 3 and three lines wiping out colour 3: the slam comes at once (no gap for a word), then COLOR GONE, then any banner
+  const off = await voiceClear(page, 3, 3, false), on = await voiceClear(page, 3, 3, true);
+  assert.equal(off.slams.length, 1); assert.equal(off.slams[0][0], 'COMBO 3');
+  assert.deepEqual(off.bands.map(b => b[0]), ['COLOR GONE!'], 'COLOR GONE still shows');
+  assert.ok(on.slams[0][1] >= 32, 'with the word, the slam waits for it: ' + on.slams[0][1]);
+  assert.ok(off.slams[0][1] < 32, 'without it, the slam is not held back: ' + off.slams[0][1]);
+  assert.ok(off.bands[0][1] < on.bands[0][1] && off.wait < on.wait, 'COLOR GONE and the banners come sooner by the same amount: ' + JSON.stringify([off.bands, on.bands, off.wait, on.wait]));
+  assert.equal(on.bands[0][1] - off.bands[0][1], on.wait - off.wait, 'the whole sequence just moves up');
+});
+
+test('voice: Crumb reacts to big clears and now and then to a 2-line clear, within the talk gap, with his own dice; not with the words on', async ({ page }) => {
+  await play(page); await dealt(page);
+  await page.waitForFunction(() => !el('mascot').hidden);
+  const r = await page.evaluate(async ([s2, s3]) => {
+    CFG.DARES = false; const o = {}, wait = () => new Promise(res => setTimeout(res, 120)), seen = () => el('crumbSay').hidden ? '' : el('crumbSay').textContent;
+    const r0 = rndSrc; let dice = 0, count = false; rndSrc = () => { if (count) dice++; return Math.random(); };
+    const clear = async (src, k = 1) => { eval(src); combo = k - 1; trayNo = 10; place(0, 0, 0); count = true; await wait(); count = false; return seen(); };   // only the frames after the drop are counted: his part
+    const fresh = () => { say.until = 0; say.last = -1e9; };
+    fresh(); o.big = await clear(s3);
+    say.until = 0; CFG.TALK_TWO = 1; o.gap = await clear(s2);                   // straight after: the gap holds
+    fresh(); o.two = await clear(s2);
+    fresh(); CFG.TALK_TWO = 0; o.never = await clear(s2);
+    fresh(); CFG.TALK_TWO = 1; CFG.PRAISE_WORDS = true; o.words = await clear(s2); CFG.PRAISE_WORDS = false;
+    CFG.TALK_TWO = .3; let n = 0;                                           // the default: now and then, never every time
+    for (let k = 0; k < 30; k++) { fresh(); if (SAY.two.includes(await clear(s2))) n++; }
+    o.n = n; rndSrc = r0; o.dice = dice;
+    return o; }, [VOICE(2), VOICE(3)]);
+  const L = await page.evaluate(() => ({ big: SAY.big, two: SAY.two }));
+  assert.ok(L.big.length >= 6, 'more lines for a big clear: ' + L.big.length);
+  assert.ok(L.big.includes(r.big), 'a 3-line clear: ' + r.big);
+  assert.ok(!L.two.includes(r.gap), 'the talk gap holds: ' + r.gap);
+  assert.ok(L.two.includes(r.two), 'a 2-line clear, odds 1: ' + r.two);
+  assert.ok(!L.two.includes(r.never) && !L.two.includes(r.words), 'odds 0, or the words on: nothing');
+  assert.ok(r.n > 2 && r.n < 20, 'now and then: ' + r.n + ' of 30');
+  assert.equal(r.dice, 0, 'his lines never roll the dealer\'s dice');
+});
+
+test('voice: a transformation no longer multiplies the score by default; no copy says ×1.5; the knob still works', async ({ page }) => {
+  await play(page); await dealt(page);
+  const r = await page.evaluate(() => {
+    const drop = () => { grid = empty(); tray = [{ s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }, null]; const s0 = score; place(0, 4, 4); return score - s0; };
+    const o = { mult: CFG.TRANSFORM_MULT };
+    trayNo = 12; transform = null; o.plain = drop();
+    transform = { id: 'volcano', remaining: 5 }; renderPips(); o.live = drop(); o.pips = el('transformPips').textContent; o.shown = !el('transformPips').hidden;
+    banners.length = 0; transform = null; transformCool = 0; specialEnd = -99; discoveredWorlds.add('volcano'); triggerTransform('volcano'); o.banner = banners.map(b => b.sub);
+    CFG.TRANSFORM_MULT = 1.5; transform = { id: 'volcano', remaining: 5 }; renderPips(); o.old = drop(); o.oldPips = el('transformPips').textContent;
+    banners.length = 0; transform = null; transformCool = 0; specialEnd = -99; triggerTransform('volcano'); o.oldBanner = banners.map(b => b.sub);
+    CFG.TRANSFORM_MULT = 1; transform = null; renderPips();
+    return o; });
+  assert.equal(r.mult, 1);
+  assert.equal(r.live, r.plain, 'a live Volcano pays like any drop');
+  assert.ok(r.shown && r.pips === '', 'the pips count the moves, no ×: ' + JSON.stringify(r.pips));
+  assert.deepEqual(r.banner, ['9 MOVES'], 'the repeat card names no multiplier');
+  assert.equal(r.old, Math.round(r.plain * 1.5), 'the knob at 1.5 still multiplies');
+  assert.equal(r.oldPips, '×1.5'); assert.deepEqual(r.oldBanner, ['×1.5 · 9 MOVES']);
 });
 
 for (const { name, fn } of tests) {

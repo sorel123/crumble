@@ -236,6 +236,7 @@ Top to bottom:
 | (sky bite) | The sky fights back: in Endless each journey stop deals a little leaner (shorter easy, longer lean stretches, later comeback help), past Space the stops go on as Deep space 1, 2, ...; JOURNEY_AT re-spaced for today's scoring; the game-over card says how far she got and her farthest. See the section at the end |
 | (rescue) | Rescue the Crumbs, the Lab's second game: three boards where crumbs sit on gems, a line clear drops them, the bottom row is the exit; fixed queues, stars by par, Undo/Reset/hint, progress in `crumble.lab` `.rescue` (iCloud backup), a cookie on each board's first rescue. `js/rescue.js`, `tools/rescue-check.mjs`. See the Rescue section at the end |
 | (quiet) | A quiet opening: in Endless, Volcano (and the other transformations), the cannonball's charge and the x2 bonus meter wait for the second sky stop (Day, about tray 8); the meter's chip is hidden until then and slides in, and Crumb says so once. `CFG.QUIET_START`. See the section at the end |
+| (voice) | Crumb is the one voice: the praise words (GOOD!, NICE!, GREAT! ...) are off by default (`CFG.PRAISE_WORDS`), Crumb remarks on big clears and now and then on a double; transformations no longer multiply the score (`TRANSFORM_MULT` 1.5 to 1). See the section at the end |
 
 Details for each, oldest first:
 
@@ -1994,3 +1995,31 @@ charged crumb and popups all at once, so nothing felt like a step up. Jay approv
   the next streak charges him and earns Volcano. Things to judge: is Day the right line (try `JOURNEY_AT` / the switch), does
   the run feel like it opens up there.
 
+## Crumb is the one voice (2026-11-14)
+
+The review: generic praise words talked over Crumb, whose lines are funnier, and a live transformation was a third
+multiplier beside the x2 bonus and the streak. Jay approved both changes.
+
+- **No praise words by default** (`CFG.PRAISE_WORDS` false, Admin "Praise words on clears"). `praise()` (solver.js) still runs
+  exactly as before: it rolls the same dice for the word (the dealer's `rnd()`: a Daily or a pinned seed deals the same), spawns
+  the same burst of praise stars and plays the same sting for the big tiers (the arbiter only lets tier 3+ be heard; those are
+  music, not voice). It only no longer puts the word in `praises`. Everything else stays: the point pop, per-cell tags, the
+  COMBO slam, COLOR GONE, banners, fireworks.
+- **No dead wait.** FX_ONE_VOICE sequences the headline: the word and/or COMBO n, then COLOR GONE, then a banner. With a slam
+  and a 3+ line clear the word went first and the slam waited for it (`slamAt` at least 32 frames); a clear with a word but no
+  slam held the headline 30 frames, 16 without. Both now read `wordFirst` / `PRAISE_WORDS`, so with the words off the slam
+  comes at the clear's own beat and COLOR GONE and the banners move up by the same amount (test).
+- **Crumb instead** (crumbsay.js `sayStep`): `SAY.big` (3+ lines) has four more lines ("ok, who ARE you?", "three at once.
+  sure. fine.", "did you practice? be honest.", "that was my move. you stole it."), and a new `SAY.two` for a 2-line clear
+  ("two. cute.", "a double. noted.", "ok, that one was fine.", "not bad. not great."), only with the words off, only when the
+  talk gap (`TALK_GAP`, 9 s) has passed, and then only on a roll of `TALK_TWO` (.3, Admin slider) of his own dice
+  (`mascotRnd`; the roll is not made at all inside the gap). So never on every clear.
+- **`TRANSFORM_MULT` 1.5 -> 1.** The looks (Volcano, Rainbow, Starfield) stay as pure celebration. At 1 no copy names a
+  multiplier: the repeat card says "9 MOVES" (was "×1.5 · 9 MOVES") and the pips under the score only count the moves. Any
+  other value shows as before (the Admin slider is kept). Challenge never had transformations and Daily has no medal
+  targets, so no pinned target moved; two old tests changed (the calm-clear test turns the words on; the repeat card reads
+  "9 MOVES").
+- **Tests:** the three "voice:" scenarios.
+- **Check on the phone:** clear one, two and three lines: no word on the board, the stars still burst; a 3-line clear gets a
+  Crumb line, a double now and then. A streak of 3 with three lines: COMBO 3 slams at once. Earn Volcano twice: the second card
+  says "9 MOVES", and the score does not jump while it is live.

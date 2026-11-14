@@ -25,7 +25,7 @@ function mobility(){
 // ═══ transformations as achievements (plan 4.5d) ═══
 // Four named achievements, one per special. Earning one unlocks its look for good (it joins the Settings looks, see
 // LOOKS in ui.js; `discoveredWorlds` is the saved record). Three of them also start a short live transformation
-// (sky + tiles, x TRANSFORM_MULT for TRANSFORM_PLACEMENTS placements) when nothing else is going on. Gold Vault never
+// (sky + tiles, x TRANSFORM_MULT, now 1, for TRANSFORM_PLACEMENTS placements) when nothing else is going on. Gold Vault never
 // goes live: the golden hand's own celebration owns that moment. An achievement that cannot go live (a bonus, a golden
 // hand or a star in play, a live one already, the cooldown, trays 1-5) still unlocks the look; that rule matters more
 // than the sky flip. The card is only drawn over the play (a banner), it never pauses or blocks anything.
@@ -60,7 +60,7 @@ function triggerTransform(id){
   }
   if(!CFG.FX_TRANSFORM_MOMENT) return;
   if(first){ pushBanner(name.toUpperCase(),'NEW LOOK UNLOCKED','#FFE9A8'); Sfx.achieve(Object.keys(ACHIEVE).indexOf(id)); }
-  else if(live){ pushBanner(name.toUpperCase(),'×'+CFG.TRANSFORM_MULT+' · '+CFG.TRANSFORM_PLACEMENTS+' MOVES','#FFE9A8',1.6); }
+  else if(live){ pushBanner(name.toUpperCase(),(CFG.TRANSFORM_MULT!==1?'×'+CFG.TRANSFORM_MULT+' · ':'')+CFG.TRANSFORM_PLACEMENTS+' MOVES','#FFE9A8',1.6); }   // (voice) at x1 no multiplier is named
 }
 function endTransform(){
   transform=null;
@@ -149,7 +149,7 @@ function renderPips(){
   }
   const kids=[...box.children];
   for(let i=0;i<n;i++) kids[i].className='pip'+(i<transform.remaining?' on':'');
-  kids[n].textContent='×'+CFG.TRANSFORM_MULT;
+  kids[n].textContent=CFG.TRANSFORM_MULT!==1?'×'+CFG.TRANSFORM_MULT:'';   // (voice) at x1 the pips only count the moves
 }
 /* the golden hand's payoff (4.5c): the biggest celebration in the game. A gold wash behind the board and glow on the
    screen edges, sparkles on the empty cells and a rain in the margins above and below the board (never across a gem),
@@ -307,8 +307,9 @@ function place(idx,r,c){
     // (A) one voice at a time: the headline (praise word and/or COMBO n) has the board to itself, then COLOR GONE, then any banner
     const oneV=CFG.FX_ONE_VOICE, slammedNow=CFG.FX_COMBO_SLAM&&loud;
     const praiseFirst=!oneV||!slammedNow||praiseTier(total,0)>=2;   // with a COMBO slam the word stays only for a 3+ line clear, and goes first
-    const slamAt=reduce?0:(oneV&&slammedNow&&praiseFirst?Math.max(maxDelay+7,32):maxDelay+7);
-    let vEnd=slammedNow?slamAt+42:(praiseTier(total,combo)?30:16);   // frames from now until the headline starts to fade
+    const wordFirst=praiseFirst&&CFG.PRAISE_WORDS;     // (voice) with the words off nothing waits for one: the slam comes at once and the headline is shorter
+    const slamAt=reduce?0:(oneV&&slammedNow&&wordFirst?Math.max(maxDelay+7,32):maxDelay+7);
+    let vEnd=slammedNow?slamAt+42:(CFG.PRAISE_WORDS&&praiseTier(total,combo)?30:16);   // frames from now until the headline starts to fade
     if(oneV) bands.length=0;                          // a new clear's words replace any still waiting
     // COLOR GONE — a clear that wipes the last of a colour off the board
     const colorsAfter=new Set();

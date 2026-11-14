@@ -1902,9 +1902,9 @@ function praiseTier(lines,combo){
 }
 function praise(lines,combo){
   const tier=praiseTier(lines,combo);
-  const P=PRAISE[tier], word=P.words[(rnd()*P.words.length)|0];
+  const P=PRAISE[tier], word=P.words[(rnd()*P.words.length)|0];   // (rolled with the words off too: the dealer's dice must not move)
   praises.length=0;                                 // newest wins — words never stack up
-  praises.push({t:0,tier,word,a:P.a,b:P.b});
+  if(CFG.PRAISE_WORDS) praises.push({t:0,tier,word,a:P.a,b:P.b});   // (voice) off: no word; Crumb reacts instead (crumbsay.js), the bursts and the sting stay
   const x=W/2, y=by+B*0.3, n=Math.min(6+tier*6,fxRoom());
   for(let k=0;!reduce&&k<n;k++){
     const ang=rnd()*6.283, sp=2.5+rnd()*(3+tier*1.6);
