@@ -2,12 +2,15 @@
 // Plain script, loaded in order by index.html (after crumbtoy.js); shares globals with the other js/ files.
 /* Jay, 2026-11-14: "more snarky animations... if you stop playing for a bit, he holds a sign hey where'd you go...
    maybe even when you do something good too". The crumb is wry, never mean, and never long: one short line at a time.
-     hot     charged for a cannonball: a bouncing "FLICK ME!" stays up until it is thrown (the one line that is a hint)
+     hot     charged for a cannonball: a bouncing "PULL ME BACK!" stays up until it is thrown (the one line that is a hint;
+             "FLICK ME!" with the slingshot switched off). A tap on it says how ("pull me back and let go!")
      idle    no touch for TALK_IDLE_MS: it holds up a sign ("hey, where'd you go?"), then a second one, then it nods off (zzz);
              the next touch gets a "you're back" line
      good    a clean sweep, a long streak, a 3+ line clear, a new best, an avalanche, a cannonball that broke a lot
      meh     many drops without a clear, a piece picked up and put back again and again, a cramped board, game over
      toy     poked, thrown hard (dizzy), sulking
+     stakes  the streak's last life ("careful.", once a run), a grown crumb on it ("use me or lose me.", once a charge),
+             the growth lost when the streak dies ("I was HUGE.")
    Everything is found by watching the game's own state from sayStep (called by mascotStep), so game.js is untouched; the
    toy's own moments call crumbSay directly. Lines are picked with the mascot's own dice (mascotRnd), never Math.random.
    One DOM element (#crumbSay), text and class written only when they change. At most one line per TALK_GAP ms, except the
@@ -40,22 +43,27 @@ const SAY={
   closetOff:["finally.","free at last.","...I kind of miss it."],
   closetBuy:["you spent cookies on THIS?","worth every crumb.","ok. it's mine now."],
   closetNew:["there's something new in my closet."],
+  hint:["pull me back and let go!"],
+  sputter:["one more miss and it's gone.","careful."],
+  useme:["use me or lose me."],
+  deflate:["pfff.","I was HUGE.","that was your fault."],
 };
-const say={el:null,txt:'',kind:'',until:0,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
+const say={el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){
   const d=document.createElement('div'); d.id='crumbSay'; d.hidden=true; d.setAttribute('aria-hidden','true');
   el('stage').appendChild(d); say.el=d;
 }
 const sayPick=k=>{ const a=SAY[k]; return a[Math.floor(mascotRnd()*a.length)%a.length]; };
-// show a line for ms. kind: 'say' (bubble) or 'sign'. force skips the gap between lines (the toy's own moments, the idle signs)
-function crumbSay(txt,ms,kind,force){
+// show a line for ms. kind: 'say' (bubble) or 'sign'. force skips the gap between lines (the toy's own moments, the idle signs).
+// over: the line shows even while the crumb is charged (in place of the "PULL ME BACK!" bubble), in the charged bubble's colours
+function crumbSay(txt,ms,kind,force,over){
   if(!CFG.FX_CRUMB_TALK||!say.el) return false;
   const now=performance.now();
   if(!force&&now-say.last<CFG.TALK_GAP) return false;
-  say.txt=txt; say.kind=kind||'say'; say.until=now+(ms||CFG.TALK_MS); say.last=now;
+  say.txt=txt; say.kind=kind||'say'; say.until=now+(ms||CFG.TALK_MS); say.last=now; say.over=!!over;
   return true;
 }
-const sayLine=(k,force)=>crumbSay(sayPick(k),0,'say',force);
+const sayLine=(k,force,over)=>crumbSay(sayPick(k),0,over?'say hot':'say',force,over);
 function sayStep(now,shown,faint){                         // mascot.js mascotStep: `shown` = the crumb is on screen
   const e=say.el; if(!e) return;
   const sync=()=>{ say.placed=stats.placed; say.lines=stats.lines; say.sweeps=stats.sweeps; say.dry=0; say.backs=0; say.best=bestBeaten; };
@@ -99,8 +107,9 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
   }
   if(stage===0&&say.kind==='say zz') say.until=0;
   // ── what shows ──
-  const hot=toy.hot&&toy.mode==='rim'&&state==='play'&&!faint;
-  const txt=hot?(toyLast()?'FLICK ME, QUICK!':'FLICK ME!'):now<say.until&&toy.mode!=='held'&&toy.mode!=='air'?say.txt:'';
+  const hot=toy.hot&&toy.mode==='rim'&&state==='play'&&!faint&&!(say.over&&now<say.until);   // (a charged crumb's own line shows for a moment in its place)
+  const how=CFG.CANNON_SLING?['PULL ME BACK, QUICK!','PULL ME BACK!']:['FLICK ME, QUICK!','FLICK ME!'];
+  const txt=hot?(toyLast()?how[0]:how[1]):now<say.until&&toy.mode!=='held'&&toy.mode!=='air'?say.txt:'';
   const kind=hot?'say hot':say.kind;
   const s=masc.s*toy.sc, x=masc.x+toy.x, right=x+s/2<W/2;       // the bubble sits on the side with more room
   const px=Math.round(right?x+s+5:W-x+5), py=Math.round(masc.y+toy.y+masc.s-s*.86);

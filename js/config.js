@@ -290,6 +290,13 @@ const CFG = {
   CANNON_SAVE:       true,   // (toy) out of room with a charged crumb: the run holds for one cannonball instead of ending (the last chance)
   CANNON_BOUNCES:    2,      // (toy) while still hot it bounces this many times off the bottom of the board instead of dropping through
   CANNON_PER_GEM:    10*SCORE_SCALE,   // (toy) points per gem it breaks
+  CANNON_DEFLATE:    true,   // (stakes) the streak dies while it is charged: it keeps the charge but loses the growth (toy.pow back to 0, "pffft")
+  CANNON_SLING:      true,   // (stakes) a charged crumb is a slingshot: pull it back and let go; it flies the other way (a fast flick still works)
+  SLING_SCALE:       22,     // (stakes) launch speed, px/s per px of pull ...
+  SLING_MIN:         22,     // ... a pull shorter than this (px) is a tap: the hint, no shot ...
+  SLING_QUICK_MS:    250,    // ... only a swipe quicker than this (touch to lift, and fast) is a flick; a longer pull is always the slingshot ...
+  SLING_MAX:         140,    // ... and the band stretches no further than this (px), so the fastest shot is SLING_SCALE x SLING_MAX
+  FX_SPUTTER:        true,   // (stakes) a carried streak close to dying shows it: the fire drops a notch, then gutters to embers on its last life, with a tick
   FX_CRUMB_TALK:     true,   // (talk) the crumb's bubble and signs: snark when she is away, dithers or misses; credit when she does something good (js/crumbsay.js)
   TALK_GAP:          9000,   // (talk) ms between ordinary lines, so it never chatters
   TALK_MS:           2600,   // (talk) ms a line stays up
@@ -310,6 +317,7 @@ const CFG = {
   TOY_GRAVITY:       2600,   // (toy) px/s^2
   TOY_BOUNCE:        .62,    // (toy) speed kept by a bounce off a wall
   TOY_MAX_SPEED:     3200,   // (toy) fastest throw, px/s
+  TOY_FLICK_MS:      80,     // (toy) the finger's speed at the lift is read over its last this-many ms (none in that time: it was resting)
   TOY_FLICK_MIN:     140,    // (toy) slower than this at release is a put-down, not a throw
   TOY_REST_V:        260,    // (toy) landing slower than this stays down
   TOY_RIM_DRAG:      2.2,    // (toy) rolling friction on the rim, 1/s

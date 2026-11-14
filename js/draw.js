@@ -180,7 +180,7 @@ function drawTrayBand(){                               // the tray dims as the r
   roundPath(ctx,a.x-6,a.y,z.x+z.w-a.x+12,a.h,14);
   if(scr.p>=0.02){ ctx.globalAlpha=scr.p*0.28; ctx.fillStyle='#1a0a05'; ctx.fill(); }
   if(fk>=0.01){                                       // (7.5d) combo fire: the tray glows warm behind the pieces, breathing with the flames
-    const b=reduce?0.6:0.5+0.5*Math.sin(performance.now()*0.006), [core,edge]=FIRE_TINTS[fire.tier];
+    const b=reduce?0.6:0.5+0.5*Math.sin(performance.now()*0.006), [core,edge]=FIRE_TINTS[fireTier()];
     ctx.globalAlpha=fk*(0.12+0.08*b); ctx.fillStyle=`rgb(${edge})`; ctx.fill();
     ctx.globalAlpha=fk*(0.45+0.3*b); ctx.strokeStyle=`rgb(${core})`; ctx.lineWidth=2+fire.flare*2; ctx.stroke();
   }
@@ -198,8 +198,14 @@ function drawTrayBand(){                               // the tray dims as the r
    One eased heat, `fire.k` (combo 3 = .4 .. combo 6+ = 1), plus `fire.flare`, a short kick on every new step. Everything sits in
    the board layer under the gems: the rim, the tray band, and capped lists of cheap sprites (embers, smoke); a bonus's own rim
    owns the frame, so the fire waits. Reduced motion: a steady warm rim and tray glow, no embers, and the snuff is a fade.
-   Settings > Look > Advanced "Combo fire" (FX_COMBO_FIRE) turns all of it off. */
-const fire={k:0,flare:0,tier:0,out:0,embers:[],smoke:[],px:null,py:0,acc:0,idle:0};
+   Settings > Look > Advanced "Combo fire" (FX_COMBO_FIRE) turns all of it off.
+   (stakes) The fire sputters: where the combo carries (Endless, Daily) a drop that clears nothing does not end the streak at once,
+   and the fire shows how close it is (`sputLevel`, from game.js comboMiss): after the first miss it drops a notch, lower and
+   steadier; on the streak's last life (comboMiss === COMBO_GRACE-1) it gutters to small orange embers that flicker, and the held
+   piece sheds far fewer embers. A clear puts it straight back to full for its combo, with the usual flare (fireCombo).
+   The drop that puts it on its last life gets a soft low tick and a light haptic (fireSputter), from combo 2. Reduced motion:
+   the same levels, steady and dimmer, no flicker. Switch: CFG.FX_SPUTTER (Admin). */
+const fire={k:0,flare:0,tier:0,out:0,embers:[],smoke:[],px:null,py:0,acc:0,idle:0,sp:0};
 const FIRE_TINTS=[['255,150,40','255,90,20'],['255,210,80','255,140,30'],['255,250,225','255,190,90']];   // [core, edge] per tier
 const _flames={};
 function flameSprite(tier){                              // one soft tongue of fire, tip up, cached per tier and cell size, full-res at its tallest (see drawFireRim)
@@ -234,10 +240,28 @@ function puffSprite(){                                   // a soft grey ball of 
   x.fillStyle=g; x.fillRect(0,0,cv.width,cv.width); _puff={c:cell,cv}; return cv;
 }
 const fireOn=()=>CFG.FX_COMBO_FIRE&&!bonus&&state==='play';
-function fireTarget(){ return fireOn()&&combo>=CFG.BIG_COMBO?Math.min(1,0.4+0.2*(combo-CFG.BIG_COMBO)):0; }   // combo 3 = .4, 4 = .6, 5 = .8, 6+ = 1
-function fireReset(){ fire.k=0; fire.flare=0; fire.out=0; fire.embers.length=0; fire.smoke.length=0; fire.px=null; fire.acc=0; }
+// (stakes) how close a carried streak is to dying: 0 safe, 1 missed once (a notch down), 2 its last life (one more miss ends it)
+function sputLevel(){
+  if(!CFG.FX_SPUTTER||!comboCarries()||combo<1||comboMiss<1) return 0;
+  return comboMiss>=CFG.COMBO_GRACE-1?2:1;
+}
+const lastLife=()=>sputLevel()===2;
+function fireTarget(){                                  // combo 3 = .4, 4 = .6, 5 = .8, 6+ = 1; a notch lower after a miss, embers on the last life
+  const k=fireOn()&&combo>=CFG.BIG_COMBO?Math.min(1,0.4+0.2*(combo-CFG.BIG_COMBO)):0, lv=k?sputLevel():0;
+  return lv===2?Math.min(k,0.16):lv===1?k*0.62:k;
+}
+const fireTier=()=>fire.sp===2?0:fire.tier;            // guttering embers are orange whatever the streak
+function fireReset(){ fire.k=0; fire.flare=0; fire.out=0; fire.embers.length=0; fire.smoke.length=0; fire.px=null; fire.acc=0; fire.sp=0; }
+function fireSputter(){                                 // place(): a drop that cleared nothing put the streak on its last life
+  if(!CFG.FX_SPUTTER||!lastLife()||combo<2) return false;   // a streak of 1 is not worth a warning
+  toyPlay(0.06,t=>{ tone(t,{f0:190,f1:95,pdur:.06,dur:.08,vol:.05,type:'triangle'}); tone(t+.09,{f0:150,f1:70,pdur:.07,dur:.1,vol:.035,type:'triangle'}); });   // its own sound: no dice (toyPlay + tone)
+  haptic('sputter');
+  return true;
+}
 function fireCombo(){                                   // place(): a clear made combo `combo`
   if(!fireOn()||combo<CFG.BIG_COMBO) return;
+  if(fire.sp) fire.k=Math.max(fire.k,fireTarget());     // (stakes) back from a sputter: straight to full for its combo
+  fire.sp=0;
   fire.flare=1; fire.out=0; fire.tier=combo>=5?2:combo>=4?1:0;
   if(!reduce) for(let i=0;i<6;i++) fireEmber(bx-9+Math.random()*(B+18),by-9,(Math.random()-.5)*1.5,-2-Math.random()*2.5);   // a burst of sparks off the top
 }
@@ -265,7 +289,7 @@ function rimPoint(d){                                     // a point at distance
   return [x0,y0+L-(d-3*L),-1,0];
 }
 function stepFire(dt){
-  const t=fireTarget();
+  const t=fireTarget(); fire.sp=fire.out>0?0:sputLevel();
   if(fire.out>0){ fire.k*=Math.pow(0.82,dt); fire.out=Math.max(0,fire.out-dt/40); }
   else fire.k+=(t-fire.k)*Math.min(1,dt*(t>fire.k?0.12:0.08));
   if(fire.k<0.004) fire.k=0;
@@ -274,7 +298,7 @@ function stepFire(dt){
     const s=tray[drag.i].s;
     if(fire.px!=null) fire.acc+=Math.hypot(drag.cx-fire.px,drag.cy-fire.py);
     fire.px=drag.cx; fire.py=drag.cy; fire.idle+=dt;
-    const step=cell*(0.45-0.2*fire.k);
+    const step=cell*(0.45-0.2*fire.k)*(fire.sp===2?3:1);   // (stakes) the last life: the piece sheds a few, not a trail
     while(fire.acc>=step||fire.idle>=14){
       if(fire.acc>=step) fire.acc-=step; else fire.idle=0;
       const [dr,dc]=s.cells[(Math.random()*s.cells.length)|0];
@@ -288,18 +312,21 @@ function stepFire(dt){
 }
 function drawFireRim(now){                             // the board layer, after the rim: a warm stroke and the tongues, all outside the frame
   const k=fire.k; if(k<=0.01) return;
-  const fl=fire.flare, [core,edge]=FIRE_TINTS[fire.tier];
+  const fl=fire.flare, lv=fire.sp, tier=fireTier(), [core,edge]=FIRE_TINTS[tier];
+  const amp=lv===1?0.4:1;                               // (stakes) a notch down: steadier tongues
+  const gut=lv!==2?1:reduce?0.6:0.62+0.38*Math.sin(now*0.017)*Math.sin(now*0.0047+1.3);   // the last life: the whole rim gutters (reduced motion: steady and dim)
   roundPath(ctx,bx-9,by-9,B+18,B+18,20);                // the frame itself glows hot: one stroke (wide strokes are what cost)
-  ctx.strokeStyle=`rgba(${core},${0.55+0.35*k})`; ctx.lineWidth=3+3*k+3*fl; ctx.stroke();
-  const sp=flameSprite(fire.tier), L=B+18, side=bx-9>cell*0.4, n=side?30:16, P=side?4*L:2*L;   // with no margin beside the board (a phone), only top and bottom burn
-  const M=ctx.getTransform(), a=Math.min(1,0.35+0.65*k);
+  ctx.strokeStyle=`rgba(${core},${(0.55+0.35*k)*(lv===2?0.55*gut:1)})`; ctx.lineWidth=3+3*k+3*fl; ctx.stroke();
+  const sp=flameSprite(tier), L=B+18, side=bx-9>cell*0.4, n=side?30:16, P=side?4*L:2*L;   // with no margin beside the board (a phone), only top and bottom burn
+  const M=ctx.getTransform(), a=Math.min(1,0.35+0.65*k)*(lv===2?0.8*gut:1);
   ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=a;
   ctx.imageSmoothingEnabled=false;                       // (perf) the sprite is full-res and only ever drawn smaller, so no filtering is needed; filtered blits were most of the cost
   for(let i=0;i<n;i++){
     let d=(i+0.5)/n*P; if(!side&&d>=L) d+=L;            // top edge, then (skipping the right side) the bottom edge
     const [x,y,nx,ny]=rimPoint(d);
-    const fx=reduce?0.7:0.5+0.3*Math.sin(now*0.013+i*1.7)+0.2*Math.sin(now*0.029+i*2.9);
+    const fx=reduce?0.7:0.5+amp*(0.3*Math.sin(now*0.013+i*1.7)+0.2*Math.sin(now*0.029+i*2.9));
     let h=cell*(0.45+0.85*k)*(0.7+0.45*fx)*(1+0.5*fl);
+    if(lv===2) h*=reduce?0.55:Math.max(0.15,0.55+0.45*Math.sin(now*0.021+i*2.3)*Math.sin(now*0.0061+i*1.1));   // embers: some tongues die and come back
     if(ny>0) h*=0.45; else if(ny<0) h*=1.15; else h*=0.7;   // short under the board (the tray lives there), tallest on top, sides in between
     const w=sp.w*(h/sp.h)*(1.15+0.3*k);
     if(ny<0){ ctx.drawImage(sp.cv,x-w/2,y-h*0.85,w,h); continue; }   // the top burns straight up: no transform
@@ -845,7 +872,7 @@ function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
     ||slams.length||bursts.length||praises.length||banners.length||stamps.length||sweepShow||goldRain.length||orbs.length||rings.length||dust.length
-    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn()||trayPopping()||toyBusy()||ava.live||dareBusy());
+    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||(fire.k>0&&!fire.out&&Math.abs(fire.k-fireTarget())>0.01)||guideHintOn()||trayPopping()||toyBusy()||ava.live||dareBusy());
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
