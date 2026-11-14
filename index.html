@@ -64,6 +64,9 @@
   @keyframes chaseFade{to{opacity:0}}
   /* (7.5f) the mascot crumb: js/mascot.js. Faces are class swaps; motion is transform/opacity only */
   #mascot{position:absolute;z-index:1;pointer-events:none;transform-origin:50% 92%;transition:opacity .2s}
+  #mascot.toy{pointer-events:auto;touch-action:none;cursor:grab}          /* (toy) js/crumbtoy.js: a finger can grab it */
+  #mascot.toy::after{content:"";position:absolute;inset:-9px -12px -4px -9px}   /* a bigger target than the crumb itself */
+  #mascot.dim{pointer-events:none}
   #mascot[hidden]{display:none}
   #mascot.dim{opacity:.22}
   :is(#mascot,#heroCrumb) .mb{width:100%;height:100%;transform-origin:50% 92%;will-change:transform}
@@ -84,7 +87,18 @@
   :is(#mascot,#heroCrumb) .mo{fill:none;stroke:#3A2010;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
   :is(#mascot,#heroCrumb) .m1,:is(#mascot,#heroCrumb) .m5{fill:#3A2010}
   :is(#mascot,#heroCrumb) .sw{fill:#9AD8FF;stroke:#3C8DBD;stroke-width:.5;opacity:0}
-  :is(#mascot,#heroCrumb) .au,:is(#mascot,#heroCrumb) .ab,:is(#mascot,#heroCrumb) .ld,:is(#mascot,#heroCrumb) .xe,:is(#mascot,#heroCrumb) .se,:is(#mascot,#heroCrumb) .mo{display:none}
+  :is(#mascot,#heroCrumb) .au,:is(#mascot,#heroCrumb) .ab,:is(#mascot,#heroCrumb) .ld,:is(#mascot,#heroCrumb) .xe,:is(#mascot,#heroCrumb) .se,:is(#mascot,#heroCrumb) .dz,:is(#mascot,#heroCrumb) .mo{display:none}
+  :is(#mascot,#heroCrumb) .dz{fill:none;stroke:#24150B;stroke-width:1.2;stroke-linecap:round}
+  :is(#mascot,#heroCrumb) .dz path{transform-box:fill-box;transform-origin:center}
+  #mascot.grab .m0,#mascot.dizzy .m0,#mascot.sulk .m0{display:none}
+  #mascot.grab .m5,#mascot.dizzy .m4,#mascot.sulk .m6,#mascot.sulk .ld{display:inline}
+  #mascot.grab .ad{display:none} #mascot.grab .au{display:inline}
+  #mascot.grab .ey{transform:scale(1.16)} #mascot.grab .pp{transform:scale(.7)} #mascot.grab .bl{transform:translateY(-2.4px)}
+  #mascot.dizzy .ey,#mascot.dizzy .bl{display:none} #mascot.dizzy .dz{display:inline}
+  #mascot.dizzy .dz path{animation:mSpin .7s linear infinite}
+  #mascot.dizzy svg{animation:mWobble .9s ease-in-out infinite}
+  #mascot.sulk .bL{transform:translateY(2px) rotate(16deg)} #mascot.sulk .bR{transform:translateY(2px) rotate(-16deg)}
+  #mascot.sulk svg{animation:none;transform:scale(1.04,.95)}
   :is(#mascot,#heroCrumb) .m0{display:inline}
   :is(#mascot,#heroCrumb).nod .m0,:is(#mascot,#heroCrumb).hop .m0,:is(#mascot,#heroCrumb).sweep .m0,:is(#mascot,#heroCrumb).smug .m0,:is(#mascot,#heroCrumb).flat .m0,:is(#mascot,#heroCrumb).phew .m0,:is(#mascot,#heroCrumb).tight .m0,:is(#mascot,#heroCrumb).faint .m0{display:none}
   :is(#mascot,#heroCrumb).nod .m1,:is(#mascot,#heroCrumb).hop .m1,:is(#mascot,#heroCrumb).sweep .m1{display:inline}
@@ -114,6 +128,8 @@
   :is(#mascot,#heroCrumb).rm svg,:is(#mascot,#heroCrumb).rm .sw,:is(#mascot,#heroCrumb).rm .pp{animation:none}
   :is(#mascot,#heroCrumb).rm,:is(#mascot,#heroCrumb).rm *{transition:none}
   :is(#mascot,#heroCrumb).rm.tight .sw,:is(#mascot,#heroCrumb).rm.phew .sw{opacity:1}
+  @keyframes mSpin{to{transform:rotate(360deg)}}
+  @keyframes mWobble{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(9deg)}}
   @keyframes mBreath{from{transform:none}to{transform:scale(.985,1.035)}}
   @keyframes mShiver{from{transform:translateX(-.5px)}to{transform:translateX(.5px)}}
   @keyframes mDrip{0%{opacity:0;transform:none}20%{opacity:1}80%{opacity:1;transform:translateY(7px)}100%{opacity:0;transform:translateY(8px)}}
@@ -456,6 +472,8 @@
         <label class="tog"><span>Combo fire: the board burns on a streak</span><input type="checkbox" id="fireOn"></label>
         <label class="tog"><span>Chase your best: a bar to your best score</span><input type="checkbox" id="chaseOn"></label>
         <label class="tog"><span>Mascot: a crumb that reacts to your game</span><input type="checkbox" id="mascotOn"></label>
+        <label class="tog"><span>Crumb is a toy: grab it and flick it</span><input type="checkbox" id="toyOn"></label>
+        <label class="tog"><span>Tilt: lean the phone and the crumb rolls</span><input type="checkbox" id="tiltOn"></label>
         <label class="tog"><span>Timelapse: replay your run on game over</span><input type="checkbox" id="tlOn"></label>
         <p class="lbl section-lbl">World</p>
         <div class="skins" id="worldGrid"></div>
@@ -595,6 +613,7 @@
 <script src="js/guide.js"></script>
 <script src="js/challenge.js"></script>
 <script src="js/mascot.js"></script>
+<script src="js/crumbtoy.js"></script>
 <script src="js/home.js"></script>
 <script src="js/goals.js"></script>
 <script src="js/share.js"></script>

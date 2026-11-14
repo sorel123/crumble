@@ -3420,6 +3420,74 @@ test('7.5f mascot: a drag and three-line clears with the crumb reacting fit the 
   assert.ok(p90 < 12, 'frames stay cheap with the crumb: p90 ' + p90.toFixed(2) + ' ms');
 });
 
+// ── the crumb as a toy (js/crumbtoy.js) ──
+const crumbAt = page => page.evaluate(() => { const b = el('mascot').getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+const flickCrumb = async (page, dx, dy, n = 6) => {
+  const r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down();
+  for (let i = 1; i <= n; i++) { await page.mouse.move(r.x + i * dx, r.y + i * dy); await page.waitForTimeout(12); }
+  await page.mouse.up();
+};
+const onRim = page => page.waitForFunction(() => toy.mode === 'rim' && toy.a === 0 && toy.vx === 0, null, { timeout: 9000 });
+
+test('crumb toy: a finger grabs it, a flick sends it flying and it lands back on the rim; the game is untouched', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await mascotMood(page, /^idle\b.*\btoy\b/);
+  const before = await page.evaluate(() => ({ score, tray: tray.map(t => t && t.s.id), grid: JSON.stringify(grid) }));
+  const r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down();
+  await mascotMood(page, /^grab\b/);
+  assert.deepEqual(await page.evaluate(() => [toy.mode, drag === null]), ['held', true], 'held, and no piece was picked up');
+  await page.mouse.move(r.x + 60, r.y + 40); await frames(page, 3);
+  const held = await crumbAt(page);
+  assert.ok(Math.abs(held.x - (r.x + 60)) < 6 && Math.abs(held.y - (r.y + 40)) < 12, 'it follows the finger ' + JSON.stringify(held));
+  await page.mouse.up();                                       // let go without moving: it drops, and hops home from wherever it lands
+  await onRim(page);
+  await flickCrumb(page, 24, -16);
+  assert.equal(await page.evaluate(() => toy.mode), 'air', 'a flick throws it');
+  assert.ok(await page.evaluate(() => fxBusy()), 'the frame pacing stays at full speed while it flies');
+  await onRim(page);
+  const end = await page.evaluate(() => ({ x: toy.x, y: toy.y, max: toyXMax(), busy: toyBusy(), score, tray: tray.map(t => t && t.s.id), grid: JSON.stringify(grid) }));
+  assert.ok(end.y === 0 && end.x >= 0 && end.x <= end.max && !end.busy, 'back on the rim, at rest ' + JSON.stringify(end));
+  assert.deepEqual({ score: end.score, tray: end.tray, grid: end.grid }, before, 'score, tray and board unchanged');
+  // a piece in the hand wins: the crumb cannot be grabbed mid-drag, and a normal drop still works
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 4, 4);
+  assert.equal(await page.evaluate(() => grid[4][4] !== null && toy.mode === 'rim'), true, 'a piece still drops as before');
+});
+
+test('crumb toy: leaning the phone rolls it to the low side and it stays; too many throws and it sulks; the switches (saved) turn it off', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await mascotMood(page, /^idle\b/);
+  const lean = x => page.evaluate(x => { toyTiltListen(); dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x, y: -8, z: -2 } })); }, x);
+  await lean(-4);                                              // (spec sign) the right edge is low
+  await page.waitForFunction(() => toy.x === toyXMax() && toy.vx === 0 && toy.a === 0, null, { timeout: 6000 });
+  await lean(0); await frames(page, 20);
+  assert.equal(await page.evaluate(() => toy.x === toyXMax()), true, 'level again: it stays on the right');
+  await lean(4);
+  await page.waitForFunction(() => toy.x === 0 && toy.vx === 0 && toy.a === 0, null, { timeout: 6000 });
+  await lean(0);
+  await page.evaluate(() => { CFG.TILT = false; }); await lean(-4); await frames(page, 20);
+  assert.equal(await page.evaluate(() => toy.x), 0, 'Tilt off: a lean does nothing');
+  await lean(0);
+  for (let k = 0; k < 5; k++) { await flickCrumb(page, 22, -20); await onRim(page); }
+  await mascotMood(page, /^(dizzy|sulk)\b/);
+  await mascotMood(page, /^sulk\b/);
+  const r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down(); await frames(page, 2);
+  assert.equal(await page.evaluate(() => toy.mode), 'rim', 'sulking: it will not be picked up');
+  await page.mouse.up();
+  await openSet(page);
+  await page.click('#advLook summary');
+  assert.deepEqual(await page.evaluate(() => [el('toyOn').checked, el('tiltOn').checked]), [true, false], 'the switches show the state');
+  await page.click('#toyOn');
+  await closeSet(page);
+  await frames(page, 3);
+  assert.ok(await page.evaluate(() => !/\btoy\b/.test(el('mascot').className) && getComputedStyle(el('mascot')).pointerEvents === 'none' && JSON.parse(localStorage.getItem('crumble.skins')).toy === false), 'off: touches pass through it, and it is saved');
+});
+
 // ── 7.5g timelapse ──
 const tlPlace = async (page, r, c) => {                   // one drop of a single cell, the tray refilled so no deal is due
   await dealt(page);

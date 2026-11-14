@@ -845,7 +845,7 @@ function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
     ||slams.length||bursts.length||praises.length||banners.length||stamps.length||sweepShow||goldRain.length||orbs.length||rings.length||dust.length
-    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn()||trayPopping());
+    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn()||trayPopping()||toyBusy());
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
