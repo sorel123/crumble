@@ -81,6 +81,7 @@ function cloudMerge(o){
       const b=pts(d.b), m=isInt(d.m,0,3)?d.m:0, n=isInt(d.n,0,1e6)?d.n:0, t=isInt(d.t,0,1e15)?d.t:0;
       if(!(b||n)) continue;
       const r=chalRec.s[seed]||(chalRec.s[seed]={b:0,m:0,n:0,t:0});
+      if(b>r.b){ if(chPaceUnpack(d.p,b)) r.p=d.p; else delete r.p; }   // (pace) a better best brings its own pace
       up(r,'b',b); up(r,'m',m); up(r,'n',n); up(r,'t',t);
     }
     if(isInt(c.won,0,1e6)) up(chalRec,'won',c.won);

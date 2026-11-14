@@ -304,6 +304,7 @@ const CFG = {
   TALK_COMBO:        4,      // (talk) from this streak (every other step) it remarks on the combo
   TALK_DRY:          7,      // (talk) drops in a row without a clear before "bold strategy."
   TALK_DITHER:       3,      // (talk) pieces picked up and put back in a row before "any day now."
+  CH_PACE:           true,   // (pace) a friend's Challenge link with their pace: their mark on the bar, ahead/behind in the HUD, two crumb lines (js/challenge.js; links carry the pace either way)
   DARES:             true,   // (dares) Endless: the crumb dares her once a run; beating it pays a cookie into the jar (js/dares.js). Needs the mascot
   DARE_MAX:          3,      // (dares) dares a run at most: each one beaten brings the next, harder one
   DARE_SAY_MS:       4200,   // (dares) ms a dare's line stays up (an ordinary line: TALK_MS)

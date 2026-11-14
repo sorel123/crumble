@@ -326,7 +326,14 @@
   #chalInfo{margin-top:5px;font-size:11px;font-weight:700;letter-spacing:.06em;white-space:nowrap}
   #chalInfo[hidden]{display:none}
   #chalInfo .to{opacity:.85}
-  #chalInfo .track{display:block;position:relative;width:76px;height:4px;margin-top:5px;border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--fg) 18%,transparent)}
+  #chalInfo .bar{display:block;position:relative;width:76px;margin-top:5px}
+  #chalInfo .track{display:block;position:relative;width:76px;height:4px;border-radius:2px;overflow:hidden;background:color-mix(in srgb,var(--fg) 18%,transparent)}
+  /* (pace) a friend's mark: a white tick across the bar with a small target under it; faded when pinned to an end */
+  #chalInfo .fp{position:absolute;top:-3px;width:3px;height:10px;margin-left:-1.5px;border-radius:2px;background:#fff;
+        box-shadow:0 0 0 1px rgba(30,10,50,.55),0 0 4px rgba(255,255,255,.6);transition:left .25s ease-out,opacity .2s}
+  #chalInfo .fp::after{content:'🎯';position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:8px;line-height:1;font-style:normal}
+  #chalInfo .fp.out{opacity:.45}
+  #chalInfo .fp[hidden]{display:none}
   #chalInfo .fill{position:absolute;inset:0;border-radius:2px;background:var(--mc,#F0A86A);transform-origin:0 50%;transform:scaleX(0);transition:transform .15s linear}
   .medals{display:flex;gap:10px;justify-content:center}
   .medals[hidden]{display:none}
@@ -526,7 +533,7 @@
       <div id="labHud"><div class="lbl">Puzzle</div><div class="lrow"><span class="score" id="labNum">1</span>
         <button id="labUndo" type="button" aria-label="Undo"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
         <button id="labReset" type="button" aria-label="Reset"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button></div></div>
-      <div id="chalInfo" hidden><span class="to"></span><span class="track"><span class="fill"></span></span></div>
+      <div id="chalInfo" hidden><span class="to"></span><span class="bar"><span class="track"><span class="fill"></span></span><i class="fp" hidden></i></span></div>
       <div id="chase" hidden aria-hidden="true"><span class="track"><span class="fill"></span></span><span class="to"></span></div>
       <div class="pips" id="transformPips" hidden></div>
     </div>
