@@ -14,7 +14,7 @@
    Reduced motion: the toy is off. Switches: CFG.FX_CRUMB_TOY (Settings > Look > Advanced "Crumb is a toy", saved `toy`)
    and CFG.TILT ("Tilt", saved `tilt`). iOS asks once for motion: the request rides on the first finger lifted off the crumb. */
 const toy={mode:'rim',x:0,y:0,vx:0,vy:0,a:0,va:0,last:0,id:-1,ox:0,oy:0,pts:[],speed:0,bounces:0,
-           dizzyTo:0,sulkTo:0,hot:false,fire:null,lastCombo:0,flicks:[],bx0:0,by0:0,bt:0,btx:0,restT:0,css:'',gx:0,gRaw:0,tiltOn:false,tiltAsked:false,hapAt:0,sndAt:0};
+           dizzyTo:0,sulkTo:0,hot:false,fire:null,lastCombo:0,pow:0,sc:1,flicks:[],bx0:0,by0:0,bt:0,btx:0,restT:0,css:'',gx:0,gRaw:0,tiltOn:false,tiltAsked:false,hapAt:0,sndAt:0};
 const toyOn=()=>CFG.FX_CRUMB_TOY&&CFG.FX_MASCOT&&!reduce&&!!masc.el;
 const toyXMax=()=>Math.max(0,(B||0)-12-(masc.s||0));                       // the rim runs the board's width; home is its left end
 function toyReset(){                                                // back on the rim where it stood, upright, calm
@@ -23,12 +23,14 @@ function toyReset(){                                                // back on t
 }
 /* ── the cannonball ── */
 const toyHot=()=>toy.hot||!!toy.fire;
-function toyRunReset(){ toy.hot=false; toy.fire=null; toy.lastCombo=0; }          // flow.js clearRunFx: a new run starts cold
+function toyRunReset(){ toy.hot=false; toy.fire=null; toy.lastCombo=0; toy.pow=0; }          // flow.js clearRunFx: a new run starts cold
 function toyCharge(comboNow){                                       // mascot.js mascotClear: every clear reports its combo
   const th=CFG.CANNON_COMBO, was=toy.lastCombo; toy.lastCombo=comboNow;
+  if(toy.hot) toy.pow=Math.max(toy.pow,comboNow-th);              // already charged: a longer streak makes it bigger and stronger
   if(!CFG.CRUMB_CANNON||!toyOn()||mode!=='endless'||guide||toyHot()||comboNow<th||was>=th) return;
-  toy.hot=true;
-  pushBanner('CRUMB IS CHARGED','flick it at the board','#FFB347',1.1);
+  toy.hot=true; toy.pow=comboNow-th;
+  banners.splice(banners.length&&banners[0].t>0?1:0,0,{t:0,txt:'CANNONBALL READY!',sub:'flick Crumb at the blocks',col:'#FFB347',k:.8});   // next in the queue: the news belongs to the clear that earned it
+  haptic('bonusReady');
   toyPlay(.25,t=>{ tone(t,{f0:330,f1:660,pdur:.18,dur:.22,vol:.06,type:'triangle'}); tone(t+.16,{f0:660,f1:990,pdur:.14,dur:.2,vol:.05,type:'triangle'}); });
 }
 function toySmash(){                                                // in flight, charged: the gem under its middle breaks
@@ -42,16 +44,24 @@ function toySmash(){                                                // in flight
   tags.push({x:bx+(c+.5)*cell,y:by+(r+.5)*cell,txt:String(pts),t:0});
   toy.vx*=CFG.CANNON_KEEP; toy.vy*=CFG.CANNON_KEEP; shake=Math.max(shake,3*CFG.SHAKE);
   toy.sndAt=0; toySnd('boing',.9); toyPlay(0,t=>tone(t,{f0:1500,f1:500,pdur:.05,dur:.07,vol:.05,type:'square'}));
-  if(f.n>=CFG.CANNON_MAX) toyFireEnd();
+  if(f.n>=f.max) toyFireEnd();
 }
 function toyFireEnd(){                                              // out of steam, or landed: the board is the player's again
-  const f=toy.fire; if(!f) return; toy.fire=null;
+  const f=toy.fire; if(!f) return; toy.fire=null; toy.shotN=f.n;
   if(!f.n) return;
+  if(f.n>=4) sayLine('cannon',true);
   pops.push({x:bx+B/2,y:by+cell*1.2,t:0,txt:'+'+f.pts,sub:'CANNONBALL ×'+f.n,combo:1,lines:1});
   glowT=Math.max(glowT,.8);
   updateDbg(); tlRecord(); if(state==='play'&&!dealing) saveRun();
 }
-function toyBusy(){ return toy.mode!=='rim'||Math.abs(toy.vx)>2||(toy.a%360!==0); }   // draw.js fxBusy: full frame rate while it moves
+const toyPower=()=>Math.min(CFG.CANNON_MAX_TOP,CFG.CANNON_MAX+CFG.CANNON_GROW*toy.pow);   // gems this cannonball can break
+function toySize(){                                                 // how big the crumb should be: it swells as the streak builds, more once charged
+  if(toy.fire||toy.hot) return Math.min(CFG.CANNON_BIG_TOP,CFG.CANNON_BIG+CFG.CANNON_BIG_STEP*toy.pow);
+  if(!CFG.CRUMB_CANNON||mode!=='endless'||guide||state!=='play') return 1;
+  const th=CFG.CANNON_COMBO;
+  return 1+(CFG.CANNON_BIG-1)*.55*Math.max(0,Math.min(1,(combo-1)/(th-1)));
+}
+function toyBusy(){ return toy.mode!=='rim'||Math.abs(toy.vx)>2||(toy.a%360!==0)||Math.abs(toy.sc-toySize())>.004; }   // draw.js fxBusy: full frame rate while it moves
 function toyMood(now){                                              // mascot.js asks: the face the toy wants, or ''
   if(toy.mode==='held'||toy.mode==='air') return 'grab';
   if(now<toy.dizzyTo) return 'dizzy';
@@ -61,11 +71,13 @@ function toyMood(now){                                              // mascot.js
 function toyWrite(){
   const el0=masc.el; if(!el0) return;
   const x=Math.round(toy.x*10)/10, y=Math.round(toy.y*10)/10, a=Math.round(toy.a*10)/10;
-  const css=x+','+y+','+a;
+  const sc=Math.round(toy.sc*200)/200;
+  const css=x+','+y+','+a+','+sc;
   if(css===toy.css) return; toy.css=css;
   const st=el0.style;
   st.translate=(x||y)?x+'px '+y+'px':'';
   st.rotate=a?a+'deg':'';
+  st.scale=sc!==1?String(sc):'';                                   // (cannonball) it grows from its feet as it charges
   st.transformOrigin=a?'50% 54%':'';                               // it spins about its middle; at rest the mascot's own origin (its feet) is back
 }
 /* ── sounds and a tap of haptics: tiny, its own, and quiet under the game's ── */
@@ -86,7 +98,7 @@ function toyDown(e){
   e.stopPropagation();                                            // the game's own pointerdown never sees a touch on the crumb
   const now=performance.now();
   if(now<toy.sulkTo&&toy.mode==='rim'){                           // sulking: it shakes its head and stays put
-    toySnd('hmph');
+    toySnd('hmph'); sayLine('sulk',true);
     masc.body.animate([{transform:'none'},{transform:'rotate(-9deg)'},{transform:'rotate(8deg)'},{transform:'rotate(-6deg)'},{transform:'none'}],{duration:420,easing:'ease-in-out'});
     return;
   }
@@ -115,11 +127,11 @@ function toyUp(e){
   if(e.type==='pointerup'&&p.length>1&&now-b.t<80){ vx=(b.x-a.x)/dt; vy=(b.y-a.y)/dt; }
   const sp=Math.hypot(vx,vy), cap=CFG.TOY_MAX_SPEED;
   if(sp>cap){ vx*=cap/sp; vy*=cap/sp; }
-  toy.speed=Math.min(sp,cap); toy.bounces=0; toy.restT=0;
+  toy.speed=Math.min(sp,cap); toy.bounces=0; toy.restT=0; toy.shotN=0;
   const shot=toy.hot&&toy.speed>=CFG.TOY_FLICK_MIN*3&&state==='play'&&!stuck;   // charged and thrown: a cannonball
-  if(shot){ toy.hot=false; toy.fire={n:0,pts:0}; }
+  if(shot){ toy.hot=false; toy.fire={n:0,pts:0,max:toyPower()}; }
   if(toy.speed<CFG.TOY_FLICK_MIN&&Math.abs(toy.y)<10&&toy.x>-masc.s*.5&&toy.x<toyXMax()+masc.s*.5){   // put down where it stood: a poke
-    toy.mode='rim'; toy.y=0; toy.vx=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); mascotAct('nod'); return;
+    toy.mode='rim'; toy.y=0; toy.vx=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); mascotAct('nod'); sayLine('poke'); return;
   }
   toy.mode='air'; toy.vx=vx; toy.vy=vy; toy.va=(vx*.5+(vy<0?vx:-vx)*.2)+(vx>=0?90:-90);
   if(toy.speed>=CFG.TOY_FLICK_MIN*3){
@@ -143,12 +155,13 @@ function toyAskTilt(fromSwitch){                                   // must run i
 }
 /* ── the step: mascot.js mascotStep calls this every drawn frame while the crumb shows ── */
 function toyLand(now,hard){                                         // on the rim (or the floor) after a flight
-  if(hard||toy.bounces>=3) { toy.dizzyTo=now+CFG.TOY_DIZZY_MS; toySnd('dizzy'); }
+  if(hard||toy.bounces>=3) { toy.dizzyTo=now+CFG.TOY_DIZZY_MS; toySnd('dizzy'); if(!toy.shotN) sayLine('dizzy'); }
   if(toy.flicks.length>=CFG.TOY_SULK_N){ toy.flicks=[]; toy.sulkTo=now+CFG.TOY_DIZZY_MS+CFG.TOY_SULK_HOLD; }
 }
 function toyStep(now){
   const dt=Math.min(.05,Math.max(0,(now-toy.last)/1000)); toy.last=now;
-  if(!toyOn()){ if(toy.mode!=='rim'||toy.a||toy.y) toyReset(); return; }
+  if(!toyOn()){ toy.sc=1; if(toy.mode!=='rim'||toy.a||toy.y||toy.css.slice(-2)!==',1') toyReset(); return; }
+  { const tg=toySize(); toy.sc=Math.abs(tg-toy.sc)<.004?tg:toy.sc+(tg-toy.sc)*Math.min(1,dt*7); }
   if(paused||!dt) return;
   const s=masc.s, xmax=toyXMax(), G=CFG.TOY_GRAVITY;
   toy.gx+=(( CFG.TILT&&toy.tiltOn?toy.gRaw:0)-toy.gx)*Math.min(1,dt*10);

@@ -57,7 +57,8 @@ function mascotInit(){
   d.innerHTML='<div class="mb">'+MASCOT_SVG+'</div>';
   el('stage').appendChild(d);
   masc.el=d; masc.body=d.firstChild; masc.pp=d.querySelector('.pp');
-  mascotPlace(); toyInit();                           // (toy) the crumb can be grabbed and flicked: js/crumbtoy.js
+  mascotPlace(); toyInit(); sayInit();              // (talk) its bubble and signs: js/crumbsay.js
+                            // (toy) the crumb can be grabbed and flicked: js/crumbtoy.js
 }
 function mascotPlace(){                               // layout() calls this: feet on the board frame's top edge, left corner
   if(!masc.el) return;
@@ -86,7 +87,7 @@ function mascotTight(){
 function mascotStep(now){                             // draw.js frame(): writes only when something it shows changes
   const m=masc; if(!m.el) return;
   const on=CFG.FX_MASCOT&&state!=='idle'&&!hero.card&&!hero.falling;   // (8.3) the menu has its own crumb (and it is still tumbling off the logo)
-  if(!on){ if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
+  if(!on){ sayStep(now,false,false); if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
   if(state==='won'&&m.lastState!=='won') mascotAct('sweep');   // a level won: the big one
   m.lastState=state;
   const faint=stuck||state==='over';
@@ -110,6 +111,7 @@ function mascotStep(now){                             // draw.js frame(): writes
   }
   const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'')+(toyOn()&&!faint?' toy':'')+(toyHot()&&!faint?' hot':'');
   if(key!==m.key){ m.el.hidden=false; m.el.className=key; m.key=key; }
+  sayStep(now,true,faint);                          // (talk) a line beside it, if it has one
   const look=mood==='faint'||mood==='sweep'||mood==='flat'||mood==='dizzy'?'0,0':(Math.round(lx*1.3*4)/4)+','+(Math.round(ly*1.1*4)/4);
   if(look!==m.look){ m.look=look; m.pp.setAttribute('transform','translate('+look+')'); }
 }

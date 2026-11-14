@@ -3504,8 +3504,18 @@ test('crumb cannonball: a streak charges the crumb (Endless only, once per strea
   assert.equal(await streak(() => { combo = 2; }), false, 'a short streak does not charge it');
   assert.equal(await streak(() => { combo = 4; mode = 'daily'; }), false, 'not in Daily');
   await page.evaluate(() => { mode = 'endless'; toy.lastCombo = 0; });
+  assert.equal(await streak(() => { combo = 3; }), false, 'combo 4: not yet');
+  assert.ok(await page.evaluate(() => toySize() > 1 && toySize() < CFG.CANNON_BIG), 'but it is already swelling');
   assert.equal(await streak(() => { combo = 4; }), true, 'combo 5 in Endless charges it');
   await mascotMood(page, /\bhot\b/);
+  assert.ok(await page.evaluate(() => banners.some(b => b.txt === 'CANNONBALL READY!')), 'the banner says so');
+  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'FLICK ME!' && toy.sc > 1.3);
+  const big = await page.evaluate(() => ({ size: toySize(), max: toyPower(), drawn: +el('mascot').style.scale }));
+  assert.ok(big.size >= await page.evaluate(() => CFG.CANNON_BIG) && big.drawn > 1.3, 'charged: big, and drawn big');
+  await streak(() => { combo = 7; });
+  const bigger = await page.evaluate(() => ({ size: toySize(), max: toyPower() }));
+  assert.ok(bigger.size > big.size && bigger.max > big.max, 'a longer streak: bigger, and it breaks more');
+  await page.evaluate(() => { toy.pow = 0; });
   assert.equal(await page.evaluate(() => { const o = snapshot(); toy.hot = false; restore(o); return toy.hot; }), true, 'still charged after a resume');
   await dealt(page);
   // a slow put-down keeps the charge; a throw down into the board spends it
@@ -3528,14 +3538,51 @@ test('crumb cannonball: a streak charges the crumb (Endless only, once per strea
   assert.equal(await page.evaluate(() => grid.flat().filter(Boolean).length), g0, 'cold: it passes over the gems');
 });
 
+// ── the crumb talks (js/crumbsay.js) ──
+const said = page => page.evaluate(() => el('crumbSay').hidden ? null : { txt: el('crumbSay').textContent, cls: el('crumbSay').className });
+test('crumb talks: a remark for a clean sweep, a sign when she stops playing, then asleep, a line when she is back; the switch (saved) silences it', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.evaluate(() => { say.until = 0; say.last = -1e9; });
+  await frames(page, 3);
+  await setup(page, { rows: ['01111111', ...Array(7).fill('00000000')], trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.sweep.includes(el('crumbSay').textContent));
+  assert.match((await said(page)).cls, /^say /, 'a speech bubble');
+  await dealt(page);
+  // no touch for a while: a sign, a second sign, then it nods off
+  await page.evaluate(() => { lastInput = performance.now() - CFG.TALK_IDLE_MS - 200; });
+  await page.waitForFunction(() => !el('crumbSay').hidden && SAY.idle1.includes(el('crumbSay').textContent));
+  assert.match((await said(page)).cls, /^sign /, 'held up as a sign');
+  await page.evaluate(() => { lastInput = performance.now() - CFG.TALK_IDLE_MS * 2.5; });
+  await page.waitForFunction(() => SAY.idle2.includes(el('crumbSay').textContent));
+  await page.evaluate(() => { lastInput = performance.now() - CFG.TALK_IDLE_MS * 4.6; });
+  await page.waitForFunction(() => el('crumbSay').textContent === 'z z z');
+  await page.evaluate(() => { lastInput = performance.now(); });
+  await page.waitForFunction(() => SAY.back.includes(el('crumbSay').textContent));
+  // poking it gets an answer too
+  await page.evaluate(() => { say.until = 0; });
+  await frames(page, 3);
+  assert.equal(await said(page), null, 'quiet again');
+  await openSet(page);
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#talkOn'), true, 'on by default');
+  await page.click('#talkOn');
+  await closeSet(page);
+  assert.ok(await page.evaluate(() => !CFG.FX_CRUMB_TALK && JSON.parse(localStorage.getItem('crumble.skins')).talk === false), 'off, and saved');
+  await page.evaluate(() => { lastInput = performance.now() - CFG.TALK_IDLE_MS - 200; });
+  await frames(page, 6);
+  assert.equal(await said(page), null, 'off: no sign');
+});
+
 // ── Avalanche (js/avalanche.js) ──
 const AVA_ROWS = ['01111111', '10000000', '11100000', '00011100', '00000011', '11011000', '00100111', '10110110'];
 const boardStr = page => page.evaluate(() => grid.map(r => r.map(g => g ? 1 : 0).join('')));
 
-test('Avalanche: off by default; on, a clear deep in a streak drops every gem, rows that fill clear as chain steps, and touches wait for the landing', async ({ page }) => {
+test('Avalanche: on by default (the tests run with it off); on, a clear deep in a streak drops every gem, rows that fill clear as chain steps, and touches wait for the landing', async ({ page }) => {
   await play(page);
   await dealt(page);
-  assert.equal(await page.evaluate(() => CFG.AVALANCHE), false, 'off by default');
+  assert.deepEqual(await page.evaluate(() => [window.__avaDefault, CFG.AVALANCHE]), [true, false], 'on by default, off for the tests');
   await setup(page, { rows: AVA_ROWS, trayShapes: [0, 0, 0] });
   await page.evaluate(() => { combo = 4; CFG.TRANSFORM_COMBO = 99; });
   await dragPiece(page, 0, 0, 0);
@@ -3586,7 +3633,7 @@ test('Avalanche: a roll, never a rule; only in Endless; nothing to drop means no
   assert.equal(await page.isChecked('#avaOn'), true, 'the switch shows it');
   await page.click('#avaOn');
   await closeSet(page);
-  assert.ok(await page.evaluate(() => !CFG.AVALANCHE && JSON.parse(localStorage.getItem('crumble.skins')).ava === false), 'off, and saved');
+  assert.ok(await page.evaluate(() => !CFG.AVALANCHE && JSON.parse(localStorage.getItem('crumble.skins')).av2 === false), 'off, and saved');
 });
 
 // ── 7.5g timelapse ──

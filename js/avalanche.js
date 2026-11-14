@@ -10,6 +10,8 @@
    Endless only. Switch: CFG.AVALANCHE (Settings > Look > Advanced "Avalanche", saved `ava`; default off while it is tried). */
 const ava={t:0,end:0,live:false};
 const avaBusy=()=>ava.live;
+let avaSeed=20261114;                                    // its own dice: the dealer's (rnd) must deal the same trays with or without it
+const avaRnd=()=>(avaSeed=(avaSeed*16807)%2147483647)/2147483647;
 const avaOff=(av,t)=>{                                   // rows above its resting cell at clock t (<= 0)
   let o=0;
   for(const [t0,d] of av){ const k=t-t0; o-=k<=0?d:Math.max(0,d-.5*CFG.AVA_G*k*k); }
@@ -23,7 +25,7 @@ function avaWould(){                                     // gems that would move
 function avaDue(comboNow){
   if(!CFG.AVALANCHE||mode!=='endless'||guide||comboNow<CFG.AVA_COMBO) return false;
   if(avaWould()<CFG.AVA_MIN_MOVE) return false;
-  return rnd()<Math.min(CFG.AVA_MAX,CFG.AVA_CHANCE+CFG.AVA_STEP*(comboNow-CFG.AVA_COMBO));
+  return avaRnd()<Math.min(CFG.AVA_MAX,CFG.AVA_CHANCE+CFG.AVA_STEP*(comboNow-CFG.AVA_COMBO));
 }
 /* place() calls this after its own lines are gone. `lead` = frames until that clear has popped.
    Returns {gained, cleared, lines, end}: points and gems the chain took, lines it cleared, frames until the last landing. */
