@@ -6328,6 +6328,7 @@ test('cookie: clearing its gem feeds the jar by exactly 1: it hops into Crumb, h
   await play(page);
   await dealt(page);
   await ckOn(page);
+  await page.evaluate(() => { dareRunReset(); dare.off = true; });   // no dare this run: one beaten by the same placement would add a second cookie
   await setup(page, { rows: ['01111111', ...CK_ROWS.slice(1)] });
   await ckSet(page, 0, 4, 2);
   await page.waitForFunction(() => !el('mascot').hidden && toy.mode === 'rim', null, { timeout: 8000 });   // the crumb is on the rim (not still tumbling off the menu's logo)
@@ -6347,6 +6348,7 @@ test('cookie: rides its gem through an Avalanche (drawn where the gem falls); a 
   await play(page);
   await dealt(page);
   await ckOn(page);
+  await page.evaluate(() => { dareRunReset(); dare.off = true; });   // no dare this run: one beaten by the same placement would add a second cookie
   await page.evaluate(() => { CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; });
   // which gems of the board survive the fall, and where they land (the rules run at once inside place)
   const fall = cookie => page.evaluate(({ rows, cookie }) => {
