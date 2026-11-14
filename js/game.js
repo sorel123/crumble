@@ -343,8 +343,9 @@ function place(idx,r,c){
     pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n*SCORE_SCALE),
                sub:slammed?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
-    if(!s.star&&avaDue(combo)){                    // (Avalanche) the streak brings the board down: gems fall, rows that fill clear, and again
-      const combo0=combo, a=avalanche(maxDelay+CFG.AVA_LEAD,lastGi);
+    const aDir=s.star?'down':avaDir();             // (lean) which way it would fall, read once, now: the fall keeps it
+    if(!s.star&&avaDue(combo,aDir)){               // (Avalanche) the streak brings the board down: gems fall, lines that fill clear, and again
+      const combo0=combo, a=avalanche(maxDelay+CFG.AVA_LEAD,lastGi,aDir);
       gained+=a.gained; cleared+=a.cleared; avaLines=a.lines; avaHit=true; maxDelay=Math.max(maxDelay,a.end);
       // each chain clear counts like an ordinary clear: it fills the bonus meter, a combo it reaches can earn Volcano and the star
       for(const [n,cmb] of a.steps) chargeBonus(n,cmb);

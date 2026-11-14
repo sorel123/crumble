@@ -4173,6 +4173,203 @@ test('Avalanche: a roll, never a rule; only in Endless; nothing to drop means no
   assert.ok(await page.evaluate(() => !CFG.AVALANCHE && JSON.parse(localStorage.getItem('crumble.skins')).av2 === false), 'off, and saved');
 });
 
+// ── Lean the Avalanche (js/avalanche.js avaDir / avaView) ──
+// A board written the way it falls down (D) is laid on the grid for a fall `dir` and read back the same way, so the three ways
+// compare cell for cell: for 'left' D's floor becomes the left wall (a quarter turn), for 'right' the right wall (a transpose).
+// The trigger is D's row 0 completed at D (0, 0). The lean is set as the toy's tilt reading (toy.gRaw / toy.gx).
+const leanAt = (dir, r, c) => dir === 'left' ? [c, 7 - r] : dir === 'right' ? [c, r] : [r, c];
+const leanRows = (rows, dir) => { const g = EMPTY.map(r => [...r]); rows.forEach((row, r) => [...row].forEach((ch, c) => { const [a, b] = leanAt(dir, r, c); g[a][b] = ch; })); return g.map(r => r.join('')); };
+const LEAN_RUN = `({ rows, dir, lean, tilt = true, pre, gis }) => {
+  const N = 8, at = dir === 'left' ? (r, c) => [c, N - 1 - r] : dir === 'right' ? (r, c) => [c, r] : (r, c) => [r, c];
+  CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; CFG.TRANSFORM_COMBO = 99; CFG.AVA_LEAN = true; CFG.TILT = true; CFG.FX_MASCOT = true;
+  grid = Array.from({ length: N }, () => Array(N).fill(null));
+  rows.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '1') { const [a, b] = at(r, c); grid[a][b] = { gi: gis ? +gis[r][c] : 0, t: 1, f: 0, l: 0 }; } }));
+  tray = [{ s: SHAPES[0], gi: 0 }, { s: SHAPES[0], gi: 0 }, { s: SHAPES[0], gi: 0 }];
+  trayNo = 10; specialEnd = -99; bonus = null; bonusMeter = 0; transformCool = 99; starForced = false; combo = 4;
+  banners.length = 0; bands.length = 0; shatters.length = 0; pops.length = 0; sweeps.length = 0; lineFlashes.length = 0; avaReset();
+  toy.tiltOn = tilt; toy.gRaw = toy.gx = lean;
+  if (pre) (0, eval)(pre);
+  const s0 = score, sw0 = stats.sweeps, [pr, pc] = at(0, 0);
+  place(0, pr, pc);
+  const board = rows.map((_, r) => rows.map((__, c) => { const [a, b] = at(r, c), g = grid[a][b]; return g ? String(g.gi) : '.'; }).join(''));
+  const banner = banners.find(b => b.txt === 'AVALANCHE!');
+  return { board, raw: grid.map(r => r.map(g => g ? g.gi : '.').join('')), gained: score - s0, combo, dir: ava.dir, live: ava.live, end: ava.end,
+    meter: bonusMeter, star: starForced, volcano: discoveredWorlds.has('volcano'), swept: stats.sweeps - sw0, empty: boardEmpty(), bands: bands.length,
+    banners: banners.map(b => b.txt), sub: banner ? banner.sub : null, twice: grid.flat().some(g => g && g.av && g.av.length === 2),
+    avaLines: sweeps.filter(s => s.t < -2).map(s => [s.horiz, s.idx]), chain: pops.filter(p => /^CHAIN/.test(p.sub)).map(p => [Math.round(p.x), p.txt, p.sub]),
+    pic: JSON.stringify({ s: shatters.map(s => [s.r, s.c, s.gi, s.horiz, s.t, s.ox, s.oy, s.av]), sw: sweeps, lf: lineFlashes, p: pops.map(p => [p.x, p.y, p.t, p.txt, p.sub]),
+      b: banners.map(b => [b.txt, b.sub]), g: grid.map(r => r.map(g => g && g.av)), end: ava.end }) };
+}`;
+const leanRun = (page, o) => page.evaluate(`(${LEAN_RUN})(${JSON.stringify(o)})`);
+const AVA_DOWN = [...Array(6).fill('00000000'), '10000000', '10110110'];   // AVA_ROWS settled, as the Avalanche test pins it
+
+test('Avalanche lean: lean switched off, tilt not live, a flat phone or a lean under AVA_LEAN_MIN all fall down exactly as before (rule and picture); avaDir reads the smoothed tilt with TILT_FLIP and the dead zone', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await leanRun(page, { rows: AVA_ROWS, dir: 'down', lean: 0 });   // once first: its one-off banners (the cannonball's charge, a goal) are out of the way
+  const flat = await leanRun(page, { rows: AVA_ROWS, dir: 'down', lean: 0 });
+  assert.deepEqual(flat.board.map(r => r.replace(/0/g, '1').replace(/\./g, '0')), AVA_DOWN, 'the same fall as the Avalanche test');
+  assert.deepEqual([flat.dir, flat.combo, flat.sub], ['down', 6, '2 more lines'], 'down, one chain step, the old banner');
+  for (const [what, o] of [['Lean switched off', { lean: -.6, pre: 'CFG.AVA_LEAN = false' }], ['Tilt switched off', { lean: .6, pre: 'CFG.TILT = false' }],
+    ['motion never granted', { lean: .6, tilt: false }], ['a lean under AVA_LEAN_MIN', { lean: -.25 }], ['a lean inside the dead zone', { lean: .05 }]]) {
+    const r = await leanRun(page, { rows: AVA_ROWS, dir: 'down', ...o });
+    assert.equal(r.dir, 'down', what);
+    assert.deepEqual({ board: r.board, gained: r.gained, combo: r.combo, pic: r.pic }, { board: flat.board, gained: flat.gained, combo: flat.combo, pic: flat.pic }, what + ': byte for byte the same');
+  }
+  const dir = (gx, raw = gx) => page.evaluate(([gx, raw]) => { CFG.AVA_LEAN = true; CFG.TILT = true; toy.tiltOn = true; toy.gx = gx; toy.gRaw = raw; return avaDir(); }, [gx, raw]);
+  assert.deepEqual([await dir(0), await dir(.29), await dir(-.29), await dir(.31), await dir(-.31), await dir(.9), await dir(-.9)], ['down', 'down', 'down', 'right', 'left', 'right', 'left'], 'past AVA_LEAN_MIN (.3) only; + is the right edge low');
+  assert.equal(await page.evaluate(() => { CFG.FX_MASCOT = false; toy.gx = 0; toy.gRaw = -.6; const d = avaDir(); CFG.FX_MASCOT = true; return d; }), 'left', 'with the mascot hidden (the toy not stepped) the raw reading stands in');
+  // a real devicemotion event, smoothed by the toy's step; TILT_FLIP reverses it
+  const lean = x => page.evaluate(x => { toyTiltListen(); dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x, y: -8, z: -2 } })); }, x);
+  await page.evaluate(() => { toy.gx = 0; toy.tiltOn = false; });   // (set by hand above: let toyTiltListen really listen)
+  await page.waitForFunction(() => !masc.el.hidden, null, { timeout: 8000 });   // the crumb is up (the toy is stepped)
+  const settle = () => page.waitForFunction(() => Math.abs(toy.gx - toy.gRaw) < .005, null, { timeout: 5000 });
+  await lean(-4); await settle();
+  assert.equal(await page.evaluate(() => avaDir()), 'right', '(spec sign) the right edge low: right');
+  await page.evaluate(() => { CFG.TILT_FLIP = true; });
+  await lean(-4); await settle();
+  assert.equal(await page.evaluate(() => avaDir()), 'left', 'TILT_FLIP reverses it');
+  await page.evaluate(() => { CFG.TILT_FLIP = false; });
+  await lean(-1.5); await settle();
+  assert.equal(await page.evaluate(() => avaDir()), 'down', 'a phone held in the hand (~9 degrees) stays down');
+});
+
+test('Avalanche lean: a left lean packs every gem against the left wall and clears full columns, scoring and stepping the combo exactly like the matching fall down; right is its mirror; gems slide again after a chain clear', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const gis = AVA_ROWS.map((row, r) => [...row].map((_, c) => (r * 3 + c * 2) % 5).join(''));
+  const down = await leanRun(page, { rows: AVA_ROWS, dir: 'down', lean: 0, gis });
+  const left = await leanRun(page, { rows: AVA_ROWS, dir: 'left', lean: -.6, gis });
+  const right = await leanRun(page, { rows: AVA_ROWS, dir: 'right', lean: .6, gis });
+  const B = await page.evaluate(() => [bx, B, cell]);
+  for (const [name, r, wall] of [['left', left, [[false, 0], [false, 1]]], ['right', right, [[false, 6], [false, 7]]]]) {
+    assert.equal(r.dir, name, name + ': it went ' + name);
+    assert.deepEqual(r.board, down.board, name + ': every gem lands where the fall down puts it, turned to the ' + name + ' wall (colours too)');
+    assert.deepEqual([r.gained, r.combo, r.meter], [down.gained, down.combo, down.meter], name + ': the same points, combo steps and bonus meter');
+    assert.deepEqual(r.avaLines, wall, name + ': the chain cleared two columns at the ' + name + ' wall');
+    assert.equal(r.sub, 'to the ' + name + '! 2 more lines', name + ': the banner says which way');
+    assert.ok(r.twice && down.twice, name + ': what was beyond the cleared columns slid again');
+    assert.equal(r.live, true, 'the picture is playing');
+  }
+  assert.deepEqual(right.raw, left.raw.map(r => [...r].reverse().join('')), 'right is the mirror of left');
+  assert.ok(left.raw.every(r => /^[0-9]*\.*$/.test(r)) && right.raw.every(r => /^\.*[0-9]*$/.test(r)), 'packed against the wall: ' + JSON.stringify([left.raw, right.raw]));
+  assert.equal(left.chain[0][0], down.chain[0][0], 'left: the CHAIN tag where it always was (top right, empty now)');
+  assert.equal(right.chain[0][0], Math.round(B[0] + B[2] * 1.6), 'right: the CHAIN tag moves to the left side, which the gems left');
+  // a board where the first fall clears nothing, so the gems settle once more against the wall with no chain
+  const NOCHAIN = ['01111111', '10000000', '01000000', '00100000', '00010000', '00001000', '00000100', '00000000'];
+  const nd = await leanRun(page, { rows: NOCHAIN, dir: 'down', lean: 0 }), nl = await leanRun(page, { rows: NOCHAIN, dir: 'left', lean: -.6 });
+  assert.deepEqual([nl.board, nl.gained, nl.combo, nl.sub, nl.dir], [nd.board, nd.gained, nd.combo, 'to the left!', 'left'], 'no chain: it only slides; the banner says "to the left!" alone');
+});
+
+test('Avalanche lean: sideways chains keep every reward: bonus meter, Volcano, the star, COLOR GONE behind the banner, a clean sweep, and the avalanche dare', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id);
+  const gis = AVA_ROWS.map((row, r) => [...row].map((_, c) => r === 5 && c === 1 ? 4 : 0).join(''));   // the only gem of its colour; the fall takes it into a chain line
+  const pre = "CFG.TRANSFORM_COMBO = 6; discoveredWorlds.delete('volcano')";
+  const res = {};
+  for (const [dir, lean] of [['down', 0], ['left', -.6], ['right', .6]]) res[dir] = await leanRun(page, { rows: AVA_ROWS, dir, lean, gis, pre });
+  for (const dir of ['left', 'right']) {
+    const r = res[dir];
+    assert.deepEqual([r.dir, r.combo, r.meter, r.volcano, r.star, r.gained, r.bands], ['' + dir, 6, 7, true, true, res.down.gained, 0], dir + ': meter, Volcano, star and COLOR GONE points as down: ' + JSON.stringify(r));
+    const ia = r.banners.indexOf('AVALANCHE!');
+    assert.ok(ia >= 0 && r.banners[ia + 1] === 'COLOR GONE!', dir + ': COLOR GONE queues right behind AVALANCHE! ' + JSON.stringify(r.banners));
+  }
+  // a lean avalanche that empties the board is a clean sweep, AVALANCHE! first
+  const SWEEP = ['01111111', '11110000', '00001111', '11110000', '00001111', '00000000', '00000000', '00000000'];
+  const sd = await leanRun(page, { rows: SWEEP, dir: 'down', lean: 0 });
+  for (const [dir, lean] of [['left', -.6], ['right', .6]]) {
+    const r = await leanRun(page, { rows: SWEEP, dir, lean });
+    assert.deepEqual([r.dir, r.empty, r.swept, r.gained], [dir, true, 1, sd.gained], dir + ': a clean sweep, paid as the one down');
+    assert.ok(r.banners.indexOf('AVALANCHE!') >= 0 && r.banners.indexOf('AVALANCHE!') < r.banners.indexOf('CLEAN SWEEP'), dir + ': AVALANCHE! then CLEAN SWEEP ' + JSON.stringify(r.banners));
+  }
+  // the 'ava' dare is beaten by an avalanche any way it falls
+  for (const [dir, lean] of [['left', -.6], ['right', .6], ['down', 0]]) {
+    const r = await page.evaluate(`(() => { const o = (${LEAN_RUN})(${JSON.stringify({ rows: AVA_ROWS, dir, lean, pre: "dare.id = 'ava'; dare.s = 0; dare.p = 0; dare.x = trayNo; dare.q = []; CFG.DARE_MAX = 99" })}); return [o.dir, dare.s]; })()`);
+    assert.deepEqual(r, [dir, 1], dir + ': the avalanche dare is won');
+  }
+});
+
+test('Avalanche lean: the way is fixed when it fires (leaning back mid-slide changes nothing), gems slide sideways in the picture, touches wait, and a run saved mid-slide resumes settled', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const L = leanRows(AVA_ROWS, 'left');
+  await setup(page, { rows: L, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; CFG.TRANSFORM_COMBO = 99; combo = 4; toy.tiltOn = true; toy.gRaw = toy.gx = -.6; });
+  await dragPiece(page, 0, 0, 7);
+  assert.equal(await page.evaluate(() => [ava.live, ava.dir].join()), 'true,left', 'a left avalanche');
+  const settled = leanRows(AVA_DOWN, 'left');
+  assert.deepEqual(await boardStr(page), settled, 'the rule is done at once: packed left, two columns cleared');
+  await page.evaluate(() => { toy.gRaw = toy.gx = .7; });   // she leans the other way mid-fall
+  await page.waitForFunction(() => grid.flat().some(g => g && g.av && ava.t > g.av[0][0] && avaOff(g.av, ava.t) < 0), null, { timeout: 5000 });
+  const mid = await page.evaluate(() => { const g = grid.flat().find(g => g && g.av && avaOff(g.av, ava.t) < 0); avaAt(avaOff(g.av, ava.t)); return { now: avaDir(), dir: ava.dir, dx: avaDX, dy: avaDY, run: localStorage.getItem('crumble.run') }; });
+  assert.deepEqual([mid.now, mid.dir], ['right', 'left'], 'the phone now says right; the fall keeps left');
+  assert.ok(mid.dx > 0 && mid.dy === 0, 'mid-slide a gem is drawn to the right of the cell it slides to, at its own height ' + JSON.stringify(mid));
+  assert.deepEqual(await boardStr(page), settled, 'and the board is unchanged');
+  const g = await geometry(page);
+  await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
+  assert.equal(await page.evaluate(() => drag === null && !!pendingPress), true, 'no pickup mid-slide');
+  await page.waitForFunction(() => !ava.live, null, { timeout: 5000 });
+  await frames(page, 3);
+  assert.equal(await page.evaluate(() => !!drag && grid.flat().every(g => !g || !g.av)), true, 'landed: the waiting finger takes the piece');
+  await page.mouse.up();
+  // the run saved mid-slide holds the settled board
+  const saved = JSON.parse(mid.run);
+  await page.evaluate(run => { localStorage.setItem('crumble.run', run); }, mid.run);
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => state === 'play');
+  assert.deepEqual(await boardStr(page), settled, 'resumed: the settled board');
+  assert.deepEqual(await page.evaluate(() => [ava.live, grid.flat().some(g => g && g.av)]), [false, false], 'nothing falling');
+  assert.ok(saved && saved.score > 0, 'the save had the score');
+});
+
+test('Avalanche lean: the first avalanche down with tilt live says "next time, lean the phone." once (saved); not before tilt is live; a sideways one gets its own line', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const drop = async (lean, tilt) => {
+    await page.waitForFunction(() => !ava.live && !dealing, null, { timeout: 8000 });
+    await frames(page, 3);
+    const dir = lean < -.3 ? 'left' : 'down';
+    await setup(page, { rows: leanRows(AVA_ROWS, dir), trayShapes: [0, 0, 0] });
+    await page.evaluate(([lean, tilt]) => { CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; CFG.TRANSFORM_COMBO = 99; combo = 4; toy.tiltOn = tilt; toy.gRaw = toy.gx = lean; }, [lean, tilt]);
+    const [r, c] = leanAt(dir, 0, 0);
+    await dragPiece(page, 0, r, c);
+    await page.waitForFunction(() => ava.live && say.avaOn, null, { timeout: 3000 });
+    return page.evaluate(() => ({ dir: ava.dir, txt: say.txt, kind: Object.keys(SAY).find(k => SAY[k].includes(say.txt)), key: localStorage.getItem('crumble.leanHint') }));
+  };
+  let r = await drop(0, false);
+  assert.deepEqual([r.dir, r.kind, r.key], ['down', 'ava', null], 'motion not live: the usual line, no hint');
+  r = await drop(0, true);
+  assert.deepEqual([r.dir, r.txt, r.key], ['down', 'next time, lean the phone.', '1'], 'tilt live, phone flat: the hint, and it is remembered');
+  r = await drop(0, true);
+  assert.deepEqual([r.dir, r.kind], ['down', 'ava'], 'only once');
+  r = await drop(-.6, true);
+  assert.deepEqual([r.dir, r.kind], ['left', 'avaSide'], 'sideways: "which way is DOWN?" and friends');
+});
+
+test('Avalanche lean: with Reduce Motion the same lean gives the same fall and score; the picture stays as calm as the fall down (no rim flash, the crumb is not thrown, no roll)', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const plain = await leanRun(page, { rows: AVA_ROWS, dir: 'left', lean: -.6 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
+  if (await page.evaluate(() => state) !== 'play') await play(page);
+  await dealt(page);
+  assert.equal(await page.evaluate(() => reduce), true);
+  // the toy's lean reading still follows the phone under reduced motion (only its roll is off)
+  const x0 = await page.evaluate(() => { toy.tiltOn = true; toy.gx = 0; toy.gRaw = -.6; return toy.x; });
+  await frames(page, 30);
+  assert.deepEqual(await page.evaluate(() => [avaDir(), toy.x]), ['left', x0], 'the lean is read; the crumb does not roll');
+  await page.evaluate(() => { borderFlash = null; toy.mode = 'rim'; });
+  const calm = await leanRun(page, { rows: AVA_ROWS, dir: 'left', lean: -.6, pre: 'borderFlash = null' });
+  assert.deepEqual([calm.dir, calm.board, calm.gained, calm.combo, calm.sub], [plain.dir, plain.board, plain.gained, plain.combo, plain.sub], 'the same rule and result');
+  const after = await page.evaluate(() => [toy.mode, borderFlash && borderFlash.col]);
+  assert.notEqual(after[1], '255,179,107', 'no avalanche rim flash');
+  assert.equal(after[0], 'rim', 'the crumb is not thrown');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+});
+
 // ── review fixes (2026-11-14): cannonball strength saved, the cannonball under reduced motion, one GUIDE key, the win card's
 // star target, Avalanche chain rewards, cannonball NEW BEST / clean sweep, the golden hand switch ──
 test('fix: a charged crumb keeps its strength across a resume (cp), not worked out again from the combo; bad or missing cp resumes at the plain charge', async ({ page }) => {
