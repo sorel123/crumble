@@ -3548,6 +3548,36 @@ test('crumb cannonball: a streak charges the crumb (Endless only, once per strea
   assert.equal(await page.evaluate(() => grid.flat().filter(Boolean).length), g0, 'cold: it passes over the gems');
 });
 
+test('crumb last chance: out of room with a charged crumb the run holds; a cannonball that makes room saves it; without the charge it ends as before', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const JAM = ['11011011', '01101101', '10110110', '11011011', '01101101', '10110110', '11011011', '01101101'];   // no 2x2 hole anywhere, no full line
+  const jam = async hot => {
+    await dealt(page);
+    await setup(page, { rows: JAM, trayShapes: [0, 0, 0] });
+    await page.evaluate(hot => {
+      const sq = SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2);
+      tray = [{ s: sq, gi: 1 }, { s: sq, gi: 2 }, { s: sq, gi: 3 }];
+      toy.hot = hot; toy.pow = 0; toy.sulkTo = 0; toy.flicks = [];
+      checkStuck();
+    }, hot);
+  };
+  await jam(true);
+  assert.equal(await page.evaluate(() => stuck && toyLast()), true, 'stuck, and it is the last chance');
+  await page.waitForTimeout(1100);
+  assert.equal(await page.evaluate(() => state), 'play', 'the run holds');
+  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'FLICK ME, QUICK!');
+  assert.equal(await page.evaluate(() => masc.fainted), false, 'the crumb is on its feet');
+  await flickCrumb(page, 10, 26);
+  assert.equal(await page.evaluate(() => !!toy.fire), true, 'thrown although the board is stuck');
+  await page.waitForFunction(() => !toy.fire && banners.some(b => b.txt === 'SAVED!'), null, { timeout: 9000 });
+  await page.waitForFunction(() => toy.mode === 'rim', null, { timeout: 9000 });
+  assert.deepEqual(await page.evaluate(() => [state, stuck, toyHot()]), ['play', false, false], 'room was made: the run goes on');
+  // no charge: the same jam ends the run
+  await jam(false);
+  await page.waitForFunction(() => state === 'over', null, { timeout: 4000 });
+});
+
 // ── the crumb talks (js/crumbsay.js) ──
 const said = page => page.evaluate(() => el('crumbSay').hidden ? null : { txt: el('crumbSay').textContent, cls: el('crumbSay').className });
 test('crumb talks: a remark for a clean sweep, a sign when she stops playing, then asleep, a line when she is back; the switch (saved) silences it', async ({ page }) => {

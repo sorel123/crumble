@@ -23,7 +23,7 @@ function toyReset(){                                                // back on t
 }
 /* ── the cannonball ── */
 const toyHot=()=>toy.hot||!!toy.fire;
-function toyRunReset(){ toy.hot=false; toy.fire=null; toy.lastCombo=0; toy.pow=0; }          // flow.js clearRunFx: a new run starts cold
+function toyRunReset(){ toy.lastAsked=false; toy.hot=false; toy.fire=null; toy.lastCombo=0; toy.pow=0; }          // flow.js clearRunFx: a new run starts cold
 function toyCharge(comboNow){                                       // mascot.js mascotClear: every clear reports its combo
   const th=CFG.CANNON_COMBO, was=toy.lastCombo; toy.lastCombo=comboNow;
   if(toy.hot) toy.pow=Math.max(toy.pow,comboNow-th);              // already charged: a longer streak makes it bigger and stronger
@@ -55,11 +55,26 @@ function toySmash(){                                                // in flight
 }
 function toyFireEnd(){                                              // out of steam, or landed: the board is the player's again
   const f=toy.fire; if(!f) return; toy.fire=null; toy.shotN=f.n;
+  if(stuck&&state==='play'&&!f.n){ toy.hot=true; return; }           // the last chance missed the board entirely: it is still charged, try again
   if(!f.n) return;
   if(f.n>=4) sayLine('cannon',true);
   pops.push({x:bx+B/2,y:by+cell*1.2,t:0,txt:'+'+f.pts,sub:'CANNONBALL ×'+f.n,combo:1,lines:1});
   glowT=Math.max(glowT,.8);
-  updateDbg(); tlRecord(); if(state==='play'&&!dealing) saveRun();
+  updateDbg(); tlRecord();
+  if(state==='play'&&stuck){                                        // the last chance is spent: room for a piece and the run goes on, otherwise it ends as it would have
+    toy.lastAsked=false; checkStuck();
+    if(!stuck){ pushBanner('SAVED!','Crumb made room','#7CFFB2',1); glowT=1; toyPlay(.1,t=>{ tone(t,{f0:440,f1:660,pdur:.12,dur:.16,vol:.06,type:'triangle'}); tone(t+.14,{f0:660,f1:880,pdur:.12,dur:.22,vol:.06,type:'triangle'}); }); }
+  }
+  if(state==='play'&&!dealing) saveRun();
+}
+/* The last chance (Jay 2026-11-14: "I had crumb charged and ran out of space and the game ended. should we let you clear
+   space with him?"). Out of room with a charged crumb, the run does not end: checkStuck (game.js) holds, the crumb stays on
+   its feet, and it can be thrown even though the board is stuck. When the cannonball is spent the board is checked again. */
+const toyLast=()=>CFG.CANNON_SAVE&&stuck&&state==='play'&&toyHot()&&toyOn()&&mode==='endless';
+function toyLastAsk(){
+  if(toy.lastAsked) return; toy.lastAsked=true;
+  banners.splice(banners.length&&banners[0].t>0?1:0,0,{t:0,txt:'LAST CHANCE!',sub:'flick Crumb at the blocks',col:'#FFB347',k:1});
+  haptic('bonusReady');
 }
 const toyPower=()=>Math.min(CFG.CANNON_MAX_TOP,CFG.CANNON_MAX+CFG.CANNON_GROW*toy.pow);   // gems this cannonball can break
 function toySize(){                                                 // how big the crumb should be: it swells as the streak builds, more once charged
@@ -101,10 +116,10 @@ function toySnd(kind,k=1){
 }
 /* ── the finger ── */
 function toyDown(e){
-  if(!toyOn()||state!=='play'||paused||drag||stuck||masc.fainted||toy.id>=0) return;
+  if(!toyOn()||state!=='play'||paused||drag||(stuck&&!toyLast())||masc.fainted||toy.id>=0) return;
   e.stopPropagation();                                            // the game's own pointerdown never sees a touch on the crumb
   const now=performance.now();
-  if(now<toy.sulkTo&&toy.mode==='rim'){                           // sulking: it shakes its head and stays put
+  if(now<toy.sulkTo&&toy.mode==='rim'&&!toyLast()){                           // sulking: it shakes its head and stays put
     toySnd('hmph'); sayLine('sulk',true);
     masc.body.animate([{transform:'none'},{transform:'rotate(-9deg)'},{transform:'rotate(8deg)'},{transform:'rotate(-6deg)'},{transform:'none'}],{duration:420,easing:'ease-in-out'});
     return;
@@ -135,7 +150,7 @@ function toyUp(e){
   const sp=Math.hypot(vx,vy), cap=CFG.TOY_MAX_SPEED;
   if(sp>cap){ vx*=cap/sp; vy*=cap/sp; }
   toy.speed=Math.min(sp,cap); toy.bounces=0; toy.restT=0; toy.shotN=0;
-  const shot=toy.hot&&toy.speed>=CFG.TOY_FLICK_MIN*3&&state==='play'&&!stuck;   // charged and thrown: a cannonball
+  const shot=toy.hot&&toy.speed>=CFG.TOY_FLICK_MIN*3&&state==='play'&&(!stuck||toyLast());   // charged and thrown: a cannonball
   if(shot){ toy.hot=false; toy.fire={n:0,pts:0,max:toyPower(),b:0}; }
   if(toy.speed<CFG.TOY_FLICK_MIN&&Math.abs(toy.y)<10&&toy.x>-masc.s*.5&&toy.x<toyXMax()+masc.s*.5){   // put down where it stood: a poke
     toy.mode='rim'; toy.y=0; toy.vx=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); mascotAct('nod'); sayLine('poke'); return;

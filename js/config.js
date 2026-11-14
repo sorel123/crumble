@@ -287,6 +287,7 @@ const CFG = {
   CANNON_BIG_TOP:    1.85,   // ... up to this
   CANNON_KEEP:       .93,    // (toy) share of its speed left after each bite (however many gems were in it)
   CANNON_REACH:      1.15,   // (toy) its bite, as a share of its drawn size: every gem its body covers breaks, so a bigger crumb cuts a wider path
+  CANNON_SAVE:       true,   // (toy) out of room with a charged crumb: the run holds for one cannonball instead of ending (the last chance)
   CANNON_BOUNCES:    2,      // (toy) while still hot it bounces this many times off the bottom of the board instead of dropping through
   CANNON_PER_GEM:    10*SCORE_SCALE,   // (toy) points per gem it breaks
   FX_CRUMB_TALK:     true,   // (talk) the crumb's bubble and signs: snark when she is away, dithers or misses; credit when she does something good (js/crumbsay.js)

@@ -418,7 +418,8 @@ function checkStuck(){
   if(chDone) return;                                 // (E1) a finished Challenge round is not stuck: its end card is on the way
   stuck=!anyFits();
   syncActions();
-  if(stuck) setTimeout(()=>{ if(!dealing&&!anyFits()) gameOver(); },700);
+  if(stuck&&toyLast()){ toyLastAsk(); return; }       // (toy) out of room with a charged crumb: the run holds for one cannonball (crumbtoy.js)
+  if(stuck) setTimeout(()=>{ if(!dealing&&!anyFits()&&!toyLast()) gameOver(); },700);
 }
 
 /* The next tray is dealt after the clear has started, not inside the drop (plan 2.2). Choosing a hand

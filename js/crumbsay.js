@@ -90,7 +90,7 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
   if(stage===0&&say.kind==='say zz') say.until=0;
   // ── what shows ──
   const hot=toy.hot&&toy.mode==='rim'&&state==='play'&&!faint;
-  const txt=hot?'FLICK ME!':now<say.until&&toy.mode!=='held'&&toy.mode!=='air'?say.txt:'';
+  const txt=hot?(toyLast()?'FLICK ME, QUICK!':'FLICK ME!'):now<say.until&&toy.mode!=='held'&&toy.mode!=='air'?say.txt:'';
   const kind=hot?'say hot':say.kind;
   const s=masc.s*toy.sc, x=masc.x+toy.x, right=x+s/2<W/2;       // the bubble sits on the side with more room
   const px=Math.round(right?x+s+5:W-x+5), py=Math.round(masc.y+toy.y+masc.s-s*.86);
