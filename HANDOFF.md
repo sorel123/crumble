@@ -230,6 +230,7 @@ Top to bottom:
 | (stakes) | The streak has stakes: the combo fire sputters as a carried streak nears its end (a notch down, then guttering embers with a tick and a nervous glance); a charged crumb that grew on a streak deflates when the streak dies; the charged crumb is a slingshot (pull back, let go) with a band and a dotted path, a tap shows how. See the section at the end |
 | (lean) | Lean the Avalanche: with tilt live and the phone leaned past `AVA_LEAN_MIN`, the gems slide to the low wall and full columns clear (one rule over a view of the grid, `avaView`; the way is read once by `avaDir()`); "to the left!" on the banner, the crumb's sideways lines and a one-time "next time, lean the phone." See the section at the end |
 | (lab) | The Lab: a slim Lab button beside Settings, a card of experiments. First one, Clear it in three: 60 fixed three-piece puzzles (20 easy, 20 medium, 20 hard) on the real board, no score or losing, Undo/Reset/hint, progress in `crumble.lab` (iCloud backup), a cookie every 5th new solve. `js/lab.js`, `tools/lab3-table.mjs`. See the Lab section at the end |
+| (sky bite) | The sky fights back: in Endless each journey stop deals a little leaner (shorter easy, longer lean stretches, later comeback help), past Space the stops go on as Deep space 1, 2, ...; JOURNEY_AT re-spaced for today's scoring; the game-over card says how far she got and her farthest. See the section at the end |
 
 Details for each, oldest first:
 
@@ -1318,7 +1319,7 @@ The name of the game, on screen: a cleared gem cracks and breaks into pieces of 
 
 The background travels as the run goes: dawn, day, golden hour, night, aurora, space. Code is the "(7.5b) journey sky" block in `js/draw.js` (state, triggers, decor, wipe) and `JOURNEY` in `js/worlds.js` (the six stages as worlds). Endless and Daily only (`journeyOn()` = `CFG.JOURNEY_SKY && paced()`); Adventure keeps her world and its mint look.
 
-- **Stages.** `CFG.JOURNEY_AT` = 0 / 500 / 1500 / 3000 / 6000 / 10000. The casual bot's finished games have a median score of about 3500, so a typical game reaches night and a great one space. Every clean sweep adds one stage on top (`jJumps`, saved in the snapshot as `jy`; older saves follow the score). Space is the last.
+- **Stages.** `CFG.JOURNEY_AT` = 0 / 500 / 1500 / 3000 / 6000 / 10000 (re-spaced to 0 / 2000 / 6000 / 12000 / 20000 / 30000 in "The sky fights back", where the stops also became Endless's difficulty curve). The casual bot's finished games have a median score of about 3500, so a typical game reaches night and a great one space. Every clean sweep adds one stage on top (`jJumps`, saved in the snapshot as `jy`; older saves follow the score). Space is the last.
 - **A stage is a world:** gradient + one ambient effect (day has a new `clouds` effect, golden hour `embers`, night and space `stars`, aurora `ribbons`) + a decor sprite cached per stage at half resolution (`decorSprite`: low sun at dawn, small sun by day, big low sun at golden hour, crescent moon, aurora glow, ringed planet and nebula in space). Suns, moon and planet sit in the gap between the HUD and the board or low behind the tray, never behind the score or the buttons; clouds drift only there too. `isJourney(id)`; `worldDef('j3')` resolves like any world.
 - **Her look.** Colours are mid-to-dark so white HUD text (Classic, Night) reads on every stage. A light theme with dark ink (Daylight, Cotton Candy, Mint, Paper) gets a pale version, each stage mixed 70% into her theme's own sky (`bgOf`, `paleTheme()`), decor at 55%. Board, tiles and motif are untouched. `homeSky()` is where the sky goes home to: the journey stage, or `CFG.HOME_WORLD` with it off or in Adventure. `syncHomeSky()` snaps there (Settings changes, reduced motion).
 - **Changing stage (6.3 hierarchy).** A score threshold is calm: checked when a tray has been dealt (`journeyDealt`, from `stepDeal`), then `JOURNEY_WAIT` (30) frames later the new sky wipes down from the top over ~1.4 s with a feathered edge and a faint band of light; no sound, no text. A sweep (`journeySweep`, from `place()`) waits for its confetti and wipes in ~0.8 s with a bright leading edge. The wipe (`drawWipe`) draws the old sky, then the new one clipped above the line; it is all in the sky layer, so pressure (6.6), the mode looks (6.7) and everything on the board draw on top as before (a test checks a gem pixel mid-wipe).
@@ -1826,3 +1827,76 @@ Jay approved: "Now and then a cookie lands on one gem. Clear that gem's line wit
 - **Tests.** The harness turns the cookie off on load (real default in `window.__cookieDefault`), like Avalanche, so the older tests and their crumb lines and pictures are as they were; the seven "cookie:" scenarios turn it on.
 - **Check on the phone:** play Endless past tray 4 with a fuller board; within a few trays a cookie should drop onto a gem and Crumb says so. Watch it get bitten as trays come, clear its row and watch it hop into him and the jar count go up; let one go stale. Things to judge: is the cookie readable on her look at a glance, is one bite vs two clear, is .3 too often or too rare, does a 3-6 line feel like a little work.
 - Screenshots: `cookie/` in the project files (whole, one bite, two bites, the hop to Crumb, the chomp, Cotton Candy and Daylight).
+
+## The sky fights back (2026-11-14)
+
+The 2026-11-14 review: Endless games have no arc and the long ones run on and on. Jay wants a crazy heater to stay possible
+with skill and luck, and games to end. The journey sky (7.5b) is now the difficulty curve of Endless: each stop deals a little leaner than the last. Dawn deals
+exactly as before (the warm-up), and the stops keep counting past Space ("Deep space 1, 2, 3 ..."; the sky art stays Space).
+
+- **The stop** (`skyStop()`, draw.js): the score's stage (`CFG.JOURNEY_AT`), then one more every `SKY_DEEP_EVERY` (120,000)
+  points past the last threshold, plus `jJumps` (a clean sweep, beating her best). It reads score and `jJumps` only, so it
+  holds with the journey sky switched off and across a resume (both already ride in the run save; nothing new is saved for the
+  run). `journeyTarget()` is `min(5, skyStop())`. `stopName(n)`: Dawn ... Space, then "Deep space n-5".
+- **JOURNEY_AT re-spaced** from 500/1500/3000/6000/10000 to 2000/6000/12000/20000/30000 (x `SCORE_SCALE`). With the carrying
+  combo and the avalanche the person-like bot makes about 3,000 points a tray, so the old stops had all passed by tray ~35 and
+  the sky said nothing about the run. Now (person-like bot, with the bite): day ~tray 8, golden hour ~14, night ~28, aurora
+  ~38, space ~53, Deep space 1 ~68, 2 ~82, 3 ~99, 5 ~131 (sweeps make it sooner). Daily's sky travels on the same thresholds.
+- **The bite** (`skyBite()`, solver.js, read once per deal into `biteNow`): `SKY_BITE_SCALE` (1; 0 = off, today's dealing) x
+  `SKY_BITE[stop]` = 0 / .05 / .15 / .25 / .4 / .7 for dawn ... space, then + `SKY_DEEP_BITE` (.5) per Deep space stop,
+  uncapped. Endless only, and only the coaster (tide) dealer: Daily, Challenge (frozen seeds), Adventure, the guided first game,
+  the home and curve dealers ignore it (bite 0).
+- **What it moves** (each `BITE_*` is how far at bite 1; all are existing odds and lengths, no new rule, every tray still goes
+  through the same checks and `ensureWay`, so every tray has a solution):
+  `BITE_EASY` .08 EASY stretches shorter and `BITE_LEAN` .12 LEAN longer (`tideLen`, the same one roll); `BITE_SMALL` .1 pieces of
+  3 cells or fewer rarer (`tideBase`); `BITE_CROWD` .1 the comeback keys later (crowded below `CROWD_ROOM`x(1-k) room or at
+  `CROWD_GEMS`+8k gems) and two keys rarer; `BITE_RESCUE` .1 LEAN's quiet rescue later (room line x(1-k), `LEAN_DRY` + 2k dry
+  trays, rounded); `BITE_KEY` .05 fewer EASY candidates seeded with a clearing key; `BITE_RUN` .1 less sweep steering (EASY's
+  sweep-run board size, `EASY_SWEEP`, `EASY_STEER`, `CHAIN_BUILD`); `BITE_EDGE` .06 the 6.1 edge (and its recovery trays) on a
+  tighter board. The person-like bot is very sensitive to these: a few percent on each moves its hazard a lot, hence the
+  small values.
+- **Seeds.** Bite 0 rolls no extra dice and changes no comparison, so a pinned seed deals as before at dawn and with the scale
+  at 0 (a test checks the trays and the dice count). With it on, the existing pinned-seed tests still pass (they stay at dawn
+  or use the 1.0/home/curve dealers), so the harness leaves it on.
+- **Game-over card** (Endless): one line under the message, "You reached Night." then "Your best is Aurora." or, past her
+  record, "Farthest yet!" (`stopLine()`, flow.js; `#overStop`). The farthest stop is `stats.farStop` in `crumble.stats` as
+  stop + 1 (0 = none on record: an older save's first game names the stop and claims nothing). The iCloud merge keeps the
+  larger. Checked at 390x844 with the replay, Second chance and a two-line message: everything fits.
+- **The crumb** (crumbsay.js `SAY.night/aurora/space/deep`): a line on arriving at night ("it gets harder from here."), aurora,
+  space ("nobody gets past space.") and now and then at a Deep space stop. Only with the bite on, not on a resume, its own dice
+  (`mascotRnd`), and it waits its turn behind the forced lines (a sweep's jump comes with the sweep's own line). The sky wipe is
+  unchanged; nothing else on screen.
+- **With the dares, stakes and the Lab (rebased onto them):** the two sky dares (`night`, medium; `space`, hard) now read
+  `skyStop()`, the same count as the end card, so "reach Night" agrees with "You reached Night." Re-spacing made them later
+  (night ~tray 28, space ~tray 53 for the person-like bot), which suits their tiers, so tiers and words are unchanged; there is
+  no easy sky dare. The aviator goggles (won by the `space` dare) are a harder feat than before. The crumb's stop lines wait
+  like the dares do (`!dare.q.length && dareQuiet(now)`, never forced), so they never talk over a dare line, the charged crumb's
+  bubble or the slingshot; dare lines already wait for any line still up (`say.until`). The Lab (`mode 'lab'`) has no bite, no
+  stop line, no farStop and no stop lines (all are Endless only; a puzzle never reaches gameOver). `farStop` rides in `stats`,
+  which the iCloud merge already maxes key by key, next to the closet and lab merges.
+- **Small phones:** under 720 px tall the game-over card tightens (gap 10, replay 116 px) so at 375x667 the gold line, the
+  replay, Second chance, Share, Play again and Home all fit even with a two-line message; the card also scrolls
+  (`justify-content: safe center`) instead of clipping its top if it ever runs long.
+- **Admin (?dev):** "Sky bite: overall", one slider per stop (`SKY_BITE.1`..`.5`: the slider table now takes an array entry), per
+  Deep space stop, points per Deep space stop, and the eight `BITE_*` knobs. The `?dev` readout shows `stop n bite b` with the phase.
+- **Measured** (`tools/bot-sim.mjs`, new `sky (bite):` line: where finished games ended by stop, when each stop was first reached,
+  score and stop at trays 10..300, scores, jumps, trays by bite; `SKY_BITE_SCALE=0` for today). 8000 trays a seed, AVALANCHE=1:
+
+  | bot | | games | p10 | p25 | median | p75 | p90 | mean |
+  |---|---|---|---|---|---|---|---|---|
+  | person-like (`BOT=human`) | off, seeds 1-8 | 506 | 23 | 45 | 89 | 162 | 271 | 124 |
+  | person-like | on, seeds 1-12 | 983 | 21 | 40 | 77 | 135 | 195 | 96 |
+  | casual | off, seeds 1-8 | 157 | 52 | 104 | 274 | 574 | 870 | 389 |
+  | casual | on, seeds 1-8 | 344 | 45 | 92 | 157 | 247 | 336 | 182 |
+
+  Per seed (person-like, on) medians run 65-94 and p90 172-220: the sim is noisy, and 1500-tray runs (5-18 games) are not enough
+  to judge (the "median 182" that started this was one seed of 5 games; 8 seeds of 8000 trays give 89). Where person-like games
+  end, off -> on: dawn 3% -> 3%, day 8 -> 6, golden hour 7 -> 9, night 8 -> 10, aurora 10 -> 9, space 8 -> 10, Deep space
+  1-3 24 -> 26, Deep space 4-6 14 -> 16, Deep space 7+ 19% -> 10%. The share of games that end at a stop, of those that reach it,
+  climbs from 7% at day to ~13% at night, ~17% at space and 25-30% by Deep space 3-5 (off: flat at ~13-17% past aurora). The
+  casual bot (which the dealer's `predictPlay` models) still ends mostly at Deep space 10-20.
+- **Not met / open:** p10 stays ~21 (target ~25): the bite is 0 at dawn and tiny at day, and today's dealing already gives a p10
+  of ~23, so early deaths are the opening's, not the bite's. If runs feel short, lower `SKY_DEEP_BITE` first (the tail) or
+  `SKY_BITE.3/.4` (the middle); if heaters still run forever, raise `SKY_DEEP_BITE`. Beating her best jumps a stop only with
+  "Chase your best" on (7.5e), so that switch slightly changes difficulty.
+- Tests: the six "sky bite" scenarios; the journey sky and points-boost tests follow the new thresholds.

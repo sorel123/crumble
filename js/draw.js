@@ -655,7 +655,7 @@ function perfHud(now){
   const h=hesSummary(), sec=ms=>(ms/1000).toFixed(1)+'s';   // the hesitation log (plan 3.4): medians of the last 20 trays, n = samples used / kept
   perf.hud.textContent='max '+mx.toFixed(1)+'ms  >'+CFG.FRAME_BUDGET_MS+'ms: '+perf.over+'\nwork '+perf.work.toFixed(1)+'ms  fx '+Math.round(perf.fx*100)+'% ('+fxLive()+')'
     +'\nhes pick '+sec(h.pick)+'  place '+sec(h.place)+'  clr '+h.clr+'%  n '+h.n+'/'+h.total
-    +(paced()?'\n'+pace.ph+' '+pace.n+(pace.ph==='edge'?'/'+pace.hold:'')+'  room '+roomNow.toFixed(2)+'  '+lastTier:'');   // (6.1) the dealer's phase
+    +(paced()?'\n'+pace.ph+' '+pace.n+(pace.ph==='edge'?'/'+pace.hold:'')+'  room '+roomNow.toFixed(2)+'  '+lastTier+(biteNow?'  stop '+skyStop()+' bite '+biteNow.toFixed(2):''):'');   // (6.1) the dealer's phase
   perf.hud.style.color=mx>CFG.FRAME_BUDGET_MS?'#FFB3B3':'#fff';
 }
 
@@ -670,11 +670,19 @@ function perfHud(now){
    Reduced motion: no wipe, the stage simply changes. */
 let jStage=0, jJumps=0, jShown=0, jw=null, jPend=null, jSweep=false;   // target stage, sweeps this run, stage on screen, the wipe, a pending change
 const journeyOn=()=>!!CFG.JOURNEY_SKY&&paced();
-function journeyTarget(){
+function journeyTarget(){ return Math.min(JOURNEY.length-1,skyStop()); }
+/* (sky bite) the stop the run has reached, counted past Space: the score's stage (CFG.JOURNEY_AT, then one more every
+   SKY_DEEP_EVERY points past the last threshold) plus one per jump (jJumps: sweeps, beating her best). 0 dawn .. 5 space,
+   6 = Deep space 1, 7 = Deep space 2 ... The sky art stops at Space; the dealer (skyBite, solver.js) and the game-over card
+   keep counting. Read from score and jJumps only, so it holds with the journey sky switched off and across a resume. */
+function skyStop(sc=score,jumps=jJumps){
   const at=CFG.JOURNEY_AT; let k=0;
-  for(let i=1;i<at.length;i++) if(score>=at[i]) k=i;
-  return Math.min(JOURNEY.length-1,k+jJumps);
+  for(let i=1;i<at.length;i++) if(sc>=at[i]) k=i;
+  const last=at[at.length-1];
+  if(k===at.length-1&&CFG.SKY_DEEP_EVERY>0) k+=Math.floor((sc-last)/CFG.SKY_DEEP_EVERY);
+  return k+jumps;
 }
+const stopName=n=>n<JOURNEY.length?JOURNEY[n].name:'Deep space '+(n-JOURNEY.length+1);   // the game-over card's words for a stop
 const homeSky=()=>journeyOn()?JOURNEY[jStage].id:CFG.HOME_WORLD;   // where the sky goes back to when nothing else owns it
 function journeySweep(){ jJumps++; if(journeyOn()){ jSweep=true; jPend={t:CFG.JOURNEY_WAIT+30}; } }   // place(): a clean sweep
 function journeyDealt(){ if(journeyOn()&&!jPend&&journeyTarget()>jStage) jPend={t:CFG.JOURNEY_WAIT}; } // stepDeal(): a tray was dealt

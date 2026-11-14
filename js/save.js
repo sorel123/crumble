@@ -168,7 +168,7 @@ function migrateScale(){
 }
 
 /* ═══════ best score + lifetime stats — their own key, loaded before the unlock check ═══════ */
-const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,bonuses:0,starSeen:0,escapes:0};   // bonuses: bonus runs earned
+const stats={games:0,lines:0,placed:0,sweeps:0,bestCombo:0,totalScore:0,bonuses:0,starSeen:0,escapes:0,farStop:0};   // bonuses: bonus runs earned; farStop: (sky bite) the farthest Endless journey stop + 1 (0: none yet; older saves)
 function saveStats(){
   try{ localStorage.setItem(STATS_STORE,JSON.stringify({v:1,best:Math.max(best,state==='play'&&mode==='endless'?score:0),...stats})); }catch(e){}
   cloudDirty();                                     // (1.1 F) the iCloud backup follows, a few seconds later

@@ -19,7 +19,8 @@
    Switch: CFG.DARES (Settings > Look > Advanced "Crumb's dares", saved `dares`); with the mascot off there are none. */
 const DARE_STORE='crumble.dares';
 // kind: drop (lines in one drop), cross (a row and a column in one drop), combo, lines (this run), sweep, colour, ava,
-// cannon (gems one cannonball breaks), noflick (trays without a throw), sky (journey stage), best. tier: 0 easy, 1 medium, 2 hard
+// cannon (gems one cannonball breaks), noflick (trays without a throw), sky (journey stop, skyStop: Night ~tray 28, Space ~tray 53 for the
+// person-like bot since the stops were re-spaced, so night is medium and space hard), best. tier: 0 easy, 1 medium, 2 hard
 const DARES=[
   {id:'drop2',   tier:0, kind:'drop',   need:2,  chip:'2 lines in one drop', say:["bet you can't clear two at once.","two lines. one drop. go on."]},
   {id:'drop3',   tier:1, kind:'drop',   need:3,  chip:'3 lines in one drop', say:["bet you can't clear three at once.","three lines, one drop. I'll wait."]},
@@ -92,7 +93,7 @@ function darePick(){                                   // the roll: a tier by th
     if(d.kind==='ava') return !!CFG.AVALANCHE;
     if(d.kind==='cannon') return !!CFG.CRUMB_CANNON&&toyOn();
     if(d.kind==='noflick') return toyOn();
-    if(d.kind==='sky') return !!CFG.JOURNEY_SKY&&journeyTarget()<d.need;
+    if(d.kind==='sky') return !!CFG.JOURNEY_SKY&&skyStop()<d.need;   // (sky bite) the same stop count as the end card's "You reached Night."
     if(d.kind==='best') return best>0&&!bestBeaten;
     return true;
   };
@@ -157,7 +158,7 @@ function dareTick(){                                   // the ones read off the 
   if(!dareOpen()) return;
   const d=dareDef(dare.id), k=d.kind;
   if(k==='noflick'){ dare.p=Math.min(d.need,Math.max(0,trayNo-dare.x)); if(dare.p>=d.need) dareWin(); }
-  else if(k==='sky'){ if(journeyTarget()>=d.need) dareWin(); }
+  else if(k==='sky'){ if(skyStop()>=d.need) dareWin(); }
   else if(k==='best'){ if(bestBeaten) dareWin(); }
   if(dare.s===1&&state==='play'&&!dealing) saveRun();
 }

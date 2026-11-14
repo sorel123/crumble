@@ -8,7 +8,7 @@ async function gameOver(){
   const prevBest=best;
   stats.totalScore+=score;
   el('overEye').textContent='Endless'; el('overTitle').textContent='Out of moves'; el('againBtn').textContent='Play again'; el('overMenuBtn').textContent='Home';
-  el('overMedals').hidden=true; el('chalNewBtn').hidden=true;
+  el('overMedals').hidden=true; el('chalNewBtn').hidden=true; el('overStop').hidden=true;
   if(mode==='adventure'&&lvl) levelFailed();
   else if(mode==='daily') dailyOver();
   else if(mode==='challenge'&&chal) chalOver();   // (E1) the round's medal card
@@ -20,6 +20,7 @@ async function gameOver(){
       +(score>=1500*SCORE_SCALE?'That is a serious run.'
       :score>=600*SCORE_SCALE?'Good chains. Save the big shapes for open space.'
       :'Clear rows early — do not let the board fill up.');
+    stopLine();                                      // (sky bite) how far the sky went, and her farthest
   }
   const offer=rescueAllowed(prevBest);              // (8.1) one marked one-time offer; otherwise only Play again and Home
   el('reviveBox').hidden=!offer;
@@ -27,6 +28,17 @@ async function gameOver(){
   shareSetup();                                      // (4.4) Share shows for Endless and Daily runs only
   el('overCard').hidden=false;
   tlShow();                                          // (7.5g) the run replays on the card; the buttons above are already live
+}
+/* (sky bite) Endless: one line on the game-over card, "You reached Night." then "Your best is Aurora." or, past her
+   record, "Farthest yet!". The farthest stop is kept in the saved stats as farStop = stop + 1 (0: none recorded yet, so an
+   older save's first game names the stop and claims no record). Past Space the stop reads "Deep space 2". */
+function stopLine(){
+  const st=skyStop(), prev=stats.farStop|0;
+  let t='You reached '+stopName(st)+'.';
+  if(prev&&st+1>prev) t+=' Farthest yet!';
+  else if(prev) t+=' Your best is '+stopName(prev-1)+'.';
+  if(st+1>prev){ stats.farStop=st+1; saveStats(); }
+  el('overStop').textContent=t; el('overStop').hidden=false;
 }
 // The one rescue of a run (plan 7.1): offered on the game-over card while she has it and the run is worth saving.
 // Every check for it goes through here, so an ad can gate it later in one place. A level always offers its rescue.

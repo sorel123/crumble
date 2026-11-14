@@ -62,8 +62,12 @@ const SAY={
   cookieLand:["cookie! get it before it goes stale.","ooh. a cookie. clear it for me.","that cookie's mine. go get it.","cookie on the board. don't let it go stale."],
   cookieYum:["mine. thank you.","okay that was worth it.","mmf. crunchy.","best part of my day.","nom. don't tell anyone.","into the jar. well. into me."],
   cookieGone:["that was my cookie.","it's fine. i wasn't hungry.","stale. great.","bye, cookie."],
+  night:["it gets harder from here.","lights out. good luck.","night shift. no more freebies."],   // (sky bite) arriving at a harder stop
+  aurora:["pretty, huh? don't look.","it's not getting easier."],
+  space:["nobody gets past space.","space. it bites.","this is where runs go to die."],
+  deep:["ok, now you're showing off.","how are you still here?","nobody's been out this far."],
 };
-const say={el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
+const say={stop:0,stopDue:'',stopT:0,el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};
 function sayInit(){
   const d=document.createElement('div'); d.id='crumbSay'; d.hidden=true; d.setAttribute('aria-hidden','true');
   el('stage').appendChild(d); say.el=d;
@@ -92,7 +96,7 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
   if(state!==say.state){
     if(state==='over') sayLine(dareOpen()?'dareLost':'over',true);   // (dares) a run that ends with a dare open: "told you."
     else if(state==='play'&&say.state==='idle'&&mascotRnd()<.5) sayLine('start');
-    say.state=state;
+    say.state=state; say.stop=skyStop(); say.stopDue='';   // (sky bite) a new or resumed run starts counting stops from where it is
   }
   if(say.placed<0||stats.placed<say.placed) sync();
   if(stats.placed!==say.placed){                           // a drop
@@ -107,6 +111,19 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
     say.placed=stats.placed; say.lines=stats.lines; say.sweeps=stats.sweeps; say.best=bestBeaten;
   }
   say.avaOn=ava.live;
+  // (sky bite) Endless, with the sky biting: a line on arriving at a harder stop (night, aurora, space, then each Deep space
+  // stop now and then). It waits its turn behind the forced lines (a sweep's jump comes with the sweep's own line), and like the
+  // dares (dareQuiet) behind dare lines, a charged crumb and the slingshot; dare lines in turn wait for it (say.until).
+  if(state==='play'&&mode==='endless'&&CFG.SKY_BITE_SCALE>0&&!guide){
+    const st=skyStop();
+    if(st<say.stop) say.stop=st;                           // a new run
+    else if(st>say.stop){
+      const k=st>=6?(mascotRnd()<.35?'deep':''):st>=5&&say.stop<5?'space':st>=4&&say.stop<4?'aurora':st>=3&&say.stop<3?'night':'';
+      if(k){ say.stopDue=k; say.stopT=now; }
+      say.stop=st;
+    }
+    if(say.stopDue&&(now-say.stopT>8000||!dare.q.length&&dareQuiet(now)&&sayLine(say.stopDue))) say.stopDue='';   // (dares, stakes) only when a dare line, the charged crumb or the slingshot is not speaking; it never forces
+  } else { say.stop=state==='play'?skyStop():0; say.stopDue=''; }
   if(!!ret!==say.retOn){ say.retOn=!!ret; if(ret&&++say.backs>=CFG.TALK_DITHER){ say.backs=0; sayLine('dither'); } }   // a piece picked up and sent back
   const tight=state==='play'&&mascotTight(); if(tight&&!say.tight) sayLine('tight'); say.tight=tight;
   // ── idle: a sign, a second one, then asleep; the next touch wakes it ──

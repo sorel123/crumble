@@ -352,6 +352,10 @@
   @media (prefers-reduced-motion: reduce){ .lt,.lf::after,.home button.cta::after{animation:none} }
   #tlBoard{width:148px;height:148px;cursor:pointer;touch-action:manipulation;flex:none}   /* (7.5g) the run's timelapse on the game-over card */
   #tlBoard[hidden]{display:none}
+  #overStop{font-size:14px;font-weight:600;opacity:.9;margin-top:-8px;max-width:32ch;color:var(--gold)}   /* (sky bite) the stop the run reached, one line */
+  #overStop[hidden]{display:none}
+  @media (max-height:720px){ #overCard{gap:10px;padding-top:18px;padding-bottom:18px} #overCard #tlBoard{width:116px;height:116px} }   /* (sky bite) a small phone (375x667) keeps the stop line, the replay and every button on screen */
+  #overCard{overflow-y:auto;justify-content:safe center}   /* and if a card still runs long it scrolls instead of clipping its top */
   .title{font-size:clamp(46px,15vw,78px);font-weight:700;line-height:.92;letter-spacing:-.03em;
          text-shadow:0 0 40px rgba(255,212,92,.3)}
   .title em{font-style:normal;color:var(--accent)}
@@ -739,6 +743,7 @@
     <p class="big" id="overScore">0</p>
     <div class="medals" id="overMedals" hidden><span><b>🥉</b><i></i></span><span><b>🥈</b><i></i></span><span><b>🥇</b><i></i></span></div>
     <p class="sub" id="overMsg"></p>
+    <p class="sub" id="overStop" hidden></p>
     <canvas id="tlBoard" hidden role="img" aria-label="Your run as a timelapse. Tap to skip, tap again to replay."></canvas>
     <div class="secondChance" id="reviveBox">
       <button class="cta" id="reviveBtn">Second chance</button>

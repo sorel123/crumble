@@ -526,7 +526,7 @@ function roomBits(lo,hi){
    guided trays. pace.n counts the trays dealt in the phase so far. */
 function paceSet(ph){ pace.ph=ph; pace.n=0; }
 function paceStep(a0){
-  const r=roomNow=roomOf(a0), cramped=r<CFG.ROOM_EDGE, ph=pace.ph;
+  const r=roomNow=roomOf(a0), cramped=r<CFG.ROOM_EDGE*(1-bite('BITE_EDGE')), ph=pace.ph;   // (sky bite) later stops: the edge's help starts on a tighter board
   if((ph==='edge'||ph==='recovery')&&!cramped){ paceSet('relief'); pace.len=CFG.RELIEF_TRAYS; }
   else if(ph==='relief'&&pace.n<pace.len&&!cramped){}
   else if(cramped){
@@ -751,10 +751,27 @@ function waveDealt(hand){ bigHist.push(hand.filter(s=>s.n>=4).length); while(big
    exact piece is one of the "keys" EASY reaches for. Closers, the sweep hunt and the sweep run stay, in EASY only
    (an earned closer waits out a LEAN stretch). GUIDE/OBVIOUS terms live on in EASY's score; LEAN has none. */
 const tideOn=()=>CFG.TIDE&&paced()&&mode!=='challenge';
+/* (sky bite) "The sky fights back": in Endless the journey stop (skyStop, draw.js) is the difficulty curve. bite =
+   SKY_BITE_SCALE x SKY_BITE[stop] (0 at dawn), past Space growing by SKY_DEEP_BITE per Deep space stop, uncapped, so every
+   game ends some time but a heater can run long. Read once per deal into biteNow. It only shifts odds and lengths the tide
+   already has (BITE_* say how far at bite 1): EASY shorter and LEAN longer (tideLen), fewer small pieces (tideBase), the
+   comeback keys and LEAN's quiet rescue later (tideHandSteps), fewer clearing keys in EASY, less sweep steering (the run,
+   its pull, the chain after a board clear), and the 6.1 edge later (paceStep). Every tray is still checked and guarded the
+   same way (a solution always exists). Bite 0 (dawn, the scale at 0, Daily, Challenge, Adventure, the guided game, the
+   curve and home dealers, which ignore it) changes nothing and rolls no extra dice, so pinned seeds deal as before. */
+let biteNow=0;
+function skyBite(){
+  if(mode!=='endless'||guide||!tideOn()||CFG.DEALER_CURVE||CFG.DEALER_HOME||!(CFG.SKY_BITE_SCALE>0)) return 0;   // the curve and home dealers ignore it
+  const st=skyStop(), B=CFG.SKY_BITE, last=B.length-1;
+  const b=st<=last?+B[st]||0:(+B[last]||0)+CFG.SKY_DEEP_BITE*(st-last);
+  return Math.max(0,CFG.SKY_BITE_SCALE*b);
+}
+const bite=(k,cap=1)=>Math.min(cap,biteNow*CFG[k]);    // how far knob k moves at this bite (a share, capped)
 let tide={st:'easy',n:0,len:0};                       // the stretch: 'easy' | 'lean', trays dealt in it, its rolled length
-const tideLen=st=>st==='easy'?CFG.TIDE_EASY_MIN+((rnd()*(CFG.TIDE_EASY_MAX-CFG.TIDE_EASY_MIN+1))|0):CFG.TIDE_LEAN_MIN+((rnd()*(CFG.TIDE_LEAN_MAX-CFG.TIDE_LEAN_MIN+1))|0);
+const tideLen=st=>{ const n=st==='easy'?CFG.TIDE_EASY_MIN+((rnd()*(CFG.TIDE_EASY_MAX-CFG.TIDE_EASY_MIN+1))|0):CFG.TIDE_LEAN_MIN+((rnd()*(CFG.TIDE_LEAN_MAX-CFG.TIDE_LEAN_MIN+1))|0);
+  return biteNow?Math.max(1,Math.round(st==='easy'?n*(1-bite('BITE_EASY',.9)):n*(1+biteNow*CFG.BITE_LEAN))):n; };   // (sky bite) later stops: shorter EASY, longer LEAN (the same one roll)
 function tideSet(st){ tide={st,n:0,len:tideLen(st)}; }
-function resetTide(){ tide={st:'easy',n:0,len:0}; }   // the first stretch's length is rolled at its first tray (no rnd() here: Challenge seeds stay as dealt)
+function resetTide(){ tide={st:'easy',n:0,len:0}; biteNow=0; }   // the first stretch's length is rolled at its first tray (no rnd() here: Challenge seeds stay as dealt)
 function tideStep(){                                  // the stretch for the tray being dealt
   if(!tide.len) tide.len=tideLen(tide.st);
   if(pace.ph==='relief'&&pace.n===1&&tide.st==='lean') tideSet('easy');   // getting out of the edge in LEAN ends the stretch (in EASY it just carries on)
@@ -772,7 +789,7 @@ function tideBase(s,st){
   if(st==='easy'&&CFG.EASY_RECT&&!isRect(s)) return 0;   // (round 5) EASY deals rectangles and bars only: boards stay blocky, so big clears and board clears line up for a person
   if(st==='easy') w=isRect(s)?({1:.04,2:.12,3:.4,4:1.1,5:1.4,6:1.8,9:1.8})[s.n]:isBigL(s)?.8:s.n===3?.15:.1;
   else w=isRect(s)?({1:.03,2:.1,3:.25,4:.45,5:.35,6:.35,9:.25})[s.n]:isBigL(s)?1.1:s.n===3?.2:1;
-  return s.n<=3?w*CFG.TIDE_SMALL:w;
+  return s.n<=3?w*CFG.TIDE_SMALL*(biteNow?1-bite('BITE_SMALL',.9):1):w;   // (sky bite) fewer small pieces at later stops
 }
 /* how well each shape fits this board's contours: its best drop's lines and its most flush spot (share of its outline
    against gems or the wall). 0 = no spot at all. One pass over every shape's spots, per deal. */
@@ -835,8 +852,9 @@ function* tideHandSteps(a0,st,withStar){
   // LEAN's quiet rescue: dry for LEAN_DRY trays, or on a board tighter than LEAN_ROOM, a piece that clears a line comes, the best of them first
   // (round 6) Block Blast's comeback: on a crowded board every tray brings a piece that exactly finishes a line, in either stretch
   // (LEAN's are its awkward ones); the old rescue still covers a dry LEAN spell
-  const crowded=CFG.CROWD_ROOM>0&&(room0<CFG.CROWD_ROOM||pop32(lo)+pop32(hi)>=CFG.CROWD_GEMS);
-  const rescue=crowded||!easy&&(dryN>=CFG.LEAN_DRY||room0<CFG.LEAN_ROOM);
+  const cb=bite('BITE_CROWD'), rb=bite('BITE_RESCUE');   // (sky bite) later stops: the comeback keys and the quiet rescue come later
+  const crowded=CFG.CROWD_ROOM>0&&(room0<CFG.CROWD_ROOM*(1-cb)||pop32(lo)+pop32(hi)>=CFG.CROWD_GEMS+Math.round(8*cb));
+  const rescue=crowded||!easy&&(dryN>=CFG.LEAN_DRY+Math.round(2*rb)||room0<CFG.LEAN_ROOM*(1-rb));
   let fixers=[];
   if(rescue){
     const ranked=[];
@@ -861,9 +879,9 @@ function* tideHandSteps(a0,st,withStar){
       if(ps.length) hand[(rnd()*3)|0]=ps[(rnd()*ps.length)|0];
     }
     if(big&&keys.length) for(let j=0;j<3;j++){ if(rnd()<0.85){ const pool=multi.length&&rnd()<0.5?multi:keys; hand[j]=pool[(rnd()*pool.length)|0]; } }   // big solve: a tray of keys, each finishing a different line if it can
-    else if(easy&&keys.length&&rnd()<0.8){ const pool=multi.length&&rnd()<0.6?multi:keys, j=(rnd()*3)|0; hand[j]=pool[(rnd()*pool.length)|0]; if(rnd()<0.4) hand[(j+1)%3]=keys[(rnd()*keys.length)|0]; }
+    else if(easy&&keys.length&&rnd()<0.8*(1-bite('BITE_KEY'))){ const pool=multi.length&&rnd()<0.6?multi:keys, j=(rnd()*3)|0; hand[j]=pool[(rnd()*pool.length)|0]; if(rnd()<0.4) hand[(j+1)%3]=keys[(rnd()*keys.length)|0]; }
     if(twins.length&&!big&&rnd()<CFG.MATCH_TRY){ const t=twins[(rnd()*twins.length)|0]; hand[0]=hand[1]=t; if(rnd()<0.5||!keys.length) hand[2]=t; else hand[2]=keys[(rnd()*keys.length)|0]; }
-    if(fixers.length&&!big){ const j=(rnd()*3)|0; hand[j]=fixers[i%fixers.length]; if(crowded&&rnd()<CFG.CROWD_TWO) hand[(j+1)%3]=fixers[(i+1+((rnd()*3)|0))%fixers.length]; }   // (round 6) often two keys on a crowded board
+    if(fixers.length&&!big){ const j=(rnd()*3)|0; hand[j]=fixers[i%fixers.length]; if(crowded&&rnd()<CFG.CROWD_TWO*(1-cb)) hand[(j+1)%3]=fixers[(i+1+((rnd()*3)|0))%fixers.length]; }   // (round 6) often two keys on a crowded board
     else if(!easy&&later.length&&rnd()<CFG.LEAN_PUZZLE_TRY) hand[(rnd()*3)|0]=later[(rnd()*later.length)|0];   // a big piece with no spot yet: room has to be made for it
     if(withStar) hand[(rnd()*3)|0]=STAR;
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
@@ -879,8 +897,8 @@ function* tideHandSteps(a0,st,withStar){
       if(easy&&left[0]!==undefined) sc+=CFG.EASY_ROOM*roomBits(left[0],left[1]);   // EASY keeps the board she will leave open
       if(easy){                                                                        // (round 2) a cash-in: the most gems cleared, and late in the stretch, steer toward an empty board
         const late=tide.n>tide.len/2, swept=pp&&!(pp[0]|pp[1]);
-        sc+=ev.cleared*CFG.EASY_CASH+(swept?CFG.EASY_SWEEP:0)-(pp&&!swept?CFG.EASY_LOW*(pop32(pp[0])+pop32(pp[1])):0);   // the board she will leave: the fewer gems the better
-        if(late&&!swept&&left[0]!==undefined) sc-=CFG.EASY_STEER*Math.min(sweepDist(left[0],left[1]),40);
+        sc+=ev.cleared*CFG.EASY_CASH+(swept?CFG.EASY_SWEEP*(1-bite('BITE_RUN')):0)-(pp&&!swept?CFG.EASY_LOW*(pop32(pp[0])+pop32(pp[1])):0);   // the board she will leave: the fewer gems the better
+        if(late&&!swept&&left[0]!==undefined) sc-=CFG.EASY_STEER*(1-bite('BITE_RUN'))*Math.min(sweepDist(left[0],left[1]),40);
       }
       const smallN=hand.filter(s=>!s.star&&s.n<=3).length;                          // (round 3) no onsy-twosies: one small piece a tray, more only to finish a board clear
       if(easy&&smallN>1&&!(pp&&!(pp[0]|pp[1]))&&!ev.sweep) sc-=CFG.SMALL_CAP*(smallN-1);
@@ -1666,6 +1684,7 @@ function* dealSteps(){
   if(guide&&guideDeal()) return;                       // (1.1 D) the guided first game deals its own lessons
   trayNo++;
   if(mode==='challenge'&&!chGen){ chDealNext(); return; }   // (E1) a Challenge plays its frozen deal (challenge.js); generating it runs the real dealer below
+  biteNow=skyBite();                                   // (sky bite) how lean this stop deals (0: as before)
   if(mode==='daily') rndSrc=mulberry(hashStr(dailySeed(trayNo)));   // (4.1b) every tray of the Daily is dealt from the date's stream, so two phones see the same dice
   if(bonusDue()) startBonus();                         // (6.2) a full meter: this tray and the next two pay x2; dealing below is unchanged
   const specialsOk=trayNo>=CFG.SPECIAL_FROM_TRAY;      // trays 1-5 never carry a special
@@ -1690,7 +1709,7 @@ function* dealSteps(){
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
   // (round 6) the chain: right after a board clear Block Blast deals big matching pieces (three 1x5s, three 2x2s, 2x3s) that
   // rebuild whole rows, so the next clear comes quickly; the sweep run takes it from there
-  if(tideOn()&&CFG.CHAIN_BUILD>0&&!wt&&trayNo>1&&!countFlat(a0)&&freeOfSpecials&&rnd()<CFG.CHAIN_BUILD){   // (an earned closer or chase keeps its tray)
+  if(tideOn()&&CFG.CHAIN_BUILD>0&&!wt&&trayNo>1&&!countFlat(a0)&&freeOfSpecials&&rnd()<CFG.CHAIN_BUILD*(1-bite('BITE_RUN'))){   // (an earned closer or chase keeps its tray)
     const pool=CFG.EASY_RECT&&tideNow==='easy'?OPEN_BUILD.filter(isRect):OPEN_BUILD;
     const p=pool[(rnd()*pool.length)|0], h=[p,p,p];
     if(rnd()<0.4){ const q=pool[(rnd()*pool.length)|0]; h[2]=q; }
@@ -1716,7 +1735,7 @@ function* dealSteps(){
   if(paced()&&mode!=='challenge'&&CFG.RUN_TRAYS>0){
     const n=countFlat(a0), ok=!hunted&&!payBig&&(tideNow==='easy'?pace.ph!=='edge':runPhase())&&tideNow!=='lean'&&tier!=='edge'&&tier!=='recovery'&&freeOfSpecials&&n>0;
     const easyRun=tideNow==='easy'&&CFG.EASY_RUN_GEMS>0;      // (round 2) EASY chases board clears harder: bigger boards, no cooldown, longer runs
-    const runGems=easyRun?Math.max(CFG.RUN_GEMS,CFG.EASY_RUN_GEMS):CFG.RUN_GEMS, runTrays=easyRun?Math.max(CFG.RUN_TRAYS,CFG.EASY_RUN_TRAYS):CFG.RUN_TRAYS;
+    const runGems=easyRun?Math.max(CFG.RUN_GEMS,Math.round(CFG.EASY_RUN_GEMS*(1-bite('BITE_RUN')))):CFG.RUN_GEMS, runTrays=easyRun?Math.max(CFG.RUN_TRAYS,CFG.EASY_RUN_TRAYS):CFG.RUN_TRAYS;
     if(sweepRun&&(!ok||n>runGems+CFG.RUN_SLACK||sweepRun.n>=runTrays)) endRun();
     else if(!sweepRun&&ok&&n<=runGems&&(easyRun||closerCool<=0&&sweepCool<=0)&&trayNo>CFG.EARLY_TRAYS) sweepRun={n:0};
     if(sweepRun){

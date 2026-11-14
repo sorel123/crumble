@@ -55,6 +55,9 @@
 // taken, fit of the pieces dealt in between, most lines in one of those trays) and game length. Where it differs from measures.py: lines per
 // tray counts trays the bot played in full (Block Blast: fully parsed trays), the wipe and comeback counts include the game still running
 // at the end, and Block Blast's game split is a heuristic (revives not separated), ours is exact.
+// The sky bite ('sky (bite):' line; Endless only, SKY_BITE_SCALE=0 turns it off): endedAt (finished games by the journey stop they
+// ended at: 0 dawn .. 5 space, 6+ Deep space), firstReached (per stop, the games that reached it and the median tray of the game it
+// was first dealt at), scoreMedian / scoreP90 and jumpsMedian (sweeps and beaten bests) of finished games, biteShare (trays by bite).
 import { serve, openGame, play } from '../tests/harness.mjs';
 
 const args = process.argv.slice(2), kv = args.filter(a => a.includes('=')), pos = args.filter(a => !a.includes('='));
@@ -174,7 +177,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   const fillOf = () => grid.flat().filter(Boolean).length / (N * N);
   const finishDeal = () => { if (dealing) { const t0 = performance.now(); runSteps(dealing.it); dealing = null; costs.push(performance.now() - t0); } };
   const costs = [], trays = [], afterClear = [];
-  let cur = null, games = 0, goldens = 0, rescues = 0;
+  let cur = null, games = 0, goldens = 0, rescues = 0; const ends = [];   // (sky bite) each finished game: the stop it ended at, its score, its jumps
   const newTray = () => {
     const obvN = tray.filter(t => { if (!t) return false; for (let r = 0; r <= N - t.s.rows; r++) for (let c = 0; c <= N - t.s.cols; c++) if (canPlace(t.s, r, c, grid) && obviousAt(t.s, r, c, grid)) return true; return false; }).length, obv = obvN > 0;
     const possible = SHAPES.some(s => { for (let r = 0; r <= N - s.rows; r++) for (let c = 0; c <= N - s.cols; c++) if (canPlace(s, r, c, grid) && obviousAt(s, r, c, grid)) return true; return false; });
@@ -202,6 +205,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
       for (let i = 0; i < 64; i++) if (bitAt(glo, ghi, i) && NB[i].every(j => j < 0 || !bitAt(glo, ghi, j))) iso++;
       cur.l5 = l5; cur.iso = iso; }
     cur.awkN = shp.filter(s => !s.star && awkward(s)).length; cur.placed = 0;
+    cur.stop = typeof skyStop === 'function' ? skyStop() : 0; cur.bite = typeof biteNow === 'number' ? biteNow : 0; cur.score = score;   // (sky bite) the journey stop at the deal, and how lean it dealt
     trays.push(cur);
     if (golden) goldens++;                     // golden hands dealt (plan 4.5c rarity: about one per game)
   };
@@ -210,7 +214,7 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
   while (trays.length < TRAYS) {
     let m = BOT === 'strong' ? strong() : choose();
     if (!m && RESCUE && rescueAllowed(best)) { rescue(); rescues++; cur.tier = lastTier; m = BOT === 'strong' ? strong() : choose(); }
-    if (!m) { games++; start(); finishDeal(); newTray(); continue; }
+    if (!m) { ends.push({ stop: typeof skyStop === 'function' ? skyStop() : 0, score, jumps: typeof jJumps === 'number' ? jJumps : 0 }); games++; start(); finishDeal(); newTray(); continue; }
     const before = stats.lines, sw0 = stats.sweeps;
     if (cur.firstObv === null) cur.firstObv = m[3];
     const g0n = countFlat(packGrid(grid));
@@ -330,7 +334,17 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
       clear: pct(cp, x => x === 'clear'), flush: pct(cp, x => x === 'flush'), stick: pct(cp, x => x === 'stick'), maxLines: cpl.reduce((x, t) => Math.max(x, t.lines), 0), lines5: pct(cpl, t => t.lines >= 5) };
     bbm.games = { ended: games, p10: q(0.1), median: q(0.5), p90: q(0.9), endGems: median(perGame.map(a => a[a.length - 1].gems)), endPlaced: median(perGame.map(a => a[a.length - 1].placed)) };   // the last tray of a lost game: gems at its deal, pieces she got down
     bbm.curve = typeof cvStats === 'object' ? cvStats : null; }
-  return { homeLine, g1, series, pace6, bbm,
+  // (sky bite) the arc: where finished games ended (stop: games), when each stop was first reached (median tray of the game), score
+  const sky = (() => { const end = {}; ends.forEach(e => { end[e.stop] = (end[e.stop] || 0) + 1; });
+    const reach = {}; perGame.forEach(a => { const seen = new Set(); a.forEach((t, i) => { if (!seen.has(t.stop)) { seen.add(t.stop); (reach[t.stop] = reach[t.stop] || []).push(i + 1); } }); });
+    for (const k in reach) reach[k] = { games: reach[k].length, medianTray: median(reach[k]) };
+    const sc = ends.map(e => e.score);
+    const live = trays.filter(t => t.game === games), lastT = live[live.length - 1];
+    const allG = perGame.concat([live]), atTray = {};   // score (median, in thousands) and stop (median) at the deal of tray n, over the games that got that far
+    [10, 25, 50, 75, 100, 150, 200, 300].forEach(n => { const a = allG.filter(g => g.length >= n).map(g => g[n - 1]); if (a.length) atTray[n] = { games: a.length, kScore: Math.round(median(a.map(t => t.score)) / 1000), stop: median(a.map(t => t.stop)) }; });
+    return { live: lastT ? { trays: live.length, stop: lastT.stop } : null, atTray, endedAt: end, games: perGame.map((a, i) => [a.length, ends[i].stop]), firstReached: reach, scoreMedian: median(sc), scoreP90: sc.length ? sc.slice().sort((x, y) => x - y)[Math.floor((sc.length - 1) * 0.9)] : 0, jumpsMedian: median(ends.map(e => e.jumps)),
+      biteShare: (() => { const o = {}; trays.forEach(t => { const k = t.bite.toFixed(2); o[k] = (o[k] || 0) + 1; }); for (const k in o) o[k] = Math.round(100 * o[k] / trays.length) + '%'; return o; })() }; })();
+  return { homeLine, g1, series, pace6, bbm, sky,
     trays: trays.length, games, goldens, goldensPerGame: +(goldens / (games + 1)).toFixed(2), traysPerGame: Math.round(trays.length / (games + 1)), buckets,
     obviousAtDealAll: pct(trays, t => t.obv), boardAllowsAll: pct(trays, t => t.possible), clearPerTrayAll: pct(trays, t => t.cleared), allThreeAll: pct(trays, t => t.obvN === 3), clearsPerTrayAll: mean(trays, t => t.clears),
     medianFill: Math.round(100 * median(trays.map(t => t.fill))),
@@ -338,10 +352,11 @@ const out = await page.evaluate(([TRAYS, BOT, RESCUE]) => {
     dealMs: { median: +median(costs).toFixed(2), p95: +(sorted[Math.floor(sorted.length * 0.95)] || 0).toFixed(2), max: +(sorted[sorted.length - 1] || 0).toFixed(2) },
   };
 }, [TRAYS, BOT, RESCUE]);
-console.log(JSON.stringify({ bot: BOT, rescue: RESCUE, overrides: OVR, ...out, buckets: undefined, pace6: undefined, g1: undefined, series: undefined, homeLine: undefined }));
+console.log(JSON.stringify({ bot: BOT, rescue: RESCUE, overrides: OVR, ...out, sky: undefined, buckets: undefined, pace6: undefined, g1: undefined, series: undefined, homeLine: undefined }));
 console.log('home:', JSON.stringify(out.homeLine));
 console.log('pace (6.1):', JSON.stringify(out.pace6));
 console.log('coaster (1.1 G):', JSON.stringify(out.g1));
+console.log('sky (bite):', JSON.stringify(out.sky));
 if (process.env.SERIES) (await import('node:fs')).writeFileSync(process.env.SERIES, JSON.stringify(out.series));
 { // Block Blast's yardstick: one compact table, this run beside Block Blast's measured numbers (BB; SUMMARY.md of the tray study)
   const b = out.bbm, w = out.homeLine.wipes, BB = { '0-12': [19, 77, 3, 0, 92, 5.76, 0.62, 0.15, 5.42, 5.1, 20.1], '13-24': [47, 49, 4, 1, 90, 10.89, 2.6, 0.24, 5.29, 6.2, 21.4], '25-36': [68, 26, 2, 4, 81, 13.92, 6.54, 0.39, 4.72, 12.4, 27.7], '37+': [77, 4, 0, 18, 50, 14.67, 10.67, 0.4, 4.59, 20.5, 15.9], all: [45, 50, 3, 2, 86, null, null, null, 5.14, 8.3, 22.2] };
