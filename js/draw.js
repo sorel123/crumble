@@ -880,7 +880,7 @@ function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
     ||slams.length||bursts.length||praises.length||banners.length||stamps.length||sweepShow||goldRain.length||orbs.length||rings.length||dust.length
-    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||(fire.k>0&&!fire.out&&Math.abs(fire.k-fireTarget())>0.01)||guideHintOn()||l3Pulse()||trayPopping()||toyBusy()||ava.live||dareBusy()||cookieBusy());
+    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||(fire.k>0&&!fire.out&&Math.abs(fire.k-fireTarget())>0.01)||guideHintOn()||labFx()||trayPopping()||toyBusy()||ava.live||dareBusy()||cookieBusy());
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
@@ -1029,7 +1029,7 @@ function frame(now){
   stepAnticipation(dt);                              // (7.5c) after the slot is known, before the gems read it
   const claySquash=curSkin==='clay';
   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-    const g=grid[r][c]; if(!g) continue;
+    const g=grid[r][c]; if(!g||g.cr) continue;      // (Lab) a rescue crumb's cell: rescue.js draws the crumb
     if(g.t<1) g.t=Math.min(1,g.t+dt*0.085);
     if(g.t<=0) continue;
     if(g.f>0) g.f=Math.max(0,g.f-dt*0.14);            // the landing glint, gone in ~7 frames
@@ -1058,7 +1058,7 @@ function frame(now){
 
   if(gh && gh.lines && CFG.FX_LINE_PREVIEW && (gh.lines.rows.length||gh.lines.cols.length)){
     // every gem already in a would-clear line is recoloured to the held piece — the whole line reads as one colour, about to go
-    const p=cell*.05, inL=(r,c)=>gh.lines.rows.includes(r)||gh.lines.cols.includes(c);
+    const p=cell*.05, inL=(r,c)=>!grid[r][c].cr&&(gh.lines.rows.includes(r)||gh.lines.cols.includes(c));   // (Lab) not a rescue crumb
     ctx.globalAlpha=0.72; ctx.fillStyle=`hsl(${gh.hue} 85% 60%)`;
     for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]&&inL(r,c)){ roundPath(ctx,bx+c*cell+p,by+r*cell+p,cell-p*2,cell-p*2,cell*.16); ctx.fill(); }
     ctx.globalAlpha=0.22; ctx.fillStyle='#fff';
@@ -1250,6 +1250,7 @@ function frame(now){
   cookieDraw(now,dt);                                // (cookie) on its gem, over the board, under the tray and the held piece (cookie.js)
   if(guide) guideDraw(now);                          // (1.1 D) the guided first game's ghost pulse, on empty cells only
   if(l3) l3Draw(now);                                // (Lab) Clear it in three's hint, on empty cells only
+  if(rs) rsDraw(now);                                // (Lab) Rescue the Crumbs: the exit, the hint and the crumbs
   drawRubble(dt);                                    // (7.5) the broken pieces: over the board and its gems, under the tray and the held piece
   stepTrayPop(dt);
   for(let i=0;i<3;i++){

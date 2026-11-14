@@ -528,6 +528,25 @@
   .l3n.next{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold),0 0 12px var(--glow)}
   .l3n:disabled{opacity:.3;cursor:not-allowed}
   #l3Done .title{font-size:clamp(40px,13vw,64px)}
+  /* (Lab) Rescue the Crumbs: js/rescue.js */
+  #labPar{font-size:11.5px;font-weight:700;color:var(--gold);margin-top:3px;white-space:nowrap;letter-spacing:.02em}
+  #rsGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:min(330px,100%)}
+  .rsTile{font-family:var(--font);color:var(--fg);background:var(--chip);border:2px solid var(--chip-line);border-radius:16px;padding:12px 4px 10px;
+       display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+  .rsTile b{font-size:34px;line-height:1.05}
+  .rsTile i{font-style:normal;font-size:17px;letter-spacing:1px;color:var(--gold)}
+  .rsTile span{font-size:11.5px;font-weight:600;opacity:.75;white-space:nowrap}
+  .rsTile.done{background:var(--sel-bg);border-color:var(--gold)}
+  .rsTile.next{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold),0 0 14px var(--glow)}
+  .rsTile:disabled{opacity:.35;cursor:not-allowed}
+  .rsTile:disabled b{font-size:26px;line-height:1.35}
+  #rsDone .title{font-size:clamp(40px,13vw,64px)}
+  #rsDoneStars{display:flex;gap:6px;justify-content:center;font-size:46px;line-height:1;margin:0;color:var(--fg);opacity:.9}
+  #rsDoneStars span{opacity:.35}
+  #rsDoneStars span.on{opacity:1;color:var(--gold);text-shadow:0 0 14px var(--glow);animation:rsStar .5s cubic-bezier(.3,1.6,.5,1) both}
+  @keyframes rsStar{from{transform:scale(0) rotate(-40deg);opacity:0}to{transform:none;opacity:1}}
+  #rsDoneCookie{margin:0;font-size:14px;font-weight:700;color:var(--gold)}
+  @media (prefers-reduced-motion:reduce){#rsDoneStars span.on{animation:none}}
   @media (prefers-reduced-motion:reduce){button{transition:none}}
 </style>
 </head>
@@ -538,9 +557,10 @@
 
   <div class="hud">
     <div id="scoreBox"><div class="lbl">Score</div><div class="score" id="scoreVal">0</div>
-      <div id="labHud"><div class="lbl">Puzzle</div><div class="lrow"><span class="score" id="labNum">1</span>
+      <div id="labHud"><div class="lbl" id="labLbl">Puzzle</div><div class="lrow"><span class="score" id="labNum">1</span>
         <button id="labUndo" type="button" aria-label="Undo"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-        <button id="labReset" type="button" aria-label="Reset"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button></div></div>
+        <button id="labReset" type="button" aria-label="Reset"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button></div>
+        <div id="labPar" hidden></div></div>
       <div id="chalInfo" hidden><span class="to"></span><span class="bar"><span class="track"><span class="fill"></span></span><i class="fp" hidden></i></span></div>
       <div id="chase" hidden aria-hidden="true"><span class="track"><span class="fill"></span></span><span class="to"></span></div>
       <div class="pips" id="transformPips" hidden></div>
@@ -727,6 +747,26 @@
     <button class="ghost" id="l3Lab" type="button">Lab</button>
   </div>
 
+  <div class="overlay" id="rsCard" hidden>
+    <p class="eyebrow">Lab</p>
+    <h2 class="dailydate">Rescue the Crumbs</h2>
+    <p class="sub">Little crumbs are stuck on the gems. Clear the lines under them and they drop out the bottom. Fewer pieces, more stars.</p>
+    <div id="rsGrid"></div>
+    <p class="setnote" id="rsNote"></p>
+    <button class="ghost" id="rsBack" type="button">Back</button>
+  </div>
+
+  <div class="overlay" id="rsDone" hidden>
+    <p class="eyebrow" id="rsDoneEye">Board 1 of 3</p>
+    <h2 class="title" id="rsDoneTitle">Rescued!</h2>
+    <p id="rsDoneStars" role="img"></p>
+    <p class="sub" id="rsDoneMsg"></p>
+    <p id="rsDoneCookie" hidden>🍪 A cookie for Crumb's jar</p>
+    <button class="cta" id="rsNext" type="button">Next board</button>
+    <button class="ghost" id="rsAgain" type="button">Play again</button>
+    <button class="ghost" id="rsLab" type="button">Lab</button>
+  </div>
+
   <div class="overlay" id="winCard" hidden>
     <p class="eyebrow" id="winEye"></p>
     <h2 class="title" id="winTitle">Cleared!</h2>
@@ -792,6 +832,7 @@
 <script src="js/dares.js"></script>
 <script src="js/cookie.js"></script>
 <script src="js/lab.js"></script>
+<script src="js/rescue.js"></script>
 <script src="js/home.js"></script>
 <script src="js/goals.js"></script>
 <script src="js/closet.js"></script>

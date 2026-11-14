@@ -2,7 +2,7 @@
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ iCloud key-value backup ═══════
    Progress, not runs: the best score, lifetime stats, goals and the streak, unlocked skins and discovered looks,
-   Adventure records and Daily results, (dares) the cookie jar `crumble.dares` (closet) `crumble.closet` and (Lab) the puzzles solved `crumble.lab`. One JSON value under one key in the player's own iCloud key-value store
+   Adventure records and Daily results, (dares) the cookie jar `crumble.dares` (closet) `crumble.closet` and (Lab) the puzzles solved and crumbs rescued `crumble.lab`. One JSON value under one key in the player's own iCloud key-value store
    (NSUbiquitousKeyValueStore, through the in-app CloudStore plugin, ios/App/App/CloudStore.swift). It never reaches us.
    No UI: a new phone (or a reinstall) signed in to the same Apple account picks her progress up by itself.
 
@@ -29,7 +29,7 @@ function cloudBlob(){
     chal:{s:chalRec.s, won:chalRec.won, gold:chalRec.gold}, gd:guideSeen()?1:0,
     dares:{cookies:dare.st.cookies, won:{...dare.st.won}, days:{...dare.st.days}},   // (dares) crumble.dares: the cookie jar
     closet:{own:[...closet.own].sort(), spent:closet.spent, on:{...closet.on}, ot:closet.ot},   // (closet) crumble.closet: what she bought, spent and wears
-    lab:{three:{done:lab.three.done.slice(), at:lab.three.at}}};   // (Lab) crumble.lab: puzzles solved
+    lab:{three:{done:lab.three.done.slice(), at:lab.three.at}, rescue:{stars:lab.rescue.stars.slice(), best:lab.rescue.best.slice()}}};   // (Lab) crumble.lab: puzzles solved, crumbs rescued
 }
 
 // Folds a cloud copy into this phone's progress. Returns true if anything here changed. Bad data changes nothing.
@@ -116,6 +116,13 @@ function cloudMerge(o){
     if(Array.isArray(lb.done)) for(const k of lb.done) if(isInt(k,1,L3_COUNT)&&!lab.three.done.includes(k)){ lab.three.done.push(k); ch=true; }
     lab.three.done.sort((a,b)=>a-b);
     if(isInt(lb.at,1,L3_COUNT)) up(lab.three,'at',lb.at);
+  }
+  const lr=o.lab&&o.lab.rescue;                         // (Lab) Rescue the Crumbs: stars by max, best pieces by the smaller (0 = none yet)
+  if(lr&&typeof lr==='object'&&Array.isArray(lr.stars)&&Array.isArray(lr.best)) for(let k=0;k<LAB_RS;k++){
+    const st=lr.stars[k], b=lr.best[k];
+    if(!isInt(st,1,3)||!isInt(b,1,999)) continue;       // a board not rescued there, or bad data
+    if(st>lab.rescue.stars[k]){ lab.rescue.stars[k]=st; ch=true; }
+    if(!lab.rescue.best[k]||b<lab.rescue.best[k]){ lab.rescue.best[k]=b; ch=true; }
   }
   if(o.gd===1&&!guideSeen()){ guideMark(); ch=true; }   // (1.1 D) she has had the guided first game on another phone
   return ch;

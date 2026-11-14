@@ -184,7 +184,7 @@ function syncHud(){
     else { lbl='Goal'; val='Empty it'; }
   }
   el('bestLbl').textContent=lbl; el('bestVal').textContent=val; hudFit();
-  chaseSync(); chHud(); l3Sync();                   // (Lab) Puzzle n, Undo and Reset take the score's place
+  chaseSync(); chHud(); labSync();                  // (Lab) Puzzle n (or Pieces n), Undo and Reset take the score's place
 }
 // place() calls this after every placement
 function goalStep(total,swept){
@@ -286,14 +286,14 @@ function pauseNewReset(){ clearTimeout(pauseNewT); const b=el('pauseNew'); b.tex
 function openPause(){
   if(state!=='play'||overlayOpen()) return;
   pauseForMenu(); pauseNewReset();
-  const adventure=mode==='adventure'&&lvl, puzzle=mode==='lab'&&l3;
-  el('pauseEye').textContent='Paused · '+(puzzle?'Puzzle '+l3.k:adventure?'Level '+lvl.id:mode==='daily'?'Daily':mode==='challenge'&&chal?chLabel(chal.seed):'Endless');
+  const adventure=mode==='adventure'&&lvl, puzzle=mode==='lab'&&(l3||rs);
+  el('pauseEye').textContent='Paused · '+(puzzle?(rs?'Board '+(rs.k+1):'Puzzle '+l3.k):adventure?'Level '+lvl.id:mode==='daily'?'Daily':mode==='challenge'&&chal?chLabel(chal.seed):'Endless');
   el('pauseScore').textContent=score.toLocaleString('en-US');
   el('pauseMsg').textContent=adventure?goalText(lvl.goal)+'. Your game is saved.':mode==='challenge'&&chal?'Tray '+Math.min(trayNo,CH_TRAYS)+' of '+CH_TRAYS+'. Your game is saved.':'Your game is saved.';
   { const t=darePauseText(), p=el('pauseDare'); p.hidden=!t; p.textContent=t; }   // (dares) the run's dare
   el('pauseNew').dataset.lbl=mode==='challenge'?'Restart':'End game'; pauseNewReset();
   el('pauseScore').hidden=el('pauseNew').hidden=!!puzzle; el('pauseHome').textContent=puzzle?'Lab':'Home';   // (Lab) Resume / Lab / Settings
-  if(puzzle) el('pauseMsg').textContent='Clear it in three. Leaving starts this puzzle again.';
+  if(puzzle) el('pauseMsg').textContent=rs?'Rescue the Crumbs. Leaving starts this board again.':'Clear it in three. Leaving starts this puzzle again.';
   el('pauseCard').hidden=false;
 }
 function closePause(){ pauseNewReset(); el('pauseCard').hidden=true; if(!overlayOpen()) paused=false; }

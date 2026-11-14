@@ -69,6 +69,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
   - The cookie on the board (`js/cookie.js`) rides in the run save as `ck: {r, c, l: trays left, n: eaten this run, s: trays since the last one left, o: 1 = none this run (the guided game)}`; its cookies go into `crumble.dares` like a dare's.
   - `crumble.closet` — Crumb's closet (`js/closet.js`): `{v:1, own:[ids bought], on:{head,face,neck}, spent, ot, seen:[ids]}`. Cookies she can spend are `dares.cookies - spent` (the jar itself is never lowered). `ot` is when the outfit last changed (for the iCloud merge), `seen` what she has seen on offer (the dot). Feat items are never in `own`. Validated on load: unknown ids, feat ids in `own` and items she does not own in `on` are dropped.
   - `crumble.lab` — the Lab (`js/lab.js`): `{v:1, three:{done:[k…], at:k}}`, the Clear-it-in-three puzzles solved (1..60) and the one she is on. Validated on load (bad entries dropped, a broken save starts fresh); in the iCloud backup (done by union, at by max). The Lab keeps no run save: leaving a puzzle starts it again.
+  - `crumble.lab` `.rescue` — Rescue the Crumbs (`js/rescue.js`): `{stars:[s1,s2,s3], best:[n1,n2,n3]}`, the stars (0..3) and fewest pieces per board; a board with no stars has best 0. Validated on load (a bad entry resets that board; saves from before it load with all zeros); in the iCloud backup (stars by max, best by the fewest).
   - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, bonuses`; `bonuses` is bonus runs earned, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
@@ -98,6 +99,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 - **A cookie on the board (Endless)** — now and then a cookie lands on one gem; clear that gem within three trays (a bite out of it each tray) and Crumb eats it, one more cookie in the jar. Shares the dares' Settings switch. See the cookie section at the end.
 - **Crumb's closet** — the cookies buy him hats: 16 items in three slots (head, face, neck), most for cookies, seven only for feats (a 7-day dare streak, the Space dare, 10 sweeps...). He wears them on the board, the menu, in flight, as a cannonball and fainted. Reached from the Goals card's "Crumb's closet" button and by tapping the crumb on the front menu. See the closet section at the end.
 - **The Lab** — a slim "🧪 Lab" button beside Settings on the start card and mode menu opens a card of experiments (`LAB` registry in `js/lab.js`). The first, **Clear it in three**: 60 fixed puzzles (easy, medium, hard), a part-filled board and three pieces, place all three and leave the board empty. No score, no timer, no losing; Undo, Reset, and a hint after three failed tries; every 5th new solve pays one of Crumb's cookies. See the Lab section at the end.
+- **Rescue the Crumbs (Lab)** — the second experiment: three hand-made boards with baby crumbs stuck on gems. Clear the lines under them and they fall; a crumb that reaches the bottom row hops out. Get them all out in as few pieces as you can (stars by par), from a fixed queue. Undo, Reset, a hint after three tries; the first rescue of each board pays a cookie. See the Rescue section at the end.
 - **Timelapse (7.5g)** — the run replays on a small board on the game-over card in a few seconds; the share picture gets a four-board strip of the run. Settings → Look → Advanced "Timelapse". See the 7.5g section at the end.
 - **Bonus trays (6.2)** — clears fill a small meter (the chip under the board); full, the next three trays pay ×2 automatically, with a violet sky, a pulsing rim and a `+N bonus` tag at the end. Nothing to tap. Replaced the Blast Round. See the 6.2 section at the end.
 - **No Undo, no mid-run Rescue (plan 7.1):** the Undo button, the mid-run Rescue button and End run were removed. `snapshot()` / `restore()` in `save.js` stay: they are how save and resume work.
@@ -146,6 +148,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 | `js/guide.js` | the guided first game: three lesson boards, the hint, off-script exit (1.1 D) |
 | `js/challenge.js` | Challenge mode (1.1 E1): frozen deal from a seed, medal bots, HUD, end card, results |
 | `js/lab.js` | the Lab (loaded after `dares.js`): experiment registry and cards; Clear it in three (puzzle generator, solver, `L3_TABLE` of the 60 puzzles, the `lab` mode, `crumble.lab`). `tools/lab3-table.mjs` rewrites the table |
+| `js/rescue.js` | Rescue the Crumbs (Lab, loaded after `lab.js`): the three boards, crumb gravity, the solver `rsSolve`, the HUD, cards, crumb sprites and the exit strip. `tools/rescue-check.mjs` proves each board |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
 | `js/cloud.js` | iCloud backup of progress, app only (1.1 F) |
@@ -231,6 +234,7 @@ Top to bottom:
 | (lean) | Lean the Avalanche: with tilt live and the phone leaned past `AVA_LEAN_MIN`, the gems slide to the low wall and full columns clear (one rule over a view of the grid, `avaView`; the way is read once by `avaDir()`); "to the left!" on the banner, the crumb's sideways lines and a one-time "next time, lean the phone." See the section at the end |
 | (lab) | The Lab: a slim Lab button beside Settings, a card of experiments. First one, Clear it in three: 60 fixed three-piece puzzles (20 easy, 20 medium, 20 hard) on the real board, no score or losing, Undo/Reset/hint, progress in `crumble.lab` (iCloud backup), a cookie every 5th new solve. `js/lab.js`, `tools/lab3-table.mjs`. See the Lab section at the end |
 | (sky bite) | The sky fights back: in Endless each journey stop deals a little leaner (shorter easy, longer lean stretches, later comeback help), past Space the stops go on as Deep space 1, 2, ...; JOURNEY_AT re-spaced for today's scoring; the game-over card says how far she got and her farthest. See the section at the end |
+| (rescue) | Rescue the Crumbs, the Lab's second game: three boards where crumbs sit on gems, a line clear drops them, the bottom row is the exit; fixed queues, stars by par, Undo/Reset/hint, progress in `crumble.lab` `.rescue` (iCloud backup), a cookie on each board's first rescue. `js/rescue.js`, `tools/rescue-check.mjs`. See the Rescue section at the end |
 
 Details for each, oldest first:
 
@@ -1900,3 +1904,41 @@ exactly as before (the warm-up), and the stops keep counting past Space ("Deep s
   `SKY_BITE.3/.4` (the middle); if heaters still run forever, raise `SKY_DEEP_BITE`. Beating her best jumps a stop only with
   "Chase your best" on (7.5e), so that switch slightly changes difficulty.
 - Tests: the six "sky bite" scenarios; the journey sky and points-boost tests follow the new thresholds.
+
+## Rescue the Crumbs (2026-11-14)
+
+The Lab's second experiment. Baby crumbs are stuck on top of gems. Clear the lines under them and they fall; a crumb that reaches the bottom row hops out through the exit. Three hand-made boards.
+
+- **File.** `js/rescue.js` (after `lab.js`): the boards (`RS_BOARDS`), gravity, the solver, play, the HUD, the cards and the drawing. Cards `#rsCard` and `#rsDone`, and the HUD's `#labPar` (the "★★★ in P" line) in `index.html`. Crumb's lines (`rsOpen`, `rsOut`, `rsLast`, `rsStuck`, `rsStar3`, `rsTop`, `rsCookie`) are in `SAY` in `crumbsay.js`; the hint offer reuses `l3Hint`.
+- **The rules.**
+  - A crumb fills one cell. Nothing can be placed on it. It counts toward a line, but when the line clears the crumb stays.
+  - After each drop (and its clears) crumbs fall straight down, lowest first, until nothing moves: through empty cells, onto gems or onto another crumb.
+  - A crumb that reaches the bottom row is rescued: it hops out and leaves the board. (A crumb that starts on the bottom row would be out at once; no board has one.)
+  - Each board has a fixed queue of pieces, dealt three at a time in order, repeating. No dealer, no dice, no `Math.random` anywhere in play.
+  - Won when every crumb is out. Stars: 3 at or under par, 2 within par+2, otherwise 1. The card shows pieces used and the best.
+  - Stuck (a piece left in the tray fits nowhere): "Not quite", Crumb says "you trapped them. nice.", and the board starts again after 1.5 s (0.7 s with Reduce Motion). That counts as a try.
+  - Undo (one step, puts a rescued crumb back) and Reset (counts a try if she had placed anything).
+  - After the 3rd stuck or reset try Crumb offers a hint and a 💡 Hint button appears. It shows a ghost of the next drop of the stored solution. If her drops so far are off that path, the board resets first and Crumb says "from the top. watch."
+- **The boards** (digits are gem colours, `a`-`c` crumbs, the bottom row is the exit; pieces as rows x columns):
+  ```
+  Board 1, par 2           Board 2, par 3           Board 3, par 7
+  ........                 ........                 ........
+  ........                 ........                 ........
+  ........                 ........                 2c22.222
+  ........                 ......b.                 1111...1
+  ........                 ......4.                 ......b.
+  ...a....                 ......4.                 ......a.
+  1111....                 ..a...4.                 33.3.333
+  33.....3                 1111..41                 4.4...4.
+  queue: 1x2, 1x2, 2x2     queue: 3x1, 1x2, 2x1     queue: 2x1, 1x2, big L (3x3 corner)
+  ```
+  Board 1 teaches the idea (finish the row, the crumb drops out). Board 2 teaches order: the crumb on the column must come down first; finishing the bottom row first costs a piece (best 4, 2 stars). Board 3 needs a chain: crumb `c` is inside a line high up and only falls once that line clears, `b` sits on `a` and both need the rows under them cleared, and the best line spends one piece on purpose.
+- **Proof.** `node tools/rescue-check.mjs [1-3]` opens the game, runs `rsSolve` (iterative deepening on the dealer's bitboards, crumbs as a bitmask, a memo kept across depths and a lower bound) and prints each board. On 2026-11-14: board 1 fewest 2 (3 positions), board 2 fewest 3 (591), board 3 fewest 7 (1.17 M positions, about 3 s). Par equals the fewest for all three, the crumbs start at rest and the stored solutions win at par. It exits 1 if anything is off. Run it after touching a board.
+- **Playing.** Mode `lab` like Clear it in three (no score, dealer, specials, dares, stats or saved run). Hooks shared with it in `lab.js`: `labBefore` (from `place()`), `labAfter` (from `checkStuck()`), `labBusy`, `labFx`, `labSync`, `labFresh`. A crumb cell is `{gi:-1, cr:1}` in `grid`: `place()` does not clear it and `draw.js` does not draw it as a gem (`rsDraw` draws the crumbs). Pause says "Rescue the Crumbs. Leaving starts this board again."
+- **Look.** Crumb sprites are drawn once per size: three looks (tint and chips) and moods worried, falling, happy and blinking. Worried crumbs bob and blink. A fall stretches and lands with a squash (a "boing"); a rescue is a hop with sparkles, a ring, a chirp and the `rescue` haptic. A green exit strip with chevrons runs under the bottom row. Reduce Motion: falls are a step, the hop is a fade, no bob, no star pop on the card.
+- **Cards.** The Lab tile "🛟 Rescue the Crumbs" with "2 of 3 · ★★★★★☆☆☆☆". The Rescue card has three tiles (number or 🔒, stars, "Best N" or "★★★ in P"); boards unlock in order. The win card: "Board k of 3", "Rescued!", the stars, "N pieces · best M" (plus the 3-star target when short), Next board, Play again, Lab.
+- **Cookie.** The first rescue of each board pays one cookie through `dareGift()` with "fine. one cookie. for the cousins."; replays pay nothing.
+- **Saved.** `crumble.lab` gains `rescue:{stars:[…3], best:[…3]}`; see the localStorage list.
+- **Check on the phone:** Lab, Rescue, board 1. Does the crumb read as stuck and the exit as a way out? Is the fall and hop fun, and is the chirp too loud? Try board 2 the wrong way round (2 stars) and then the right way. Is board 3 hard but fair at par 7? Get stuck, then Reset three times for the hint; drop off the hint's path and see "from the top. watch." Check the HUD at the top on a small phone, and Reduce Motion.
+- **Known.** Board 2's par is 3 (the brief said about 4); kept for its order lesson. The stars and best merge by max and by the fewest across devices, so a merge can pair stars from one device with a best from another.
+- Tests: the nine "Rescue:" scenarios.

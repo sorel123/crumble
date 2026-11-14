@@ -31,9 +31,11 @@
    the table L3_TABLE below: tools/lab3-table.mjs rewrites it, and a test checks it is exactly what l3MakeAll() makes.
    Changing the generator changes the puzzles: the test pins a fingerprint of all 60, so do that on purpose or not at all.
 
+   The second experiment, "Rescue the Crumbs", lives in js/rescue.js and plays in the same mode (rs instead of l3).
+
    Mode `lab`: the real board, drag and clear effects, its own run. No dealer, specials, bonus meter, Avalanche, cannonball
    charge, dares, journey sky, best score, stats, Game Center or saved run (leaving mid-puzzle restarts it). The HUD shows
-   "Puzzle 12" with Undo and Reset where the score would be. Progress: `crumble.lab` = {v:1, three:{done:[k...], at:k}}. */
+   "Puzzle 12" with Undo and Reset where the score would be. Progress: `crumble.lab` = {v:1, three:{done:[k...], at:k}, rescue:{stars, best}}. */
 const LAB_STORE='crumble.lab';
 const L3_COUNT=60, L3_BAND=20, L3_BANDS=['easy','medium','hard'];
 const L3_MAX=[8,4,2];                                  // most distinct solutions a puzzle of each band may have
@@ -326,19 +328,31 @@ const L3_TABLE=[
 ];
 
 /* ═══════ progress: crumble.lab ═══════
-   {v:1, three:{done:[puzzle numbers solved], at:the puzzle last opened}}. Validated on load; iCloud (cloud.js) merges it
-   by union (done) and max (at). */
-const lab={three:{done:[],at:1}};
+   {v:1, three:{done:[puzzle numbers solved], at:the puzzle last opened}, rescue:{stars:[0-3 per board], best:[fewest
+   pieces per board, 0 = not rescued yet]}}. Validated on load, each part on its own (an older save has no rescue);
+   iCloud (cloud.js) merges done by union, at by max, stars by max, best by the smaller of two non-zero. */
+const LAB_RS=3;                                          // Rescue the Crumbs' boards (RS_COUNT in rescue.js, which loads later)
+const lab={three:{done:[],at:1},rescue:{stars:[0,0,0],best:[0,0,0]}};
 function loadLab(){
   try{
-    const o=JSON.parse(localStorage.getItem(LAB_STORE)||'null'), t=o&&o.v===1&&o.three;
-    if(!t||typeof t!=='object') return;
-    if(Array.isArray(t.done)) lab.three.done=[...new Set(t.done.filter(k=>isInt(k,1,L3_COUNT)))].sort((a,b)=>a-b);
-    if(isInt(t.at,1,L3_COUNT)) lab.three.at=t.at;
+    const o=JSON.parse(localStorage.getItem(LAB_STORE)||'null');
+    if(!o||o.v!==1) return;
+    const t=o.three;
+    if(t&&typeof t==='object'){
+      if(Array.isArray(t.done)) lab.three.done=[...new Set(t.done.filter(k=>isInt(k,1,L3_COUNT)))].sort((a,b)=>a-b);
+      if(isInt(t.at,1,L3_COUNT)) lab.three.at=t.at;
+    }
+    const r=o.rescue;
+    if(r&&typeof r==='object') for(let k=0;k<LAB_RS;k++){
+      if(Array.isArray(r.stars)&&isInt(r.stars[k],0,3)) lab.rescue.stars[k]=r.stars[k];
+      if(Array.isArray(r.best)&&isInt(r.best[k],0,999)) lab.rescue.best[k]=r.best[k];
+      if(!lab.rescue.stars[k]||!lab.rescue.best[k]){ lab.rescue.stars[k]=0; lab.rescue.best[k]=0; }   // one without the other is not a rescue
+    }
   }catch(e){}
 }
 function saveLab(){
-  try{ localStorage.setItem(LAB_STORE,JSON.stringify({v:1,three:{done:lab.three.done,at:lab.three.at}})); }catch(e){}
+  try{ localStorage.setItem(LAB_STORE,JSON.stringify({v:1,three:{done:lab.three.done,at:lab.three.at},
+    rescue:{stars:lab.rescue.stars.slice(),best:lab.rescue.best.slice()}})); }catch(e){}
   cloudDirty();
 }
 const l3IsDone=k=>lab.three.done.includes(k);
@@ -354,8 +368,9 @@ function l3Next(){                                     // the puzzle the big but
 // the experiments: one line each (id, title, one-line description, progress, open)
 const LAB=[
   {id:'three',title:'🧩 Clear it in three',sub:'Three pieces. Leave the board empty.',prog:()=>lab.three.done.length+' of '+L3_COUNT,open:()=>openL3()},
+  {id:'rescue',title:'🛟 Rescue the Crumbs',sub:'Clear a path. Get them out.',prog:()=>rsProg(),open:()=>openRS()},   // js/rescue.js
 ];
-const LAB_CARDS=['labCard','l3Card','l3Done'];
+const LAB_CARDS=['labCard','l3Card','l3Done','rsCard','rsDone'];
 function labHide(){ for(const id of LAB_CARDS) el(id).hidden=true; }   // modes.js openMenu / hideMenus
 function openLab(){
   pauseForMenu(); el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('winCard').hidden=true;
@@ -402,18 +417,27 @@ function playL3(k){
   leaveMode(); hideMenus(); labHide();
   mode='lab'; lvl=null;                                 // not saved as the mode: a relaunch opens where she was before the Lab
   lab.three.at=k; saveLab();
-  // a run of its own, from scratch (what start() resets, without counting a game, dealing, or the dealer's state)
-  cancelDeal(); clearRunFx(); stuck=false; rndSrc=null; chal=null; chDone=false; dk='';
-  score=0; shownScore=0; combo=0; comboMiss=0; rescuesUsed=0; tension=0; trayNo=1; bonusMeter=0; specialEnd=-99;
-  pace={ph:'calm',n:0,hold:0,len:0}; roomNow=1; lv={lines:0,pieces:0,combo:0,swept:false};
-  jJumps=0; resetWorld(); chaseBest=0; tlReset(); hesVoid(); recCur=null;
-  el('scoreVal').textContent='0'; el('startCard').hidden=true; el('overCard').hidden=true;
+  labFresh();
   l3={k,p,fails:0,undo:null,hint:null,hintOk:false,over:false,solved:false};
   l3Lay(true);
   state='play'; paused=false;
   syncHud(); syncActions(); syncBonusChip();
   setTimeout(()=>{ if(l3&&l3.k===k&&mode==='lab') crumbSay(sayPick('l3Open'),0,'say dare',true); },reduce?50:450);
 }
+// a Lab run of its own, from scratch (what start() resets, without counting a game, dealing, or the dealer's state)
+function labFresh(){
+  l3=null; rs=null;
+  cancelDeal(); clearRunFx(); stuck=false; rndSrc=null; chal=null; chDone=false; dk='';
+  score=0; shownScore=0; combo=0; comboMiss=0; rescuesUsed=0; tension=0; trayNo=1; bonusMeter=0; specialEnd=-99;
+  pace={ph:'calm',n:0,hold:0,len:0}; roomNow=1; lv={lines:0,pieces:0,combo:0,swept:false};
+  jJumps=0; resetWorld(); chaseBest=0; tlReset(); hesVoid(); recCur=null;
+  el('scoreVal').textContent='0'; el('startCard').hidden=true; el('overCard').hidden=true;
+}
+// the hooks game.js and draw.js call in mode 'lab', handed to the experiment in play (Clear it in three, or rescue.js)
+function labBefore(i,r,c){ if(rs) rsBefore(i,r,c); else l3Before(); }   // place(), first
+function labAfter(){ if(rs) rsAfter(); else l3After(); }               // checkStuck()
+const labBusy=()=>l3Busy()||rsBusy();                                   // game.js onDown: hands off the tray
+const labFx=()=>l3Pulse()||rsFx();                                      // draw.js fxBusy
 // the puzzle's start: its board (the gems grow back in) and its three pieces
 function l3Lay(pop){
   const p=l3.p;
@@ -421,7 +445,7 @@ function l3Lay(pop){
   tray=p.pieces.map(x=>({s:x.s,gi:x.gi}));
   combo=0; comboMiss=0; stuck=false;
   l3.undo=null; l3.over=false; l3.hint=null;
-  l3Sync();
+  labSync();
 }
 // place() calls this first: the board as it was, for the one-step Undo; any hint is spent
 function l3Before(){
@@ -436,7 +460,7 @@ function l3After(){
   const left=tray.filter(Boolean);
   if(!left.length){ if(boardEmpty()) l3Solved(); else l3Fail(); }
   else if(left.some(t=>!fitsAnywhere(t.s,grid))) l3Fail();
-  l3Sync();
+  labSync();
 }
 function l3Fail(){
   l3.over=true; l3.fails++; l3.undo=null;
@@ -447,9 +471,9 @@ function l3Fail(){
     if(!l3||l3.k!==k||mode!=='lab') return;
     clearRunFx(); l3Lay(true);
     if(l3.fails>=3&&!l3.hintOk){ l3.hintOk=true; crumbSay(sayPick('l3Hint'),0,'say dare',true); }
-    l3Sync();
+    labSync();
   },reduce?700:1500);
-  l3Sync();
+  labSync();
 }
 function l3Solved(){
   const k=l3.k, first=!l3IsDone(k);
@@ -461,7 +485,7 @@ function l3Solved(){
   crumbSay(sayPick('l3Solve'),0,'say dare',true);
   if(cookie) setTimeout(()=>{ if(l3&&l3.k===k){ dareGift(); crumbSay(sayPick('l3Cookie'),0,'say dare',true); } },reduce?300:1900);
   setTimeout(()=>{ if(l3&&l3.k===k&&mode==='lab') l3ShowDone(cookie); },reduce?700:cookie?3400:2300);
-  l3Sync();
+  labSync();
 }
 function l3ShowDone(cookie){
   pauseForMenu();
@@ -477,7 +501,7 @@ function l3Undo(){
   const u=l3.undo; l3.undo=null;
   clearRunFx();
   grid=u.grid.map(r=>r.map(gi=>gi<0?null:{gi,t:1,f:0,l:0})); tray=u.tray.slice(); combo=u.combo; comboMiss=0;
-  Sfx.pickup(); l3Sync();
+  Sfx.pickup(); labSync();
 }
 function l3Reset(){
   if(!l3||l3.over||drag||mode!=='lab') return;
@@ -491,7 +515,7 @@ function l3Hint(){
   if(!s.n){ clearRunFx(); l3Lay(true); s=l3Solve(l3.p.lo,l3.p.hi,tray.map(t=>t.s),1); }
   const q=s.n?[...s.sets.values()][0].seq[0]:null;
   l3.hint=q?{i:q[0],r:q[1],c:q[2],t:performance.now()}:null;
-  l3Sync();
+  labSync();
 }
 function l3Draw(now){                                  // draw.js, over the board's gems layer: the hinted seat, pulsing, on empty cells
   if(!l3Pulse()) return;
@@ -502,17 +526,19 @@ function l3Draw(now){                                  // draw.js, over the boar
     gem(t.gi,bx+c*cell,by+r*cell,cell,1,0.18+0.42*k,0);
   }
 }
-// the HUD, the buttons and the hint button follow the puzzle
-function l3Sync(){
-  const on=mode==='lab'&&!!l3;
-  el('stage').classList.toggle('lab',on);
-  el('labHint').hidden=!(on&&l3.hintOk&&!l3.over);
-  if(!on) return;
-  el('labNum').textContent=l3.k;
+// the HUD, the buttons and the hint button follow the game in play
+function labSync(){
+  const g=mode==='lab'?l3||rs:null;
+  el('stage').classList.toggle('lab',!!g);
+  el('labHint').hidden=!(g&&g.hintOk&&!g.over);
+  el('labPar').hidden=!(g&&rs);
+  if(!g) return;
+  if(rs){ rsSyncHud(); return; }
+  el('labLbl').textContent='Puzzle'; el('labNum').textContent=l3.k;
   el('labUndo').disabled=!l3.undo||l3.over;
   el('labReset').disabled=l3.over;
 }
-function labLeave(){ if(mode==='lab'){ l3=null; l3Sync(); } }   // another mode starts (modes.js leaveMode)
+function labLeave(){ if(mode==='lab'){ l3=null; rs=null; labSync(); } }   // another mode starts (modes.js leaveMode)
 
 el('startLab').onclick=e=>{ e.stopPropagation(); ac(); openLab(); };
 el('menuLab').onclick=e=>{ e.stopPropagation(); openLab(); };
@@ -521,7 +547,7 @@ el('l3Back').onclick=e=>{ e.stopPropagation(); openLab(); };
 el('l3Play').onclick=e=>{ e.stopPropagation(); playL3(l3Next()); };
 el('l3Next').onclick=e=>{ e.stopPropagation(); if(l3) playL3(Math.min(L3_COUNT,l3.k+1)); };
 el('l3Lab').onclick=e=>{ e.stopPropagation(); openLab(); };
-el('labUndo').onclick=e=>{ e.stopPropagation(); l3Undo(); };
-el('labReset').onclick=e=>{ e.stopPropagation(); l3Reset(); };
-el('labHint').onclick=e=>{ e.stopPropagation(); l3Hint(); };
+el('labUndo').onclick=e=>{ e.stopPropagation(); if(rs) rsUndo(); else l3Undo(); };
+el('labReset').onclick=e=>{ e.stopPropagation(); if(rs) rsReset(); else l3Reset(); };
+el('labHint').onclick=e=>{ e.stopPropagation(); if(rs) rsHint(); else l3Hint(); };
 
