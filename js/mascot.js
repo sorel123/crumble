@@ -90,7 +90,7 @@ function mascotStep(now){                             // draw.js frame(): writes
   if(!on){ sayStep(now,false,false); if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
   if(state==='won'&&m.lastState!=='won') mascotAct('sweep');   // a level won: the big one
   m.lastState=state;
-  const faint=stuck||state==='over';
+  const faint=(stuck&&!toyLast())||state==='over';   // (toy) a charged crumb does not faint when she is out of room: it is her last chance
   if(faint!==m.fainted){                            // tips over on the rim, or stands back up (rescue)
     m.fainted=faint; m.act=''; m.el.getAnimations({subtree:true}).forEach(a=>a.cancel());
     if(faint&&!reduce) m.el.animate([{transform:'none'},{transform:'rotate(-14deg)',offset:.25},{transform:'translate(4%,-38%) rotate(80deg)'}],{duration:650,easing:'cubic-bezier(.5,0,.7,1.4)',fill:'forwards'});

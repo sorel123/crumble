@@ -280,12 +280,15 @@ const CFG = {
   CRUMB_CANNON:      true,   // (toy) Endless: a streak of CANNON_COMBO charges the crumb; thrown charged, it breaks the gems it flies over
   CANNON_COMBO:      5,      // (toy) the streak that charges it (once per streak)
   CANNON_MAX:        10,     // (toy) gems one cannonball can break ...
-  CANNON_GROW:       2,      // ... plus this many per combo step past CANNON_COMBO while it waits charged ...
-  CANNON_MAX_TOP:    20,     // ... up to this
+  CANNON_GROW:       3,      // ... plus this many per combo step past CANNON_COMBO while it waits charged ...
+  CANNON_MAX_TOP:    28,     // ... up to this
   CANNON_BIG:        1.45,   // (toy) how big a charged crumb is (it swells part of the way there as the streak builds) ...
   CANNON_BIG_STEP:   .08,    // ... plus this per combo step past CANNON_COMBO ...
   CANNON_BIG_TOP:    1.85,   // ... up to this
-  CANNON_KEEP:       .88,    // (toy) share of its speed left after each gem
+  CANNON_KEEP:       .93,    // (toy) share of its speed left after each bite (however many gems were in it)
+  CANNON_REACH:      1.15,   // (toy) its bite, as a share of its drawn size: every gem its body covers breaks, so a bigger crumb cuts a wider path
+  CANNON_SAVE:       true,   // (toy) out of room with a charged crumb: the run holds for one cannonball instead of ending (the last chance)
+  CANNON_BOUNCES:    2,      // (toy) while still hot it bounces this many times off the bottom of the board instead of dropping through
   CANNON_PER_GEM:    10*SCORE_SCALE,   // (toy) points per gem it breaks
   FX_CRUMB_TALK:     true,   // (talk) the crumb's bubble and signs: snark when she is away, dithers or misses; credit when she does something good (js/crumbsay.js)
   TALK_GAP:          9000,   // (talk) ms between ordinary lines, so it never chatters
