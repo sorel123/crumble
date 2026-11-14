@@ -55,6 +55,8 @@ export async function openGame(url, { seed = 1 } = {}) {
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__avaDefault = CFG.AVALANCHE; CFG.AVALANCHE = false; }));
   // the cookie on the board (js/cookie.js) is on by default too; the older tests were written without it (a cookie line in the crumb's bubble, a cookie drawn on a pinned board), so it is off here (real default in __cookieDefault) and the cookie tests turn it on
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__cookieDefault = CFG.COOKIE; CFG.COOKIE = false; }));
+  // (quiet) the quiet opening holds Volcano, the cannonball charge and the bonus meter back until Day; many older tests earn them in the first trays, so it is off here (real default in __quietDefault) and the "quiet:" tests turn it on
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__quietDefault = CFG.QUIET_START; CFG.QUIET_START = false; }));
   await page.goto(url);
   await page.waitForFunction(() => typeof state !== 'undefined' && state === 'idle' && !!cell);
   return { browser, page, errors };

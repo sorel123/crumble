@@ -91,7 +91,7 @@ function cookieEat(){
 }
 function cookieGone(){                                  // stale: it crumbles off its gem
   ck.fade={x:ck.px,y:ck.py,b:cookieBites(),t:0};
-  ck.g=null; ck.since=0;
+  ck.g=null; ck.since=0; rc.s++;                         // (report) a cookie gone stale this run
   cookieCrumbs(7);
   cookieSay('cookieGone',6000);
 }

@@ -25,7 +25,7 @@ function mobility(){
 // ═══ transformations as achievements (plan 4.5d) ═══
 // Four named achievements, one per special. Earning one unlocks its look for good (it joins the Settings looks, see
 // LOOKS in ui.js; `discoveredWorlds` is the saved record). Three of them also start a short live transformation
-// (sky + tiles, x TRANSFORM_MULT for TRANSFORM_PLACEMENTS placements) when nothing else is going on. Gold Vault never
+// (sky + tiles, x TRANSFORM_MULT, now 1, for TRANSFORM_PLACEMENTS placements) when nothing else is going on. Gold Vault never
 // goes live: the golden hand's own celebration owns that moment. An achievement that cannot go live (a bonus, a golden
 // hand or a star in play, a live one already, the cooldown, trays 1-5) still unlocks the look; that rule matters more
 // than the sky flip. The card is only drawn over the play (a banner), it never pauses or blocks anything.
@@ -39,8 +39,15 @@ function canGoLive(id){
 // (round 6) the carrying combo: Endless and Daily only (Adventure goals and Challenge scores keep the 1.0 combo)
 let comboMiss=0;
 const comboCarries=()=>CFG.COMBO_CARRY&&paced()&&mode!=='challenge'&&!guide;
+/* (quiet) A quiet opening: the review found everything fired in the first minute (combo fire, Volcano, the x2 meter, a
+   charged crumb, all by drop 15). In Endless, until the run reaches the second sky stop (skyStop() >= 1, Day), three loud
+   systems wait: transformations are not earned, a streak does not charge the crumb (he is still a toy), and the bonus meter
+   neither fills nor shows. Read from the score and the jumps only, so nothing is saved and a resume is right by itself.
+   Not in Daily, Challenge, Adventure, the Lab or the guided first game (ck.off marks that whole run, cookie.js). */
+const quietNow=()=>!!CFG.QUIET_START&&mode==='endless'&&!guide&&!ck.off&&skyStop()<1;
+let quietHid=false, quietIn=0;                      // the meter is hidden by the quiet opening; when it slides in (ms, fxBusy)
 function triggerTransform(id){
-  if(!special('transform') || !ACHIEVE[id] || guide) return;   // (1.1 D) specials stay off in the guided first game
+  if(!special('transform') || !ACHIEVE[id] || guide || quietNow()) return;   // (1.1 D) specials stay off in the guided first game; (quiet) and in the quiet opening
   const first=!discoveredWorlds.has(id), live=canGoLive(id), name=TRANSFORMS[id].name;
   if(first){
     discoveredWorlds.add(id); newLook=true; syncLookDot(); saveSkinSave(); renderWorlds();
@@ -53,7 +60,7 @@ function triggerTransform(id){
   }
   if(!CFG.FX_TRANSFORM_MOMENT) return;
   if(first){ pushBanner(name.toUpperCase(),'NEW LOOK UNLOCKED','#FFE9A8'); Sfx.achieve(Object.keys(ACHIEVE).indexOf(id)); }
-  else if(live){ pushBanner(name.toUpperCase(),'×'+CFG.TRANSFORM_MULT+' · '+CFG.TRANSFORM_PLACEMENTS+' MOVES','#FFE9A8',1.6); }
+  else if(live){ pushBanner(name.toUpperCase(),(CFG.TRANSFORM_MULT!==1?'×'+CFG.TRANSFORM_MULT+' · ':'')+CFG.TRANSFORM_PLACEMENTS+' MOVES','#FFE9A8',1.6); }   // (voice) at x1 no multiplier is named
 }
 function endTransform(){
   transform=null;
@@ -78,14 +85,19 @@ const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>sp
 let bonusMeter=0, specialEnd=-99, bonusTag=null;   // meter (saved); tray a special last ended in; {txt} the "+N bonus" tag after a bonus
 let bonusTagT=0;
 function chargeBonus(lines,comboNow){               // place(): a clear of `lines` lines at combo `comboNow`
-  if(!special('bonus')||bonus||trayNo<CFG.SPECIAL_FROM_TRAY||bonusMeter>=CFG.BONUS_METER) return;
+  if(!special('bonus')||bonus||trayNo<CFG.SPECIAL_FROM_TRAY||bonusMeter>=CFG.BONUS_METER||quietNow()) return;   // (quiet) nothing fills it before Day
   bonusMeter=Math.min(CFG.BONUS_METER,bonusMeter+lines+Math.min(Math.max(comboNow-1,0),CFG.BONUS_COMBO_MAX));
-  const c=el('bonusChip'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump');
+  const c=el('bonusChip'); c.classList.remove('bump','arrive'); void c.offsetWidth; c.classList.add('bump');
   if(bonusMeter>=CFG.BONUS_METER) Sfx.bonusReady();   // the one chime; after that it only glows
   syncBonusChip();
 }
 function syncBonusChip(){
-  const c=el('bonusChip'), on=special('bonus')||!!bonus||!!bonusTag;
+  const c=el('bonusChip'), q=quietNow(), on=special('bonus')&&!q||!!bonus||!!bonusTag;
+  if(c.hidden&&on&&quietHid&&state==='play'){       // (quiet) Day: the meter slides in (reduced motion: it is just there)
+    c.classList.remove('arrive','bump'); void c.offsetWidth; c.classList.add('arrive');
+    quietIn=reduce?0:performance.now()+700;
+  }
+  quietHid=q&&special('bonus');
   c.hidden=!on;
   const full=!bonus&&bonusMeter>=CFG.BONUS_METER;
   const f=bonus?1:clamp(bonusMeter/CFG.BONUS_METER,0,1);
@@ -137,7 +149,7 @@ function renderPips(){
   }
   const kids=[...box.children];
   for(let i=0;i<n;i++) kids[i].className='pip'+(i<transform.remaining?' on':'');
-  kids[n].textContent='×'+CFG.TRANSFORM_MULT;
+  kids[n].textContent=CFG.TRANSFORM_MULT!==1?'×'+CFG.TRANSFORM_MULT:'';   // (voice) at x1 the pips only count the moves
 }
 /* the golden hand's payoff (4.5c): the biggest celebration in the game. A gold wash behind the board and glow on the
    screen edges, sparkles on the empty cells and a rain in the margins above and below the board (never across a gem),
@@ -295,8 +307,9 @@ function place(idx,r,c){
     // (A) one voice at a time: the headline (praise word and/or COMBO n) has the board to itself, then COLOR GONE, then any banner
     const oneV=CFG.FX_ONE_VOICE, slammedNow=CFG.FX_COMBO_SLAM&&loud;
     const praiseFirst=!oneV||!slammedNow||praiseTier(total,0)>=2;   // with a COMBO slam the word stays only for a 3+ line clear, and goes first
-    const slamAt=reduce?0:(oneV&&slammedNow&&praiseFirst?Math.max(maxDelay+7,32):maxDelay+7);
-    let vEnd=slammedNow?slamAt+42:(praiseTier(total,combo)?30:16);   // frames from now until the headline starts to fade
+    const wordFirst=praiseFirst&&CFG.PRAISE_WORDS;     // (voice) with the words off nothing waits for one: the slam comes at once and the headline is shorter
+    const slamAt=reduce?0:(oneV&&slammedNow&&wordFirst?Math.max(maxDelay+7,32):maxDelay+7);
+    let vEnd=slammedNow?slamAt+42:(CFG.PRAISE_WORDS&&praiseTier(total,combo)?30:16);   // frames from now until the headline starts to fade
     if(oneV) bands.length=0;                          // a new clear's words replace any still waiting
     // COLOR GONE — a clear that wipes the last of a colour off the board
     const colorsAfter=new Set();
@@ -434,7 +447,7 @@ function place(idx,r,c){
   }
   recDrop(idx,r,c,total,swept);                      // the play recorder (save.js; nothing when off)
   tlRecord();                                        // (7.5g) the board as this drop left it, for the game-over timelapse
-  if(mode!=='lab'){ stats.placed++; stats.lines+=total+avaLines; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++; }   // (Lab) puzzles count in no stats
+  if(mode!=='lab'){ stats.placed++; stats.lines+=total+avaLines; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++; rc.c=Math.max(rc.c,combo); if(swept) rc.p++; }   // (Lab) puzzles count in no stats
   playedToday(); checkGoals();                       // (4.2) the day counts, a reached goal gets its banner
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
   guideDrop(total,swept);                            // (1.1 D) the guided first game counts its lesson

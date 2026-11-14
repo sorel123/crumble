@@ -41,6 +41,7 @@ function toyRunReset(){ toy.lastAsked=false; toy.hot=false; toy.fire=null; toy.l
 function toyCharge(comboNow){                                       // mascot.js mascotClear: every clear reports its combo
   const th=CFG.CANNON_COMBO, was=toy.lastCombo; toy.lastCombo=comboNow;
   if(toy.hot) toy.pow=Math.max(toy.pow,comboNow-th);              // already charged: a longer streak makes it bigger and stronger
+  if(quietNow()){ toy.lastCombo=Math.min(comboNow,th-1); return; }   // (quiet) no charge before Day; a streak still going at Day charges on its next clear
   if(!CFG.CRUMB_CANNON||!toyOn()||mode!=='endless'||guide||toyHot()||comboNow<th||was>=th) return;
   toy.hot=true; toy.pow=comboNow-th; toy.warned=false;
   banners.splice(banners.length&&banners[0].t>0?1:0,0,{t:0,txt:'CANNONBALL READY!',sub:toyHow(),col:'#FFB347',k:.8});   // next in the queue: the news belongs to the clear that earned it
@@ -51,7 +52,7 @@ const toyHow=()=>CFG.CANNON_SLING?'pull Crumb back and let go':'flick Crumb at t
 /* (stakes) Fire now, or get greedy: the growth a charged crumb gained on this streak is lost when the streak dies (game.js place) */
 function toyDeflate(){
   if(!CFG.CANNON_DEFLATE||!toy.hot||toy.pow<1) return;
-  toy.pow=0;                                                        // the charge stays; toySize() eases it back to the plain charged size; place() saves the run after
+  toy.pow=0; rc.d++;                                                // (report) deflated this run. The charge stays; toySize() eases it back to the plain charged size; place() saves the run after
   toyPlay(0,t=>{ tone(t,{f0:620,f1:110,pdur:.36,dur:.4,vol:.022,type:'square'}); tone(t+.02,{f0:300,f1:80,pdur:.34,dur:.38,vol:.03,type:'triangle'}); });   // pffft
   if(!reduce&&masc.body) masc.body.animate([{transform:'scale(1.06,.9)'},{transform:'scale(.95,1.04)',offset:.5},{transform:'none'}],{duration:460,easing:'ease-out'});
   sayLine('deflate',true,true);
@@ -114,7 +115,7 @@ function toyFireEnd(){                                              // out of st
   pops.push({x:bx+B/2,y:by+cell*1.2,t:0,txt:'+'+f.pts,sub:'CANNONBALL ×'+f.n,combo:1,lines:1});
   glowT=Math.max(glowT,.8);
   if(state==='play'&&boardEmpty()){                                 // it broke the last gem: a clean sweep, with everything a drop's sweep brings (game.js)
-    score+=sweepPayoff(f.n,6,true); stats.sweeps++; mascotAct('sweep'); checkGoals(); dareDrop(0,0,0,true,false,false,false);   // (dares) a cannonball's sweep counts for a sweep dare
+    score+=sweepPayoff(f.n,6,true); stats.sweeps++; rc.p++; mascotAct('sweep'); checkGoals(); dareDrop(0,0,0,true,false,false,false);   // (dares) a cannonball's sweep counts for a sweep dare
   }
   if(state==='play') bestCheck(true);                               // and passing her best is NEW BEST, as for a drop
   updateDbg(); tlRecord();
@@ -136,7 +137,7 @@ function toyLastAsk(){
 const toyPower=()=>Math.min(CFG.CANNON_MAX_TOP,CFG.CANNON_MAX+CFG.CANNON_GROW*toy.pow);   // gems this cannonball can break
 function toySize(){                                                 // how big the crumb should be: it swells as the streak builds, more once charged
   if(toy.fire||toy.hot) return Math.min(CFG.CANNON_BIG_TOP,CFG.CANNON_BIG+CFG.CANNON_BIG_STEP*toy.pow);
-  if(!CFG.CRUMB_CANNON||mode!=='endless'||guide||state!=='play') return 1;
+  if(!CFG.CRUMB_CANNON||mode!=='endless'||guide||state!=='play'||quietNow()) return 1;   // (quiet) no swelling toward a charge it cannot get
   const th=CFG.CANNON_COMBO;
   return 1+(CFG.CANNON_BIG-1)*.55*Math.max(0,Math.min(1,(combo-1)/(th-1)));
 }

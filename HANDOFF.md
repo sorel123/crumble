@@ -235,6 +235,9 @@ Top to bottom:
 | (lab) | The Lab: a slim Lab button beside Settings, a card of experiments. First one, Clear it in three: 60 fixed three-piece puzzles (20 easy, 20 medium, 20 hard) on the real board, no score or losing, Undo/Reset/hint, progress in `crumble.lab` (iCloud backup), a cookie every 5th new solve. `js/lab.js`, `tools/lab3-table.mjs`. See the Lab section at the end |
 | (sky bite) | The sky fights back: in Endless each journey stop deals a little leaner (shorter easy, longer lean stretches, later comeback help), past Space the stops go on as Deep space 1, 2, ...; JOURNEY_AT re-spaced for today's scoring; the game-over card says how far she got and her farthest. See the section at the end |
 | (rescue) | Rescue the Crumbs, the Lab's second game: three boards where crumbs sit on gems, a line clear drops them, the bottom row is the exit; fixed queues, stars by par, Undo/Reset/hint, progress in `crumble.lab` `.rescue` (iCloud backup), a cookie on each board's first rescue. `js/rescue.js`, `tools/rescue-check.mjs`. See the Rescue section at the end |
+| (quiet) | A quiet opening: in Endless, Volcano (and the other transformations), the cannonball's charge and the x2 bonus meter wait for the second sky stop (Day, about tray 8); the meter's chip is hidden until then and slides in, and Crumb says so once. `CFG.QUIET_START`. See the section at the end |
+| (voice) | Crumb is the one voice: the praise words (GOOD!, NICE!, GREAT! ...) are off by default (`CFG.PRAISE_WORDS`), Crumb remarks on big clears and now and then on a double; transformations no longer multiply the score (`TRANSFORM_MULT` 1.5 to 1). See the section at the end |
+| (report) | Crumb's report card: the Endless game-over card stamps a grade (D to A+, never an F) beside the sky line, with Crumb's face and one line (a quip when one applies, else one for the grade). `CFG.REPORT_CARD`, run counters saved as `rc`. See the section at the end |
 
 Details for each, oldest first:
 
@@ -1942,3 +1945,119 @@ The Lab's second experiment. Baby crumbs are stuck on top of gems. Clear the lin
 - **Check on the phone:** Lab, Rescue, board 1. Does the crumb read as stuck and the exit as a way out? Is the fall and hop fun, and is the chirp too loud? Try board 2 the wrong way round (2 stars) and then the right way. Is board 3 hard but fair at par 7? Get stuck, then Reset three times for the hint; drop off the hint's path and see "from the top. watch." Check the HUD at the top on a small phone, and Reduce Motion.
 - **Known.** Board 2's par is 3 (the brief said about 4); kept for its order lesson. The stars and best merge by max and by the fewest across devices, so a merge can pair stars from one device with a best from another.
 - Tests: the nine "Rescue:" scenarios.
+## A quiet opening (2026-11-14)
+
+The review: "everything fires in the first minute". By drop 15 a good run had combo fire, Volcano at x1.5, the x2 meter, a
+charged crumb and popups all at once, so nothing felt like a step up. Jay approved holding three of the loud systems back.
+
+- **Rule** (`quietNow()`, game.js): Endless only, and only until the run reaches the second sky stop, Day (`skyStop() >= 1`:
+  2000 x `SCORE_SCALE` points, or a jump from a sweep or a beaten best; about tray 8 for the person-like bot). Not in Daily,
+  Challenge, Adventure, the Lab or the guided first game (the whole of it: `guide`, then `ck.off`, which the cookie already
+  saves for that run). It reads the score and the jumps only, so nothing new is saved and a resume past Day is past it.
+- **What waits:** (a) transformations: `triggerTransform` returns, so Volcano (and Starfield, which cannot come before tray 6
+  anyway) is neither unlocked nor live; a clean sweep jumps the sky to Day first, so its Rainbow still comes. (b) the
+  cannonball's charge: `toyCharge` charges nothing and the crumb does not swell toward it (`toySize`); he is still a toy to
+  grab and flick. A streak still going at Day charges him on its next clear (`toy.lastCombo` is held under `CANNON_COMBO`).
+  (c) the bonus meter: `chargeBonus` adds nothing and `#bonusChip` is hidden, so the first screen is calm.
+- **Untouched:** the combo and its fire, the sputter, sweeps, the Avalanche, the dares (a cannonball dare may still be the
+  run's dare; it waits for Day like the cannon), the cookie, the sky bite, the score.
+- **The last chance:** it has always needed a charged crumb (`toyLast()`), and before Day he cannot be charged, so out of room
+  before Day the run ends exactly as it does today for an uncharged crumb. From Day it works as before (test).
+- **Day.** The chip slides up into place (`#bonusChip.arrive`, 0.6 s; `quietIn` keeps `fxBusy()` at full frame rate only while
+  it moves; Reduce Motion: it is just there) and Crumb says one line, once a run (`SAY.quiet`: "ok. now it gets interesting.",
+  "warm-up's over.", "fine. now the fun stuff."). The line waits its turn like the sky stops' lines (`!dare.q.length &&
+  dareQuiet()`, never forced, dropped after 8 s). Not on a resume past Day (`say.qSync`, set by `clearRunFx`), not when the
+  switch is turned off mid-run, and a jump straight past Day to Night says Night's line instead. Day has no sky-stop line of
+  its own, so the two never double up. His own dice (`mascotRnd`).
+- **Dice.** Nothing new rolls. A test plays the same five trays from the same dealer stream with it on and off (with
+  `TRANSFORM_COMBO` and `CANNON_COMBO` at 2 so the off run does get loud) and compares trays and the number of rolls. In a real
+  Endless game the dealer draws from `Math.random`, which the cosmetic sounds also draw from (6.5's `jit`), so a Volcano
+  sting it holds back shifts that shared stream exactly as playing a different move would; the dealer's own logic is unchanged.
+- **Switch.** `CFG.QUIET_START` (on), Admin "Quiet opening: Volcano, cannonball charge and x2 meter wait for Day (Endless)".
+  Off: today's behaviour exactly (test).
+- **Tests.** The harness turns it off on load (real default in `window.__quietDefault`), as for the Avalanche and the cookie,
+  because many older tests charge the crumb, earn Volcano or fill the meter in the first trays. The five "quiet:" scenarios
+  turn it on. `tools/bot-sim.mjs` plays the game's real default (it puts `__quietDefault` back; `QUIET_START=0` for without).
+- **Measured** (`node tools/bot-sim.mjs 8000 <seed> BOT=human AVALANCHE=1`, then `QUIET_START=0`; games are trays to the end):
+
+  | person-like bot | games | p10 | median | p90 | Day reached (median tray) | Night | Space |
+  |---|---|---|---|---|---|---|---|
+  | seed 1, quiet on | 78 | 19 | 91 | 211 | 8 | 26 | 55 |
+  | seed 1, off | 79 | 21 | 88 | 177 | 9 | 28 | 61 |
+  | seed 2, quiet on | 85 | 24 | 68 | 216 | 9 | 27 | 51 |
+  | seed 2, off | 109 | 16 | 63 | 138 | 9 | 30 | 51 |
+
+  The sim plays the real `place()`, so the held-back x2 and x1.5 are in its scores. Day still comes at tray 8-9 (the bonus cannot
+  start before tray 6 and Volcano cannot go live before it either, so little early score is lost) and the later stops move by a
+  tray or two. Games are not shorter; if anything the long tail is a little longer, since a slower score means a slightly
+  later bite. The sim is noisy at this size (see the sky bite section): read it as "no change in difficulty".
+- **Check on the phone:** start Endless: no x2 chip under the board, and a streak of 5 neither lights the crumb nor brings
+  Volcano. Around tray 8 (the sky turns to day) the chip slides up and Crumb says it is getting interesting; from then on
+  the next streak charges him and earns Volcano. Things to judge: is Day the right line (try `JOURNEY_AT` / the switch), does
+  the run feel like it opens up there.
+
+## Crumb is the one voice (2026-11-14)
+
+The review: generic praise words talked over Crumb, whose lines are funnier, and a live transformation was a third
+multiplier beside the x2 bonus and the streak. Jay approved both changes.
+
+- **No praise words by default** (`CFG.PRAISE_WORDS` false, Admin "Praise words on clears"). `praise()` (solver.js) still runs
+  exactly as before: it rolls the same dice for the word (the dealer's `rnd()`: a Daily or a pinned seed deals the same), spawns
+  the same burst of praise stars and plays the same sting for the big tiers (the arbiter only lets tier 3+ be heard; those are
+  music, not voice). It only no longer puts the word in `praises`. Everything else stays: the point pop, per-cell tags, the
+  COMBO slam, COLOR GONE, banners, fireworks.
+- **No dead wait.** FX_ONE_VOICE sequences the headline: the word and/or COMBO n, then COLOR GONE, then a banner. With a slam
+  and a 3+ line clear the word went first and the slam waited for it (`slamAt` at least 32 frames); a clear with a word but no
+  slam held the headline 30 frames, 16 without. Both now read `wordFirst` / `PRAISE_WORDS`, so with the words off the slam
+  comes at the clear's own beat and COLOR GONE and the banners move up by the same amount (test).
+- **Crumb instead** (crumbsay.js `sayStep`): `SAY.big` (3+ lines) has four more lines ("ok, who ARE you?", "three at once.
+  sure. fine.", "did you practice? be honest.", "that was my move. you stole it."), and a new `SAY.two` for a 2-line clear
+  ("two. cute.", "a double. noted.", "ok, that one was fine.", "not bad. not great."), only with the words off, only when the
+  talk gap (`TALK_GAP`, 9 s) has passed, and then only on a roll of `TALK_TWO` (.3, Admin slider) of his own dice
+  (`mascotRnd`; the roll is not made at all inside the gap). So never on every clear.
+- **`TRANSFORM_MULT` 1.5 -> 1.** The looks (Volcano, Rainbow, Starfield) stay as pure celebration. At 1 no copy names a
+  multiplier: the repeat card says "9 MOVES" (was "×1.5 · 9 MOVES") and the pips under the score only count the moves. Any
+  other value shows as before (the Admin slider is kept). Challenge never had transformations and Daily has no medal
+  targets, so no pinned target moved; two old tests changed (the calm-clear test turns the words on; the repeat card reads
+  "9 MOVES").
+- **Tests:** the three "voice:" scenarios.
+- **Check on the phone:** clear one, two and three lines: no word on the board, the stars still burst; a 3-line clear gets a
+  Crumb line, a double now and then. A streak of 3 with three lines: COMBO 3 slams at once. Earn Volcano twice: the second card
+  says "9 MOVES", and the score does not jump while it is live.
+
+## Crumb's report card (2026-11-14)
+
+The Endless game-over card used to end on a generic tip. Now Crumb grades the run: a stamped grade, his face and one line,
+in one row between the score and the replay. Endless only (Daily, Adventure, Challenge and the Lab keep their own cards).
+
+- **Switch.** `CFG.REPORT_CARD` (on), Admin "Crumb's report card on game over (Endless)". Off: the old tip is back and the
+  sky line sits where it did. `FX_MASCOT` off: no face. `FX_CRUMB_TALK` off: no line (the stamp alone beside the sky line).
+  A new-skin message is still shown above the row; the tip is dropped. The share card and share text are unchanged.
+- **The mark** (`reportGrade(run)` in flow.js, pure: no dice, no state). Five parts, each 0..1, weighted by `CFG.REPORT_W`
+  `[45,25,15,10,5]` and full at `CFG.REPORT_TOP` `[1,5,12,3,3]`:
+  score / her best before this run (`chaseBest`), sky stop / 5 (Space), best combo / 12, sweeps / 3, (dares beaten +
+  cookies eaten) / 3. Mark = weighted sum, 0..100, rounded.
+  - A new best (score > best before the run) counts the score part full and is never below A- (`REPORT_CUTS[6]`).
+  - A first game (no best yet) has no score part: the other four are scaled up to 100.
+- **Grades** by `CFG.REPORT_CUTS` `[0,25,35,45,55,65,75,84,92]`: D, C, C+, B-, B, B+, A-, A, A+ (the card uses a real minus
+  sign). No F. Bands for the colour and the fallback line: D..C+ low (orange), B-..B+ mid (gold), A-..A+ high (green).
+  Examples (best 100k): 5k at stop 0 = D; 40k, Day, combo 5, a sweep = C; 60k, Golden hour, combo 6, a sweep, a dare = B;
+  90k, Night, combo 10, 2 sweeps, 2 dares = A-; 90k, Space, combo 11, 3 sweeps, 2 dares = A+.
+  Admin sliders for each weight and each cut.
+- **The line** (`reportLine(run)`): the first quip that applies, in order: new best (`rcBest`), reached Space (`rcSpace`), a
+  cannonball broke `REPORT_CANNON` (10) gems or more (`rcCannon`), every dare offered was beaten (`rcDares`), a cookie went
+  stale (`rcStale`), he deflated (`rcDeflate`), the toy was on, she reached Day and never threw him (`rcIgnored`), it ended
+  before Day (`rcQuick`); else `rcLow` / `rcMid` / `rcHigh` by band. Three lines each in `SAY` (crumbsay.js), lowercase.
+  Which of the three: `hashStr` of score, stop, combo, sweeps, throws and gems, so the same run always reads the same.
+- **Counters** (`rc` in flow.js): `t` throws, `g` most gems one cannonball broke, `s` cookies gone stale, `d` deflates, `w`
+  dares beaten, `c` best combo, `p` sweeps (place and cannonball). Bumped from the existing hooks (dares.js `dareFlick`,
+  `dareCannon`, `dareWin`; cookie.js `cookieGone`; crumbtoy.js `toyDeflate` and the cannonball sweep; game.js `place()`),
+  reset in `clearRunFx`, saved with the run as **`rc`** (Endless only). An older save loads with zeros; bad values are dropped.
+- **Motion.** The stamp thumps in (scale and spin down to -9deg) 0.45 s after the card, 0.5 s long; `reportIn` keeps
+  `fxBusy()` on only for those ~1.05 s. Reduce Motion: it is just there.
+- **Fit.** At 390x844 and 375x667 the whole card (score, row, replay, Second chance, share, again, home) is on screen, with a
+  new-skin message too. Under 720 px tall the stamp is 46 px and the text a little tighter (test).
+- **Tests:** the five "report:" scenarios.
+- **Check on the phone:** lose an Endless run early (a D or C, "that was quick." or a low line), a middling one and a new best
+  (A- or better): the stamp lands after the score, the colour reads, the line is funny rather than mean, and the Home button
+  is on screen on a small phone. Admin "Mascot crumb" off: the stamp and line stay, the face goes.

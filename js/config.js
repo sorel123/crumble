@@ -231,6 +231,7 @@ const CFG = {
   FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
   FX_PIECE_COLOR_CLEAR: true, // (D) a cleared line turns the colour of the piece that cleared it and breaks in that colour
   FX_ONE_VOICE:   true,   // (A) one headline at a time: praise or COMBO n, then COLOR GONE, then a banner, each with the board to itself
+  PRAISE_WORDS:   false,  // (voice) the praise words on the board after a clear (GOOD!, NICE!, GREAT! ...). Off: Crumb is the one voice; the bursts and the big tiers' stings stay
   FX_HERO_STAMP:  true,
   FX_SWEEP_SHOW:  true,   // (B) a clean sweep is a ~2 s show: the board floods with gems and drains, two crumbs cheer SWEEP ×N, then the new world (sky / look) arrives
   SWEEP_SHOW_LEN: 118,    // (B) frames from the last gem breaking to the new world   // (C) a big moment stamps a little crumb on each gem of the piece that made it
@@ -272,7 +273,7 @@ const CFG = {
 
   // transformations — achievement-triggered event looks (own world + own tile skin), temporary
   TRANSFORM_PLACEMENTS: 9,     // how many placements one lasts
-  TRANSFORM_MULT:       1.5,   // score multiplier while active
+  TRANSFORM_MULT:       1,     // score multiplier while active. (voice) Was 1.5: a third multiplier beside the x2 bonus and the streak; the looks stay as pure celebration. At 1 no copy shows a multiplier
   TRANSFORM_COOLDOWN:   8,     // trays that must pass after one ends before another can start
   TRANSFORM_COMBO:      5,     // the combo that earns Volcano
   TRANSFORM_STAR_GEMS:  10,    // a star clearing at least this many gems earns Starfield (STAR_MIN is 9)
@@ -321,6 +322,7 @@ const CFG = {
   TALK_COMBO:        4,      // (talk) from this streak (every other step) it remarks on the combo
   TALK_DRY:          7,      // (talk) drops in a row without a clear before "bold strategy."
   TALK_DITHER:       3,      // (talk) pieces picked up and put back in a row before "any day now."
+  TALK_TWO:          .3,     // (voice) with the praise words off: odds he remarks on a 2-line clear (only when the talk gap allows)
   CH_PACE:           true,   // (pace) a friend's Challenge link with their pace: their mark on the bar, ahead/behind in the HUD, two crumb lines (js/challenge.js; links carry the pace either way)
   DARES:             true,   // (dares) Endless: the crumb dares her once a run; beating it pays a cookie into the jar (js/dares.js). Needs the mascot
   DARE_MAX:          3,      // (dares) dares a run at most: each one beaten brings the next, harder one
@@ -353,6 +355,12 @@ const CFG = {
   TOY_SULK_MS:       14000,
   TOY_SULK_HOLD:     6000,   // (toy) how long the sulk lasts
   TOY_BACK_MS:       560,    // (toy) the hop from the floor back to the rim
+  REPORT_CARD:       true,   // (report) Endless game-over card: a grade (D .. A+, never an F) stamped beside the sky line and one line from Crumb (flow.js reportGrade)
+  REPORT_W:          [45,25,15,10,5],   // (report) points of the 0-100 mark: score vs her best before the run, sky stop, best combo, sweeps, dares beaten + cookies eaten
+  REPORT_TOP:        [1,5,12,3,3],      // (report) ... each part is full at: (score: her best), stop 5 (Space), combo 12, 3 sweeps, 3 dares + cookies
+  REPORT_CUTS:       [0,25,35,45,55,65,75,84,92],   // (report) the mark each grade starts at: D, C, C+, B-, B, B+, A-, A, A+. A new best is never below A- (REPORT_CUTS[6])
+  REPORT_CANNON:     10,     // (report) gems one cannonball must break for "that cannonball carried you."
+  QUIET_START:       true,   // (quiet) Endless: until the second sky stop (Day) no Volcano or other transformation, no cannonball charge and no bonus meter (hidden); the combo, fire, sweeps, Avalanche, dares and the cookie are as ever (game.js quietNow)
   AVALANCHE:         true,   // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). On since Jay tried it (2026-11-14)
   AVA_COMBO:         4,      // (Avalanche) the streak it can start from
   AVA_CHANCE:        .3,     // (Avalanche) odds at AVA_COMBO ...
