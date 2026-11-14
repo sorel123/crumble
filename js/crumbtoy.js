@@ -29,7 +29,7 @@ function toyCharge(comboNow){                                       // mascot.js
   if(!CFG.CRUMB_CANNON||!toyOn()||mode!=='endless'||guide||toyHot()||comboNow<th||was>=th) return;
   toy.hot=true;
   pushBanner('CRUMB IS CHARGED','flick it at the board','#FFB347',1.1);
-  play(.25,t=>{ tone(t,{f0:330,f1:660,pdur:.18,dur:.22,vol:.06,type:'triangle'}); tone(t+.16,{f0:660,f1:990,pdur:.14,dur:.2,vol:.05,type:'triangle'}); });
+  toyPlay(.25,t=>{ tone(t,{f0:330,f1:660,pdur:.18,dur:.22,vol:.06,type:'triangle'}); tone(t+.16,{f0:660,f1:990,pdur:.14,dur:.2,vol:.05,type:'triangle'}); });
 }
 function toySmash(){                                                // in flight, charged: the gem under its middle breaks
   const f=toy.fire, s=masc.s, cx=masc.x+toy.x+s/2, cy=masc.y+toy.y+s/2;
@@ -41,7 +41,7 @@ function toySmash(){                                                // in flight
   const pts=CFG.CANNON_PER_GEM; score+=pts; f.n++; f.pts+=pts;
   tags.push({x:bx+(c+.5)*cell,y:by+(r+.5)*cell,txt:String(pts),t:0});
   toy.vx*=CFG.CANNON_KEEP; toy.vy*=CFG.CANNON_KEEP; shake=Math.max(shake,3*CFG.SHAKE);
-  toy.sndAt=0; toySnd('boing',.9); play(0,t=>noiseHit(t,{dur:.07,f0:1800,f1:600,q:.8,vol:.07}));
+  toy.sndAt=0; toySnd('boing',.9); toyPlay(0,t=>tone(t,{f0:1500,f1:500,pdur:.05,dur:.07,vol:.05,type:'square'}));
   if(f.n>=CFG.CANNON_MAX) toyFireEnd();
 }
 function toyFireEnd(){                                              // out of steam, or landed: the board is the player's again
@@ -69,13 +69,15 @@ function toyWrite(){
   st.transformOrigin=a?'50% 54%':'';                               // it spins about its middle; at rest the mascot's own origin (its feet) is back
 }
 /* ── sounds and a tap of haptics: tiny, its own, and quiet under the game's ── */
+// its own play(): audio.js play() rolls Math.random for a pitch jitter, and the dealer's dice must not move for a cosmetic sound
+function toyPlay(delay,fn){ if(sfxOff()) return; try{ const c=ac(); fn(c.currentTime+delay); }catch(e){} }
 function toySnd(kind,k=1){
   const now=performance.now(); if(now-toy.sndAt<60) return; toy.sndAt=now;
-  if(kind==='squeak') play(0,t=>{ tone(t,{f0:620,f1:1180,pdur:.07,dur:.1,vol:.05,type:'triangle'}); });
-  else if(kind==='whee') play(0,t=>{ tone(t,{f0:520,f1:1500,pdur:.22,dur:.26,vol:.045,type:'triangle'}); });
-  else if(kind==='boing') play(0,t=>{ tone(t,{f0:300+220*k,f1:150,pdur:.11,dur:.15,vol:.035+.05*k,type:'sine'}); });
-  else if(kind==='dizzy') play(0,t=>{ for(let i=0;i<4;i++) tone(t+i*.11,{f0:760-i*70,f1:560-i*60,pdur:.09,dur:.1,vol:.035,type:'triangle'}); });
-  else if(kind==='hmph') play(0,t=>{ tone(t,{f0:210,f1:150,pdur:.12,dur:.16,vol:.07,type:'triangle'}); });
+  if(kind==='squeak') toyPlay(0,t=>{ tone(t,{f0:620,f1:1180,pdur:.07,dur:.1,vol:.05,type:'triangle'}); });
+  else if(kind==='whee') toyPlay(0,t=>{ tone(t,{f0:520,f1:1500,pdur:.22,dur:.26,vol:.045,type:'triangle'}); });
+  else if(kind==='boing') toyPlay(0,t=>{ tone(t,{f0:300+220*k,f1:150,pdur:.11,dur:.15,vol:.035+.05*k,type:'sine'}); });
+  else if(kind==='dizzy') toyPlay(0,t=>{ for(let i=0;i<4;i++) tone(t+i*.11,{f0:760-i*70,f1:560-i*60,pdur:.09,dur:.1,vol:.035,type:'triangle'}); });
+  else if(kind==='hmph') toyPlay(0,t=>{ tone(t,{f0:210,f1:150,pdur:.12,dur:.16,vol:.07,type:'triangle'}); });
   if((kind==='boing'||kind==='squeak')&&CFG.HAPTICS&&Native.on()&&now-toy.hapAt>70){ toy.hapAt=now; hapFire(k>.6?'MEDIUM':'LIGHT'); }
 }
 /* ── the finger ── */
