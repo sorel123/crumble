@@ -116,8 +116,9 @@ function toySnd(kind,k=1){
 }
 /* ── the finger ── */
 function toyDown(e){
-  if(!toyOn()||state!=='play'||paused||drag||(stuck&&!toyLast())||masc.fainted||toy.id>=0) return;
-  e.stopPropagation();                                            // the game's own pointerdown never sees a touch on the crumb
+  if(!toyOn()||state!=='play'||paused||drag) return;
+  e.stopPropagation();                                            // the game's own pointerdown never sees a touch on the crumb, grabbed or not (a tap on it down by the tray must not pick up a piece)
+  if((stuck&&!toyLast())||masc.fainted||toy.id>=0) return;
   const now=performance.now();
   if(now<toy.sulkTo&&toy.mode==='rim'&&!toyLast()){                           // sulking: it shakes its head and stays put
     toySnd('hmph'); sayLine('sulk',true);

@@ -464,7 +464,11 @@ function pickAt(x,y){
 }
 let pendingPress=null;                                // a press that came while the tray was dealing: {id,x,y}
 function onDown(e){
+  if(drag&&e.isPrimary&&e.pointerType==='touch'&&e.pointerId!==drag.id&&state==='play'&&!paused){   // a first finger lands while a piece is still "held": that finger's lift was lost, so the piece goes home instead of hanging there
+    if(tray[drag.i]) sendBack(); hapSelect('end'); drag=null; return;
+  }
   if(state!=='play'||paused||drag) return;   // one drag at a time (a second finger can't pick up another piece)
+  if(stuck&&toyLast()) return;               // (toy) the last chance: no piece fits, the only move is the crumb
   if(e.target&&e.target.closest&&e.target.closest('button')) return;
   if(dealing||avaBusy()){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY,pt:e.pointerType}; return; }   // taken the moment the new tray appears (stepPending)
   startDrag(e.pointerId,e.clientX,e.clientY,e.pointerType);
@@ -483,7 +487,7 @@ function startDrag(id,x,y,pt){
 function stepPending(){                               // called each frame: the deal finished and her finger is still down
   if(!pendingPress||dealing||avaBusy()||drag) return;
   const p=pendingPress; pendingPress=null;
-  if(state==='play'&&!paused) startDrag(p.id,p.x,p.y,p.pt);
+  if(state==='play'&&!paused&&!(stuck&&toyLast())) startDrag(p.id,p.x,p.y,p.pt);
 }
 function onMove(e){
   if(pendingPress&&e.pointerId===pendingPress.id){ pendingPress.x=e.clientX; pendingPress.y=e.clientY; }
@@ -545,8 +549,8 @@ function updateSlot(){
 }
 addEventListener('pointerdown',onDown,{passive:true});
 addEventListener('pointermove',onMove,{passive:true});
-addEventListener('pointerup',onUp,{passive:true});
-addEventListener('pointercancel',onCancel,{passive:true});
+addEventListener('pointerup',onUp,{passive:true,capture:true});          // capture: no element's own handler (the crumb toy stops its events) can keep a lift from ending the drag
+addEventListener('pointercancel',onCancel,{passive:true,capture:true});
 document.addEventListener('visibilitychange',()=>{      // backgrounded mid-drag: iOS may never send the cancel
   if(document.visibilityState==='hidden'&&drag){ if(tray[drag.i]) sendBack(); hapSelect('end'); drag=null; }
 });
