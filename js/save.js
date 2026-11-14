@@ -15,7 +15,7 @@ function snapshot(){
     carry:carry.map(s=>SHAPES.indexOf(s)).filter(i=>i>=0),
     golden:golden?{want:{...golden.want},got:{...golden.got},pts:golden.pts}:null,   // copies, so the snapshot does not move while the live hand goes on
     goldenNext, goldenCool, trayHadSweep, trayCombo, starForced, starCool, transformCool,
-    bonusMeter, specialEnd,
+    bonusMeter, specialEnd, cn:toy.hot?1:0,          // (toy) a charged crumb stays charged across a resume
     pace:{...pace},
     td:{st:tide.st,n:tide.n,len:tide.len},          // (1.1 G) the coaster's stretch
     hm:{ph:hdeal.ph,n:hdeal.n,len:hdeal.len,f:hdeal.f||0,wp:hdeal.wp|0,wr:hdeal.wr|0,wa:hdeal.wa===undefined?99:hdeal.wa,wn:hdeal.wn|0,lk:hdeal.lk|0},          // the home dealer's coaster (DEALER_HOME)
@@ -63,6 +63,7 @@ function restore(o){
   renderPips();
   bonusMeter=isInt(o.bonusMeter,0,1e4)?Math.min(o.bonusMeter,CFG.BONUS_METER):0; bonusTag=null;
   specialEnd=isInt(o.specialEnd,-99,1e6)?o.specialEnd:-99;
+  toy.hot=o.cn===1&&mode==='endless'&&CFG.CRUMB_CANNON; toy.lastCombo=combo;
   const pc=o.pace, PH=['calm','building','edge','recovery','relief'];   // (6.1) older saves have none: start calm
   pace=pc&&PH.includes(pc.ph)&&isInt(pc.n,0,1e6)&&isInt(pc.hold,0,99)&&isInt(pc.len,0,99)?{ph:pc.ph,n:pc.n,hold:pc.hold,len:pc.len}:{ph:'calm',n:0,hold:0,len:0};
   resetWave(); const w=o.wave;                       // (7.3) older saves have none: a fresh wave

@@ -1358,19 +1358,20 @@ A sidekick on the board. Code is `js/mascot.js` (the SVG, `mascotStep` called fr
 
 ## The crumb is a toy (2026-11-14, Jay: "something whacky like flicking the crumb guy")
 
-The mascot can be grabbed, flicked and rolled by leaning the phone. Code is `js/crumbtoy.js` (`toyStep` is called from `mascotStep`; pointer listeners on `#mascot`), the `#mascot.toy / .grab / .dizzy / .sulk` CSS in `index.html`, and `toyBusy()` in `fxBusy()` so the frame pacing runs at full speed while it moves. It never touches score, tray or board.
+The mascot can be grabbed, flicked and rolled by leaning the phone. Code is `js/crumbtoy.js` (`toyStep` is called from `mascotStep`; pointer listeners on `#mascot`), the `#mascot.toy / .grab / .dizzy / .sulk` CSS in `index.html`, and `toyBusy()` in `fxBusy()` so the frame pacing runs at full speed while it moves. Apart from the cannonball below, it never touches score, tray or board.
 
 - **Grab.** A finger on the crumb (a slightly bigger target than the drawing) picks it up: wide eyes, arms up, it swings behind the finger. A piece in the hand wins: the crumb cannot be grabbed mid-drag, and while a held piece is near it (`dim`) touches pass through.
 - **Flick.** Let go while moving and it flies (`TOY_GRAVITY`, capped at `TOY_MAX_SPEED`), spins, and bounces off the screen edges (`TOY_BOUNCE`). The board's top rim is a ledge from above only; anywhere else it falls to the floor under the tray, rolls to a stop and hops back up to the rim (`TOY_BACK_MS`). Let go without moving and it is a put-down.
 - **Dizzy.** A throw faster than `TOY_DIZZY_V`, or three bounces, lands with spiral eyes for `TOY_DIZZY_MS`.
 - **Sulk.** `TOY_SULK_N` throws within `TOY_SULK_MS` and it frowns for `TOY_SULK_HOLD`; a grab then gets a head shake.
+- **Cannonball (Endless only).** A clear that takes the combo to `CANNON_COMBO` (5) charges the crumb, once per streak: it glows (`#mascot.hot`) and a banner says "CRUMB IS CHARGED / flick it at the board". Thrown while charged it is a cannonball: every gem its middle passes over breaks (`toySmash`: the gem leaves `grid`, a shatter, `CANNON_PER_GEM` points and a tag), each one costs it speed (`CANNON_KEEP`), up to `CANNON_MAX` gems. It passes through the rim while it is a cannonball. When it lands or is spent, a "+N CANNONBALL xN" pop shows and the run is saved. A slow put-down keeps the charge; the charge is in the run save (`cn`). It never completes a line and gives no sweep credit; it only opens room, so it is a skill-shot rescue. Switch: `CFG.CRUMB_CANNON` (Admin; it also needs the toy on). This is the one way the toy changes the game.
 - **Tilt.** `devicemotion` gravity along the screen's x axis rolls it along the rim (`TILT_PUSH`, dead zone `TILT_DEAD`, friction `TOY_RIM_DRAG`); it stays where it stops, so a lean to the right leaves it on the right. iOS reports gravity with the opposite sign to the spec, so the sign is chosen by platform; `TILT_FLIP` (Admin) reverses it if a device rolls uphill. iOS only grants motion from a user gesture: the request rides on the first finger lifted off the crumb (once per launch), or on turning the Tilt switch on. A "Don't Allow" turns the switch off and it is not asked again.
 - **Where it stands.** `toy.x` is its offset along the rim from the left corner (0..`toyXMax()`); `mascotPlace()` clamps it on a layout.
 - **Sound.** Small synthesized squeak / whee / boing / dizzy warble through `play()` (so the Sound effects button mutes them), and a light haptic on a bounce in the app.
 - **Reduced motion:** the toy is off (the crumb stays in its corner).
 - **Switches.** `CFG.FX_CRUMB_TOY` (Settings → Look → Advanced "Crumb is a toy", saved `toy`) and `CFG.TILT` ("Tilt", saved `tilt`); both in Admin.
 - **Check on the phone:** flick the crumb hard at a wall: it should bounce around and land dizzy. Flick it five times quickly: it sulks. After the first flick iOS asks for motion; allow it, then lean the phone right: the crumb should roll to the right end of the rim and stay there when the phone is level again. **Not yet tried on a real phone**: the motion prompt inside the app's web view, and the tilt direction.
-- Tests: the two "crumb toy" scenarios.
+- Tests: the two "crumb toy" scenarios and "crumb cannonball".
 
 ## Avalanche (2026-11-14, concept 1 of the new feature concepts; off by default)
 

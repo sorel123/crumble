@@ -277,6 +277,11 @@ const CFG = {
   CHASE_SKY_MIN:     500*SCORE_SCALE,    // (7.5e) a best below this beats with the banner only, so a tiny early best does not skip dawn
   FX_MASCOT:         true,   // (7.5f) a cookie crumb on the board's top-left corner: nods/hops/smirks on clears, sweats when it is tight, faints on game over (js/mascot.js)
   FX_CRUMB_TOY:      true,   // (toy) the crumb can be grabbed and flicked: it flies, bounces, lands dizzy, sulks if overdone (js/crumbtoy.js)
+  CRUMB_CANNON:      true,   // (toy) Endless: a streak of CANNON_COMBO charges the crumb; thrown charged, it breaks the gems it flies over
+  CANNON_COMBO:      5,      // (toy) the streak that charges it (once per streak)
+  CANNON_MAX:        10,     // (toy) gems one cannonball can break
+  CANNON_KEEP:       .88,    // (toy) share of its speed left after each gem
+  CANNON_PER_GEM:    10*SCORE_SCALE,   // (toy) points per gem it breaks
   TILT:              true,   // (toy) with motion allowed, leaning the phone rolls the crumb along the board's rim
   TILT_FLIP:         false,  // (toy) if the crumb rolls uphill on some device, flip the sign
   TILT_DEAD:         .07,    // (toy) lean (share of gravity, ~4 degrees) the phone forgives before the crumb moves

@@ -3488,6 +3488,46 @@ test('crumb toy: leaning the phone rolls it to the low side and it stays; too ma
   assert.ok(await page.evaluate(() => !/\btoy\b/.test(el('mascot').className) && getComputedStyle(el('mascot')).pointerEvents === 'none' && JSON.parse(localStorage.getItem('crumble.skins')).toy === false), 'off: touches pass through it, and it is saved');
 });
 
+test('crumb cannonball: a streak charges the crumb (Endless only, once per streak); thrown charged it breaks the gems it flies over, pays per gem, and goes cold; the charge survives a resume', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const FULL = ['01111111', '11011011', '11101110', '10111101', '11011011', '01101101', '11110111', '10111010'];   // one row to clear, no full column
+  const streak = async pre => {
+    await dealt(page);
+    await setup(page, { rows: FULL, trayShapes: [0, 0, 0] });
+    await page.evaluate(pre);
+    await dragPiece(page, 0, 0, 0);
+    await frames(page, 4);
+    return page.evaluate(() => toy.hot);
+  };
+  await page.evaluate(() => { CFG.TRANSFORM_COMBO = 99; });
+  assert.equal(await streak(() => { combo = 2; }), false, 'a short streak does not charge it');
+  assert.equal(await streak(() => { combo = 4; mode = 'daily'; }), false, 'not in Daily');
+  await page.evaluate(() => { mode = 'endless'; toy.lastCombo = 0; });
+  assert.equal(await streak(() => { combo = 4; }), true, 'combo 5 in Endless charges it');
+  await mascotMood(page, /\bhot\b/);
+  assert.equal(await page.evaluate(() => { const o = snapshot(); toy.hot = false; restore(o); return toy.hot; }), true, 'still charged after a resume');
+  await dealt(page);
+  // a slow put-down keeps the charge; a throw down into the board spends it
+  const before = await page.evaluate(() => ({ score, gems: grid.flat().filter(Boolean).length }));
+  await flickCrumb(page, 10, 26);
+  assert.equal(await page.evaluate(() => !!toy.fire && !toy.hot), true, 'thrown: a cannonball');
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9000 });
+  const after = await page.evaluate(() => ({ score, gems: grid.flat().filter(Boolean).length, hot: toyHot(), saved: JSON.parse(localStorage.getItem('crumble.run')).grid.flat().filter(v => v >= 0).length }));
+  const broke = before.gems - after.gems;
+  assert.ok(broke >= 2 && broke <= 10, 'it broke some gems, never more than CANNON_MAX: ' + broke);
+  assert.equal(after.score - before.score, broke * await page.evaluate(() => CFG.CANNON_PER_GEM), 'paid per gem');
+  assert.equal(after.hot, false, 'cold again');
+  assert.equal(after.saved, after.gems, 'the run is saved with the broken board');
+  assert.equal(await streak(() => { combo = 6; toy.lastCombo = 6; }), false, 'the same streak does not charge it twice');
+  // an uncharged throw over the board breaks nothing
+  await dealt(page);
+  const g0 = await page.evaluate(() => grid.flat().filter(Boolean).length);
+  await flickCrumb(page, 10, 26);
+  await page.waitForFunction(() => toy.mode === 'rim', null, { timeout: 9000 });
+  assert.equal(await page.evaluate(() => grid.flat().filter(Boolean).length), g0, 'cold: it passes over the gems');
+});
+
 // ── Avalanche (js/avalanche.js) ──
 const AVA_ROWS = ['01111111', '10000000', '11100000', '00011100', '00000011', '11011000', '00100111', '10110110'];
 const boardStr = page => page.evaluate(() => grid.map(r => r.map(g => g ? 1 : 0).join('')));

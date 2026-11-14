@@ -66,10 +66,10 @@ function avalanche(lead,gi0){
   }
   ava.end=out.end+6;
   // the show: a word, a shake that lasts through the rumble, a low boom, the crumb is thrown off its perch
-  pushBanner('AVALANCHE!',out.lines?out.lines+(out.lines===1?' more line':' more lines'):'','#FFB36B',1.2);
+  banners.splice(banners.length&&banners[0].t>0?1:0,0,{t:0,txt:'AVALANCHE!',sub:out.lines?out.lines+(out.lines===1?' more line':' more lines'):'',col:'#FFB36B',k:1.2});   // next in the queue (behind one already showing): the word belongs to the fall, not after it
   shake=Math.max(shake,13*CFG.SHAKE); hitWait=0;
   if(!reduce) borderFlash={t:-lead,col:'255,179,107'};
-  play(lead/60,t=>{ boom(t,.2); noiseHit(t,{dur:.5,f0:220,f1:90,q:.6,vol:.07,type:'lowpass'}); });
+  toyPlay(lead/60,t=>{ boom(t,.2); tone(t+.05,{f0:90,f1:48,pdur:.4,dur:.5,vol:.12}); });
   haptic('sweep');
   if(typeof toyOn==='function'&&toyOn()&&toy.mode==='rim'&&!masc.fainted){ toy.mode='air'; toy.vy=-900; toy.vx=(toy.x<toyXMax()/2?1:-1)*160; toy.va=420; toy.speed=0; toy.bounces=0; }
   return out;

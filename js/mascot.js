@@ -76,6 +76,7 @@ function mascotAct(name){
   if(a.move&&!reduce&&!masc.fainted) masc.body.animate(a.move,{duration:a.dur,delay,easing:'ease-out'});
 }
 function mascotClear(total,combo,swept,escaped){       // which mood a clear gets, by the 6.3 hierarchy
+  toyCharge(combo);                                 // (toy) a long streak charges the crumb: the cannonball
   mascotAct(swept?'sweep':escaped?'phew':combo>=CFG.BIG_COMBO?'smug':total>=2?'hop':'nod');
 }
 function mascotTight(){
@@ -107,7 +108,7 @@ function mascotStep(now){                             // draw.js frame(): writes
     const cx=m.x+toy.x+m.s/2, cy=m.y+toy.y+m.s*.45, dx=drag.cx-cx, dy=drag.cy-cy, d=Math.hypot(dx,dy)||1;
     lx=dx/d; ly=dy/d; dim=d<m.s*1.6+cell*1.2;
   }
-  const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'')+(toyOn()&&!faint?' toy':'');
+  const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'')+(toyOn()&&!faint?' toy':'')+(toyHot()&&!faint?' hot':'');
   if(key!==m.key){ m.el.hidden=false; m.el.className=key; m.key=key; }
   const look=mood==='faint'||mood==='sweep'||mood==='flat'||mood==='dizzy'?'0,0':(Math.round(lx*1.3*4)/4)+','+(Math.round(ly*1.1*4)/4);
   if(look!==m.look){ m.look=look; m.pp.setAttribute('transform','translate('+look+')'); }
