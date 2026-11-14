@@ -3422,11 +3422,15 @@ test('7.5f mascot: a drag and three-line clears with the crumb reacting fit the 
 
 // ── the crumb as a toy (js/crumbtoy.js) ──
 const crumbAt = page => page.evaluate(() => { const b = el('mascot').getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+// a quick swipe. (stakes) A charged crumb takes a flick only within SLING_QUICK_MS of the touch, else it is a slingshot: the window is
+// stretched for the swipe, so a slow runner cannot turn a test's flick into a slingshot thrown the other way
 const flickCrumb = async (page, dx, dy, n = 6) => {
   const r = await crumbAt(page);
+  const q = await page.evaluate(() => { const v = CFG.SLING_QUICK_MS; CFG.SLING_QUICK_MS = 1e5; return v; });
   await page.mouse.move(r.x, r.y); await page.mouse.down();
   for (let i = 1; i <= n; i++) { await page.mouse.move(r.x + i * dx, r.y + i * dy); await page.waitForTimeout(12); }
   await page.mouse.up();
+  await page.evaluate(v => { CFG.SLING_QUICK_MS = v; }, q);
 };
 const onRim = page => page.waitForFunction(() => toy.mode === 'rim' && toy.a === 0 && toy.vx === 0, null, { timeout: 9000 });
 
@@ -3509,7 +3513,7 @@ test('crumb cannonball: a streak charges the crumb (Endless only, once per strea
   assert.equal(await streak(() => { combo = 4; }), true, 'combo 5 in Endless charges it');
   await mascotMood(page, /\bhot\b/);
   assert.ok(await page.evaluate(() => banners.some(b => b.txt === 'CANNONBALL READY!')), 'the banner says so');
-  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'FLICK ME!' && toy.sc > 1.3);
+  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'PULL ME BACK!' && toy.sc > 1.3);
   const big = await page.evaluate(() => ({ size: toySize(), max: toyPower(), drawn: +el('mascot').style.scale }));
   assert.ok(big.size >= await page.evaluate(() => CFG.CANNON_BIG) && big.drawn > 1.3, 'charged: big, and drawn big');
   await streak(() => { combo = 7; });
@@ -3566,7 +3570,7 @@ test('crumb last chance: out of room with a charged crumb the run holds; a canno
   assert.equal(await page.evaluate(() => stuck && toyLast()), true, 'stuck, and it is the last chance');
   await page.waitForTimeout(1100);
   assert.equal(await page.evaluate(() => state), 'play', 'the run holds');
-  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'FLICK ME, QUICK!');
+  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'PULL ME BACK, QUICK!');
   assert.equal(await page.evaluate(() => masc.fainted), false, 'the crumb is on its feet');
   await flickCrumb(page, 10, 26);
   assert.equal(await page.evaluate(() => !!toy.fire), true, 'thrown although the board is stuck');
@@ -5435,6 +5439,322 @@ test('curve dealer: the luck dial walks in -1..1, moves the table, survives a re
   assert.ok(g && g.cfg.DEALER_CURVE === true && Array.isArray(g.cfg.CURVE_TABLE) && 'CURVE_HEAT' in g.cfg && 'CURVE_MULTI' in g.cfg, 'the knobs in the game marker: ' + JSON.stringify(g && g.cfg));
   assert.ok(t.some(x => /^CURVE /.test(x.d) && x.p === 'curve'), 'trays recorded with the curve label and phase');
   await page.evaluate(() => { CFG.REC_PLAY = false; recClear(); });
+});
+
+// ── the streak has stakes, and Crumb is a slingshot ──
+const STK_FULL = ['01111111', '11011011', '11101110', '10111101', '11011011', '01101101', '11110111', '10111010'];
+const STK_JAM = ['11011011', '01101101', '10110110', '11011011', '01101101', '10110110', '11011011', '01101101'];
+const missDrop = async page => {                       // a drop that clears nothing
+  await dealt(page);
+  await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 4, 4);
+  await frames(page, 3);
+};
+const chargeCrumb = (page, pow = 0) => page.evaluate(pow => { toy.hot = true; toy.pow = pow; toy.sulkTo = 0; toy.flicks = []; toy.demo = null; }, pow);
+const crumbReady = page => page.waitForFunction(() => toy.mode === 'rim' && !toy.fire && Math.abs(toy.sc - toySize()) < .01 && !el('mascot').hidden, null, { timeout: 8999 });
+const pullCrumb = async (page, dx, dy, { steps = 8, hold = 170 } = {}) => {   // touch it, pull, and rest the finger (a slingshot, not a flick)
+  const r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down();
+  for (let i = 1; i <= steps; i++) { await page.mouse.move(r.x + dx * i / steps, r.y + dy * i / steps); await page.waitForTimeout(16); }
+  await page.waitForTimeout(hold);
+  return r;
+};
+const aimRead = page => page.evaluate(() => {
+  const a = el('crumbAim'), g = a.querySelector('.gh');
+  return { shown: a.style.display !== 'none', dots: [...a.querySelectorAll('.dt circle')].filter(c => +c.getAttribute('r') > 0).length,
+    ghost: +g.getAttribute('r') > 0 ? g.getAttribute('cx') + ',' + g.getAttribute('cy') : '' };
+});
+const gemSet = page => page.evaluate(() => grid.flatMap((row, r) => row.map((g, c) => g ? r * 8 + c : -1)).filter(v => v >= 0));
+const watchTicks = page => page.evaluate(() => {
+  window.__hap = []; window.__tp = 0;
+  const oh = haptic; haptic = function (k) { __hap.push(k); return oh.apply(this, arguments); };
+  const tp = toyPlay; toyPlay = function () { __tp++; return tp.apply(this, arguments); };
+});
+
+test('stakes: the fire sputters: a notch down after one miss, guttering embers on the last life with a tick and a glance, straight back on a clear; the third miss snuffs it', async ({ page }) => {
+  await play(page);
+  await page.evaluate(() => { CFG.TRANSFORM_COMBO = 99; });
+  await watchTicks(page);
+  await streak(page, 4);
+  await frames(page, 40);
+  const full = await page.evaluate(() => ({ combo, k: fire.k, t: fireTarget(), lv: sputLevel(), tier: fire.tier }));
+  assert.ok(full.combo === 4 && full.lv === 0 && full.k > 0.5, 'combo 4 burns ' + JSON.stringify(full));
+  await missDrop(page);
+  const m1 = await page.evaluate(() => ({ combo, miss: comboMiss, lv: sputLevel(), t: fireTarget(), hap: __hap.filter(h => h === 'sputter').length }));
+  assert.deepEqual([m1.combo, m1.miss, m1.lv, m1.hap], [4, 1, 1, 0], 'one miss: the streak carries, a notch down, no tick yet');
+  assert.ok(Math.abs(m1.t - full.t * 0.62) < 1e-9, 'the notch: ' + m1.t);
+  await frames(page, 50);
+  const k1 = await page.evaluate(() => ({ k: fire.k, sp: fire.sp }));
+  assert.ok(k1.sp === 1 && k1.k < full.k - 0.15 && k1.k > 0.25, 'the flames drop a visible notch ' + JSON.stringify(k1));
+  // the last life
+  await page.evaluate(() => { say.last = -1e9; say.txt = ''; __tp = 0; });
+  await missDrop(page);
+  const m2 = await page.evaluate(() => ({ combo, miss: comboMiss, lv: sputLevel(), t: fireTarget(), hap: __hap.filter(h => h === 'sputter').length, tp: __tp, said: say.txt, act: masc.act }));
+  assert.deepEqual([m2.combo, m2.miss, m2.lv, m2.hap, m2.act], [4, 2, 2, 1, 'glance'], 'the last life: a tick, a light haptic, and the crumb glances at the board ' + JSON.stringify(m2));
+  assert.ok(m2.tp >= 1 && m2.t <= 0.16, 'its own sound; embers ' + JSON.stringify(m2));
+  assert.ok(["one more miss and it's gone.", 'careful.'].includes(m2.said), 'a warning line: ' + m2.said);
+  await mascotMood(page, /^glance\b/);
+  await frames(page, 50);
+  const k2 = await page.evaluate(() => ({ k: fire.k, sp: fire.sp, tier: fireTier() }));
+  assert.ok(k2.sp === 2 && k2.tier === 0 && k2.k < 0.2 && k2.k > 0.1, 'guttering orange embers ' + JSON.stringify(k2));
+  // a clear: straight back to full, with the flare
+  await streak(page, 1);
+  const back = await page.evaluate(() => ({ combo, miss: comboMiss, k: fire.k, t: fireTarget(), flare: fire.flare, sp: fire.sp }));
+  assert.ok(back.combo === 5 && back.miss === 0 && back.k >= back.t - 0.01 && back.flare > 0.3 && back.sp === 0, 'back at once ' + JSON.stringify(back));
+  // a second last life in the same run: the tick again, but the line only once a run
+  await missDrop(page);
+  await page.evaluate(() => { say.last = -1e9; say.txt = ''; });
+  await missDrop(page);
+  const m3 = await page.evaluate(() => ({ lv: sputLevel(), hap: __hap.filter(h => h === 'sputter').length, said: say.txt }));
+  assert.deepEqual([m3.lv, m3.hap, m3.said], [2, 2, ''], 'ticked again, no second line ' + JSON.stringify(m3));
+  // the third miss snuffs it as before
+  await missDrop(page);
+  const out = await page.evaluate(() => ({ combo, out: fire.out, smoke: fire.smoke.length, lv: sputLevel() }));
+  assert.ok(out.combo === 0 && out.out > 0 && out.smoke >= 10 && out.lv === 0, 'snuffed ' + JSON.stringify(out));
+  // below the fire, the switch, the modes, and no dice
+  const r = await page.evaluate(() => {
+    const o = {}; let rolls = 0; const R = Math.random; Math.random = () => { rolls++; return R(); };
+    const at = (c, m = 'endless') => { const m0 = mode; mode = m; combo = c; comboMiss = CFG.COMBO_GRACE - 1; __hap.length = 0;
+      const ok = fireSputter(); if (ok) toyLastLife(); const res = { ok, hap: __hap.length, lv: sputLevel(), t: +fireTarget().toFixed(3) }; mode = m0; return res; };
+    o.c1 = at(1); o.c2 = at(2); o.daily = at(2, 'daily'); o.chal = at(4, 'challenge');
+    CFG.FX_SPUTTER = false; o.off = at(4); CFG.FX_SPUTTER = true;
+    Math.random = R; o.rolls = rolls; combo = 0; comboMiss = 0; return o;
+  });
+  assert.equal(r.c1.ok, false, 'a streak of 1 is not worth a warning');
+  assert.deepEqual([r.c2.ok, r.c2.hap, r.daily.ok], [true, 1, true], 'from combo 2, in Endless and Daily: the tick');
+  assert.deepEqual([r.chal.ok, r.chal.lv], [false, 0], 'not where the combo does not carry');
+  assert.deepEqual([r.off.ok, r.off.lv, r.off.t], [false, 0, 0.6], 'FX_SPUTTER off: the fire stays as it was');
+  assert.equal(r.rolls, 0, 'the sputter never rolls the game\'s dice');
+});
+
+test('stakes: a grown charged crumb deflates when the streak dies (still charged, plain size, a pffft and a line, saved deflated); on the last life it says "use me or lose me." once per charge', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.evaluate(() => { CFG.TRANSFORM_COMBO = 99; toy.lastCombo = 8; combo = 8; comboMiss = 0; say.last = -1e9; });
+  await chargeCrumb(page, 3);
+  await watchTicks(page);
+  await page.waitForFunction(() => toy.sc > CFG.CANNON_BIG + .1);
+  await missDrop(page);
+  assert.deepEqual(await page.evaluate(() => [comboMiss, toy.pow, toy.warned]), [1, 3, false], 'one miss: nothing yet');
+  await missDrop(page);
+  const ll = await page.evaluate(() => ({ act: masc.act, said: say.txt, warned: toy.warned }));
+  assert.deepEqual(ll, { act: 'worry', said: 'use me or lose me.', warned: true }, 'the last life with a grown crumb: worried about itself');
+  await page.waitForFunction(() => el('crumbSay').textContent === 'use me or lose me.' && !el('crumbSay').hidden);
+  // a clear, then a second last life with the same charge: no second warning
+  await page.evaluate(() => { grid = grid.map(r => r.map(() => null)); });
+  await streak(page, 1);
+  await missDrop(page);
+  await page.evaluate(() => { say.last = -1e9; say.txt = ''; });
+  await missDrop(page);
+  assert.equal(await page.evaluate(() => say.txt), '', 'once per charge');
+  // the third miss: the streak dies, the growth goes
+  const pow0 = await page.evaluate(() => toy.pow), tp0 = await page.evaluate(() => __tp);
+  assert.ok(pow0 >= 3, 'grown: ' + pow0);
+  await missDrop(page);
+  const d = await page.evaluate(() => ({ combo, hot: toy.hot, pow: toy.pow, size: toySize(), big: CFG.CANNON_BIG, said: say.txt, tp: __tp, run: JSON.parse(localStorage.getItem('crumble.run')) }));
+  assert.deepEqual([d.combo, d.hot, d.pow, d.size], [0, true, 0, d.big], 'still charged, back to the plain charged size');
+  assert.ok(['pfff.', 'I was HUGE.', 'that was your fault.'].includes(d.said) && d.tp > tp0, 'a pffft and a line ' + JSON.stringify(d.said));
+  assert.deepEqual([d.run.cn, d.run.cp], [1, 0], 'saved deflated');
+  await page.waitForFunction(() => Math.abs(toy.sc - CFG.CANNON_BIG) < .01);
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
+  assert.deepEqual(await page.evaluate(() => [toy.hot, toy.pow]), [true, 0], 'and through a real reload');
+  // nothing to lose at the plain charge; the switch off keeps the growth
+  await dealt(page);
+  await page.evaluate(() => { toy.pow = 0; combo = 3; comboMiss = CFG.COMBO_GRACE - 1; say.last = -1e9; say.txt = ''; });
+  await missDrop(page);
+  assert.deepEqual(await page.evaluate(() => [toy.hot, toy.pow, SAY.deflate.includes(say.txt)]), [true, 0, false], 'a plain charge: no pffft');
+  await page.evaluate(() => { CFG.CANNON_DEFLATE = false; toy.pow = 2; combo = 7; comboMiss = CFG.COMBO_GRACE - 1; });
+  await missDrop(page);
+  assert.deepEqual(await page.evaluate(() => [toy.hot, toy.pow]), [true, 2], 'CANNON_DEFLATE off: it keeps its growth');
+});
+
+test('stakes: slingshot: a pull launches opposite the pull (resting or on the move) and breaks gems along the dots; a quick swipe is still a flick; a tap gives the hint and spends nothing; a pull over the tray picks up nothing; a cancel leaves it charged', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  // uncharged: today's toy, no band, no dots
+  await crumbReady(page);
+  await pullCrumb(page, -20, -60);
+  assert.deepEqual([await page.evaluate(() => !toy.sl), (await aimRead(page)).shown], [true, false], 'uncharged: no slingshot');
+  await page.mouse.up();
+  await onRim(page);
+  // charged: pull back, rest, let go
+  await setup(page, { rows: STK_FULL, trayShapes: [0, 0, 0] });
+  await chargeCrumb(page);
+  await crumbReady(page);
+  assert.equal(await page.evaluate(() => el('crumbSay').textContent), 'PULL ME BACK!', 'the bubble says pull');
+  await pullCrumb(page, -30, -80);
+  const aim = await aimRead(page);
+  const pre = await page.evaluate(() => ({ sl: !!toy.sl, px: toy.x - toy.sl.ax, py: toy.y, path: toyPath(toy.sl.ax, toy.x - toy.sl.ax, toy.y), say: el('crumbSay').hidden,
+    reach: Math.max(cell * .5, masc.s * toySize() * .5 * CFG.CANNON_REACH) + cell * .2, bx, by, cell }));
+  assert.ok(pre.sl && aim.shown && aim.dots >= 10 && !aim.ghost, 'pulling: the band and the dots ' + JSON.stringify(aim));
+  const before = await gemSet(page), s0 = await page.evaluate(() => score);
+  await page.mouse.up();
+  const shot = await page.evaluate(() => ({ fire: !!toy.fire, hot: toy.hot, vx: toy.vx, vy: toy.vy, aim: el('crumbAim').style.display }));
+  assert.ok(shot.fire && !shot.hot && shot.vx > 0 && shot.vy > 0 && shot.aim === 'none', 'let go: a cannonball, away from the pull ' + JSON.stringify(shot));
+  const dir = Math.atan2(shot.vy, shot.vx) - Math.atan2(-pre.py, -pre.px);
+  assert.ok(Math.abs(dir) < 0.15, 'straight opposite the pull: ' + dir.toFixed(3));
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9001 });
+  const after = new Set(await gemSet(page)), broke = before.filter(i => !after.has(i));
+  assert.ok(broke.length >= 4, 'it broke gems: ' + broke.length);
+  assert.equal(await page.evaluate(() => score) - s0, broke.length * await page.evaluate(() => CFG.CANNON_PER_GEM), 'paid per gem');
+  const near = i => { const x = pre.bx + (i % 8 + .5) * pre.cell, y = pre.by + (Math.floor(i / 8) + .5) * pre.cell;
+    return pre.path.some(([px, py], k) => { const [qx, qy] = k ? pre.path[k - 1] : [px, py];      // distance to each segment of the dotted path
+      const L = (px - qx) ** 2 + (py - qy) ** 2, t = L ? Math.max(0, Math.min(1, ((x - qx) * (px - qx) + (y - qy) * (py - qy)) / L)) : 0;
+      return Math.hypot(x - (qx + t * (px - qx)), y - (qy + t * (py - qy))) <= pre.reach + 8; }); };
+  assert.deepEqual(broke.filter(i => !near(i)), [], 'every gem it broke lies along the dots');
+  // a fast flick still works, in the direction of the throw
+  await dealt(page);
+  await setup(page, { rows: STK_FULL, trayShapes: [0, 0, 0] });
+  // (the swipe's windows are stretched for this one step, so a slow runner's late events still read as a quick, fast swipe: the rule, not the clock, is tested)
+  await chargeCrumb(page); await crumbReady(page);
+  const knobs = await page.evaluate(() => { const k = [CFG.SLING_QUICK_MS, CFG.TOY_FLICK_MS, CFG.TOY_FLICK_MIN]; CFG.SLING_QUICK_MS = 1e5; CFG.TOY_FLICK_MS = 1e5; CFG.TOY_FLICK_MIN = 20; return k; });
+  const rf = await crumbAt(page);
+  await page.mouse.move(rf.x, rf.y); await page.mouse.down();
+  for (let i = 1; i <= 6; i++) await page.mouse.move(rf.x + i * 10, rf.y + i * 26);
+  await page.mouse.up();
+  const fl = await page.evaluate(() => ({ fire: !!toy.fire, vx: toy.vx, vy: toy.vy }));
+  await page.evaluate(k => { [CFG.SLING_QUICK_MS, CFG.TOY_FLICK_MS, CFG.TOY_FLICK_MIN] = k; }, knobs);
+  assert.ok(fl.fire && fl.vx > 0 && fl.vy > 0, 'a quick swipe down and right is a flick: down and right ' + JSON.stringify(fl));
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9002 });
+  // pulled back and let go without resting, after SLING_QUICK_MS: the slingshot, however fast the finger was moving
+  await chargeCrumb(page); await crumbReady(page);
+  const rs = await crumbAt(page);
+  await page.mouse.move(rs.x, rs.y); await page.mouse.down();
+  await page.waitForFunction(q => performance.now() - toy.t0 > q, await page.evaluate(() => CFG.SLING_QUICK_MS));
+  for (let i = 1; i <= 6; i++) await page.mouse.move(rs.x - i * 5, rs.y - i * 14);
+  await page.mouse.up();
+  const sw = await page.evaluate(() => ({ fire: !!toy.fire, vx: toy.vx, vy: toy.vy }));
+  assert.ok(sw.fire && sw.vx > 0 && sw.vy > 0, 'a pull up and left let go on the move: launched down and right, opposite the pull ' + JSON.stringify(sw));
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9005 });
+  // a tap: the hint and a demo, nothing spent
+  await chargeCrumb(page); await crumbReady(page);
+  const g0 = await gemSet(page), sc0 = await page.evaluate(() => score);
+  const r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down(); await page.mouse.up();
+  assert.deepEqual(await page.evaluate(() => [toy.hot, !!toy.fire, toy.mode, !!toy.demo]), [true, false, 'rim', true], 'still charged, a demo');
+  await page.waitForFunction(() => el('crumbSay').textContent === 'pull me back and let go!' && !el('crumbSay').hidden);
+  await page.waitForFunction(() => el('crumbAim').style.display !== 'none' && [...el('crumbAim').querySelectorAll('.dt circle')].some(c => +c.getAttribute('r') > 0));
+  assert.ok((await aimRead(page)).ghost, 'the demo shows the band by itself');
+  await page.waitForFunction(() => el('crumbAim').style.display === 'none' && !toy.demo, null, { timeout: 3000 });
+  assert.deepEqual([await gemSet(page), await page.evaluate(() => score)], [g0, sc0], 'no shot spent');
+  await page.waitForFunction(() => el('crumbSay').textContent === 'PULL ME BACK!', null, { timeout: 5000 });
+  // a pull down over the tray tracks the finger and picks up no piece; back to the perch and let go: the hint again
+  const g = await geometry(page), tray0 = await page.evaluate(() => tray.map(t => t && t.s.id));
+  await page.mouse.move(r.x, r.y); await page.mouse.down();
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(r.x + (g.trayCenters[0].x - r.x) * i / 10, r.y + (g.trayCenters[0].y - r.y) * i / 10); await page.waitForTimeout(16); }
+  const over = await page.evaluate(() => ({ drag: drag === null, pend: pendingPress === null, sl: !!toy.sl, len: Math.hypot(toy.x - toy.sl.ax, toy.y), max: CFG.SLING_MAX }));
+  assert.ok(over.drag && over.pend && over.sl && over.len <= over.max + .5, 'over the tray: still the crumb, stretched no further than SLING_MAX ' + JSON.stringify(over));
+  for (let i = 9; i >= 0; i--) { await page.mouse.move(r.x + (g.trayCenters[0].x - r.x) * i / 10, r.y + (g.trayCenters[0].y - r.y) * i / 10); await page.waitForTimeout(16); }
+  await page.waitForTimeout(150);
+  await page.mouse.up();
+  assert.deepEqual(await page.evaluate(() => [drag, toy.hot, !!toy.fire, tray.map(t => t && t.s.id)]), [null, true, false, tray0], 'no piece, no shot');
+  // cancelled pulls (a real touch): the system takes the touch, a second finger lands, the app is hidden
+  await page.evaluate(() => { toy.demo = null; });
+  const f = await fingers(page);
+  const perch = await page.evaluate(() => toy.x);
+  await f.down(1, r.x, r.y); await f.move(1, r.x - 20, r.y - 70, 6); await frames(page, 2);
+  assert.equal(await page.evaluate(() => !!toy.sl), true, 'a touch pulls it too');
+  await f.cancel(); await frames(page, 2);
+  assert.deepEqual(await page.evaluate(() => [toy.mode, toy.hot, !!toy.fire, toy.x, toy.y, el('crumbAim').style.display]), ['rim', true, false, perch, 0, 'none'], 'cancelled: back on its perch, charged');
+  await f.down(1, r.x, r.y); await f.move(1, r.x - 20, r.y - 70, 6); await frames(page, 2);
+  await f.down(2, g.trayCenters[1].x, g.trayCenters[1].y); await frames(page, 2);
+  assert.deepEqual(await page.evaluate(() => [!!toy.sl, drag, toy.mode, toy.hot]), [false, null, 'rim', true], 'a second finger: the pull is off, and it picks up nothing');
+  await f.up(2); await f.up(1); await frames(page, 2);
+  assert.deepEqual(await page.evaluate(() => [drag, toy.hot, !!toy.fire]), [null, true, false], 'still charged');
+  await pullCrumb(page, -20, -70);
+  await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new Event('visibilitychange')); delete document.visibilityState; });
+  await page.mouse.up();
+  assert.deepEqual(await page.evaluate(() => [toy.mode, toy.hot, !!toy.fire]), ['rim', true, false], 'hidden mid-pull: back on its perch, charged');
+});
+
+test("stakes: with Crumb's dares: a slingshot is a throw (\"don't flick me\" is lost), a tap's hint is not; the dare chip steps back for the aim, and no dare line talks while she aims", async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.waitForFunction(() => !!dare.id);
+  await page.evaluate(() => { dare.id = 'noflick'; dare.s = 0; dare.p = 0; dare.x = trayNo; dare.q = []; });
+  await setup(page, { rows: STK_FULL, trayShapes: [0, 0, 0] });
+  await chargeCrumb(page); await crumbReady(page);
+  const r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down(); await page.mouse.up();      // a tap: the hint and its demo
+  await page.waitForFunction(() => el('stage').classList.contains('aiming'));
+  await page.waitForTimeout(250);
+  const demo = await page.evaluate(() => ({ s: dare.s, quiet: dareQuiet(1e12), chip: getComputedStyle(el('dareChip')).filter }));
+  assert.deepEqual([demo.s, demo.quiet], [0, false], 'the hint spends nothing and loses nothing; not a quiet board');
+  assert.equal(demo.chip, 'opacity(0.2)', 'the chip makes way for the demo');
+  await page.waitForFunction(() => !toy.demo && !el('stage').classList.contains('aiming'), null, { timeout: 3000 });
+  await pullCrumb(page, -30, -80);
+  assert.deepEqual(await page.evaluate(() => [!!toy.sl, dareQuiet(1e12), el('stage').classList.contains('aiming')]), [true, false, true], 'aiming: not quiet, the chip steps back');
+  await page.mouse.up();
+  assert.deepEqual(await page.evaluate(() => [!!toy.fire, dare.s]), [true, 2], 'the slingshot threw him: the dare is lost');
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9000 });
+  assert.equal(await page.evaluate(() => el('stage').classList.contains('aiming')), false);
+});
+
+test('stakes: with Reduce Motion the slingshot, the demo (a still picture), the sputter and the deflate keep their rules', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && state === 'idle');
+  await play(page);
+  await dealt(page);
+  assert.equal(await page.evaluate(() => reduce), true);
+  await watchTicks(page);
+  // the sputter: the same levels and the tick
+  await page.evaluate(() => { CFG.TRANSFORM_COMBO = 99; combo = 4; comboMiss = 0; toy.lastCombo = 4; });
+  await missDrop(page);
+  assert.equal(await page.evaluate(() => sputLevel()), 1);
+  await missDrop(page);
+  assert.deepEqual(await page.evaluate(() => [sputLevel(), fireTarget() <= 0.16, __hap.filter(h => h === 'sputter').length]), [2, true, 1], 'the last life, with its tick');
+  // the deflate: same rule, its size at once
+  await chargeCrumb(page, 2);
+  await missDrop(page);
+  assert.deepEqual(await page.evaluate(() => [combo, toy.hot, toy.pow, toy.sc === CFG.CANNON_BIG]), [0, true, 0, true], 'deflated at once, still charged');
+  // a tap: the demo is a still picture
+  await setup(page, { rows: STK_FULL, trayShapes: [0, 0, 0] });
+  await crumbReady(page);
+  const r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down(); await page.mouse.up();
+  await page.waitForFunction(() => el('crumbAim').style.display !== 'none');
+  const a1 = await aimRead(page); await frames(page, 12); const a2 = await aimRead(page);
+  assert.ok(a1.ghost && a1.dots > 0 && a1.ghost === a2.ghost && a1.dots === a2.dots, 'the demo does not move ' + JSON.stringify([a1, a2]));
+  await page.waitForFunction(() => el('crumbAim').style.display === 'none', null, { timeout: 3000 });
+  // the slingshot
+  const before = await gemSet(page);
+  await pullCrumb(page, -30, -80);
+  assert.ok((await aimRead(page)).dots >= 10, 'the dots');
+  await page.mouse.up();
+  const shot = await page.evaluate(() => ({ fire: !!toy.fire, vx: toy.vx, vy: toy.vy }));
+  assert.ok(shot.fire && shot.vx > 0 && shot.vy > 0, 'reduced motion: the slingshot throws the cannonball ' + JSON.stringify(shot));
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9000 });
+  const after = new Set(await gemSet(page));
+  assert.ok(before.filter(i => !after.has(i)).length >= 4, 'and it breaks gems');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+});
+
+test('stakes: Last Chance with the slingshot: a deflated crumb still holds the run; a pull over the tray picks up nothing; a pull back and let go makes room', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  await page.evaluate(() => { combo = 7; comboMiss = CFG.COMBO_GRACE - 1; toy.lastCombo = 7; });
+  await chargeCrumb(page, 2);
+  await missDrop(page);
+  assert.deepEqual(await page.evaluate(() => [toy.hot, toy.pow]), [true, 0], 'deflated, charged');
+  await dealt(page);
+  await setup(page, { rows: STK_JAM });
+  await page.evaluate(() => { const sq = SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2); tray = [{ s: sq, gi: 1 }, { s: sq, gi: 2 }, { s: sq, gi: 3 }]; checkStuck(); });
+  assert.equal(await page.evaluate(() => stuck && toyLast()), true, 'the last chance');
+  assert.ok(await page.evaluate(() => banners.some(b => b.txt === 'LAST CHANCE!' && /pull/.test(b.sub))), 'the banner says pull');
+  await page.waitForFunction(() => !el('crumbSay').hidden && el('crumbSay').textContent === 'PULL ME BACK, QUICK!');
+  const g = await geometry(page), r = await crumbAt(page);
+  await page.mouse.move(r.x, r.y); await page.mouse.down();
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(r.x + (g.trayCenters[1].x - r.x) * i / 10, r.y + (g.trayCenters[1].y - r.y) * i / 10); await page.waitForTimeout(16); }
+  assert.deepEqual(await page.evaluate(() => [drag, pendingPress, !!toy.sl]), [null, null, true], 'over the tray: no pickup, still pulling');
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(g.trayCenters[1].x + (r.x - 30 - g.trayCenters[1].x) * i / 10, g.trayCenters[1].y + (r.y - 80 - g.trayCenters[1].y) * i / 10); await page.waitForTimeout(16); }
+  await page.waitForTimeout(170);
+  await page.mouse.up();
+  assert.equal(await page.evaluate(() => !!toy.fire && drag === null), true, 'let go: a cannonball');
+  await page.waitForFunction(() => !toy.fire && banners.some(b => b.txt === 'SAVED!'), null, { timeout: 9000 });
+  await page.waitForFunction(() => toy.mode === 'rim', null, { timeout: 9000 });
+  assert.deepEqual(await page.evaluate(() => [state, stuck, toyHot()]), ['play', false, false], 'room was made: the run goes on');
 });
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;

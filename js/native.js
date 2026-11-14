@@ -12,6 +12,7 @@ const Native={
 // kind -> [priority, impact style | notification type, optional follow-up after ms]
 const HAPTIC={
   pickup:    [1,'LIGHT'],
+  sputter:   [3,'LIGHT'],      // (stakes) the streak's last life: a light tap instead of the drop's thump
   place:     [2,'MEDIUM'],
   clear:     [3,'MEDIUM'],
   combo:     [4,'HEAVY'],

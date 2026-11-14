@@ -195,7 +195,7 @@ function dareCookie(){                                 // a cookie hops from the
   dare.hop.oncancel=()=>{ ck.remove(); land(); };
 }
 function dareQuiet(now){                               // nothing bigger is going on: a dare line may speak
-  return state==='play'&&!paused&&!dealing&&!stuck&&!ava.live&&!toyHot()&&toy.mode==='rim'&&!masc.fainted
+  return state==='play'&&!paused&&!dealing&&!stuck&&!ava.live&&!toyHot()&&toy.mode==='rim'&&!masc.fainted&&!toy.sl&&!toy.demo   // (stakes) not while she aims the slingshot or its demo shows
     &&!banners.length&&!sweepShow&&!bands.length&&now>=say.until+350;
 }
 function dareStep(now,shown){

@@ -382,8 +382,10 @@ function place(idx,r,c){
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
   } else if(comboCarries()&&combo>0&&++comboMiss<CFG.COMBO_GRACE){
     // (round 6) Block Blast's streak: the combo carries over drops that clear nothing, as long as she clears again within COMBO_GRACE drops
+    if(fireSputter()) toyLastLife();               // (stakes) its last life: a tick (draw.js), and the crumb glances at the board (crumbtoy.js)
   } else {
     if(combo>=CFG.BIG_COMBO){ fireSnuff(); mascotAct('flat'); }   // (7.5d) the streak is over: the flames go out in a puff; (7.5f) the crumb gives it a flat stare
+    if(combo>0) toyDeflate();                       // (stakes) a charged crumb that grew on this streak loses the growth
     combo=0; comboMiss=0;
     if(!paced()) tension=Math.min(1,tension+CFG.TENSION_UP);
   }

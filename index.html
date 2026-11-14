@@ -137,6 +137,15 @@
   :is(#mascot,#heroCrumb,.crumbFig).faint .cl-head:not(.cl-space){transform:translate(-2px,-1px) rotate(-18deg)}      /* knocked askew */
   :is(#mascot,#heroCrumb,.crumbFig) .cl-shades{transform-origin:50% 50%}
   :is(#mascot,#heroCrumb,.crumbFig):is(.faint,.sweep,.grab,.dizzy) .cl-shades{transform:translateY(-6.6px) rotate(-4deg) scaleY(.8)}   /* pushed up: the big faces (X, stars, spirals, wide eyes) show */
+  #mascot.glance .m0,#mascot.worry .m0{display:none} #mascot.glance .m4,#mascot.worry .m5{display:inline}   /* (stakes) the streak's last life */
+  #mascot.glance .bL,#mascot.worry .bL{transform:translateY(-.6px) rotate(-17deg)} #mascot.glance .bR,#mascot.worry .bR{transform:translateY(-.6px) rotate(17deg)}
+  #mascot.worry .sw{opacity:1}
+  #crumbAim{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible}   /* (stakes) the slingshot's band and dots: js/crumbtoy.js */
+  #crumbAim line{stroke:#7A3E12;stroke-linecap:round}
+  #stage.aiming #dareChip{filter:opacity(.2)}   /* the dare chip makes way for the slingshot's aim (a filter: its entrance animation owns opacity) */
+  #crumbAim .fk{fill:none;stroke:#6E4220;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+  #crumbAim .gh{fill:rgba(255,179,71,.35);stroke:#FFB347;stroke-width:2;stroke-dasharray:4 3}
+  #crumbAim .dt circle{fill:#FFF6E3;stroke:#7A3E12;stroke-width:1.2}
   /* (talk) the crumb's bubble and signs: js/crumbsay.js */
   #crumbSay{position:absolute;z-index:1;pointer-events:none;max-width:200px;padding:3px 9px 4px;border-radius:11px;white-space:nowrap;
     font:600 13px/1.25 var(--font);color:#3A2010;background:#FFF6E3;border:1.5px solid #6E4220;box-shadow:0 2px 0 rgba(0,0,0,.25);

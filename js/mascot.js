@@ -11,6 +11,8 @@
      sweep  a clean sweep or a won level: star eyes and a flip (the biggest, as the sweep is)
      tight  the board is cramped (Endless/Daily: the pace is edge or recovery; Adventure: room below ROOM_EDGE): worried brows, a sweat drop
      faint  no moves / game over: X eyes, it tips over on the rim; a rescue or a new run stands it back up
+     glance (stakes) a carried streak is on its last life: worried brows, a wobbly mouth, its eyes on the board
+     worry  (stakes) the same while it is charged and grown: it looks down at itself, with a bead of sweat (use me or lose me)
    Plain DOM (an inline SVG) over the canvas: no canvas drawing. Faces are class swaps written only when the mood changes;
    motion is CSS / Web Animations on transform and opacity only. The pupils follow the drag in quantised steps (an attribute
    write only when the step changes). Reduced motion: the faces change, nothing moves. It dims when the held piece comes near
@@ -46,6 +48,8 @@ const MASCOT_ACT={                                   // ms the face holds, and t
   hop:  {ms:950,  move:[{transform:'none'},{transform:'translateY(1px) scale(1.06,.9)',offset:.15},{transform:'translateY(-30%) scale(.95,1.06)',offset:.45},{transform:'translateY(1px) scale(1.05,.92)',offset:.8},{transform:'none'}], dur:620},
   smug: {ms:1300, move:[{transform:'none'},{transform:'translateY(-12%) rotate(-7deg)',offset:.35},{transform:'rotate(-5deg)',offset:.7},{transform:'none'}], dur:900},
   flat: {ms:1500, move:null},
+  glance:{ms:1700, move:[{transform:'none'},{transform:'rotate(6deg) translateX(4%)',offset:.3},{transform:'rotate(4deg) translateX(3%)',offset:.8},{transform:'none'}], dur:1300},
+  worry:{ms:1900, move:[{transform:'none'},{transform:'translateX(-3%)',offset:.2},{transform:'translateX(3%)',offset:.4},{transform:'translateX(-2%)',offset:.6},{transform:'none'}], dur:700},
   phew: {ms:1300, move:[{transform:'none'},{transform:'scale(1.04,.95)',offset:.3},{transform:'translateY(1px) scale(.98,1.02)',offset:.6},{transform:'none'}], dur:900},
   sweep:{ms:1700, move:[{transform:'none'},{transform:'translateY(2px) scale(1.08,.86)',offset:.12},{transform:'translateY(-55%) rotate(-180deg)',offset:.45},{transform:'translateY(-30%) rotate(-360deg)',offset:.7},{transform:'translateY(1px) scale(1.06,.92) rotate(-360deg)',offset:.88},{transform:'rotate(-360deg)'}], dur:1100},
 };
@@ -114,6 +118,8 @@ function mascotStep(now){                             // draw.js frame(): writes
   const key=mood+(blink?' blink':'')+(dim?' dim':'')+(reduce?' rm':'')+(toyGrabbable()&&!faint?' toy':'')+(toyHot()&&!faint?' hot':'');
   if(key!==m.key){ m.el.hidden=false; m.el.className=key; m.key=key; }
   sayStep(now,true,faint);                          // (talk) a line beside it, if it has one
+  if(mood==='glance') lx=bx+B/2>m.x+toy.x+m.s/2?1:-1, ly=1;        // (stakes) eyes on the board
+  else if(mood==='worry') lx=0, ly=1.2;                            // ... or on itself
   const look=mood==='faint'||mood==='sweep'||mood==='flat'||mood==='dizzy'?'0,0':(Math.round(lx*1.3*4)/4)+','+(Math.round(ly*1.1*4)/4);
   if(look!==m.look){ m.look=look; m.pp.setAttribute('transform','translate('+look+')'); }
 }
