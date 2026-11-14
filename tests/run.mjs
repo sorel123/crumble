@@ -3695,6 +3695,238 @@ test('Avalanche: a roll, never a rule; only in Endless; nothing to drop means no
   assert.ok(await page.evaluate(() => !CFG.AVALANCHE && JSON.parse(localStorage.getItem('crumble.skins')).av2 === false), 'off, and saved');
 });
 
+// ── review fixes (2026-11-14): cannonball strength saved, the cannonball under reduced motion, one GUIDE key, the win card's
+// star target, Avalanche chain rewards, cannonball NEW BEST / clean sweep, the golden hand switch ──
+test('fix: a charged crumb keeps its strength across a resume (cp), not worked out again from the combo; bad or missing cp resumes at the plain charge', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const r = await page.evaluate(() => {
+    const o = {};
+    toy.hot = true; toy.pow = 3; combo = 9;
+    const snap = JSON.parse(JSON.stringify(snapshot()));
+    o.cp = snap.cp; o.power = toyPower(); o.size = toySize();
+    toy.hot = false; toy.pow = 0; snap.combo = 0;                  // the resumed combo says nothing about the strength
+    o.ok = restore(snap); o.hot = toy.hot; o.pow = toy.pow; o.power2 = toyPower(); o.size2 = toySize();
+    o.bad = ['3', -1, 2.5, 1e6, null].map(cp => { restore({ ...snap, cp }); return [toy.hot, toy.pow]; });
+    const old = { ...snap }; delete old.cp; restore(old); o.old = [toy.hot, toy.pow];
+    toy.hot = false; toy.pow = 4; o.cold = snapshot().cp;
+    toy.hot = true; toy.pow = 3; saveRun();
+    return o;
+  });
+  assert.equal(r.cp, 3, 'saved');
+  assert.deepEqual([r.ok, r.hot, r.pow, r.power2, r.size2], [true, true, 3, r.power, r.size], 'resumed as strong and as big as it was');
+  r.bad.forEach(b => assert.deepEqual(b, [true, 0], 'a bad cp is dropped: ' + JSON.stringify(r.bad)));
+  assert.deepEqual(r.old, [true, 0], 'an older save: charged, plain strength');
+  assert.equal(r.cold, 0, 'a cold crumb saves no strength');
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => typeof state !== 'undefined' && state === 'play' && !!cell);
+  assert.deepEqual(await page.evaluate(() => [toy.hot, toy.pow]), [true, 3], 'and through a real reload');
+});
+
+// one cannonball, stepped by hand in a single evaluate (no frame runs in between), so two page loads can be compared exactly
+const CANNON_FLIGHT = `(() => {
+  const FULL = ['01111111', '11011011', '11101110', '10111101', '11011011', '01101101', '11110111', '10111010'];
+  grid = FULL.map(r => [...r].map(ch => ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null));
+  toyReset(); toy.hot = true; toy.pow = 0; toy.x = 0; toy.sc = toySize(); masc.fainted = false;
+  const t0 = performance.now(), s0 = score, a = [];
+  toy.last = t0; toy.hot = false; toy.fire = { n: 0, pts: 0, max: toyPower(), b: 0 }; toy.mode = 'air'; toy.vx = 260; toy.vy = 620; toy.va = reduce ? 0 : 400; toy.speed = 700; toy.bounces = 0;
+  for (let k = 1; k < 3000 && toy.mode !== 'rim'; k++) { toyStep(t0 + k * 16); a.push(toy.a); }
+  return { board: grid.map(r => r.map(g => g ? 1 : 0).join('')), pts: score - s0, rim: toy.mode, spun: a.some(v => v !== 0), hot: toyHot() };
+})()`;
+const toGameReady = page => page.waitForFunction(() => state === 'play' && !dealing && !paused);
+test('fix: with Reduce Motion the cannonball still charges, flies the same flight, breaks the same gems for the same points, and the last chance holds; only the play around it is calmer', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const plain = await page.evaluate(CANNON_FLIGHT);
+  assert.ok(plain.pts > 0 && plain.spun, 'the reference flight breaks gems (and spins) ' + JSON.stringify(plain));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && (state === 'play' || state === 'idle'));
+  if (await page.evaluate(() => state) !== 'play') await play(page);
+  await dealt(page);
+  assert.equal(await page.evaluate(() => reduce && toyOn()), true, 'reduced motion: the toy is there');
+  const calm = await page.evaluate(CANNON_FLIGHT);
+  assert.deepEqual({ board: calm.board, pts: calm.pts }, { board: plain.board, pts: plain.pts }, 'the same gems broken, the same points');
+  assert.equal(calm.spun, false, 'no spin');
+  assert.deepEqual([calm.rim, calm.hot], ['rim', false], 'back on the rim at once, cold');
+  // uncharged, touches pass through it; a streak charges it and the banner says so
+  await toGameReady(page);
+  await mascotMood(page, /^idle\b/);
+  assert.ok(await page.evaluate(() => !/\btoy\b/.test(el('mascot').className) && getComputedStyle(el('mascot')).pointerEvents === 'none'), 'not charged: nothing to grab');
+  const FULL = ['01111111', '11011011', '11101110', '10111101', '11011011', '01101101', '11110111', '10111010'];
+  await page.evaluate(() => { CFG.TRANSFORM_COMBO = 99; toy.lastCombo = 0; combo = 4; });
+  await setup(page, { rows: FULL, trayShapes: [0, 0, 0] });
+  await dragPiece(page, 0, 0, 0);
+  await page.waitForFunction(() => toy.hot && banners.some(b => b.txt === 'CANNONBALL READY!'));
+  await mascotMood(page, /\btoy\b.*\bhot\b/);
+  const before = await page.evaluate(() => grid.flat().filter(Boolean).length);
+  for (let k = 0; k < 4 && !await page.evaluate(() => !!toy.fire); k++) {   // a slow flick is a put-down that keeps the charge (headless timing varies): flick again
+    await flickCrumb(page, 12, 30, 4);
+    const t = await page.evaluate(() => [!!toy.fire, toy.mode, toy.hot]);
+    if (!t[0]) assert.deepEqual(t, [false, 'rim', true], 'reduced motion: a throw that is not a cannonball puts it straight back, still charged');
+  }
+  assert.equal(await page.evaluate(() => !!toy.fire), true, 'a flick throws the cannonball');
+  await page.waitForFunction(() => !toy.fire && toy.mode === 'rim', null, { timeout: 9000 });
+  assert.ok(before - await page.evaluate(() => grid.flat().filter(Boolean).length) > 0, 'it broke gems');
+  // the last chance: out of room with a charged crumb, the run holds
+  await dealt(page);
+  const JAM = ['11011011', '01101101', '10110110', '11011011', '01101101', '10110110', '11011011', '01101101'];
+  await setup(page, { rows: JAM });
+  await page.evaluate(() => { const sq = SHAPES.find(s => s.n === 4 && s.rows === 2 && s.cols === 2); tray = [{ s: sq, gi: 1 }, { s: sq, gi: 2 }, { s: sq, gi: 3 }]; toy.hot = true; checkStuck(); });
+  assert.equal(await page.evaluate(() => stuck && toyLast()), true, 'it is the last chance');
+  await page.waitForTimeout(1100);
+  assert.deepEqual(await page.evaluate(() => [state, masc.fainted]), ['play', false], 'the run holds, the crumb stands');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+});
+
+test('fix: GUIDE is the dealing weight (a number), GUIDED_START the guided first game; an old Admin save holding GUIDE:true cannot clobber the weight', async ({ page, server }) => {
+  assert.deepEqual(await page.evaluate(() => [typeof CFG.GUIDE, CFG.GUIDE, CFG.GUIDED_START]), ['number', 1, true]);
+  await page.evaluate(() => localStorage.setItem('crumble.dev.6', JSON.stringify({ GUIDE: true, GUIDED_START: 'x', ANTIC_SHIVER: 2 })));
+  await page.goto(server.url + '?dev');
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  const r = await page.evaluate(() => ({ g: CFG.GUIDE, gs: CFG.GUIDED_START, shake: CFG.ANTIC_SHIVER, tog: [...document.querySelectorAll('#devList label')].some(l => /Guided first game/.test(l.textContent)) }));
+  assert.deepEqual(r, { g: 1, gs: true, shake: 2, tog: true }, 'the old boolean is dropped, other tuning kept, and Admin has the switch');
+  await page.evaluate(() => { CFG.GUIDE = 2; CFG.GUIDED_START = false; devSave(); });
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => [CFG.GUIDE, CFG.GUIDED_START]), [2, false], 'both saved as themselves');
+  await page.evaluate(() => localStorage.removeItem('crumble.dev.6'));
+});
+
+test('fix: the Adventure win card names the next star target: two stars after one, three after two, at the right boundaries', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const msg = (L, p) => { lvl = L; lv = { lines: 0, pieces: p, combo: 0, swept: false }; state = 'won'; showWin(starsFor(L, p), false); return [starsFor(L, p), el('winMsg').textContent]; };
+    const L = LEVELS[0], out = { par: L.par };
+    out.rows = [L.par[0], L.par[0] + 1, L.par[1], L.par[1] + 1].map(p => msg(L, p));
+    out.same = msg({ ...L, par: [5, 5] }, 6);
+    out.one = msg({ ...L, par: [1, 3] }, 2);
+    el('winCard').hidden = true; state = 'idle';
+    return out;
+  });
+  const [p3, p2] = r.par;
+  assert.deepEqual(r.rows, [
+    [3, 'Perfect! Three stars.'],
+    [2, `Finish in ${p3} pieces or fewer for three stars. You used ${p3 + 1}.`],
+    [2, `Finish in ${p3} pieces or fewer for three stars. You used ${p2}.`],
+    [1, `Finish in ${p2} pieces or fewer for two stars. You used ${p2 + 1}.`],
+  ]);
+  assert.deepEqual(r.same, [1, 'Finish in 5 pieces or fewer for three stars. You used 6.'], 'when the two targets are one number, one star points at three');
+  assert.deepEqual(r.one, [2, 'Finish in 1 piece or fewer for three stars. You used 2.'], 'one piece, singular');
+});
+
+test('fix: Avalanche chain lines count like clears: the bonus meter fills, a combo they reach earns Volcano and the star, a colour the fall wipes out pays COLOR GONE behind the AVALANCHE! banner', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const r = await page.evaluate((AVA_ROWS) => {
+    CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; CFG.TRANSFORM_COMBO = 6;
+    grid = AVA_ROWS.map(r => [...r].map(ch => ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null));
+    grid[5][1].gi = 4;                                      // the only gem of its colour; the fall takes it into a chain row
+    tray = [{ s: SHAPES[0], gi: 0 }, { s: SHAPES[0], gi: 0 }, { s: SHAPES[0], gi: 0 }];
+    trayNo = 10; specialEnd = -99; bonus = null; bonusMeter = 0; transformCool = 99; starForced = false; combo = 4; banners.length = 0; bands.length = 0;
+    discoveredWorlds.delete('volcano');
+    const s0 = score;
+    place(0, 0, 0);
+    const main = Math.round(CFG.LINE_POINTS * (1 + 4 * CFG.COMBO_STEP)), chain = Math.round(CFG.LINE_POINTS * 4 * (1 + 5 * CFG.COMBO_STEP));
+    const cg = Math.round(CFG.COLOR_GONE_BONUS * (1 + 5 * 0.25));
+    return { combo, meter: bonusMeter, volcano: discoveredWorlds.has('volcano'), star: starForced, gained: score - s0, want: SCORE_SCALE + main + chain + cg,
+      banners: banners.map(b => b.txt), bands: bands.length, board: grid.map(r => r.map(g => g ? 1 : 0).join('')) };
+  }, AVA_ROWS);
+  assert.deepEqual(r.board, [...Array(6).fill('00000000'), '10000000', '10110110'], 'the same fall as before');
+  assert.equal(r.combo, 6);
+  assert.equal(r.meter, 3 + 4, 'the meter: the clear (1 line at combo 5) and the chain (2 lines at combo 6)');
+  assert.equal(r.volcano, true, 'combo 6 reached by the chain earns Volcano');
+  assert.equal(r.star, true, 'and the star (STAR_COMBO 6)');
+  assert.equal(r.gained, r.want, 'the colour the fall wiped out pays COLOR GONE');
+  const ia = r.banners.indexOf('AVALANCHE!');
+  assert.ok(ia >= 0 && r.banners[ia + 1] === 'COLOR GONE!', 'its words queue right behind the AVALANCHE! banner: ' + JSON.stringify(r.banners));
+  assert.equal(r.bands, 0, 'no band drawn over the falling board');
+});
+
+test('fix: an Avalanche that empties the board is a clean sweep whose show starts after the last chain line breaks', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const r = await page.evaluate(() => {
+    CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; CFG.TRANSFORM_COMBO = 99;
+    const rows = ['01111111', '11110000', '00001111', '11110000', '00001111', '00000000', '00000000', '00000000'];
+    grid = rows.map(r => [...r].map(ch => ch === '1' ? { gi: 0, t: 1, f: 0, l: 0 } : null));
+    tray = [{ s: SHAPES[0], gi: 0 }, { s: SHAPES[0], gi: 0 }, { s: SHAPES[0], gi: 0 }];
+    combo = 4; banners.length = 0; const sw0 = stats.sweeps;
+    place(0, 0, 0);
+    const chain = pops.filter(p => /^CHAIN/.test(p.sub)).map(p => -p.t / 0.026);
+    return { empty: boardEmpty(), sweeps: stats.sweeps - sw0, show: sweepShow ? -sweepShow.t : null, chain, slamEnd: slams.length ? -slams[0].t + 48 : 0, banners: banners.map(b => b.txt) };
+  });
+  assert.equal(r.empty, true); assert.equal(r.sweeps, 1, 'counted as a sweep');
+  assert.ok(r.chain.length >= 1 && r.show !== null, JSON.stringify(r));
+  assert.ok(r.show > Math.max(...r.chain), 'the flood starts after the last chain line has broken: ' + JSON.stringify(r));
+  assert.ok(r.show >= r.slamEnd, 'and after the COMBO slam is gone: ' + JSON.stringify(r));
+  assert.ok(r.banners.indexOf('AVALANCHE!') < r.banners.indexOf('CLEAN SWEEP'), 'AVALANCHE! first, then CLEAN SWEEP, one at a time');
+});
+
+test('fix: a cannonball that passes her best raises NEW BEST; one that breaks the last gem is a full clean sweep (bonus, count, sky, look, show, save)', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const r = await page.evaluate(() => {
+    const o = {}, gem = () => ({ gi: 0, t: 1, f: 0, l: 0 });
+    const shoot = (rr, cc) => {                                  // the cannonball's middle right over cell (rr, cc), then spent
+      const s = masc.s; toy.sc = 1; toy.mode = 'air';
+      toy.x = bx + (cc + .5) * cell - masc.x - s / 2; toy.y = by + (rr + .5) * cell - masc.y - s + s / 2;
+      toy.fire = { n: 0, pts: 0, max: 10, b: 0 }; toySmash(); toyFireEnd();
+    };
+    grid = empty(); grid[2][2] = gem(); grid[6][6] = gem();
+    best = score + CFG.CANNON_PER_GEM - 1; chaseBest = best; bestBeaten = false; banners.length = 0;
+    shoot(2, 2);
+    o.best = bestBeaten; o.bestBanner = banners.some(b => b.txt === 'NEW BEST!'); o.left = grid.flat().filter(Boolean).length; o.noSweep = !banners.some(b => b.txt === 'CLEAN SWEEP');
+    discoveredWorlds.delete('rainbow'); banners.length = 0;
+    const s0 = score, sw0 = stats.sweeps, j0 = jJumps;
+    shoot(6, 6);
+    o.empty = boardEmpty(); o.gained = score - s0; o.want = CFG.CANNON_PER_GEM + CFG.SWEEP_BONUS + CFG.SWEEP_PER_GEM;
+    o.sweeps = stats.sweeps - sw0; o.jumps = jJumps - j0; o.rainbow = discoveredWorlds.has('rainbow'); o.show = !!sweepShow;
+    o.banner = banners.some(b => b.txt === 'CLEAN SWEEP'); o.saved = JSON.parse(localStorage.getItem('crumble.run')).score === score;
+    o.statsSaved = JSON.parse(localStorage.getItem('crumble.stats')).sweeps === stats.sweeps;
+    toyReset();
+    return o;
+  });
+  assert.deepEqual([r.best, r.bestBanner, r.left, r.noSweep], [true, true, 1, true], 'NEW BEST, and one gem left is no sweep');
+  assert.equal(r.empty, true);
+  assert.equal(r.gained, r.want, 'the cannon gem plus the sweep bonus');
+  assert.deepEqual([r.sweeps, r.jumps, r.rainbow, r.show, r.banner], [1, 1, true, true, true], 'counted, the sky jumps, Rainbow unlocks, the show and the banner');
+  assert.deepEqual([r.saved, r.statsSaved], [true, true], 'the run and the stats are saved');
+});
+
+test('fix: Golden hand switch in Settings > Look > Advanced: on by default, saved; off mid-run a live golden hand plays out and pays, and no new one is dealt', async ({ page, errors }) => {
+  await play(page);
+  await dealt(page);
+  await page.evaluate(goldHand);
+  await openSet(page);
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#goldOn'), true, 'on by default');
+  assert.match(await page.textContent('label:has(#goldOn)'), /Golden hand: a rare gold tray that pays triple/);
+  await page.click('#goldOn');
+  await closeSet(page);
+  assert.ok(await page.evaluate(() => CFG.SPECIALS.golden === false && JSON.parse(localStorage.getItem('crumble.skins')).gold === false), 'off, and saved');
+  const r = await page.evaluate(() => {
+    const live = !!golden, b = score;
+    place(0, 0, 0); place(1, 1, 0); place(2, 2, 0);
+    const o = { live, gained: score - b, after: golden, cele: !!goldenCele && goldenCele.full };
+    goldenNext = true; goldenCool = 0; trayNo = 20; specialEnd = -99; golden = null; tray = [null, null, null]; genTray();
+    o.dealtGold = !!golden || tray.some(t => t && t.gi === GOLD);
+    return o;
+  });
+  assert.equal(r.live, true, 'the hand was live when it was switched off');
+  assert.deepEqual([r.after, r.cele], [null, true], 'it played out and celebrated');
+  assert.ok(r.gained > 0, 'and paid');
+  assert.equal(r.dealtGold, false, 'no new golden hand while it is off');
+  await page.reload(); await toGame(page);
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => CFG.SPECIALS.golden), false, 'still off after a reload');
+  if (await page.evaluate(() => state) === 'play') await openSet(page); else await page.click('#startSettings');
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#goldOn'), false, 'the box shows it');
+  await page.click('#goldOn');
+  assert.ok(await page.evaluate(() => CFG.SPECIALS.golden === true && JSON.parse(localStorage.getItem('crumble.skins')).gold === true), 'back on, saved');
+  assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), [], 'no script errors');
+});
+
 // ── 7.5g timelapse ──
 const tlPlace = async (page, r, c) => {                   // one drop of a single cell, the tray refilled so no deal is due
   await dealt(page);
@@ -4069,7 +4301,7 @@ test('guided first game (1.1 D): a returning player, an old save without the fla
   const r = await page.evaluate(() => { mode = 'daily'; start(); const d = lastTier; mode = 'adventure'; lvl = LEVELS[0]; stats.games = 0; start(); return { d, a: lastTier, g: guide }; });
   assert.notEqual(r.d, 'GUIDE'); assert.notEqual(r.a, 'GUIDE'); assert.equal(r.g, null);
   await freshPlayer(page);
-  assert.equal(await page.evaluate(() => { CFG.GUIDE = false; start(); return lastTier; }), 'OPENING', 'the switch turns it off');
+  assert.equal(await page.evaluate(() => { CFG.GUIDED_START = false; start(); return lastTier; }), 'OPENING', 'the switch turns it off');
 });
 
 test('guided first game (1.1 D): off-script ends it quietly, the ordinary dealer takes over from her board, and it never comes back', async ({ page }) => {

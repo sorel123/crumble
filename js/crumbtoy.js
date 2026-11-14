@@ -8,14 +8,18 @@
      sulk    thrown TOY_SULK_N times within TOY_SULK_MS it sits with a frown and shakes its head at the next grabs
      cannon  (Endless) a streak of CANNON_COMBO charges it: it glows. Thrown while charged it is a cannonball: every gem it
              flies over breaks (CANNON_PER_GEM points each) and slows it, up to CANNON_MAX gems. The one way the toy touches the board.
+             Breaking the last gem is a clean sweep and passing her best is NEW BEST (game.js sweepPayoff / bestCheck).
      tilt    with motion allowed, leaning the phone rolls the crumb along the rim and it stays on the low side
    Apart from the cannonball, score, tray and board are never touched; the piece drag wins (one finger on a piece: the crumb cannot be grabbed).
    The crumb moves with the CSS `translate` and `rotate` properties, so mascot.js's own transform animations still play.
-   Reduced motion: the toy is off. Switches: CFG.FX_CRUMB_TOY (Settings > Look > Advanced "Crumb is a toy", saved `toy`)
-   and CFG.TILT ("Tilt", saved `tilt`). iOS asks once for motion: the request rides on the first finger lifted off the crumb. */
+   Reduced motion: the cannonball is a game ability, so it stays (charge, throw, the last chance: same flight, same gems, same
+   points); the play around it is off: the crumb can only be picked up while it is charged, a throw that is not a cannonball puts
+   it straight back, and there is no spin, sway, dizzy, tilt roll or hop home (it lands and is back on the rim at once).
+   Switches: CFG.FX_CRUMB_TOY (Settings > Look > Advanced "Crumb is a toy", saved `toy`) and CFG.TILT ("Tilt", saved `tilt`). iOS asks once for motion: the request rides on the first finger lifted off the crumb. */
 const toy={mode:'rim',x:0,y:0,vx:0,vy:0,a:0,va:0,last:0,id:-1,ox:0,oy:0,pts:[],speed:0,bounces:0,
            dizzyTo:0,sulkTo:0,hot:false,fire:null,lastCombo:0,pow:0,sc:1,flicks:[],bx0:0,by0:0,bt:0,btx:0,restT:0,css:'',gx:0,gRaw:0,tiltOn:false,tiltAsked:false,hapAt:0,sndAt:0};
-const toyOn=()=>CFG.FX_CRUMB_TOY&&CFG.FX_MASCOT&&!reduce&&!!masc.el;
+const toyOn=()=>CFG.FX_CRUMB_TOY&&CFG.FX_MASCOT&&!!masc.el;           // the toy exists (the cannonball and the last chance need only this)
+const toyGrabbable=()=>toyOn()&&(!reduce||toy.hot||toy.mode==='held');   // reduced motion: a finger takes it only while it is charged
 const toyXMax=()=>Math.max(0,(B||0)-12-(masc.s||0));                       // the rim runs the board's width; home is its left end
 function toyReset(){                                                // back on the rim where it stood, upright, calm
   if(toy.id>=0&&masc.el){ try{ masc.el.releasePointerCapture(toy.id); }catch(e){} }
@@ -60,6 +64,10 @@ function toyFireEnd(){                                              // out of st
   if(f.n>=4) sayLine('cannon',true);
   pops.push({x:bx+B/2,y:by+cell*1.2,t:0,txt:'+'+f.pts,sub:'CANNONBALL ×'+f.n,combo:1,lines:1});
   glowT=Math.max(glowT,.8);
+  if(state==='play'&&boardEmpty()){                                 // it broke the last gem: a clean sweep, with everything a drop's sweep brings (game.js)
+    score+=sweepPayoff(f.n,6,true); stats.sweeps++; mascotAct('sweep'); checkGoals();
+  }
+  if(state==='play') bestCheck(true);                               // and passing her best is NEW BEST, as for a drop
   updateDbg(); tlRecord();
   if(state==='play'&&stuck){                                        // the last chance is spent: room for a piece and the run goes on, otherwise it ends as it would have
     toy.lastAsked=false; checkStuck();
@@ -105,6 +113,8 @@ function toyWrite(){
 /* ── sounds and a tap of haptics: tiny, its own, and quiet under the game's ── */
 // its own play(): audio.js play() rolls Math.random for a pitch jitter, and the dealer's dice must not move for a cosmetic sound
 function toyPlay(delay,fn){ if(sfxOff()) return; try{ const c=ac(); fn(c.currentTime+delay); }catch(e){} }
+function toyFanfare(){ toyPlay(.05,t=>{ [523,659,784,1047].forEach((f,i)=>tone(t+i*.09,{f0:f,f1:f,pdur:.05,dur:i===3?.4:.14,vol:.06,type:'triangle'})); }); }   // NEW BEST from a cannonball
+function toySweepSnd(){ toyPlay(.1,t=>{ [392,523,659,784,1047].forEach((f,i)=>tone(t+i*.07,{f0:f,f1:f*1.01,pdur:.05,dur:i===4?.5:.16,vol:.06,type:'triangle'})); }); }   // a cannonball's clean sweep
 function toySnd(kind,k=1){
   const now=performance.now(); if(now-toy.sndAt<60) return; toy.sndAt=now;
   if(kind==='squeak') toyPlay(0,t=>{ tone(t,{f0:620,f1:1180,pdur:.07,dur:.1,vol:.05,type:'triangle'}); });
@@ -116,7 +126,7 @@ function toySnd(kind,k=1){
 }
 /* ── the finger ── */
 function toyDown(e){
-  if(!toyOn()||state!=='play'||paused||drag) return;
+  if(!toyGrabbable()||state!=='play'||paused||drag) return;
   e.stopPropagation();                                            // the game's own pointerdown never sees a touch on the crumb, grabbed or not (a tap on it down by the tray must not pick up a piece)
   if((stuck&&!toyLast())||masc.fainted||toy.id>=0) return;
   const now=performance.now();
@@ -153,10 +163,11 @@ function toyUp(e){
   toy.speed=Math.min(sp,cap); toy.bounces=0; toy.restT=0; toy.shotN=0;
   const shot=toy.hot&&toy.speed>=CFG.TOY_FLICK_MIN*3&&state==='play'&&(!stuck||toyLast());   // charged and thrown: a cannonball
   if(shot){ toy.hot=false; toy.fire={n:0,pts:0,max:toyPower(),b:0}; }
+  if(reduce&&!shot){ toy.mode='rim'; toy.y=0; toy.vx=toy.vy=toy.va=0; toy.a=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); return; }   // reduced motion: only a cannonball flies
   if(toy.speed<CFG.TOY_FLICK_MIN&&Math.abs(toy.y)<10&&toy.x>-masc.s*.5&&toy.x<toyXMax()+masc.s*.5){   // put down where it stood: a poke
     toy.mode='rim'; toy.y=0; toy.vx=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); mascotAct('nod'); sayLine('poke'); return;
   }
-  toy.mode='air'; toy.vx=vx; toy.vy=vy; toy.va=(vx*.5+(vy<0?vx:-vx)*.2)+(vx>=0?90:-90);
+  toy.mode='air'; toy.vx=vx; toy.vy=vy; toy.va=reduce?0:(vx*.5+(vy<0?vx:-vx)*.2)+(vx>=0?90:-90);
   if(toy.speed>=CFG.TOY_FLICK_MIN*3){
     toySnd('whee');
     if(!shot) toy.flicks.push(now); toy.flicks=toy.flicks.filter(t=>now-t<CFG.TOY_SULK_MS);
@@ -178,21 +189,22 @@ function toyAskTilt(fromSwitch){                                   // must run i
 }
 /* ── the step: mascot.js mascotStep calls this every drawn frame while the crumb shows ── */
 function toyLand(now,hard){                                         // on the rim (or the floor) after a flight
+  if(reduce){ if(toy.mode==='floor'){ toy.mode='rim'; toy.y=0; toy.vx=0; toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); } toy.a=0; return; }   // reduced motion: no dizzy spell, no roll and hop home
   if(hard||toy.bounces>=3) { toy.dizzyTo=now+CFG.TOY_DIZZY_MS; toySnd('dizzy'); if(!toy.shotN) sayLine('dizzy'); }
   if(toy.flicks.length>=CFG.TOY_SULK_N){ toy.flicks=[]; toy.sulkTo=now+CFG.TOY_DIZZY_MS+CFG.TOY_SULK_HOLD; }
 }
 function toyStep(now){
   const dt=Math.min(.05,Math.max(0,(now-toy.last)/1000)); toy.last=now;
   if(!toyOn()){ toy.sc=1; if(toy.mode!=='rim'||toy.a||toy.y||toy.css.slice(-2)!==',1') toyReset(); return; }
-  { const tg=toySize(); toy.sc=Math.abs(tg-toy.sc)<.004?tg:toy.sc+(tg-toy.sc)*Math.min(1,dt*7); }
+  { const tg=toySize(); toy.sc=reduce||Math.abs(tg-toy.sc)<.004?tg:toy.sc+(tg-toy.sc)*Math.min(1,dt*7); }   // reduced motion: it is its size at once, no swelling
   if(paused||!dt) return;
   const s=masc.s, xmax=toyXMax(), G=CFG.TOY_GRAVITY;
-  toy.gx+=(( CFG.TILT&&toy.tiltOn?toy.gRaw:0)-toy.gx)*Math.min(1,dt*10);
+  toy.gx+=(( CFG.TILT&&toy.tiltOn&&!reduce?toy.gRaw:0)-toy.gx)*Math.min(1,dt*10);   // reduced motion: no tilt roll
   const gx=Math.abs(toy.gx)>CFG.TILT_DEAD?toy.gx-Math.sign(toy.gx)*CFG.TILT_DEAD:0;
   if(masc.fainted&&toy.mode!=='rim'){ toyReset(); return; }
   if(toy.mode==='held'){
     const p=toy.pts, a=p[0], b=p[p.length-1], vx=p.length>1?(b.x-a.x)/Math.max(.016,(b.t-a.t)/1000):0;
-    toy.a+=((Math.max(-28,Math.min(28,-vx*.03)))-toy.a)*Math.min(1,dt*12);        // it swings behind the finger
+    if(!reduce) toy.a+=((Math.max(-28,Math.min(28,-vx*.03)))-toy.a)*Math.min(1,dt*12);        // it swings behind the finger
   }else if(toy.mode==='air'){
     toy.vy+=G*dt; toy.vx+=G*gx*.6*dt;
     const py=toy.y;
@@ -209,7 +221,7 @@ function toyStep(now){
         }
       }
     } else { toy.x+=toy.vx*dt; toy.y+=toy.vy*dt; }
-    toy.a+=toy.va*dt;
+    if(!reduce) toy.a+=toy.va*dt;                                   // (reduced motion: the same flight, without the spin)
     const L=-masc.x, R=W-s-masc.x, T=-masc.y, F=H-s-masc.y, e=CFG.TOY_BOUNCE;
     const hit=(v)=>{ toy.bounces++; toySnd('boing',Math.min(1,Math.abs(v)/1400)); };
     if(toy.x<L){ toy.x=L; if(toy.vx<0){ hit(toy.vx); toy.vx=-toy.vx*e; toy.va=toy.vy*.4; } }

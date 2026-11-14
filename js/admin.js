@@ -46,6 +46,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['TILT','Crumb toy: tilt to roll'],
   ['TILT_FLIP','Crumb toy: flip the tilt direction'],
   ['AVALANCHE','Avalanche: the board falls on a streak (Endless)'],
+  ['GUIDED_START','Guided first game for a new player (1.1 D)'],
   ['FX_TIMELAPSE','Timelapse on game over (7.5g)'],
   ['SHOW_TENSION','Debug readout']
 ];
@@ -230,7 +231,7 @@ function devLoad(){
     const o=JSON.parse(localStorage.getItem(DEV_STORE)||'{}');
     if(o.scaleV!==SCORE_SCALE){ delete o.STAR_PER_GEM; delete o.COLOR_GONE_BONUS; }   // (8.0) tuning saved before the points boost holds old-size point values
     if(!o.clearV) delete o.CLEAR_STYLE;                  // (7.5) tuning saved before crumble was the default keeps its other values but not the old 'squash'
-    for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);
+    for(const k of DEV_KEYS) if(typeof o[k]===typeof DEV_DEFAULTS[k]) cfgSet(k,o[k]);   // a value of the wrong type is dropped: tuning saved while CFG had two GUIDE keys holds GUIDE:true (the guided first game's switch, now GUIDED_START), which must not become the numeric dealing weight
     for(const [k,,options] of DEV_CHOICES) if(!options.some(x=>x.value===CFG[k])) CFG[k]=DEV_DEFAULTS[k];
     const dl=new URLSearchParams(location.search).get('dealer'); if(dl){ CFG.DEALER_HOME=dl==='home'; CFG.DEALER_CURVE=dl==='curve'; }   // ?dealer=home|curve|tide beats the saved switches
   }catch(e){}

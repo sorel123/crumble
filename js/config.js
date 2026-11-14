@@ -356,7 +356,7 @@ const CFG = {
   FRAME_DOZE_MS:  20000, // then 30 frames a second; after this long with no touch, 15
 
   // (1.1 D) the guided first game: a brand-new player's first three trays are hand-built lessons (js/guide.js)
-  GUIDE:          true,  // off = a new player opens like everyone else
+  GUIDED_START:   true,  // off = a new player opens like everyone else (was GUIDE, which also named the dealing weight above and overwrote it)
   GUIDE_HINT_MS:  6000,  // a lesson's target cells pulse after this long with no piece picked up
   GUIDE_WAIT:     20,    // frames between a lesson's last drop and the next board (the clear plays out first)
 
