@@ -3488,6 +3488,67 @@ test('crumb toy: leaning the phone rolls it to the low side and it stays; too ma
   assert.ok(await page.evaluate(() => !/\btoy\b/.test(el('mascot').className) && getComputedStyle(el('mascot')).pointerEvents === 'none' && JSON.parse(localStorage.getItem('crumble.skins')).toy === false), 'off: touches pass through it, and it is saved');
 });
 
+// ── Avalanche (js/avalanche.js) ──
+const AVA_ROWS = ['01111111', '10000000', '11100000', '00011100', '00000011', '11011000', '00100111', '10110110'];
+const boardStr = page => page.evaluate(() => grid.map(r => r.map(g => g ? 1 : 0).join('')));
+
+test('Avalanche: off by default; on, a clear deep in a streak drops every gem, rows that fill clear as chain steps, and touches wait for the landing', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  assert.equal(await page.evaluate(() => CFG.AVALANCHE), false, 'off by default');
+  await setup(page, { rows: AVA_ROWS, trayShapes: [0, 0, 0] });
+  await page.evaluate(() => { combo = 4; CFG.TRANSFORM_COMBO = 99; });
+  await dragPiece(page, 0, 0, 0);
+  assert.deepEqual(await boardStr(page), ['00000000', ...AVA_ROWS.slice(1)], 'off: the row clears and nothing falls');
+  await dealt(page);
+  await page.evaluate(() => { CFG.AVALANCHE = true; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; });
+  await setup(page, { rows: AVA_ROWS, trayShapes: [0, 0, 0] });
+  const s0 = await page.evaluate(() => { combo = 4; return { score, lines: stats.lines }; });
+  await dragPiece(page, 0, 0, 0);
+  const a = await page.evaluate(() => ({ score, combo, live: ava.live, lines: stats.lines, falling: grid.flat().filter(g => g && g.av).length }));
+  assert.deepEqual(await boardStr(page), [...Array(6).fill('00000000'), '10000000', '10110110'], 'the board fell, two rows filled and cleared, the rest settled');
+  assert.equal(a.combo, 6, 'the clear and one chain step');
+  assert.equal(a.lines - s0.lines, 3, 'three lines counted');
+  const pts = await page.evaluate(() => SCORE_SCALE + Math.round(CFG.LINE_POINTS * (1 + 4 * CFG.COMBO_STEP)) + Math.round(CFG.LINE_POINTS * 4 * (1 + 5 * CFG.COMBO_STEP)));
+  assert.ok(a.score - s0.score >= pts, 'the chain pays like a 2-line clear one combo step on: ' + (a.score - s0.score) + ' >= ' + pts);
+  assert.ok(a.live && a.falling > 0, 'the fall is still playing');
+  // a touch on the tray during the fall waits; it is taken once the board has landed
+  const g = await geometry(page);
+  await page.mouse.move(g.trayCenters[1].x, g.trayCenters[1].y); await page.mouse.down();
+  assert.equal(await page.evaluate(() => drag === null && !!pendingPress), true, 'no pickup mid-fall');
+  await page.waitForFunction(() => !ava.live, null, { timeout: 5000 });
+  await frames(page, 3);
+  assert.equal(await page.evaluate(() => !!drag && grid.flat().every(g => !g || !g.av)), true, 'landed: the waiting finger picks the piece up, no gem is still marked falling');
+  await page.mouse.up();
+});
+
+test('Avalanche: a roll, never a rule; only in Endless; nothing to drop means no avalanche; the switch is saved', async ({ page }) => {
+  await play(page);
+  await dealt(page);
+  const drop = async pre => {
+    await dealt(page);
+    await setup(page, { rows: AVA_ROWS, trayShapes: [0, 0, 0] });
+    await page.evaluate(pre);
+    await dragPiece(page, 0, 0, 0);
+    const fell = await page.evaluate(() => ava.live);
+    await page.waitForFunction(() => !ava.live, null, { timeout: 5000 });
+    return fell;
+  };
+  await page.evaluate(() => { CFG.AVALANCHE = true; CFG.TRANSFORM_COMBO = 99; });
+  assert.equal(await drop(() => { combo = 4; CFG.AVA_CHANCE = 0; CFG.AVA_STEP = 0; }), false, 'odds 0: never');
+  assert.equal(await drop(() => { combo = 1; CFG.AVA_CHANCE = 1; CFG.AVA_MAX = 1; }), false, 'a short streak: never');
+  assert.equal(await drop(() => { combo = 4; mode = 'daily'; }), false, 'not in Daily');
+  await page.evaluate(() => { mode = 'endless'; });
+  assert.equal(await drop(() => { combo = 4; CFG.AVA_MIN_MOVE = 99; }), false, 'too few gems would move');
+  assert.equal(await drop(() => { combo = 4; CFG.AVA_MIN_MOVE = 6; }), true, 'and with all of it in place, it falls');
+  await openSet(page);
+  await page.click('#advLook summary');
+  assert.equal(await page.isChecked('#avaOn'), true, 'the switch shows it');
+  await page.click('#avaOn');
+  await closeSet(page);
+  assert.ok(await page.evaluate(() => !CFG.AVALANCHE && JSON.parse(localStorage.getItem('crumble.skins')).ava === false), 'off, and saved');
+});
+
 // ── 7.5g timelapse ──
 const tlPlace = async (page, r, c) => {                   // one drop of a single cell, the tray refilled so no deal is due
   await dealt(page);

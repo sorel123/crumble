@@ -43,6 +43,7 @@ const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an obj
   ['FX_CRUMB_TOY','Crumb toy: grab + flick'],
   ['TILT','Crumb toy: tilt to roll'],
   ['TILT_FLIP','Crumb toy: flip the tilt direction'],
+  ['AVALANCHE','Avalanche: the board falls on a streak (Endless)'],
   ['FX_TIMELAPSE','Timelapse on game over (7.5g)'],
   ['SHOW_TENSION','Debug readout']
 ];

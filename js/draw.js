@@ -845,7 +845,7 @@ function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
     ||slams.length||bursts.length||praises.length||banners.length||stamps.length||sweepShow||goldRain.length||orbs.length||rings.length||dust.length
-    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn()||trayPopping()||toyBusy());
+    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||guideHintOn()||trayPopping()||toyBusy()||ava.live);
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
@@ -867,6 +867,7 @@ function frame(now){
   if(paceFull&&!gap) perfFrame(now-last); paceFull=!gap;
   const dt=paused?0:Math.min(gap?gap/16.67+.5:2.5,(now-last)/16.67)||1; last=now;
   if(hitWait>0) hitWait-=dt; else shake*=Math.pow(.85,dt);
+  avaStep(dt);                                       // (Avalanche) the clock its falling gems read
   glowT*=Math.pow(.93,dt);
 
   const comboTarget=combo>=CFG.BIG_COMBO?Math.min(1,(combo-1)/6):0;
@@ -1008,6 +1009,9 @@ function frame(now){
     } else {
       if(antAny) antCell(r,c,now); else _ax=_ay=_af=0;   // (7.5c) a line one piece from clearing shivers and glints
       const lf=g.f?g.f*g.f*0.45:0, fl=lf>_af?lf:_af;
+      if(g.av){                                     // (Avalanche) still falling to this cell; a thump when it lands
+        const o=avaOff(g.av,ava.t); if(o===0&&g.avo<0) g.l=1; g.avo=o; _ay+=o*cell;
+      }
       if(g.l>0){                                    // landing thump: wide-and-short on impact, springs back over ~8 frames
         g.l=Math.max(0,g.l-dt*0.17);                // ~6 frames, about 100 ms
         const q=Math.sin(g.l*Math.PI)*0.11;
@@ -1114,6 +1118,9 @@ function frame(now){
   const squash=CFG.CLEAR_STYLE==='squash'||(CFG.CLEAR_STYLE==='crumble'&&reduce), POP=crumble?CRUMBLE_CRACK:squash?6:7;
   for(let i=shatters.length-1;i>=0;i--){
     const s=shatters[i]; s.t+=dt;
+    if(s.t<0&&s.av){                                 // (Avalanche) a gem that falls into a clearing row: it lands, flashes, then breaks
+      gem(s.gi,bx+s.c*cell,by+(s.r+avaOff(s.av,ava.t))*cell,cell,1,1,s.t>-5?0.95:0); continue;
+    }
     if(s.t<0){                                       // blink phase, timed from the clear itself so the line flashes in unison
       const since=s.t-s.t0, on=since<3||since>=5;
       gem(s.gi,bx+s.c*cell,by+s.r*cell,cell,1,1,s.star?(since<(reduce?0:CFG.STAR_CHARGE)?0.15:0.95):CFG.CLEAR_BLINK>0&&on?0.95:0.15); continue;   // a star's cross waits, then goes white-hot as the beam reaches it

@@ -48,7 +48,7 @@ function clearRunFx(){
   praises=[];bursts=[];lineFlashes=[];stamps=[];bannerWait=0;sweepShow=null;
   chunks=[];rubble=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
   bonus=null; bonusTag=null; clearTimeout(bonusTagT);
-  tags=[]; slams=[]; bands=[]; borderFlash=null;
+  tags=[]; slams=[]; bands=[]; borderFlash=null; avaReset();
   confetti=[]; goldenCele=null; goldRain=[]; goldenArrive=999; comboGlowV=0; goldTintV=0; sweepFxT=0; punchT=0;
   fireReset(); chaseKey=''; guide=null;                         // (7.5e) a new or restored run's marker appears without the pop
 }

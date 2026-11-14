@@ -197,7 +197,7 @@ function place(idx,r,c){
     cols=grid.some(row=>row[c])?[c]:[];
   } else ({rows,cols}=linesFor(grid));
   const total=rows.length+cols.length;
-  let gained=s.n*SCORE_SCALE, swept=false;
+  let gained=s.n*SCORE_SCALE, swept=false, avaLines=0;
   hesPlace(total>0);                               // the hesitation log (save.js): the tray's first drop, timed
 
   if(s.star){
@@ -309,6 +309,10 @@ function place(idx,r,c){
     pops.push({x:popX,y:popY,t:-(reduce?0:CFG.CLEAR_BLINK)*0.026,txt:'+'+(gained-s.n*SCORE_SCALE),
                sub:slammed?'':combo>1?'COMBO ×'+combo:(total>1?total+' LINES':''),combo,lines:total});
 
+    if(!s.star&&avaDue(combo)){                    // (Avalanche) the streak brings the board down: gems fall, rows that fill clear, and again
+      const a=avalanche(maxDelay+CFG.AVA_LEAD,lastGi);
+      gained+=a.gained; cleared+=a.cleared; avaLines=a.lines; maxDelay=Math.max(maxDelay,a.end);
+    }
     // clean sweep — board completely emptied
     let anyLeft=false;
     for(let rr=0;rr<N&&!anyLeft;rr++) for(let cc=0;cc<N;cc++) if(grid[rr][cc]){anyLeft=true;break;}
@@ -401,7 +405,7 @@ function place(idx,r,c){
   }
   recDrop(idx,r,c,total,swept);                      // the play recorder (save.js; nothing when off)
   tlRecord();                                        // (7.5g) the board as this drop left it, for the game-over timelapse
-  stats.placed++; stats.lines+=total; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
+  stats.placed++; stats.lines+=total+avaLines; stats.bestCombo=Math.max(stats.bestCombo,combo); if(swept) stats.sweeps++;
   playedToday(); checkGoals();                       // (4.2) the day counts, a reached goal gets its banner
   goalStep(total,swept);                             // (4.1) an Adventure level's goal; a win ends the level
   guideDrop(total,swept);                            // (1.1 D) the guided first game counts its lesson
@@ -461,7 +465,7 @@ let pendingPress=null;                                // a press that came while
 function onDown(e){
   if(state!=='play'||paused||drag) return;   // one drag at a time (a second finger can't pick up another piece)
   if(e.target&&e.target.closest&&e.target.closest('button')) return;
-  if(dealing){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY,pt:e.pointerType}; return; }   // taken the moment the new tray appears (stepPending)
+  if(dealing||avaBusy()){ pendingPress={id:e.pointerId,x:e.clientX,y:e.clientY,pt:e.pointerType}; return; }   // taken the moment the new tray appears (stepPending)
   startDrag(e.pointerId,e.clientX,e.clientY,e.pointerType);
 }
 function startDrag(id,x,y,pt){
@@ -476,7 +480,7 @@ function startDrag(id,x,y,pt){
   Sfx.pickup(); if(tray[i]&&tray[i].s.star) Sfx.starPick();
 }
 function stepPending(){                               // called each frame: the deal finished and her finger is still down
-  if(!pendingPress||dealing||drag) return;
+  if(!pendingPress||dealing||avaBusy()||drag) return;
   const p=pendingPress; pendingPress=null;
   if(state==='play'&&!paused) startDrag(p.id,p.x,p.y,p.pt);
 }
