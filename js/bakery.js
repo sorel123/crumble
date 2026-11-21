@@ -580,9 +580,6 @@ function bkPlate(){
     bkVisSeed=777;
     for(let i=0;i<70;i++){ const x=bkVisRnd()*W, y=bkVisRnd()*H*.5, r=bkVisRnd()*1.3+.3; g.globalAlpha=(1-y/(H*.5))*.8*bkVisRnd()+.1; g.fillStyle='#fff'; g.beginPath(); g.arc(x,y,r,0,6.283); g.fill(); }
     g.globalAlpha=1;
-    const mx=W*.84, my=H*.2;                                  // a fat crescent moon
-    g.fillStyle='rgba(255,240,210,.9)'; g.beginPath(); g.arc(mx,my,20,0,6.283); g.fill();
-    g.fillStyle='#3A2266'; g.globalCompositeOperation='destination-out'; g.beginPath(); g.arc(mx+9,my-6,18,0,6.283); g.fill(); g.globalCompositeOperation='source-over';
     const gl=g.createRadialGradient(W/2,floorY,10,W/2,floorY,W*.8); gl.addColorStop(0,'rgba(255,190,120,.35)'); gl.addColorStop(1,'rgba(255,190,120,0)');   // a warm glow behind the jar
     g.fillStyle=gl; g.fillRect(0,0,W,H);
     const cy=floorY+wall+2;                                   // the counter
@@ -622,7 +619,7 @@ function bkFresh(){
 }
 const bkPopDur=()=>reduce?.12:.3;
 function bkFaceMood(b,ft){                                  // the face a treat makes now
-  if(ft-b.dz<1.6&&!reduce) return 'dizzy';
+  if(bk.t-b.dz<1.6&&!reduce) return 'dizzy';
   if(bk.t-b.ooh<.3) return 'ooh';
   if(bk.danger&&bk.t-b.born>=1&&b.y-b.r<BK_LINE) return 'scared';
   if(bk.st==='play'&&bk.ready&&b.k===bk.held) return 'happy';
@@ -883,3 +880,214 @@ document.addEventListener('visibilitychange',()=>{
 });
 addEventListener('pagehide',()=>{ if(bk.open) bkSaveRun(); });
 bkBadge();
+
+/* ═══════ juice: pops, crumbs, words, sounds, haptics and Crumb's lines ═══════
+   Called from the physics through the bkFx* hooks (so tests that drive bkStep with the view closed get the same game, and
+   nothing here changes it). Sounds go through toyPlay (silent when Sound effects are off; the music keeps playing) with the
+   synth's tone / bell / boom; every chain link climbs one step of the major pentatonic scale the game's sounds share
+   (note() in audio.js). Haptics through haptic(). Reduce Motion: no screen shake or jolt, short pops, fewer crumbs. */
+const BK_PART_CAP=240;
+function bkBurst(x,y,n,cols,spd,size){                    // crumbs flying out (screen px)
+  if(reduce) n=Math.ceil(n/3);
+  for(let i=0;i<n&&bkFx.parts.length<BK_PART_CAP;i++){
+    const a=bkVisRnd()*6.283, v=spd*(.35+bkVisRnd()*.75);
+    bkFx.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-spd*.35,t:0,d:.5+bkVisRnd()*.5,s:size*(.5+bkVisRnd()*.8),c:cols[i%cols.length],sq:bkVisRnd()<.5});
+  }
+}
+function bkText(x,y,txt,size,col,dur,rise){ bkFx.texts.push({x,y,txt,size,col,t:0,d:dur||.9,rise:rise==null?46:rise}); }
+const bkHap=k=>{ try{ haptic(k); }catch(e){} };
+function bkFxDrop(b){
+  const f=440*Math.pow(.86,b.k-1);                         // a soft bloop, lower for bigger treats
+  toyPlay(0,t=>{ tone(t,{f0:f*1.5,f1:f,pdur:.07,dur:.13,vol:.07}); tone(t+.01,{f0:f*3,f1:f*2,pdur:.05,dur:.06,vol:.015,type:'triangle'}); });
+  bkHap('place');
+}
+function bkFxReady(){ bk.aim=bkDropX(bk.aim); }
+function bkFxBake(k,nb,x,y,pts,mult){
+  const sx=bkSX(x), sy=bkSY(y), crumble=k>=BK_N, nk=crumble?BK_N:k+1, r=bkR(nk)*bkG.S, col=BK_FILL[nk], L=BK_LOOK[nk-1];
+  bkFx.rings.push({x:sx,y:sy,r0:r*.6,r1:r*1.7,t:0,d:reduce?.2:.38,c:col});
+  bkBurst(sx,sy,8+nk*2,[col,L.light,L.dark,'#FFFFFF'],140+nk*14,2.4+nk*.25);
+  if(mult>=2) for(const q of bkFx.texts) q.d=Math.min(q.d,q.t+.16);   // in a chain the last link's numbers take over, the old ones fade fast
+  bkText(sx,sy-r*.3,'+'+pts.toLocaleString('en-US'),Math.min(30,15+nk*1.4),'#FFFFFF');
+  if(mult>=2) bkText(sx,sy-r*.3-24,'×'+mult,22+Math.min(6,mult)*3,mult>=4?'#FF8FC8':'#FFD45C',1.1,60);
+  if(!reduce&&nk>=7) bkFx.shake=Math.max(bkFx.shake,nk*1.1);
+  const step=Math.min(14,2+bk.chain);                      // the bell climbs the scale with the chain
+  toyPlay(0,t=>{
+    tone(t,{f0:900+nk*30,f1:260,pdur:.05,dur:.08,vol:.07,type:'triangle'});   // the pop
+    bell(t+.012,{f:note(step),dur:.8,vol:.075,wet:.3});
+    if(nk>=7) boom(t,.06+.012*(nk-7));                      // a low thump under the big ones
+  });
+  bkHap(bk.chain>=3||nk>=7?'combo':'clear');
+  if(crumble) bkFxCrumble(sx,sy);
+  else if(bk.chain>=3){ bkSay('bkChain',2); bkCrumbAct('smug',1300); }
+  else if(nk>=8){ bkSay('bkBig',2); bkCrumbAct('hop',950); }
+  else bkCrumbAct(nk>=5?'hop':'nod',nk>=5?950:700);
+}
+function bkFxCrumble(sx,sy){
+  bkFx.flash=1; bkFx.word=performance.now();
+  if(!reduce){ bkFx.shake=Math.max(bkFx.shake,22); bkFx.jolt=1; }
+  const {jx,jy,jw,jh}=bkG;
+  for(let i=0;i<6;i++) bkBurst(jx+jw*(.15+.14*i),jy+jh*.35,10,BK_RAINBOW,260,3.4);
+  toyPlay(0,t=>{ boom(t,.22); for(let i=0;i<12;i++) bell(t+.08+i*.04,{f:note(4+i),dur:.6,vol:.05,wet:.4}); });
+  bkHap('sweep'); bkSay('bkCrumble',3); bkCrumbAct('sweep',1700);
+}
+function bkFxShake(){
+  if(!reduce){ bkFx.jolt=1; bkFx.shake=Math.max(bkFx.shake,10); }
+  toyPlay(0,t=>{ for(let i=0;i<9;i++){ const q=t+i*.035+bkVisRnd()*.012; noiseHit(q,{dur:.03,f0:2400+bkVisRnd()*2400,q:4,vol:.05}); tone(q,{f0:700+bkVisRnd()*900,pdur:.01,dur:.04,vol:.02,type:'triangle'}); } });
+  bkHap('combo'); bkSay('bkShake',2); bkCrumbAct('dizzy',1600);
+}
+function bkFxCharge(){
+  const b=el('bkShake'); b.classList.remove('got'); void b.offsetWidth; if(!reduce) b.classList.add('got');
+  toyPlay(0,t=>{ bell(t,{f:note(9),dur:.5,vol:.05}); bell(t+.07,{f:note(11),dur:.6,vol:.05}); });
+}
+function bkFxDiscover(k,cookie){
+  bkFx.flip[k]=performance.now();
+  const c=el('bkNew'); c.innerHTML='NEW! <b></b>'+(cookie?' 🍪':''); c.querySelector('b').textContent=BK_NAMES[k-1];
+  c.hidden=true; void c.offsetWidth; c.hidden=false; c.className=reduce?'rm':'';
+  c.style.top=Math.round(bkG.jy+BK_LINE*bkG.S+14)+'px';           // in the jar, under the line: clear of Crumb and the next treat
+  clearTimeout(bkFxDiscover.t); bkFxDiscover.t=setTimeout(()=>{ c.hidden=true; },reduce?1500:1900);
+  const sx=bkG.stripX+(k-1)*(bkG.slot+3)+bkG.slot/2, sy=bkG.stripY+bkG.stripH/2;
+  bkFx.sparks=(bkFx.sparks||[]).concat(Array.from({length:reduce?4:14},()=>({x:sx,y:sy,a:bkVisRnd()*6.283,v:30+bkVisRnd()*60,t:0})));
+  toyPlay(.18,t=>{ [0,2,4].forEach((s,i)=>bell(t+i*.09,{f:note(7+s),dur:.9,vol:.07,wet:.35})); });   // a three-note arpeggio
+  bkHap('achieve'); bkSay('bkNew',3);
+}
+function bkFxOver(){
+  bk.touch=null;
+  const order=bk.bodies.slice().sort((a,b)=>(a.y-a.r)-(b.y-b.r));   // top to bottom
+  const gap=Math.max(.035,Math.min(.09,1.4/Math.max(1,order.length)))*(reduce?.5:1);
+  bkFx.cascade={order,i:0,t:-.45,gap,done:0};
+  toyPlay(.05,t=>{ [9,7,4,2,0].forEach((s,i)=>bell(t+i*.16,{f:note(s),dur:.9,vol:.06,kind:'marimba',wet:.3})); });
+  bkHap('deny');
+  bkSay(bk.newBest?'bkBest':'bkOver',3);
+}
+function bkFxStep(dt,now){                                  // moves everything above; true while anything still moves
+  const F=bkFx;
+  for(let i=F.parts.length-1;i>=0;i--){ const p=F.parts[i]; p.t+=dt; if(p.t>=p.d){ F.parts.splice(i,1); continue; } p.vy+=520*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=1-1.5*dt; }
+  for(let i=F.texts.length-1;i>=0;i--){ const q=F.texts[i]; q.t+=dt; if(q.t>=q.d) F.texts.splice(i,1); }
+  for(let i=F.rings.length-1;i>=0;i--){ const q=F.rings[i]; q.t+=dt; if(q.t>=q.d) F.rings.splice(i,1); }
+  if(F.sparks){ for(const s of F.sparks) s.t+=dt; F.sparks=F.sparks.filter(s=>s.t<.7); if(!F.sparks.length) F.sparks=null; }
+  F.flash=Math.max(0,F.flash-dt*3); F.shake*=Math.pow(.02,dt); if(F.shake<.3) F.shake=0; F.jolt=Math.max(0,F.jolt-dt*2.2);
+  // danger: a soft tick that speeds up, and one worried line
+  if(bk.danger&&!bk.paused&&bk.st==='play'){
+    const k=Math.min(1,bk.overT/(CFG.BK_LINE_MS/1000)), iv=.55-.38*k;
+    F.dangerTick-=dt;
+    if(F.dangerTick<=0){ F.dangerTick=iv; toyPlay(0,t=>tone(t,{f0:1250+500*k,pdur:.01,dur:.05,vol:.028+.02*k,type:'square'})); }
+    if(!F.dangerSaid){ F.dangerSaid=true; bkSay('bkDanger',2); }
+  } else { F.dangerTick=0; if(!bk.danger) F.dangerSaid=false; }
+  // game over: the treats pop one after another, top to bottom, then the card
+  const C=F.cascade;
+  if(C&&bk.st==='over'){
+    C.t+=dt;
+    while(C.i<C.order.length&&C.t>=C.i*C.gap){
+      const b=C.order[C.i++], sx=bkSX(b.x), sy=bkSY(b.y), r=b.r*bkG.S;
+      bkBurst(sx,sy,6+b.k,[BK_FILL[b.k],BK_LOOK[b.k-1].light,'#fff'],120+b.k*10,2.2+b.k*.2);
+      F.rings.push({x:sx,y:sy,r0:r*.4,r1:r*1.3,t:0,d:.25,c:BK_FILL[b.k]});
+      b.dead=true; const ci=C.i;
+      toyPlay(0,t=>tone(t,{f0:300+ci*25,f1:140,pdur:.05,dur:.07,vol:.04,type:'triangle'}));
+    }
+    bk.bodies=bk.bodies.filter(b=>!b.dead);
+    if(C.i>=C.order.length&&C.t>=C.i*C.gap+.45){ F.cascade=null; bkShowCard(); }
+  }
+  return !!(F.parts.length||F.texts.length||F.rings.length||F.sparks||F.flash>0||F.shake>0||F.jolt>0||F.cascade||now-(F.word||-9e9)<1400
+    ||Object.values(F.flip).some(t=>now-t<700));
+}
+function bkDrawFx(g,now){                                   // in the jar's frame (it jolts with the treats)
+  const F=bkFx;
+  for(const q of F.rings){ const p=q.t/q.d; g.globalAlpha=(1-p)*.8; g.strokeStyle=q.c; g.lineWidth=4*(1-p)+1; g.beginPath(); g.arc(q.x,q.y,q.r0+(q.r1-q.r0)*easeOutCubic(p),0,6.283); g.stroke();
+    g.globalAlpha=(1-p)*.35; g.fillStyle='#fff'; g.beginPath(); g.arc(q.x,q.y,(q.r0+(q.r1-q.r0)*p)*.8,0,6.283); g.fill(); }
+  for(const p of F.parts){ g.globalAlpha=Math.min(1,(1-p.t/p.d)*1.6); g.fillStyle=p.c; if(p.sq) g.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s); else { g.beginPath(); g.arc(p.x,p.y,p.s/2,0,6.283); g.fill(); } }
+  g.globalAlpha=1; g.textAlign='center';
+  for(const q of F.texts){
+    const p=q.t/q.d, s=p<.15?easeOutBack(p/.15):1;
+    g.globalAlpha=p>.65?(1-p)/.35:1; g.font='700 '+Math.round(q.size*s)+'px '+BK_FONT;
+    const y=q.y-q.rise*easeOutCubic(p);
+    g.fillStyle='rgba(40,10,50,.55)'; g.fillText(q.txt,q.x+1.5,y+2);
+    g.fillStyle=q.col; g.fillText(q.txt,q.x,y);
+  }
+  g.globalAlpha=1;
+}
+function bkDrawTop(g,now){                                  // over everything: the crumble's flash and its word, a discovery's sparkles
+  const F=bkFx, {W,H}=bkG;
+  if(F.sparks) for(const s of F.sparks){ const p=s.t/.7, d=s.v*easeOutCubic(p); g.globalAlpha=1-p; g.fillStyle=p<.5?'#FFF6C0':'#FFD45C';
+    const x=s.x+Math.cos(s.a)*d, y=s.y+Math.sin(s.a)*d, r=3*(1-p)+1; g.beginPath(); g.moveTo(x,y-r*2); g.lineTo(x+r*.6,y); g.lineTo(x,y+r*2); g.lineTo(x-r*.6,y); g.closePath(); g.fill(); }
+  g.globalAlpha=1;
+  if(F.flash>0){ g.globalAlpha=F.flash*.7; g.fillStyle='#FFF8E8'; g.fillRect(0,0,W,H); g.globalAlpha=1; }
+  const wt=(now-(F.word||-9e9))/1400;
+  if(wt>=0&&wt<1){
+    const s=reduce?1:wt<.18?easeOutBack(wt/.18)*1.0:1+.06*Math.sin(wt*20)*(1-wt);
+    g.save(); g.translate(W/2,bkSY(BK_JH*.38)); g.scale(s,s); g.rotate(-.06);
+    g.globalAlpha=wt>.75?(1-wt)/.25:1; g.textAlign='center'; g.font='700 '+Math.round(Math.min(64,W*.15))+'px '+BK_FONT;
+    g.fillStyle='#5A1E5A'; g.fillText('CRUMBLE!',3,5);
+    const gr=g.createLinearGradient(0,-40,0,10); gr.addColorStop(0,'#FFF3A0'); gr.addColorStop(1,'#FF8FC8'); g.fillStyle=gr; g.fillText('CRUMBLE!',0,0);
+    g.restore(); g.globalAlpha=1;
+  }
+}
+
+/* ── Crumb talks (the SAY bank in crumbsay.js, picked with the Bakery's own dice). One line every BK_TALK_GAP at most; a
+   bigger moment (higher prio) may cut in. His bubble sits on the side away from the "next" bubble. ── */
+const bkTalk={until:0,last:-1e9,prio:0,key:''};
+function bkSayReset(){ bkTalk.until=0; bkTalk.prio=0; bkTalk.key=''; const e=el('bkSay'); if(e) e.hidden=true; }
+function bkSay(k,prio){
+  if(!CFG.FX_CRUMB_TALK||!SAY[k]) return false;
+  const now=performance.now(), up=now<bkTalk.until;
+  if(up&&prio<=bkTalk.prio) return false;                  // he does not talk over himself ...
+  if(!up&&now-bkTalk.last<CFG.BK_TALK_GAP&&prio<3) return false;   // ... and keeps quiet a while after a line, unless it is a big moment
+  const a=SAY[k], txt=a[Math.floor(bkVisRnd()*a.length)%a.length];
+  bkTalk.txt=txt; bkTalk.until=now+CFG.TALK_MS; bkTalk.last=now; bkTalk.prio=prio||1; bkTalk.big=prio>=3;
+  return true;
+}
+function bkSayOpen(again){ bkSayReset(); bkTalk.last=-1e9; bkSay(again?'bkAgain':'bkOpen',1); }
+function bkSayStep(now){
+  const e=el('bkSay'), on=now<bkTalk.until&&bk.open;
+  if(!on){ if(bkTalk.key!==''){ bkTalk.key=''; e.hidden=true; bkTalk.prio=0; } return; }
+  const cs=bkG.cs, roomL=bkDom.x-4-8, roomR=bkG.W-(bkDom.x+cs+4)-8;   // room beside him, keeping 8px off the screen edge
+  let right=bkSX(bk.aim)>=bkG.W/2;                          // the next bubble is on the roomier side: he talks on the other
+  if((right?roomL:roomR)<150&&(right?roomR:roomL)>(right?roomL:roomR)) right=!right;   // unless that side is too tight
+  const y=Math.round(Math.max(bkG.stripY+bkG.stripH+4,bkDom.y-6));
+  const x=right?Math.round(bkG.W-bkDom.x+4):Math.round(bkDom.x+cs+4), mw=Math.round(Math.max(90,Math.min(190,right?roomL:roomR)));
+  const key=bkTalk.txt+'|'+right+x+','+y+','+mw;
+  if(key===bkTalk.key) return; bkTalk.key=key;
+  e.hidden=false; e.textContent=bkTalk.txt; e.className=(right?'fromR':'fromL')+(bkTalk.big?' big':'')+(reduce?' rm':'');
+  e.style.top=y+'px'; e.style.left=right?'':x+'px'; e.style.right=right?x+'px':''; e.style.maxWidth=mw+'px';
+}
+
+/* ── the card at the end ── */
+function bkShowCard(){
+  bk.st='card';
+  const s=lab.bakery;
+  el('bkOverScore').textContent=bk.score.toLocaleString('en-US');
+  const ob=el('bkOverBest'); ob.textContent=bk.newBest?'★ NEW BEST ★':'Best '+s.best.toLocaleString('en-US'); ob.classList.toggle('nb',!!bk.newBest);
+  el('bkBigName').textContent=BK_NAMES[bk.big-1];
+  const c=el('bkBigCv'), d=Math.min(3,devicePixelRatio||1); c.width=c.height=72*d;
+  const g=c.getContext('2d'); g.setTransform(d,0,0,d,36*d,36*d); bkPaint(g,bk.big,31);
+  const gl=bkG.gloss; if(gl) g.drawImage(gl.c,-gl.h*31/50,-gl.h*31/50,gl.h*2*31/50,gl.h*2*31/50);
+  bkFace(g,bk.big,31,'happy',0,0,false,0);
+  const cr=el('bkOverCr'); cr.hidden=!bk.cr; cr.textContent=bk.cr?'💥 '+(bk.cr===1?'One CRUMBLE!':bk.cr+' CRUMBLES!'):'';
+  el('bkOver').hidden=false;
+  if(bk.newBest&&!reduce) bkBurst(bkG.W/2,bkG.H*.3,40,BK_RAINBOW,320,4);
+}
+const bkArticle=n=>/^[AEIOU]/.test(n)?'an':'a';
+function bkShareText(){ const n=BK_NAMES[bk.big-1]; return 'I baked '+bkArticle(n)+' '+n+" in Crumb's Bakery. "+bk.score.toLocaleString('en-US')+' points. '+SHARE_URL; }
+function bkShareCard(){                                     // the picture: the biggest treat, big, and the score
+  const cv=document.createElement('canvas'); cv.width=SHARE_W; cv.height=SHARE_H; const g=cv.getContext('2d');
+  const sk=g.createLinearGradient(0,0,0,SHARE_H); sk.addColorStop(0,'#1E1238'); sk.addColorStop(.55,'#7A3F7E'); sk.addColorStop(1,'#F08A6C');
+  g.fillStyle=sk; g.fillRect(0,0,SHARE_W,SHARE_H);
+  g.textAlign='center'; g.fillStyle='#fff'; g.font='700 92px '+BK_FONT; g.fillText("Crumb's Bakery",SHARE_W/2,170);
+  g.font='600 44px '+BK_FONT; g.globalAlpha=.85; g.fillText('I baked '+bkArticle(BK_NAMES[bk.big-1])+' '+BK_NAMES[bk.big-1],SHARE_W/2,250); g.globalAlpha=1;
+  g.save(); g.translate(SHARE_W/2,640); bkPaint(g,bk.big,270); bkFace(g,bk.big,270,'happy',0,0,false,0); g.restore();
+  g.font='700 160px '+BK_FONT; g.fillStyle='#FFE07A'; g.fillText(bk.score.toLocaleString('en-US'),SHARE_W/2,1110);
+  g.font='600 44px '+BK_FONT; g.fillStyle='#fff'; g.globalAlpha=.9; g.fillText(SHARE_FOOTER,SHARE_W/2,SHARE_H-70); g.globalAlpha=1;
+  return cv;
+}
+async function bkShare(){                                   // the same path as the game's share (share.js): the share sheet, else a saved picture
+  const blob=await new Promise(res=>bkShareCard().toBlob(res,'image/png')); if(!blob) return 'failed';
+  const file=new File([blob],'crumbs-bakery.png',{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:"Crumb's Bakery",text:bkShareText()}); return 'shared'; }
+    catch(e){ if(e&&e.name==='AbortError') return 'cancelled'; }
+  }
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download='crumbs-bakery.png'; document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+  return 'saved';
+}
+el('bkShare').onclick=async e=>{ e.stopPropagation(); try{ await bkShare(); }catch(err){} };

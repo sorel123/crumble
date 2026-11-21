@@ -6247,7 +6247,7 @@ test('Lab: progress survives a reload, is checked on load, merges from iCloud (u
     const ch = cloudMerge({ v: 1, lab: { three: { done: [2, 9, 61, -1, 'a'], at: 12 } } }), ch2 = cloudMerge({ v: 1, lab: { three: { done: [1], at: 3 } } });
     return { ch, ch2, three: lab.three, blob: cloudBlob().lab };
   });
-  assert.deepEqual(m, { ch: true, ch2: false, three: { done: [1, 2, 3, 4, 9], at: 12 }, blob: { three: { done: [1, 2, 3, 4, 9], at: 12 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] } } });
+  assert.deepEqual(m, { ch: true, ch2: false, three: { done: [1, 2, 3, 4, 9], at: 12 }, blob: { three: { done: [1, 2, 3, 4, 9], at: 12 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0 } } });
   await page.evaluate(() => { lab.three = { done: [1, 2, 3, 4], at: 5 }; saveLab(); dare.st.cookies = 7; saveDares(); });
   await labOpen(page, 5);
   await page.evaluate(() => { for (const [i, r, c] of l3.p.sol) place(i, r, c); });
@@ -7375,6 +7375,144 @@ test('bakery: the jar in progress saves and restores (score, dice, held and next
   assert.equal(b.next, c, 'the dice carry on where they were');
   const bad = await page.evaluate(() => [{ v: 2 }, { v: 1, sc: -1 }, { v: 1, sc: 0, seed: 5, h: 9, n: 1, b: [] }, { v: 1, sc: 0, seed: 5, h: 1, n: 1, b: [[12, 1, 1]] }, null].map(o => bkRestore(o)));
   assert.deepEqual(bad, [false, false, false, false, false]);
+});
+
+const bkOpenIt = async page => { await page.click('#startLab'); await page.click('#labList button[data-id=bakery]'); await page.waitForFunction(() => bk.open && bkG.jw > 0); };
+test('bakery: the Lab tile (first, with its progress) and a NEW badge on the Lab buttons until the Bakery has been opened once', async ({ page }) => {
+  const badge = () => page.evaluate(() => ['startLab', 'menuLab'].map(id => el(id).classList.contains('bkNewBadge') && getComputedStyle(el(id), '::after').content));
+  assert.deepEqual(await badge(), ['"NEW"', '"NEW"']);
+  await page.click('#startLab');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelector('#labList button').children].map(x => x.textContent)), ["🧁 Crumb's Bakery", 'Drop treats. Two the same bake a bigger one.', '5 of 11 treats']);
+  await page.click('#labList button[data-id=bakery]');
+  assert.deepEqual(await page.evaluate(() => ({ open: !el('bakery').hidden, op: JSON.parse(localStorage.getItem('crumble.lab')).bakery.op, chef: !!document.querySelector('#bkCrumb svg .cl-chef'), saved: closet.on.head })),
+    { open: true, op: 1, chef: true, saved: '' }, 'opened: the badge is spent; Crumb wears the Chef\'s hat without changing her pick');
+  assert.deepEqual(await badge(), [false, false]);
+  await page.evaluate(() => { lab.bakery.best = 4820; lab.bakery.seen = 7; bkToLab(); });
+  assert.equal(await page.evaluate(() => document.querySelector('#labList button[data-id=bakery] i').textContent), 'Best 4,820 · 7 of 11 treats');
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await badge(), [false, false], 'for good');
+  // her own hat wins
+  await page.evaluate(() => { closet.on.head = 'party'; }); await bkOpenIt(page);
+  assert.deepEqual(await page.evaluate(() => [!!document.querySelector('#bkCrumb svg .cl-party'), !!document.querySelector('#bkCrumb svg .cl-chef')]), [true, false]);
+});
+test('bakery: the view fits 390x844 and 375x667: score, best, pause, music, sound, the strip, Crumb, the jar and Shake on screen; the pause and end cards too', async ({ page }) => {
+  await bkOpenIt(page);
+  for (const [w, h] of [[390, 844], [375, 667]]) {
+    await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(120);
+    const r = await page.evaluate(() => {
+      const R = id => el(id).getBoundingClientRect(), inside = b => b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight && b.width > 0;
+      const btn = ['bkScore', 'bkBest', 'bkPauseBtn', 'bkMusicBtn', 'bkSndBtn', 'bkShake', 'bkCrumb'].map(id => [id, inside(R(id))]).filter(x => !x[1]).map(x => x[0]);
+      const hudB = Math.max(R('bkPauseBtn').bottom, R('bkScore').bottom), sh = R('bkShake');
+      return { btn, strip: bkG.stripY >= hudB - 1 && bkG.stripX >= 0 && bkG.stripX + bkG.slot * 11 + 30 <= innerWidth,
+        crumb: R('bkCrumb').top >= bkG.stripY + bkG.stripH - bkG.cs * .2, jar: bkG.jx >= 10 && bkG.jx + bkG.jw <= innerWidth - 10 && bkG.jy + bkG.jh + 8 <= sh.top,
+        held: bkSY(BK_HOLD) > bkG.stripY + bkG.stripH, wide: bkG.jw };
+    });
+    assert.deepEqual({ ...r, wide: r.wide > 250 }, { btn: [], strip: true, crumb: true, jar: true, held: true, wide: true }, w + 'x' + h + ' ' + JSON.stringify(r));
+    await page.click('#bkPauseBtn');
+    assert.ok(await page.evaluate(() => ['bkResume', 'bkRestart', 'bkPauseLab', 'bkPauseHome'].every(id => { const b = el(id).getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; })), w + 'x' + h + ': the pause card');
+    await page.click('#bkResume');
+    await page.evaluate(() => { bk.cr = 2; bk.big = 9; bkShowCard(); });
+    assert.ok(await page.evaluate(() => ['bkAgain', 'bkShare', 'bkOverLab', 'bkOverHome', 'bkBigCv', 'bkOverCr'].every(id => { const b = el(id).getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight && b.right <= innerWidth; })), w + 'x' + h + ': the end card');
+    await page.evaluate(() => bkAgain());
+  }
+});
+test('bakery: a finger aims (Crumb follows, clamped inside the walls) and letting go drops; a tap moves and drops; nothing while paused', async ({ page }) => {
+  await bkOpenIt(page);
+  await page.evaluate(() => bkNew(31));
+  const g = await page.evaluate(() => ({ jx: bkG.jx, jw: bkG.jw, S: bkG.S, y: bkG.jy + 60 }));
+  await page.mouse.move(g.jx + g.jw * .25, g.y); await page.mouse.down();
+  await page.mouse.move(g.jx + g.jw * .7, g.y, { steps: 4 });
+  const mid = await page.evaluate(() => ({ aim: bk.aim, n: bk.bodies.length, line: bk.touch != null, crumb: el('bkCrumb').getBoundingClientRect() }));
+  assert.ok(Math.abs(mid.aim - 273) < 2 && mid.n === 0 && mid.line, JSON.stringify(mid));
+  assert.ok(Math.abs(mid.crumb.left + mid.crumb.width / 2 - (g.jx + g.jw * .7)) < 2, 'Crumb is over the finger');
+  await page.mouse.up();
+  assert.deepEqual(await page.evaluate(() => ({ n: bk.bodies.length, x: Math.round(bk.bodies[0].x), ready: bk.ready })), { n: 1, x: 273, ready: false });
+  await page.mouse.click(g.jx / 2, g.y);                     // off the jar's left edge: clamped, and queued until the next is in his hands
+  await page.waitForFunction(() => bk.bodies.length === 2, null, { timeout: 2000 });
+  assert.equal(await page.evaluate(() => bk.bodies[1].x === bkR(bk.bodies[1].k)), true, 'clamped against the wall');
+  await page.waitForFunction(() => bk.ready);
+  await page.click('#bkPauseBtn');
+  await page.evaluate(g => { for (const t of ['pointerdown', 'pointerup']) bkCv.dispatchEvent(new PointerEvent(t, { pointerId: 9, clientX: g.jx + 100, clientY: g.y, bubbles: true })); }, g);   // under the card
+  assert.deepEqual(await page.evaluate(() => ({ n: bk.bodies.length, paused: bk.paused, raf: bkRaf, timer: !!bkTimer })), { n: 2, paused: true, raf: 0, timer: false }, 'paused: no drop, no loop');
+});
+test('bakery: its own loop only while it is up and not paused; the game\'s loop is parked underneath; leaving (Lab, Home, the app hidden) stops it; idle drops to a slow tick', async ({ page }) => {
+  await page.evaluate(() => { window.__mainN = 0; const of = frame; frame = function (t) { __mainN++; return of(t); }; });
+  await bkOpenIt(page);
+  await page.waitForTimeout(400);
+  const a = await page.evaluate(() => { const n = __mainN; return new Promise(r => setTimeout(() => r({ main: __mainN - n, mainOff: bk.mainOff, live: !!bkRaf || !!bkTimer }), 500)); });
+  assert.deepEqual(a, { main: 0, mainOff: true, live: true }, 'no frames of the game underneath');
+  // settled and untouched: no rAF, a slow tick
+  await page.evaluate(() => { bkNew(4); for (const k of [3, 5, 2]) { const b = bkBody(k, 60 + k * 50, BK_JH - bkR(k)); b.born = -1; } bkKick(); });
+  await page.waitForFunction(() => bk.bodies.every(b => b.z), null, { timeout: 5000 });
+  await page.waitForTimeout(1200);
+  assert.deepEqual(await page.evaluate(() => ({ raf: bkRaf, timer: !!bkTimer })), { raf: 0, timer: true });
+  const draws = await page.evaluate(() => new Promise(r => { let n = 0; const od = bkDraw; bkDraw = function (t) { n++; return od(t); }; setTimeout(() => { bkDraw = od; r(n); }, 1000); }));
+  assert.ok(draws >= 2 && draws <= 6, 'about four draws a second at rest (' + draws + ')');
+  // Back to the Lab
+  await page.click('#bkPauseBtn'); await page.click('#bkPauseLab');
+  const b = await page.evaluate(() => { const n = __mainN; return new Promise(r => setTimeout(() => r({ open: bk.open, raf: bkRaf, timer: !!bkTimer, lab: !el('labCard').hidden, main: __mainN - n > 3, saved: !!localStorage.getItem(BK_RUN) }), 400)); });
+  assert.deepEqual(b, { open: false, raf: 0, timer: false, lab: true, main: true, saved: true });
+  // Home
+  await page.click('#labList button[data-id=bakery]'); await page.click('#bkPauseBtn'); await page.click('#bkPauseHome');
+  assert.deepEqual(await page.evaluate(() => ({ open: bk.open, raf: bkRaf, timer: !!bkTimer, menu: !el('menuCard').hidden })), { open: false, raf: 0, timer: false, menu: true });
+  // the app is hidden: saved, paused, stopped; back: the pause card waits
+  await page.click('#menuLab'); await page.click('#labList button[data-id=bakery]');
+  await page.evaluate(() => { bkDrop(150); });
+  const h = await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    const s = JSON.parse(localStorage.getItem(BK_RUN));
+    return { paused: bk.paused, raf: bkRaf, timer: !!bkTimer, card: !el('bkPause').hidden, saved: s.b.length === bk.bodies.length };
+  });
+  assert.deepEqual(h, { paused: true, raf: 0, timer: false, card: true, saved: true });
+  // a relaunch restores the jar at rest
+  const before = await page.evaluate(() => bkSnap());
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  await page.evaluate(() => { if (!el('menuCard').hidden) closeMenu(); });
+  await bkOpenIt(page);
+  assert.deepEqual(await page.evaluate(() => ({ sc: bk.score, n: bk.bodies.length, h: bk.held })), { sc: before.sc, n: before.b.length, h: before.h });
+});
+test('bakery: tilt leans gravity (capped at BK_TILT_MAX); Reduce Motion: no tilt, no shake or jolt, short pops', async ({ page }) => {
+  await bkOpenIt(page);
+  const t = await page.evaluate(() => { CFG.TILT = true; toy.tiltOn = true; toy.gRaw = .8; toy.gx = .8; bkTilt(1); const a = bk.gx; CFG.BK_TILT = false; bkTilt(1); const b = bk.gx; CFG.BK_TILT = true; toy.gRaw = 0; toy.gx = 0; bkTilt(1); return [a, b]; });
+  assert.deepEqual(t, [.25, 0]);
+  await page.evaluate(() => { bkNew(3); const b = bkBody(4, 200, BK_JH - bkR(4)); bkShake(); });
+  assert.ok(await page.evaluate(() => bkFx.jolt > 0 && bkFx.shake > 0 && bk.shakes === 0), 'the jar jolts');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  await page.evaluate(() => { if (!el('menuCard').hidden) closeMenu(); });
+  await bkOpenIt(page);
+  const r = await page.evaluate(() => {
+    CFG.TILT = true; toy.tiltOn = true; toy.gRaw = .8; toy.gx = .8; bkTilt(1); const gx = bk.gx;
+    bkNew(3); const b = bkBody(4, 200, BK_JH - bkR(4)); bkShake();
+    const r2 = bkR(2); for (const x of [40, 40 + 2 * r2 - .2]) { const o = bkBody(2, x, BK_JH - r2); o.born = -1; } for (let i = 0; i < 3; i++) bkStep(BK_DT);
+    return { reduce, gx, jolt: bkFx.jolt, shake: bkFx.shake, pop: bkPopDur(), dizzy: bkFaceMood(b, 0), crumb: el('bkCrumb').className.includes('rm') };
+  });
+  assert.deepEqual(r, { reduce: true, gx: 0, jolt: 0, shake: 0, pop: .12, dizzy: '', crumb: true });
+});
+test('bakery: a first discovery flips its silhouette and shows "NEW! <name>"; the end: treats pop top to bottom, then the card with the biggest treat, NEW BEST, crumbles; Play again; Share text', async ({ page }) => {
+  await bkOpenIt(page);
+  await page.evaluate(() => { lab.bakery.seen = 5; lab.bakery.best = 100; bkNew(8); const r = bkR(5); for (const x of [r + 1, 3 * r + .5]) { const b = bkBody(5, x, BK_JH - r); b.born = -1; } for (let i = 0; i < 3; i++) bkStep(BK_DT); });
+  assert.deepEqual(await page.evaluate(() => ({ chip: el('bkNew').hidden ? '' : el('bkNew').textContent, flip: !!bkFx.flip[6], seen: lab.bakery.seen })), { chip: 'NEW! Cinnamon roll 🍪', flip: true, seen: 6 });
+  await page.evaluate(() => { for (const k of [1, 2, 3, 4]) { const b = bkBody(k, 40 + k * 70, 200); b.born = -1; } bk.score = 4820; bk.cr = 1; bkGameOver(); });
+  const mid = await page.evaluate(() => new Promise(r => setTimeout(() => r({ st: bk.st, n: bk.bodies.length }), 500)));
+  assert.ok(mid.st === 'over' && mid.n < 5, 'popping: ' + JSON.stringify(mid));
+  await page.waitForFunction(() => bk.st === 'card', null, { timeout: 5000 });
+  const c = await page.evaluate(() => ({ n: bk.bodies.length, card: !el('bkOver').hidden, score: el('bkOverScore').textContent, best: el('bkOverBest').textContent, name: el('bkBigName').textContent,
+    cr: el('bkOverCr').textContent, saved: JSON.parse(localStorage.getItem('crumble.lab')).bakery, run: localStorage.getItem(BK_RUN), share: bkShareText() }));
+  assert.deepEqual({ ...c, saved: [c.saved.best, c.saved.games] }, { n: 0, card: true, score: '4,820', best: '★ NEW BEST ★', name: 'Cinnamon roll', cr: '💥 One CRUMBLE!', saved: [4820, 1], run: null,
+    share: "I baked a Cinnamon roll in Crumb's Bakery. 4,820 points. https://crumble.win" });
+  await page.click('#bkAgain');
+  assert.deepEqual(await page.evaluate(() => ({ st: bk.st, score: bk.score, n: bk.bodies.length, card: el('bkOver').hidden })), { st: 'play', score: 0, n: 0, card: true });
+});
+test('bakery: progress merges from iCloud by max (best, biggest treat, crumbles, runs); bad values change nothing', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    Object.assign(lab.bakery, { best: 500, seen: 7, crumbles: 1, games: 3 });
+    const ch = cloudMerge({ v: 1, lab: { bakery: { best: 4820, seen: 6, crumbles: 2, games: 'x' } } });
+    const ch2 = cloudMerge({ v: 1, lab: { bakery: { best: -5, seen: 40 } } });
+    return { ch, ch2, b: { ...lab.bakery }, blob: cloudBlob().lab.bakery };
+  });
+  assert.deepEqual(r, { ch: true, ch2: false, b: { best: 4820, seen: 7, crumbles: 2, games: 3, op: 0 }, blob: { best: 4820, seen: 7, crumbles: 2, games: 3 } });
 });
 
 for (const { name, fn } of tests) {
