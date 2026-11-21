@@ -7367,11 +7367,11 @@ test('bakery: the jar in progress saves and restores (score, dice, held and next
     return { snap: bkSnap(), saved: JSON.parse(localStorage.getItem(BK_RUN)) };
   });
   assert.deepEqual(a.saved, a.snap);
-  const b = await page.evaluate(() => { bkNew(1); const ok = bkLoadRun(); const s = bkSnap(); return { ok, s, still: bk.bodies.every(b => b.vx === 0 && b.vy === 0), next: (() => { bkDrop(200); return bk.next; })() }; });
+  const b = await page.evaluate(() => { bkNew(1); const ok = bkLoadRun(); const s = bkSnap(); window.__sv = localStorage.getItem(BK_RUN); return { ok, s, still: bk.bodies.every(b => b.vx === 0 && b.vy === 0), next: (() => { bkDrop(200); return bk.next; })() }; });
   assert.equal(b.ok, true);
   assert.deepEqual(b.s, a.snap, 'the same jar');
   assert.ok(b.still, 'restored at rest');
-  const c = await page.evaluate(() => { bkNew(1); bkRestore(JSON.parse(localStorage.getItem(BK_RUN))); bkDrop(200); return bk.next; });
+  const c = await page.evaluate(() => { bkNew(1); bkRestore(JSON.parse(window.__sv)); bkDrop(200); return bk.next; });
   assert.equal(b.next, c, 'the dice carry on where they were');
   const bad = await page.evaluate(() => [{ v: 2 }, { v: 1, sc: -1 }, { v: 1, sc: 0, seed: 5, h: 9, n: 1, b: [] }, { v: 1, sc: 0, seed: 5, h: 1, n: 1, b: [[12, 1, 1]] }, null].map(o => bkRestore(o)));
   assert.deepEqual(bad, [false, false, false, false, false]);
@@ -7514,6 +7514,61 @@ test('bakery: progress merges from iCloud by max (best, biggest treat, crumbles,
   });
   assert.deepEqual(r, { ch: true, ch2: false, b: { best: 4820, seen: 7, crumbles: 2, games: 3, op: 0 }, blob: { best: 4820, seen: 7, crumbles: 2, games: 3 } });
 });
+
+/* ── (bakery round two) faces fixed to the treat, the bubble clear of NEXT, a save on every drop ── */
+test('bakery: a face is fixed to its treat: drawn at the treat\'s own angle, upside down and all, and it never eases back upright', async ({ page }) => {
+  await bkOpenIt(page);
+  const r = await page.evaluate(() => {
+    bkStop(); bkNew(4);
+    const angs = [2.6, -1.1, 3.1, 0.4];
+    angs.forEach((a, i) => { const b = bkBody(i + 1, 60 + i * 90, BK_JH - bkR(i + 1)); b.a = a; b.w = 0; b.born = -1; });
+    const got = [], orig = bkFace;
+    window.bkFace = function (g, k, ...rest) { const m = g.getTransform(); got.push(Math.atan2(m.b, m.a)); return orig.call(this, g, k, ...rest); };
+    const norm = a => Math.atan2(Math.sin(a), Math.cos(a));
+    try {
+      bkDraw(performance.now());
+      const first = bk.bodies.map(b => got.some(a => Math.abs(norm(a - b.a)) < 1e-6));
+      for (let i = 0; i < 40; i++) { bkStep(BK_DT); bkFaces(BK_DT, performance.now() + i * 16); }   // asleep or rolling, time passes
+      got.length = 0; bkDraw(performance.now());
+      const later = bk.bodies.map(b => got.some(a => Math.abs(norm(a - b.a)) < 1e-6));
+      return { first, later, upside: bk.bodies.some(b => Math.abs(norm(b.a)) > 2.5) };
+    } finally { window.bkFace = orig; }
+  });
+  assert.deepEqual(r, { first: [true, true, true, true], later: [true, true, true, true], upside: true });
+});
+
+test('bakery: Crumb\'s bubble never covers the NEXT bubble at 375 wide, wherever he stands', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await bkOpenIt(page);
+  const bad = await page.evaluate(() => {
+    bkStop(); const out = [];
+    for (let x = 0; x <= BK_JW; x += 26) {
+      bk.aim = bkDropX(x); bkSayReset(); bkTalk.last = -1e9; bkSay('bkDanger', 3);
+      bkDom.cKey = ''; bkDomStep(performance.now());
+      const s = el('bkSay').getBoundingClientRect();
+      const cx = bkSX(bk.aim), side = cx < bkG.W / 2 ? 1 : -1, nx = cx + side * (bkG.cs * .5 + 24), ny = bkSY(BK_HOLD) - bkG.cs * .42;
+      const n = { left: nx - 20, right: nx + 20, top: ny - 17 - 14, bottom: ny + 17 };
+      const hit = s.left < n.right && s.right > n.left && s.top < n.bottom && s.bottom > n.top;
+      const off = s.left < 0 || s.right > innerWidth;
+      if (hit || off) out.push({ x, hit, off });
+    }
+    return out;
+  });
+  assert.deepEqual(bad, []);
+});
+
+test('bakery: the jar is saved on every drop, not only on pause and hide', async ({ page }) => {
+  await bkOpenIt(page);
+  const r = await page.evaluate(() => {
+    localStorage.removeItem(BK_RUN); bkNew(12);
+    bkDrop(120); const one = JSON.parse(localStorage.getItem(BK_RUN));
+    for (let j = 0; j < 80; j++) bkStep(BK_DT);
+    bkDrop(260); const two = JSON.parse(localStorage.getItem(BK_RUN));
+    return { one: one && one.b.length, two: two && two.b.length, held: two.h === bk.held && two.n === bk.next };
+  });
+  assert.deepEqual(r, { one: 1, two: 2, held: true });
+});
+
 
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;

@@ -61,7 +61,7 @@ function bkNew(seed){                                       // a fresh jar (seed
 function bkBody(k,x,y,vx=0,vy=0){                           // a treat of tier k at (x, y), full size, awake
   const r=bkR(k);
   const b={id:bk.nid++,k,x,y,vx,vy,a:0,w:0,r,r0:r,rf:r,m:r*r,im:1/(r*r),iI:2/(r*r*r*r),born:bk.t,sl:0,z:false,ct:false,
-    fa:0,blink:0,pop:-9,ooh:-9,dz:-9,dead:false};
+    blink:0,pop:-9,ooh:-9,dz:-9,dead:false};
   bk.bodies.push(b);
   return b;
 }
@@ -226,7 +226,7 @@ function bkBake(a,b){
   } else {
     pts=bkPts(k+1)*mult;
     nb=bkBody(k+1,x,y,(a.vx+b.vx)/2,(a.vy+b.vy)/2);
-    nb.w=(a.w+b.w)/2; nb.a=(a.a+b.a)/2; nb.fa=nb.a;
+    nb.w=(a.w+b.w)/2; nb.a=(a.a+b.a)/2;
     nb.r0=Math.max(a.r,b.r); nb.r=nb.r0; bkMass(nb); nb.pop=nb.ooh=bk.t;
     bkKeepIn(nb);
     if(k+1>bk.big) bk.big=k+1;
@@ -265,6 +265,7 @@ function bkDrop(x){                                         // Crumb lets go of 
   bk.held=bk.next; bk.next=bkRoll(); bk.ready=false; bk.readyAt=bk.t+CFG.BK_DROP_MS/1000;
   if(bk.held>bk.big) bk.big=bk.held;
   if(typeof bkFxDrop==='function') bkFxDrop(b);
+  bkSaveRun();                                              // the jar is saved on every drop (cheap), as well as on pause and hide
   return b;
 }
 function bkTickReady(){                                     // the next treat pops into his hands
@@ -330,7 +331,7 @@ function bkRestore(o){                                      // true if o was a g
   bk.cr=isInt(o.cr,0,1e6)?o.cr:0;
   for(const q of o.b){
     const r=bkR(q[0]), b=bkBody(q[0],Math.max(r,Math.min(BK_JW-r,q[1])),Math.min(BK_JH-r,q[2]));
-    b.a=isNum(q[3])?q[3]:0; b.fa=0; b.born=-2;               // at rest, and old enough for the line and to bake
+    b.a=isNum(q[3])?q[3]:0; b.born=-2;               // at rest, and old enough for the line and to bake
   }
   bk.big=Math.max(isInt(o.big,1,BK_N)?o.big:1,bk.held,bk.next,...bk.bodies.map(b=>b.k));
   return true;
@@ -350,7 +351,7 @@ const BK_LOOK=[   // base, light, outline, face ink; face: eyes at (+-ex, ey), e
   {base:'#E4A262',light:'#F6C98E',dark:'#9A5A22',ink:'#5A1636',ex:.44,ey:.02,es:.11,my:.38},     // 5 Donut (either side of the hole)
   {base:'#F4D7A6',light:'#FFF0D2',dark:'#A8662E',ink:'#4A2A10',ex:.36,ey:.1,es:.105,my:.33},     // 6 Cinnamon roll
   {base:'#F5B43F',light:'#FFDD88',dark:'#A8651B',ink:'#5A3008',ex:.36,ey:.16,es:.1,my:.38},      // 7 Pancake
-  {base:'#E4A35C',light:'#F7CD90',dark:'#9A5E22',ink:'#1E1450',ex:.34,ey:.1,es:.095,my:.32,wh:1},     // 8 Blueberry pie
+  {base:'#E4A35C',light:'#F7CD90',dark:'#9A5E22',ink:'#4A2A10',ex:.19,ey:-.03,es:.082,my:.19},     // 8 Blueberry pie (face on the crust lid)
   {base:'#E8BC70',light:'#FFE3A8',dark:'#9C7026',ink:'#24400A',ex:.33,ey:.12,es:.09,my:.33},     // 9 Lime tart
   {base:'#6E3B23',light:'#9A6040',dark:'#3A190B',ink:'#170803',ex:.33,ey:.2,es:.088,my:.4,wh:1},      // 10 Chocolate cake
   {base:'#FFF3F8',light:'#FFFFFF',dark:'#D9609A',ink:'#5A1636',ex:.32,ey:.2,es:.085,my:.4},    // 11 Party cake
@@ -434,6 +435,9 @@ function bkPaint(g,k,R){
       for(const v of [-.5,0,.5]) strip(-R,v*R-R*.08,R*2,R*.16);                         // ... three across ...
       for(const v of [-.5,.5]) for(const u of [-.5,0,.5]) if((Math.round(v*2)+Math.round(u*2))%2===0) strip(v*R-R*.08,u*R-R*.08,R*.16,R*.16);   // ... woven
       g.restore();
+      const md=g.createRadialGradient(-R*.12,-R*.16,R*.04,0,0,R*.48); md.addColorStop(0,'#FFE7B8'); md.addColorStop(1,L.light);
+      g.fillStyle=md; bkBlob(g,0,0,R*.46,12,.03,.4); g.fill();                             // a round crust lid in the middle, for the face
+      g.strokeStyle=L.dark; g.lineWidth=Math.max(1,R*.03); g.stroke();
       g.strokeStyle=L.dark; g.lineWidth=R*.03; bkCircle(g,R*.82); g.stroke();
       g.strokeStyle='rgba(255,255,255,.25)'; g.setLineDash([R*.06,R*.08]); bkCircle(g,R*.9); g.stroke(); g.setLineDash([]);   // a pinched crust
       g.restore();
@@ -637,17 +641,15 @@ function bkDrawTreat(g,b,x,y,r,now,ft){                     // one treat: its sp
   g.save(); g.rotate(b.a); g.drawImage(sp.c,-sp.h*sc,-sp.h*sc,sp.h*2*sc,sp.h*2*sc); g.restore();
   const gl=bkG.gloss, gs=r/50; g.drawImage(gl.c,-gl.h*gs,-gl.h*gs,gl.h*2*gs,gl.h*2*gs);
   if(mood==='scared'&&!reduce) g.translate(Math.sin(now*.09+b.id)*r*.03,0);
-  g.rotate(b.fa);
+  g.rotate(b.a);                                               // the face is part of the treat: it rolls with it, upside down and all
   let lx=0, ly=-.4;                                            // the eyes go to the treat he holds
-  if(bk.st==='play'){ const hx=bk.aim-b.x, hy=BK_HOLD+bkR(bk.held)-b.y, d=Math.hypot(hx,hy)||1, c=Math.cos(-b.fa), s=Math.sin(-b.fa); lx=(hx*c-hy*s)/d; ly=(hx*s+hy*c)/d; }
+  if(bk.st==='play'){ const hx=bk.aim-b.x, hy=BK_HOLD+bkR(bk.held)-b.y, d=Math.hypot(hx,hy)||1, c=Math.cos(-b.a), s=Math.sin(-b.a); lx=(hx*c-hy*s)/d; ly=(hx*s+hy*c)/d; }
   bkFace(g,b.k,r,mood,lx,ly,now<b.blinkTo&&now>=b.blinkAt,ft);
   g.restore();
 }
-function bkFaces(dt,now){                                    // faces settle upright when a treat stops; blinks now and then (looks only)
+function bkFaces(dt,now){                                    // blinks now and then (looks only); the face turns with the treat (bkDrawTreat)
   let busy=false;
   for(const b of bk.bodies){
-    const da=b.a-(b.pa==null?b.a:b.pa); b.pa=b.a; b.fa+=da;
-    if(b.z||Math.abs(b.w)<.8){ const w=Math.atan2(Math.sin(b.fa),Math.cos(b.fa)); b.fa=w-w*Math.min(1,dt*4); if(Math.abs(b.fa)>.01) busy=true; else b.fa=0; }
     if(now>b.blinkTo+50){ b.blinkAt=now+1800+bkVisRnd()*5200; b.blinkTo=b.blinkAt+140; }
   }
   return busy;
@@ -679,7 +681,7 @@ function bkDraw(now){
   // the treat he holds, and the next one in a bubble beside him
   if(bk.st==='play'&&bk.ready){
     const k=bk.held, r=bkR(k)*S, p=Math.min(1,(bk.t-bk.readyAt)/(reduce?.08:.24)), s=reduce?1:p<1?easeOutBack(p):1;
-    const hb=bkHeldBody||(bkHeldBody={id:0,k,a:0,fa:0,pop:-9,ooh:-9,dz:-9,born:0,r:0,y:0,blinkAt:0,blinkTo:0});
+    const hb=bkHeldBody||(bkHeldBody={id:0,k,a:0,pop:-9,ooh:-9,dz:-9,born:0,r:0,y:0,blinkAt:0,blinkTo:0});
     hb.k=k; hb.r=bkR(k); hb.y=BK_HOLD+hb.r; hb.x=bk.aim;
     g.save(); g.translate(bkSX(bk.aim),bkSY(BK_HOLD)+r); g.scale(s,s);
     const sp=bkG.spr[k], sc=r/sp.R; g.drawImage(sh.c,r*.06-sh.h*r/50,r*.14-sh.h*r/50,sh.h*r/25,sh.h*r/25);
@@ -1040,9 +1042,11 @@ function bkSayStep(now){
   const e=el('bkSay'), on=now<bkTalk.until&&bk.open;
   if(!on){ if(bkTalk.key!==''){ bkTalk.key=''; e.hidden=true; bkTalk.prio=0; } return; }
   const cs=bkG.cs, roomL=bkDom.x-4-8, roomR=bkG.W-(bkDom.x+cs+4)-8;   // room beside him, keeping 8px off the screen edge
-  let right=bkSX(bk.aim)>=bkG.W/2;                          // the next bubble is on the roomier side: he talks on the other
-  if((right?roomL:roomR)<150&&(right?roomR:roomL)>(right?roomL:roomR)) right=!right;   // unless that side is too tight
-  const y=Math.round(Math.max(bkG.stripY+bkG.stripH+4,bkDom.y-6));
+  const nextR=bkSX(bk.aim)<bkG.W/2;                          // the next bubble is on his roomier side (bkDrawNext) ...
+  let right=nextR, under=false;                              // ... he talks on the other (right = the bubble ends at his left)
+  if((right?roomL:roomR)<130){ right=!right; under=bk.st==='play'; }   // too tight there: the next bubble's side, under it
+  const ny=bkSY(BK_HOLD)-cs*.42;
+  const y=Math.round(under?ny+17+6:Math.max(bkG.stripY+bkG.stripH+4,bkDom.y-6));
   const x=right?Math.round(bkG.W-bkDom.x+4):Math.round(bkDom.x+cs+4), mw=Math.round(Math.max(90,Math.min(190,right?roomL:roomR)));
   const key=bkTalk.txt+'|'+right+x+','+y+','+mw;
   if(key===bkTalk.key) return; bkTalk.key=key;
