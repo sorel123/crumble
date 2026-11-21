@@ -238,10 +238,12 @@ function openMenu(){
   el('menuGoalsSub').textContent=goalsSub();
   const liveE=mode==='endless'&&state==='play'?{score}:peekRun('endless');   // (8.4) a saved endless run waits here
   el('menuBest').textContent=liveE&&liveE.score?'Continue · '+fmtScore(liveE.score):liveE?'Continue':'Play as long as you can';
+  el('startCard').hidden=true;                        // one home card at a time: from the start card (Lab, Goals, Daily...) Back lands here, not on top of it
   el('menuCard').hidden=false;
 }
 function closeMenu(){                              // back to wherever she came from: the game, or the card that was up (a won level, game over)
   el('menuCard').hidden=true;
+  if(state==='idle') el('startCard').hidden=false;      // nothing to go back to yet: the start card again
   if(state==='won') el('winCard').hidden=false; else if(state==='over'){ el('overCard').hidden=false; tlResume(); }
   if(!overlayOpen()) paused=false;
 }

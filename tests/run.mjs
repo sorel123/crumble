@@ -60,6 +60,15 @@ test('front menu (8.3): Settings opened over the mode menu keeps the game paused
   assert.equal(await page.evaluate(() => paused), false);
 });
 
+test('front menu: Back from a card opened on the start card shows one home card, never the start card and the menu on top of each other', async ({ page }) => {
+  const cards = () => page.evaluate(() => ({ start: !el('startCard').hidden, menu: !el('menuCard').hidden }));
+  for (const [open, back] of [['#startLab', '#labBack'], ['#startGoals', '#goalsBack'], ['#startDaily', '#dailyBack'], ['#startChal', '#chalBack'], ['#startAdv', '#mapBack']]) {
+    await page.click(open); await page.click(back);
+    assert.deepEqual(await cards(), { start: false, menu: true }, open + ' then ' + back);
+    await page.click('#menuClose');                         // Back with no game yet: the start card again
+    assert.deepEqual(await cards(), { start: true, menu: false }, 'Back from the menu ' + open);
+  }
+});
 test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and End game (tap twice, back to the home screen)', async ({ page }) => {
   await play(page); await dealt(page);
   assert.equal(await page.evaluate(() => !!document.getElementById('modeTag')), false, 'the Endless pill is gone');
