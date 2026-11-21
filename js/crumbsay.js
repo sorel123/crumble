@@ -94,6 +94,7 @@ const SAY={
   bkChain:["again! again!","it keeps going!","chain! don't stop."],
   bkBig:["that one's huge.","who's going to eat that?","now we're baking."],
   bkDanger:["too full! too full!","it's at the line. do something.","uh oh."],
+  bkBeat:["you beat them. tell them.","passed! rub it in.","that's their score gone."],   // (bakery) a dare: past the friend's score
   bkShake:["whoa whoa whoa.","i felt that.","not the jar!"],
   bkCrumble:["CRUMBLE! that's the name of the game.","it crumbled. obviously.","all that cake. gone. worth it."],
   bkOver:["the jar's full. my fault? no.","too many treats. is that possible?","we baked too hard."],

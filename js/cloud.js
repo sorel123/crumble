@@ -30,7 +30,7 @@ function cloudBlob(){
     dares:{cookies:dare.st.cookies, won:{...dare.st.won}, days:{...dare.st.days}},   // (dares) crumble.dares: the cookie jar
     closet:{own:[...closet.own].sort(), spent:closet.spent, on:{...closet.on}, ot:closet.ot},   // (closet) crumble.closet: what she bought, spent and wears
     lab:{three:{done:lab.three.done.slice(), at:lab.three.at}, rescue:{stars:lab.rescue.stars.slice(), best:lab.rescue.best.slice()},
-      bakery:{best:lab.bakery.best, seen:lab.bakery.seen, crumbles:lab.bakery.crumbles, games:lab.bakery.games}}};   // (bakery) Crumb's Bakery: all by max   // (Lab) crumble.lab: puzzles solved, crumbs rescued
+      bakery:{best:lab.bakery.best, seen:lab.bakery.seen, crumbles:lab.bakery.crumbles, games:lab.bakery.games, bs:lab.bakery.bs, bb:lab.bakery.bb}}};   // (bakery) Crumb's Bakery: all by max   // (Lab) crumble.lab: puzzles solved, crumbs rescued
 }
 
 // Folds a cloud copy into this phone's progress. Returns true if anything here changed. Bad data changes nothing.
@@ -127,6 +127,7 @@ function cloudMerge(o){
   }
   const lk=o.lab&&o.lab.bakery;                         // (bakery) best, biggest treat, crumbles and runs: each by max
   if(lk&&typeof lk==='object'){
+    if(isInt(lk.best,0,1e9)&&lk.best>lab.bakery.best&&isInt(lk.bs,1,2147483646)&&isInt(lk.bb,1,11)){ lab.bakery.bs=lk.bs; lab.bakery.bb=lk.bb; ch=true; }   // the better best brings its seed and treat
     if(isInt(lk.best,0,1e9)) up(lab.bakery,'best',lk.best);
     if(isInt(lk.seen,BK_SEEN0,11)) up(lab.bakery,'seen',lk.seen);
     if(isInt(lk.crumbles,0,1e6)) up(lab.bakery,'crumbles',lk.crumbles);

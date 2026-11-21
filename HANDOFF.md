@@ -70,8 +70,8 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
   - `crumble.closet` — Crumb's closet (`js/closet.js`): `{v:1, own:[ids bought], on:{head,face,neck}, spent, ot, seen:[ids]}`. Cookies she can spend are `dares.cookies - spent` (the jar itself is never lowered). `ot` is when the outfit last changed (for the iCloud merge), `seen` what she has seen on offer (the dot). Feat items are never in `own`. Validated on load: unknown ids, feat ids in `own` and items she does not own in `on` are dropped.
   - `crumble.lab` — the Lab (`js/lab.js`): `{v:1, three:{done:[k…], at:k}}`, the Clear-it-in-three puzzles solved (1..60) and the one she is on. Validated on load (bad entries dropped, a broken save starts fresh); in the iCloud backup (done by union, at by max). The Lab keeps no run save: leaving a puzzle starts it again.
   - `crumble.lab` `.rescue` — Rescue the Crumbs (`js/rescue.js`): `{stars:[s1,s2,s3], best:[n1,n2,n3]}`, the stars (0..3) and fewest pieces per board; a board with no stars has best 0. Validated on load (a bad entry resets that board; saves from before it load with all zeros); in the iCloud backup (stars by max, best by the fewest).
-  - `crumble.lab` `.bakery` — Crumb's Bakery (`js/bakery.js`): `{best, seen, crumbles, games, op}`: best score, the biggest tier ever baked (starts at 5: Crumb to Donut are known), CRUMBLEs and runs ever, `op` 1 once the Bakery has been opened (clears the NEW badge on the Lab buttons). Validated field by field on load; older saves load with the defaults. In the iCloud backup (best, seen, crumbles, games by max; `op` stays on the device).
-  - `crumble.bakery.run` — the Bakery jar in progress: `{v:1, sc, seed, h, n, sh, sn, big, cr, b:[[tier,x,y,angle]…]}` (score, dice state, held and next, shakes and the points for the next, biggest this run, crumbles this run, every treat). Saved on pause, when the app is hidden (and on pagehide) and on leaving the Bakery; cleared at game over and Restart. Restored at rest; a bad save is refused and a fresh jar starts.
+  - `crumble.lab` `.bakery` — Crumb's Bakery (`js/bakery.js`): `{best, seen, crumbles, games, op, bs, bb, hi}`: best score, the biggest tier ever baked (starts at 5: Crumb to Donut are known), CRUMBLEs and runs ever, `op` 1 once the Bakery has been opened (clears the NEW badge on the Lab buttons), `bs`/`bb` the best run's seed and biggest treat (Share my best; 0 until a best is set, taken together or not at all), `hi` 1 once the first-play hint has gone. Validated field by field on load; older saves load with the defaults. In the iCloud backup (best, seen, crumbles, games by max; `bs`/`bb` come with a better best; `op` and `hi` stay on the device).
+  - `crumble.bakery.run` — the Bakery jar in progress: `{v:1, sc, seed, ds, s0, h, n, sh, sn, big, cr, b:[[tier,x,y,angle]…]}` (score, the two dice states (`seed` moves things, `ds` deals; a save from before `ds` uses `seed` for both), the run's starting seed, held and next, shakes and the points for the next, biggest this run, crumbles this run, every treat). Saved on every drop, on pause, when the app is hidden (and on pagehide) and on leaving the Bakery; cleared at game over and Restart. A friend's dare is never saved here (her own jar keeps its save). Restored at rest; a bad save is refused and a fresh jar starts.
   - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, bonuses`; `bonuses` is bonus runs earned, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
@@ -241,7 +241,7 @@ Top to bottom:
 | (quiet) | A quiet opening: in Endless, Volcano (and the other transformations), the cannonball's charge and the x2 bonus meter wait for the second sky stop (Day, about tray 8); the meter's chip is hidden until then and slides in, and Crumb says so once. `CFG.QUIET_START`. See the section at the end |
 | (voice) | Crumb is the one voice: the praise words (GOOD!, NICE!, GREAT! ...) are off by default (`CFG.PRAISE_WORDS`), Crumb remarks on big clears and now and then on a double; transformations no longer multiply the score (`TRANSFORM_MULT` 1.5 to 1). See the section at the end |
 | (report) | Crumb's report card: the Endless game-over card stamps a grade (D to A+, never an F) beside the sky line, with Crumb's face and one line (a quip when one applies, else one for the grade). `CFG.REPORT_CARD`, run counters saved as `rc`. See the section at the end |
-| (bakery) | Crumb's Bakery, the Lab's third game (first on the card): drop treats into a jar, two the same bake the next of eleven (Crumb to Party cake), chains multiply, two Party cakes CRUMBLE into a rain of Crumbs; Shake charges, first discoveries pay a cookie from tier 6, Crumb's own lines, a card with share. Own physics, view, loop and dice. `js/bakery.js`, `CFG.BK_*`. See the Bakery section at the end |
+| (bakery) | Crumb's Bakery, the Lab's third game (first on the card): drop treats into a jar, two the same bake the next of eleven (Crumb to Party cake), chains multiply, two Party cakes CRUMBLE into a rain of Crumbs; Shake charges, first discoveries pay a cookie from tier 6, Crumb's own lines, a card with share. Own physics, view, loop and dice. `js/bakery.js`, `CFG.BK_*`. Round two: faces fixed to their treats, a friend link (`?bk=`) that opens a dare on the same treats, a first-play hint. See the Bakery section at the end |
 
 Details for each, oldest first:
 
@@ -2095,14 +2095,16 @@ next one where they met. Everything is in `js/bakery.js`; the knobs are `CFG.BK_
   speed cap 1500. Sleep by speed and by how far a treat has drifted from where it settled; woken by a hit, a push or a
   moving neighbour. A baked treat grows from the old size to its own over `BK_GROW_MS` (120) and cannot bake again for
   `BK_MERGE_COOL_MS` (80), so a chain reads as separate beats. About 0.02 ms a step with a full jar.
-- **Dice.** Everything in the Bakery, looks included, comes from its own Park-Miller dice: `bkRnd` (seeded per run: the
-  drop sequence, the shake, the Crumb rain) and `bkVisRnd` (decorations, particles, which line Crumb says). Never
-  `Math.random` or `rnd`; a test pins a seed and counts `Math.random` calls.
+- **Dice.** Everything in the Bakery, looks included, comes from its own Park-Miller dice: `bkDealRnd` (the treats Crumb
+  is handed, nothing else, so a run's starting seed `bk.seed0` always deals the same treats in the same order), `bkRnd`
+  (seeded from the same seed: the shake's kick, the Crumb rain) and `bkVisRnd` (decorations, particles, which line Crumb
+  says). Never `Math.random` or `rnd`; a test pins a seed and counts `Math.random` calls.
 - **The view.** Its own full-screen `#bakery` with one canvas, Crumb, his speech bubble, the HUD (score, best, pause, music,
   sound), the cookbook strip of all eleven (silhouettes until found), the Shake button, the pause card (Resume, a two-tap
   Restart, Lab, Home) and the end card. Treat sprites are painted once per layout at `min(devicePixelRatio, BK_DPR)` (3); one
   shared shadow and gloss; faces are drawn live and react (happy while held, ooh just baked, scared over the line, dizzy
-  after a shake, a blink now and then) and settle upright while the treat rolls.
+  after a shake, a blink now and then). A face is part of its treat: it turns with the treat's angle exactly, like the
+  decorations, upside down and all. The Blueberry pie's face sits on a round crust lid in the middle of the lattice.
 - **The loop.** `bkFrame` on its own requestAnimationFrame only while the Bakery is up and something moves; when the jar
   sleeps it drops to a 250 ms tick. The game's `frame()` is parked underneath (`bkParked()`) and restarted on leaving.
   Hidden app: saved, paused, loop stopped.
@@ -2113,13 +2115,34 @@ next one where they met. Everything is in `js/bakery.js`; the knobs are `CFG.BK_
 - **Crumb's lines.** `SAY` keys `bkOpen bkAgain bkNew bkChain bkBig bkDanger bkShake bkCrumble bkOver bkBest bkCharge`
   (crumbsay.js), in a bubble beside him in the Bakery, at most one per `BK_TALK_GAP` (3500 ms) unless a bigger moment
   cuts in.
-- **Share.** "I baked a/an <biggest> in Crumb's Bakery. N points." and the game's link, through the share sheet where
-  the share sheet takes files: a picture of the biggest treat, big, and the score; else the picture is downloaded.
+- **Share: the friend link.** Share on the end card, and "Share my best · N" on the pause card (her best run), send "I
+  baked a Blueberry pie in Crumb's Bakery and scored 4,820. Same treats, same order. Beat it: <link>". The link is
+  `https://crumble.win/?bk=SEED-SCORE-TIER-CHECK`, base 36: the run's starting seed, the score in tens, the biggest treat
+  and a 3-character check of the three (`bkLinkFor`, `bkLinkParse`). No name, nothing about her. The share sheet gets the
+  words (and the picture of the treat and score where it takes files); with no share sheet the words are copied and the
+  button says "Link copied". In the iOS app the link opens the website (no universal links).
+- **The dare.** `bkReadLink` (main.js, after the Challenge link) reads `?bk=` once and takes it out of the address bar
+  (`history.replaceState`); a link that does not parse or whose check does not match is ignored and the site opens as
+  usual. A good one opens the Bakery at once with the dare card over it (`bkOpenDare`): no menu, no guided first game (that
+  still comes the first time she plays the block game). The card: "🧁 Crumb's Bakery", the friend's treat, "A friend baked
+  a Blueberry pie and scored 4,820.", "Same treats, same order. Can you beat it?", Play, "What is this?" (Home). If she has a
+  jar going it says so, and offers "Play the dare" or "Back to my jar". The dare jar is dealt from the link's seed
+  (`bkNew(seed, true)`); "to beat N" sits by the score and the moment she passes it there is a little fanfare and a
+  `bkBeat` line (once). It counts for her best and runs like any jar, but is never saved over her jar; leaving it (Lab,
+  Home) drops it. The end card says "You beat your friend by N!" or "N short. So close." ("A tie! So close." on the
+  same score), and its first button is "Send it back" (her score and treat, the same seed), then Play again (the same
+  seed and target).
+- **First-play hint.** The first time the Bakery is open and playing (a link too, once the dare card is gone): a finger
+  slides side to side under Crumb and lifts, with "Drag. Let go. Match two the same." It goes at her first touch, for good
+  (`.bakery.hi`). Reduce Motion: the line only.
 - **Saved.** `crumble.lab` `.bakery` and `crumble.bakery.run`; see the localStorage list. In the iCloud backup by max.
 - **Admin.** A "Bakery" heading with sliders for gravity, bounce, friction, chain window, line time, drop delay, shake
   points, most tilt and the five weights (the copy-settings snippet includes `BK_WEIGHTS`). The rest are in config.js only.
-- **Tests:** the fifteen "bakery:" scenarios (merge table, chain, settling, pinned drop sequence and no Math.random, the line,
-  CRUMBLE, discoveries and cookies, run save, Lab tile and badge, fit at 390x844 and 375x667, finger input, the loop, tilt and
-  Reduce Motion, discovery chip / cascade / card / share text, iCloud merge).
+- **Tests:** the twenty-five "bakery:" scenarios (merge table, chain, settling, pinned drop sequence and no Math.random, the
+  line, CRUMBLE, discoveries and cookies, run save, Lab tile and badge, fit at 390x844 and 375x667, finger input, the loop,
+  tilt and Reduce Motion, discovery chip / cascade / card / share text, iCloud merge; the face at the treat's angle, the
+  bubble clear of NEXT at 375 wide, a save on every drop; the link round trip and tampered links, the dare card on launch,
+  the same deal from the seed, the marker, the dare's end card and Send it back, her jar surviving a dare, the hint).
 - **Check on the phone:** the drop feels weighty but quick; a pile comes to rest and stays still; chains read as separate
-  beats; Shake rescues a full jar; frame rate with a full jar at 3x; tilt is fun and not seasick.
+  beats; Shake rescues a full jar; frame rate with a full jar at 3x; tilt is fun and not seasick. Send yourself a link in
+  Messages: one tap opens the dare card in Safari and Play starts the same treats.
