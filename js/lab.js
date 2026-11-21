@@ -377,6 +377,7 @@ function l3Next(){                                     // the puzzle the big but
 /* ═══════ the Lab card ═══════ */
 // the experiments: one line each (id, title, one-line description, progress, open)
 const LAB=[
+  {id:'bakery',title:"🧁 Crumb's Bakery",sub:'Drop treats. Two the same bake a bigger one.',prog:()=>bkProg(),open:()=>bkOpen()},   // js/bakery.js
   {id:'three',title:'🧩 Clear it in three',sub:'Three pieces. Leave the board empty.',prog:()=>lab.three.done.length+' of '+L3_COUNT,open:()=>openL3()},
   {id:'rescue',title:'🛟 Rescue the Crumbs',sub:'Clear a path. Get them out.',prog:()=>rsProg(),open:()=>openRS()},   // js/rescue.js
 ];

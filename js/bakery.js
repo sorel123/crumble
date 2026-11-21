@@ -24,6 +24,7 @@ const BK_VMAX=1500;                                         // speed cap (units/
 const BK_SLOP=.5, BK_ITER=10, BK_PITER=4;                   // overlap left alone, velocity iterations, position passes
 const BK_SLEEP_V=20, BK_SLEEP_W=1, BK_SLEEP_T=.4, BK_WAKE_V=45;   // at rest below these for BK_SLEEP_T s: asleep; a hit faster than BK_WAKE_V wakes it
 const BK_REST_V=40;                                         // "nearly at rest" for the line rule
+const BK_HOLD=-2*BK_RAD[4]*BK_JW-8;                         // the top of the treat Crumb holds (units; above the jar): a Donut just clears the rim
 const BK_RUN='crumble.bakery.run';                          // the jar in progress (localStorage)
 const bkPts=k=>10*k*(k-1)/2;                                // points for baking tier k (tier 2 = 10 ... tier 11 = 550)
 const bkR=k=>BK_RAD[k-1]*BK_JW;                             // a tier's full radius in units
@@ -259,7 +260,7 @@ function bkLineCheck(dt){
 function bkDropX(x){ const r=bkR(bk.held); return Math.max(r,Math.min(BK_JW-r,x)); }
 function bkDrop(x){                                         // Crumb lets go of the treat he holds, at x (units)
   if(bk.st!=='play'||!bk.ready) return null;
-  const k=bk.held, r=bkR(k), b=bkBody(k,bkDropX(x),-r-6,0,140);
+  const k=bk.held, r=bkR(k), b=bkBody(k,bkDropX(x),BK_HOLD+r,0,140);
   b.pop=-9;
   bk.held=bk.next; bk.next=bkRoll(); bk.ready=false; bk.readyAt=bk.t+CFG.BK_DROP_MS/1000;
   if(bk.held>bk.big) bk.big=bk.held;
@@ -335,3 +336,550 @@ function bkRestore(o){                                      // true if o was a g
   return true;
 }
 function bkLoadRun(){ try{ return bkRestore(JSON.parse(localStorage.getItem(BK_RUN)||'null')); }catch(e){ return false; } }
+
+/* ═══════ the treats' looks ═══════
+   Each treat is painted once per layout into a sprite at device pixels (DPR capped at CFG.BK_DPR) and drawn rotated with
+   drawImage. The light is fixed (top left): one soft shadow and one gloss sprite, both unrotated, serve every treat. The
+   outline is a darker shade of the treat's own colour, never black. Decorations are placed by bkVisRnd, seeded per tier, so a
+   Cookie always has the same chips. Faces are drawn live on top (they react), in the treat's own frame. */
+const BK_LOOK=[   // base, light, outline, face ink; face: eyes at (+-ex, ey), eye size es, mouth at my (shares of r)
+  {base:'#D8A26A',light:'#F1D1A6',dark:'#8E5A2C',ink:'#4A2A10',ex:.36,ey:.06,es:.15,my:.34},     // 1 Crumb
+  {base:'#FF4F86',light:'#FF9DC0',dark:'#C21F56',ink:'#5C0A26',ex:.36,ey:.08,es:.14,my:.34},     // 2 Gumdrop
+  {base:'#B89BFF',light:'#DCCBFF',dark:'#6F4FD0',ink:'#2E1A66',ex:.38,ey:-.24,es:.13,my:-.02},   // 3 Macaron (face on the top shell)
+  {base:'#EDAE45',light:'#FBD98E',dark:'#A0601A',ink:'#4A2A10',ex:.36,ey:.06,es:.125,my:.3},     // 4 Cookie
+  {base:'#E4A262',light:'#F6C98E',dark:'#9A5A22',ink:'#5A1636',ex:.44,ey:.02,es:.11,my:.38},     // 5 Donut (either side of the hole)
+  {base:'#F4D7A6',light:'#FFF0D2',dark:'#A8662E',ink:'#4A2A10',ex:.36,ey:.1,es:.105,my:.33},     // 6 Cinnamon roll
+  {base:'#F5B43F',light:'#FFDD88',dark:'#A8651B',ink:'#5A3008',ex:.36,ey:.16,es:.1,my:.38},      // 7 Pancake
+  {base:'#E4A35C',light:'#F7CD90',dark:'#9A5E22',ink:'#1E1450',ex:.34,ey:.1,es:.095,my:.32,wh:1},     // 8 Blueberry pie
+  {base:'#E8BC70',light:'#FFE3A8',dark:'#9C7026',ink:'#24400A',ex:.33,ey:.12,es:.09,my:.33},     // 9 Lime tart
+  {base:'#6E3B23',light:'#9A6040',dark:'#3A190B',ink:'#170803',ex:.33,ey:.2,es:.088,my:.4,wh:1},      // 10 Chocolate cake
+  {base:'#FFF3F8',light:'#FFFFFF',dark:'#D9609A',ink:'#5A1636',ex:.32,ey:.2,es:.085,my:.4},    // 11 Party cake
+];
+const BK_FILL={2:'#FF4F86',3:'#B89BFF',4:'#E9B15A',5:'#FF8FC8',6:'#F4D7A6',7:'#F5B43F',8:'#5845C8',9:'#9BDD45',10:'#6E3B23',11:'#FF8FC8',1:'#E3A95E'};   // the colour a treat reads as (crumbs, rings, the strip's glow)
+function bkCircle(g,r){ g.beginPath(); g.arc(0,0,r,0,Math.PI*2); }
+function bkBlob(g,cx,cy,r,n,j,ph){                          // a soft lumpy round shape (chips, dollops, the crumb itself)
+  g.beginPath();
+  for(let i=0;i<=n*3;i++){ const a=i/(n*3)*Math.PI*2, rr=r*(1+j*Math.sin(a*n+ph)); i?g.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr):g.moveTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr); }
+  g.closePath();
+}
+const BK_RAINBOW=['#FF5A6E','#FFB13B','#FFE14D','#5BD67A','#4FB3FF','#A57BFF','#FFFFFF'];
+function bkSprinkles(g,R,n,inner,cols){                     // little rounded sticks, any colour, any angle, inside radius inner
+  g.lineCap='round'; g.lineWidth=Math.max(1,R*.06);
+  for(let i=0;i<n;i++){
+    const a=bkVisRnd()*Math.PI*2, d=Math.sqrt(bkVisRnd())*inner, x=Math.cos(a)*d, y=Math.sin(a)*d, t=bkVisRnd()*Math.PI, l=R*.07;
+    g.strokeStyle=cols[i%cols.length]; g.beginPath(); g.moveTo(x-Math.cos(t)*l,y-Math.sin(t)*l); g.lineTo(x+Math.cos(t)*l,y+Math.sin(t)*l); g.stroke();
+  }
+}
+// paints treat k at the origin with radius R (device px): body, decorations, outline. Not the face, shadow or gloss.
+function bkPaint(g,k,R){
+  const L=BK_LOOK[k-1];
+  bkVisSeed=1000+k*7919;
+  const fillBody=(c1,c2)=>{ const gr=g.createRadialGradient(-R*.3,-R*.35,R*.1,0,0,R*1.05); gr.addColorStop(0,c1); gr.addColorStop(1,c2); g.fillStyle=gr; };
+  g.save();
+  if(k===1){                                               // Crumb: a lumpy bit of cookie, like the mascot's little cousin
+    bkBlob(g,0,0,R*.94,5,.05,1.1); fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+    g.fillStyle='#5B3417'; for(const [x,y,r] of [[-.42,.38,.13],[.46,.34,.11],[.38,-.5,.1],[-.1,.6,.07]]){ bkBlob(g,x*R,y*R,r*R,4,.18,x*9); g.fill(); }
+    g.restore(); bkBlob(g,0,0,R*.94,5,.05,1.1);
+  } else {
+    bkCircle(g,R*.97);
+    if(k===2){ fillBody('#FF8FB5',L.base); g.fill(); g.save(); g.clip();
+      g.fillStyle='rgba(255,255,255,.75)'; for(let i=0;i<46;i++){ const a=bkVisRnd()*6.283, d=Math.sqrt(bkVisRnd())*R*.9; g.fillRect(Math.cos(a)*d,Math.sin(a)*d,R*.045,R*.045); }
+      g.fillStyle='rgba(150,0,50,.18)'; g.beginPath(); g.ellipse(0,R*.62,R*.9,R*.4,0,0,6.283); g.fill();   // the gumdrop's darker bottom
+      g.restore();
+    } else if(k===3){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      g.fillStyle='#FFF4E6'; g.fillRect(-R,R*.05,R*2,R*.3);                             // the cream line
+      for(let x=-R;x<R;x+=R*.12){ g.beginPath(); g.arc(x,R*.05,R*.06,Math.PI,0); g.arc(x+R*.06,R*.35,R*.06,0,Math.PI); g.fill(); }   // a frilly cream edge
+      g.fillStyle='rgba(80,40,160,.16)'; g.fillRect(-R,R*.35,R*2,R*.7);                 // the bottom shell, in shade
+      g.restore();
+    } else if(k===4){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      g.strokeStyle='rgba(150,90,20,.35)'; g.lineWidth=R*.03; for(let i=0;i<5;i++){ const a=bkVisRnd()*6.283, d=R*(.3+bkVisRnd()*.5); g.beginPath(); g.moveTo(Math.cos(a)*d,Math.sin(a)*d); g.lineTo(Math.cos(a+.25)*(d+R*.12),Math.sin(a+.25)*(d+R*.12)); g.stroke(); }
+      for(const [x,y,r] of [[-.5,-.35,.15],[.12,-.6,.12],[.55,-.15,.14],[-.6,.42,.12],[.5,.55,.13],[.0,.68,.1],[-.2,-.05,.09]]){
+        g.fillStyle='#5B3417'; bkBlob(g,x*R,y*R,r*R,5,.15,x*7+y); g.fill();
+        g.fillStyle='rgba(255,255,255,.22)'; g.beginPath(); g.arc((x-.04)*R,(y-.05)*R,r*R*.35,0,6.283); g.fill();
+      }
+      g.restore();
+    } else if(k===5){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      g.fillStyle='#FF8FC8'; bkBlob(g,0,0,R*.8,7,.07,.5); g.fill();                     // icing
+      g.fillStyle='rgba(255,255,255,.35)'; bkBlob(g,-R*.12,-R*.14,R*.6,7,.07,.5); g.globalCompositeOperation='source-atop'; g.globalAlpha=.4; g.fill(); g.globalAlpha=1; g.globalCompositeOperation='source-over';
+      g.save(); bkBlob(g,0,0,R*.78,7,.07,.5); g.clip(); bkSprinkles(g,R,26,R*.74,BK_RAINBOW.slice(0,6)); g.restore();
+      const hg=g.createRadialGradient(0,-R*.04,R*.02,0,0,R*.22); hg.addColorStop(0,'#5A2E10'); hg.addColorStop(1,'#B9783E');   // the hole
+      g.fillStyle='#FF8FC8'; bkCircle(g,R*.28); g.fill();
+      g.fillStyle=hg; bkCircle(g,R*.2); g.fill();
+      g.strokeStyle='#C2558E'; g.lineWidth=Math.max(1,R*.03); bkCircle(g,R*.2); g.stroke();
+      g.restore();
+    } else if(k===6){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      g.strokeStyle='#B8743A'; g.lineWidth=R*.13; g.lineCap='round'; g.beginPath();     // the cinnamon swirl
+      for(let i=0;i<=240;i++){ const t=i/240, a=t*Math.PI*2*2.6+.4, d=R*(.06+.84*t); i?g.lineTo(Math.cos(a)*d,Math.sin(a)*d):g.moveTo(Math.cos(a)*d,Math.sin(a)*d); }
+      g.stroke();
+      g.strokeStyle='rgba(120,60,20,.35)'; g.lineWidth=R*.03; g.stroke();
+      g.strokeStyle='rgba(255,255,255,.9)'; g.lineWidth=R*.05;                         // icing, in a few soft strokes along the swirl
+      for(const [a0,a1,d] of [[3.6,4.5,.62],[.3,1.2,.48],[5.2,5.9,.8]]){ g.beginPath(); g.arc(0,0,R*d,a0,a1); g.stroke(); }
+      g.restore();
+    } else if(k===7){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      g.strokeStyle='rgba(170,95,20,.4)'; g.lineWidth=R*.07; bkCircle(g,R*.86); g.stroke();   // the browned edge
+      g.strokeStyle='rgba(255,240,190,.45)'; g.lineWidth=R*.03; bkCircle(g,R*.7); g.stroke();
+      const sy=g.createRadialGradient(-R*.05,-R*.6,R*.03,0,-R*.5,R*.42); sy.addColorStop(0,'#E8913A'); sy.addColorStop(1,'#B5561A');
+      g.fillStyle=sy; bkBlob(g,0,-R*.5,R*.36,5,.12,2); g.fill();                         // a pool of syrup on top ...
+      for(const [x,w,y0,l] of [[-.36,.08,-.42,.42],[.34,.07,-.44,.34]]){ g.beginPath(); g.roundRect((x-w)*R,y0*R,w*2*R,l*R,w*R); g.fill(); }   // ... running down the sides
+      g.fillStyle='#FFF2A8'; g.save(); g.translate(R*.02,-R*.56); g.rotate(.18); g.beginPath(); g.roundRect(-R*.2,-R*.14,R*.4,R*.28,R*.07); g.fill();   // the butter pat
+      g.fillStyle='rgba(255,255,255,.75)'; g.fillRect(-R*.14,-R*.09,R*.16,R*.06); g.restore();
+      g.restore();
+    } else if(k===8){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      g.fillStyle='#4B3BB0'; bkCircle(g,R*.8); g.fill();                                  // the filling
+      g.fillStyle='#2E2280'; for(let i=0;i<20;i++){ const a=bkVisRnd()*6.283, d=Math.sqrt(bkVisRnd())*R*.72; g.beginPath(); g.arc(Math.cos(a)*d,Math.sin(a)*d,R*.07,0,6.283); g.fill(); }
+      g.fillStyle='rgba(170,160,255,.5)'; for(let i=0;i<12;i++){ const a=bkVisRnd()*6.283, d=Math.sqrt(bkVisRnd())*R*.72; g.beginPath(); g.arc(Math.cos(a)*d,Math.sin(a)*d,R*.025,0,6.283); g.fill(); }
+      g.save(); bkCircle(g,R*.82); g.clip();
+      const strip=(x,y,w,h)=>{ g.fillStyle=L.base; g.fillRect(x,y,w,h); g.strokeStyle=L.dark; g.lineWidth=Math.max(1,R*.025); g.strokeRect(x,y,w,h); };
+      for(const v of [-.5,0,.5]) strip(v*R-R*.08,-R,R*.16,R*2);                         // the lattice: three down ...
+      for(const v of [-.5,0,.5]) strip(-R,v*R-R*.08,R*2,R*.16);                         // ... three across ...
+      for(const v of [-.5,.5]) for(const u of [-.5,0,.5]) if((Math.round(v*2)+Math.round(u*2))%2===0) strip(v*R-R*.08,u*R-R*.08,R*.16,R*.16);   // ... woven
+      g.restore();
+      g.strokeStyle=L.dark; g.lineWidth=R*.03; bkCircle(g,R*.82); g.stroke();
+      g.strokeStyle='rgba(255,255,255,.25)'; g.setLineDash([R*.06,R*.08]); bkCircle(g,R*.9); g.stroke(); g.setLineDash([]);   // a pinched crust
+      g.restore();
+    } else if(k===9){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      const lf=g.createRadialGradient(-R*.2,-R*.25,R*.05,0,0,R*.8); lf.addColorStop(0,'#C9F27A'); lf.addColorStop(1,'#7CC52C');
+      g.fillStyle=lf; bkBlob(g,0,0,R*.79,14,.025,0); g.fill();                         // the lime curd, in a crimped crust
+      g.save(); g.translate(R*.2,-R*.38); g.rotate(-.5);                                  // a slice of lime
+      g.fillStyle='#E9FFC4'; g.beginPath(); g.arc(0,0,R*.3,Math.PI,0); g.closePath(); g.fill();
+      g.strokeStyle='#4E9A1A'; g.lineWidth=R*.05; g.beginPath(); g.arc(0,0,R*.3,Math.PI,0); g.stroke();
+      g.strokeStyle='#A9DD5E'; g.lineWidth=R*.025; for(let i=1;i<5;i++){ const a=Math.PI+i*Math.PI/5; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(a)*R*.25,Math.sin(a)*R*.25); g.stroke(); }
+      g.restore();
+      for(const [x,y] of [[-.5,-.3],[-.25,-.55],[.6,.1]]){ g.fillStyle='#FFFFFF'; bkBlob(g,x*R,y*R,R*.1,5,.12,x*5); g.fill(); g.fillStyle='rgba(200,230,255,.6)'; g.beginPath(); g.arc((x+.03)*R,(y+.03)*R,R*.05,0,6.283); g.fill(); }
+      g.restore();
+    } else if(k===10){ fillBody(L.light,L.base); g.fill(); g.save(); g.clip();
+      g.fillStyle='#3E1A0B'; g.beginPath(); g.moveTo(-R,-R); g.lineTo(R,-R); g.lineTo(R,-R*.12);   // glossy icing with drips
+      for(let i=0;i<=10;i++){ const x=R-i*R*.2, y=-R*.12+(i%2?R*(.12+.16*((i*7)%3)/2):-R*.02); g.quadraticCurveTo(x+R*.1,y+R*.06,x,y); }
+      g.lineTo(-R,-R); g.fill();
+      g.strokeStyle='rgba(255,220,200,.35)'; g.lineWidth=R*.04; g.lineCap='round';
+      g.beginPath(); g.arc(-R*.1,-R*.1,R*.62,Math.PI*1.12,Math.PI*1.4); g.stroke();
+      g.fillStyle='rgba(255,255,255,.18)'; for(let i=0;i<4;i++){ g.fillRect(-R*.9,R*(.25+i*.18),R*1.8,R*.03); }   // the layers
+      g.restore();
+      g.fillStyle='#E8243C'; g.beginPath(); g.arc(R*.02,-R*.62,R*.2,0,6.283); g.fill();     // the cherry
+      g.strokeStyle='#9E0F22'; g.lineWidth=R*.025; g.stroke();
+      g.fillStyle='rgba(255,255,255,.75)'; g.beginPath(); g.arc(-R*.05,-R*.69,R*.06,0,6.283); g.fill();
+      g.strokeStyle='#4E7A1C'; g.lineWidth=R*.035; g.lineCap='round'; g.beginPath(); g.moveTo(R*.04,-R*.8); g.quadraticCurveTo(R*.1,-R*.95,R*.24,-R*.94); g.stroke();
+      bkCircle(g,R*.97);
+    } else if(k===11){ fillBody('#FFFFFF','#FFE6F1'); g.fill(); g.save(); g.clip();
+      g.fillStyle='#FF8FC8'; g.beginPath(); g.moveTo(-R,R*.66);                          // a pink frosting band below the face ...
+      for(let i=0;i<=12;i++){ const x=-R+i*R/6; g.quadraticCurveTo(x-R/12,R*(i%2?.76:.6),x,R*.66); }
+      g.lineTo(R,R); g.lineTo(-R,R); g.closePath(); g.fill();
+      g.fillStyle='rgba(255,255,255,.45)'; g.fillRect(-R,R*.74,R*2,R*.04);
+      bkVisSeed=1000+11*7919; g.lineCap='round'; g.lineWidth=Math.max(1,R*.06);           // ... rainbow sprinkles on top, clear of the face
+      for(let i=0;i<26;i++){ const x=(bkVisRnd()*1.7-.85)*R, y=(-.34+bkVisRnd()*.32)*R, t=bkVisRnd()*Math.PI, l=R*.07;
+        if(x*x+y*y>R*R*.8) continue;
+        g.strokeStyle=BK_RAINBOW[i%6]; g.beginPath(); g.moveTo(x-Math.cos(t)*l,y-Math.sin(t)*l); g.lineTo(x+Math.cos(t)*l,y+Math.sin(t)*l); g.stroke(); }
+      g.restore();
+      for(const [x,c] of [[-.32,'#7FD8FF'],[0,'#FFD45C'],[.32,'#A57BFF']]){                // three candles
+        g.fillStyle=c; g.beginPath(); g.roundRect((x-.05)*R,-R*.72,R*.1,R*.36,R*.03); g.fill();
+        g.strokeStyle='rgba(255,255,255,.75)'; g.lineWidth=R*.025; for(let j=0;j<3;j++){ g.beginPath(); g.moveTo((x-.05)*R,-R*(.66-j*.1)); g.lineTo((x+.05)*R,-R*(.7-j*.1)); g.stroke(); }
+        const fg=g.createRadialGradient(x*R,-R*.79,0,x*R,-R*.79,R*.11); fg.addColorStop(0,'#FFFDE0'); fg.addColorStop(.5,'#FFC53A'); fg.addColorStop(1,'rgba(255,120,40,0)');
+        g.fillStyle=fg; g.beginPath(); g.ellipse(x*R,-R*.8,R*.07,R*.1,0,0,6.283); g.fill();
+      }
+      bkCircle(g,R*.97);
+    }
+  }
+  g.restore();
+  if(k===1) bkBlob(g,0,0,R*.94,5,.05,1.1); else bkCircle(g,R*.97);
+  g.lineWidth=Math.max(1.5,R*.06); g.strokeStyle=L.dark; g.stroke();                   // the outline: the treat's own colour, darker
+  g.lineWidth=Math.max(1,R*.03); g.strokeStyle='rgba(255,255,255,.35)';                  // a thin light rim just inside it
+  g.beginPath(); g.arc(0,0,R*.9,Math.PI*1.05,Math.PI*1.55); g.stroke();
+}
+// a face, in the treat's frame, radius r (css px). mood: '' | 'happy' | 'ooh' | 'scared' | 'dizzy'; (lx, ly) where the pupils look (-1..1)
+function bkFace(g,k,r,mood,lx,ly,blink,t){
+  const L=BK_LOOK[k-1], ex=L.ex*r, ey=L.ey*r, er=Math.max(1.25,r*L.es), my=L.my*r, ink=L.ink;
+  g.fillStyle='rgba(255,105,150,.42)';                       // cheeks
+  for(const s of [-1,1]){ g.beginPath(); g.ellipse(s*(ex+er*1.35),ey+er*1.55,er*1.25,er*.75,0,0,6.283); g.fill(); }
+  g.fillStyle=ink; g.strokeStyle=L.wh?'#FFF1E0':ink; g.lineCap='round'; g.lineJoin='round';
+  const lw=Math.max(1,er*.55);
+  if(mood==='happy'){                                       // ^ ^ and an open smile: this one is the same as the one he holds
+    g.lineWidth=lw;
+    for(const s of [-1,1]){ g.beginPath(); g.arc(s*ex,ey+er*.4,er*.9,Math.PI*1.15,Math.PI*1.85); g.stroke(); }
+    g.fillStyle=L.wh?'#FFF1E0':ink; g.beginPath(); g.moveTo(-er*1.1,my-er*.3); g.quadraticCurveTo(0,my+er*1.6,er*1.1,my-er*.3); g.closePath(); g.fill();
+    g.fillStyle='#FF7D9C'; g.beginPath(); g.ellipse(0,my+er*.45,er*.5,er*.3,0,0,6.283); g.fill();
+    return;
+  }
+  if(mood==='dizzy'){                                       // spirals
+    g.lineWidth=Math.max(.9,er*.35);
+    for(const s of [-1,1]){ g.beginPath(); for(let i=0;i<=24;i++){ const a=i/24*Math.PI*3.4+t*9*s, d=er*1.15*i/24; i?g.lineTo(s*ex+Math.cos(a)*d,ey+Math.sin(a)*d):g.moveTo(s*ex,ey); } g.stroke(); }
+    g.lineWidth=lw*.8; g.beginPath(); g.moveTo(-er,my); g.quadraticCurveTo(-er*.5,my-er*.5,0,my); g.quadraticCurveTo(er*.5,my+er*.5,er,my); g.stroke();
+    return;
+  }
+  if(blink&&mood!=='scared'&&mood!=='ooh'){                 // a blink: two little lines
+    g.lineWidth=lw;
+    for(const s of [-1,1]){ g.beginPath(); g.moveTo(s*ex-er*.8,ey+er*.15); g.quadraticCurveTo(s*ex,ey+er*.6,s*ex+er*.8,ey+er*.15); g.stroke(); }
+  } else {
+    const big=mood==='scared'?1.35:mood==='ooh'?1.25:1, R=er*big;
+    for(const s of [-1,1]){
+      const x=s*ex, y=ey;
+      if(mood==='scared'){                                    // wide whites, tiny pupils
+        g.fillStyle='#fff'; g.beginPath(); g.arc(x,y,R,0,6.283); g.fill(); g.lineWidth=Math.max(.8,er*.28); g.stroke();
+        g.fillStyle=ink; g.beginPath(); g.arc(x+lx*R*.3,y+ly*R*.3,R*.42,0,6.283); g.fill();
+      } else {
+        if(L.wh){ g.fillStyle='#FFF8EE'; g.beginPath(); g.arc(x,y,R*1.3,0,6.283); g.fill(); }   // a dark top (pie, chocolate): the eyes get whites so they read
+        g.fillStyle=ink; g.beginPath(); g.arc(x+lx*er*.3,y+ly*er*.3,R,0,6.283); g.fill();
+        g.fillStyle='#fff'; g.beginPath(); g.arc(x+lx*er*.3-R*.35,y+ly*er*.3-R*.38,Math.max(.6,R*.38),0,6.283); g.fill();
+        if(R>3){ g.beginPath(); g.arc(x+lx*er*.3+R*.3,y+ly*er*.3+R*.32,R*.16,0,6.283); g.fill(); }
+      }
+    }
+  }
+  g.fillStyle=L.wh?'#FFF1E0':ink; g.lineWidth=lw*.8;
+  if(mood==='ooh'){ g.beginPath(); g.ellipse(0,my+er*.2,er*.55,er*.7,0,0,6.283); g.fill(); }
+  else if(mood==='scared'){ g.beginPath(); g.moveTo(-er*1.1,my+er*.3); for(let i=1;i<=4;i++) g.lineTo(-er*1.1+i*er*.55,my+er*.3+(i%2?-1:1)*er*.35); g.stroke();
+    g.fillStyle='#8FD3FF'; g.beginPath(); const sx=ex+er*2.2, sy=ey-er*1.6; g.moveTo(sx,sy-er*1.1); g.quadraticCurveTo(sx+er*.8,sy+er*.2,sx,sy+er*.6); g.quadraticCurveTo(sx-er*.8,sy+er*.2,sx,sy-er*1.1); g.fill(); }
+  else { g.beginPath(); g.moveTo(-er*.75,my); g.quadraticCurveTo(0,my+er*.95,er*.75,my); g.stroke(); }
+}
+
+/* ═══════ the view: layout, sprites, drawing ═══════ */
+const bkCv=el('bkCv'), bkCtx=bkCv.getContext('2d');
+const bkG={W:0,H:0,dpr:1,S:1,jx:0,jy:0,jw:0,jh:0,slot:30,stripX:0,stripY:0,stripH:40,cs:44,top:0,spr:[],ico:[],sil:[],shadow:null,gloss:null,plate:null,front:null};
+function bkLayout(){
+  const W=innerWidth, H=innerHeight, dpr=Math.min(devicePixelRatio||1,CFG.BK_DPR);
+  const cs=getComputedStyle(safeProbe), iT=parseFloat(cs.paddingTop)||0, iB=parseFloat(cs.paddingBottom)||0;
+  const slot=Math.max(22,Math.min(34,Math.floor((W-28)/11)-3)), stripY=iT+62, stripH=slot+10;
+  const crumbS=Math.round(Math.max(36,Math.min(50,W*.12)));
+  const top=stripY+stripH+8, bottom=H-iB-12-46-16;           // under the cookbook strip; over the Shake button
+  const perW=(-BK_HOLD+BK_JH)/BK_JW;                         // the zone Crumb holds treats in, and the jar, per unit of width
+  const jw=Math.max(150,Math.min(W-40,(bottom-top-crumbS*1.05-10)/perW,470));
+  const S=jw/BK_JW, jh=BK_JH*S, need=crumbS*1.05+(-BK_HOLD)*S+jh+10, extra=Math.max(0,bottom-top-need);
+  Object.assign(bkG,{W,H,dpr,S,jw,jh,cs:crumbS,slot,stripY,stripH,top,iB,
+    jx:Math.round((W-jw)/2), jy:Math.round(top+crumbS*1.05+(-BK_HOLD)*S+extra*.3),
+    stripX:Math.round((W-(slot*11+3*10))/2)});
+  bkCv.width=Math.round(W*dpr); bkCv.height=Math.round(H*dpr);
+  bkSprites(); bkPlate();
+  const c=el('bkCrumb'); c.style.width=c.style.height=crumbS+'px';
+  bkDom.key=''; bkDom.cKey='';
+}
+function bkSprites(){
+  const {dpr,jw,slot}=bkG;
+  const mk=(R,fn)=>{ const h=Math.ceil(R*1.12)+2, c=document.createElement('canvas'); c.width=c.height=Math.ceil(h*2*dpr); const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,h*dpr,h*dpr); fn(g); return {c,h,R}; };
+  bkG.spr=[]; bkG.ico=[]; bkG.sil=[];
+  for(let k=1;k<=BK_N;k++){
+    const R=BK_RAD[k-1]*jw;
+    bkG.spr[k]=mk(R,g=>bkPaint(g,k,R));
+    const ir=slot*.42;
+    bkG.ico[k]=mk(ir,g=>{ bkPaint(g,k,ir); g.save(); g.scale(1,1); bkFace(g,k,ir,'',0,0,false,0); g.restore(); });
+    bkG.sil[k]=mk(ir,g=>{ bkPaint(g,k,ir); g.globalCompositeOperation='source-in'; g.fillStyle='#2A1B4A'; g.fillRect(-ir*2,-ir*2,ir*4,ir*4); });
+  }
+  bkG.shadow=mk(50,g=>{ const gr=g.createRadialGradient(0,0,20,0,0,56); gr.addColorStop(0,'rgba(20,6,30,.5)'); gr.addColorStop(.75,'rgba(20,6,30,.22)'); gr.addColorStop(1,'rgba(20,6,30,0)'); g.fillStyle=gr; g.fillRect(-56,-56,112,112); });
+  bkG.gloss=mk(50,g=>{ g.save(); g.translate(-17,-21); g.rotate(-.6); g.scale(1,.62);
+    const gr=g.createRadialGradient(0,0,0,0,0,22); gr.addColorStop(0,'rgba(255,255,255,.62)'); gr.addColorStop(.6,'rgba(255,255,255,.2)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr; g.beginPath(); g.arc(0,0,22,0,6.283); g.fill(); g.restore();
+    g.fillStyle='rgba(255,255,255,.85)'; g.beginPath(); g.arc(-22,-24,3.4,0,6.283); g.fill(); });
+}
+// the still parts, painted once per layout: the dusk sky, the counter the jar stands on, the glass behind the treats (plate),
+// and the glass in front of them (front)
+function bkPlate(){
+  const {W,H,dpr,jx,jy,jw,jh}=bkG;
+  const mk=fn=>{ const c=document.createElement('canvas'); c.width=Math.round(W*dpr); c.height=Math.round(H*dpr); const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); fn(g); return c; };
+  const wall=Math.max(4,jw*.014), rad=Math.max(10,jw*.05), floorY=jy+jh;
+  bkG.plate=mk(g=>{
+    const sk=g.createLinearGradient(0,0,0,H);
+    sk.addColorStop(0,'#160D2E'); sk.addColorStop(.34,'#3A2266'); sk.addColorStop(.68,'#8A4682'); sk.addColorStop(1,'#F08A6C');
+    g.fillStyle=sk; g.fillRect(0,0,W,H);
+    bkVisSeed=777;
+    for(let i=0;i<70;i++){ const x=bkVisRnd()*W, y=bkVisRnd()*H*.5, r=bkVisRnd()*1.3+.3; g.globalAlpha=(1-y/(H*.5))*.8*bkVisRnd()+.1; g.fillStyle='#fff'; g.beginPath(); g.arc(x,y,r,0,6.283); g.fill(); }
+    g.globalAlpha=1;
+    const mx=W*.84, my=H*.2;                                  // a fat crescent moon
+    g.fillStyle='rgba(255,240,210,.9)'; g.beginPath(); g.arc(mx,my,20,0,6.283); g.fill();
+    g.fillStyle='#3A2266'; g.globalCompositeOperation='destination-out'; g.beginPath(); g.arc(mx+9,my-6,18,0,6.283); g.fill(); g.globalCompositeOperation='source-over';
+    const gl=g.createRadialGradient(W/2,floorY,10,W/2,floorY,W*.8); gl.addColorStop(0,'rgba(255,190,120,.35)'); gl.addColorStop(1,'rgba(255,190,120,0)');   // a warm glow behind the jar
+    g.fillStyle=gl; g.fillRect(0,0,W,H);
+    const cy=floorY+wall+2;                                   // the counter
+    const wd=g.createLinearGradient(0,cy,0,H); wd.addColorStop(0,'#8A5434'); wd.addColorStop(.08,'#6E3F25'); wd.addColorStop(1,'#3E2013');
+    g.fillStyle=wd; g.fillRect(0,cy,W,H-cy);
+    g.fillStyle='rgba(255,220,170,.35)'; g.fillRect(0,cy,W,2);
+    g.strokeStyle='rgba(30,10,0,.18)'; g.lineWidth=1.5; for(let i=1;i<6;i++){ g.beginPath(); g.moveTo(0,cy+i*(H-cy)/6+4); g.bezierCurveTo(W*.3,cy+i*(H-cy)/6-3,W*.6,cy+i*(H-cy)/6+6,W,cy+i*(H-cy)/6); g.stroke(); }
+    g.fillStyle='rgba(20,5,0,.35)'; g.beginPath(); g.ellipse(W/2,cy+3,jw*.56,7,0,0,6.283); g.fill();   // the jar's shadow on the counter
+  });
+  const fx=jx-wall*2-4, fy=jy-14, fw=jw+wall*4+8, fh=jh+wall+20;     // the glass in front: just the jar's box
+  const fc=document.createElement('canvas'); fc.width=Math.round(fw*dpr); fc.height=Math.round(fh*dpr);
+  const fg=fc.getContext('2d'); fg.setTransform(dpr,0,0,dpr,-fx*dpr,-fy*dpr);
+  bkG.front={c:fc,x:fx,y:fy,w:fw,h:fh};
+  (g=>{
+    g.lineJoin='round';
+    g.strokeStyle='rgba(225,240,255,.55)'; g.lineWidth=wall;
+    g.beginPath(); g.moveTo(jx-wall/2,jy-6); g.lineTo(jx-wall/2,floorY-rad+wall/2); g.quadraticCurveTo(jx-wall/2,floorY+wall/2,jx+rad,floorY+wall/2);
+    g.lineTo(jx+jw-rad,floorY+wall/2); g.quadraticCurveTo(jx+jw+wall/2,floorY+wall/2,jx+jw+wall/2,floorY-rad+wall/2); g.lineTo(jx+jw+wall/2,jy-6); g.stroke();
+    g.strokeStyle='rgba(255,255,255,.85)'; g.lineWidth=1.2;                                // a bright edge on the glass
+    g.beginPath(); g.moveTo(jx-wall,jy-6); g.lineTo(jx-wall,floorY-rad); g.stroke();
+    g.beginPath(); g.moveTo(jx+jw+wall,jy-6); g.lineTo(jx+jw+wall,floorY-rad); g.stroke();
+    for(const x of [jx-wall/2,jx+jw+wall/2]){ g.fillStyle='rgba(235,245,255,.9)'; g.beginPath(); g.roundRect(x-wall*1.1,jy-10,wall*2.2,8,4); g.fill(); }   // the lip
+    const st=g.createLinearGradient(jx,0,jx+jw*.12,0); st.addColorStop(0,'rgba(255,255,255,.22)'); st.addColorStop(1,'rgba(255,255,255,0)');   // reflections
+    g.fillStyle=st; g.fillRect(jx+jw*.03,jy+jh*.06,jw*.07,jh*.8);
+    g.fillStyle='rgba(255,255,255,.1)'; g.fillRect(jx+jw*.9,jy+jh*.12,jw*.025,jh*.6);
+  })(fg);
+}
+const bkSX=x=>bkG.jx+x*bkG.S, bkSY=y=>bkG.jy+y*bkG.S;
+
+/* ── what moves on screen besides the treats (particles and words live in the juice section below) ── */
+const bkFx={parts:[],rings:[],texts:[],flash:0,shake:0,jolt:0,word:0,flip:{},dangerTick:0,cascade:null};
+const bkCm={act:'',until:0,blinkAt:0,blinkTo:0};             // Crumb's face in the Bakery
+function bkFresh(){
+  bkFx.parts.length=0; bkFx.rings.length=0; bkFx.texts.length=0; bkFx.flash=0; bkFx.shake=0; bkFx.jolt=0; bkFx.word=0; bkFx.flip={}; bkFx.cascade=null;
+  bk.touch=null; bkCm.act=''; bkDom.key=''; bkDom.cKey='';
+  if(typeof bkSayReset==='function') bkSayReset();
+}
+const bkPopDur=()=>reduce?.12:.3;
+function bkFaceMood(b,ft){                                  // the face a treat makes now
+  if(ft-b.dz<1.6&&!reduce) return 'dizzy';
+  if(bk.t-b.ooh<.3) return 'ooh';
+  if(bk.danger&&bk.t-b.born>=1&&b.y-b.r<BK_LINE) return 'scared';
+  if(bk.st==='play'&&bk.ready&&b.k===bk.held) return 'happy';
+  return '';
+}
+function bkDrawTreat(g,b,x,y,r,now,ft){                     // one treat: its sprite turned by its spin, the fixed gloss, its face
+  const sp=bkG.spr[b.k], sc=r/sp.R;
+  let sx=1, sy=1;
+  const pk=(bk.t-b.pop)/bkPopDur();
+  if(pk>=0&&pk<1){ const s=1+(reduce?.06:.26)*Math.sin(pk*Math.PI)*(1-pk), q=reduce?0:.14*Math.sin(pk*Math.PI*2)*(1-pk)*(1-pk); sx=s*(1+q); sy=s*(1-q); }
+  const mood=b.mood=bkFaceMood(b,ft);
+  if(mood==='happy'&&bk.touch!=null&&!reduce){ const w=.035*Math.sin(now*.012+b.id); sx*=1+w; sy*=1-w; }
+  g.save(); g.translate(x,y); g.scale(sx,sy);
+  if(mood==='happy'&&bk.touch!=null){ g.globalAlpha=.35+.2*Math.sin(now*.01); g.fillStyle='#FFF3B0'; g.beginPath(); g.arc(0,0,r*1.12,0,6.283); g.fill(); g.globalAlpha=1; }
+  g.save(); g.rotate(b.a); g.drawImage(sp.c,-sp.h*sc,-sp.h*sc,sp.h*2*sc,sp.h*2*sc); g.restore();
+  const gl=bkG.gloss, gs=r/50; g.drawImage(gl.c,-gl.h*gs,-gl.h*gs,gl.h*2*gs,gl.h*2*gs);
+  if(mood==='scared'&&!reduce) g.translate(Math.sin(now*.09+b.id)*r*.03,0);
+  g.rotate(b.fa);
+  let lx=0, ly=-.4;                                            // the eyes go to the treat he holds
+  if(bk.st==='play'){ const hx=bk.aim-b.x, hy=BK_HOLD+bkR(bk.held)-b.y, d=Math.hypot(hx,hy)||1, c=Math.cos(-b.fa), s=Math.sin(-b.fa); lx=(hx*c-hy*s)/d; ly=(hx*s+hy*c)/d; }
+  bkFace(g,b.k,r,mood,lx,ly,now<b.blinkTo&&now>=b.blinkAt,ft);
+  g.restore();
+}
+function bkFaces(dt,now){                                    // faces settle upright when a treat stops; blinks now and then (looks only)
+  let busy=false;
+  for(const b of bk.bodies){
+    const da=b.a-(b.pa==null?b.a:b.pa); b.pa=b.a; b.fa+=da;
+    if(b.z||Math.abs(b.w)<.8){ const w=Math.atan2(Math.sin(b.fa),Math.cos(b.fa)); b.fa=w-w*Math.min(1,dt*4); if(Math.abs(b.fa)>.01) busy=true; else b.fa=0; }
+    if(now>b.blinkTo+50){ b.blinkAt=now+1800+bkVisRnd()*5200; b.blinkTo=b.blinkAt+140; }
+  }
+  return busy;
+}
+function bkDraw(now){
+  const g=bkCtx, {dpr,W,H,S,jx,jy,jw,jh}=bkG, ft=now/1000;
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.drawImage(bkG.plate,0,0,W,H);
+  let ox=0, oy=0;                                              // the jar jolts (a shake, a crumble); none with Reduce Motion
+  if(!reduce&&bkFx.shake>.3){ ox=(bkVisRnd()-.5)*bkFx.shake; oy=(bkVisRnd()-.5)*bkFx.shake; }
+  if(!reduce&&bkFx.jolt>.01) ox+=Math.sin(bkFx.jolt*26)*bkFx.jolt*9;
+  g.translate(ox,oy);
+  const wall=Math.max(4,jw*.014), rad=Math.max(10,jw*.05);
+  g.fillStyle='rgba(255,255,255,.07)'; g.beginPath(); g.roundRect(jx-wall,jy-4,jw+wall*2,jh+wall+4,[6,6,rad,rad]); g.fill();
+  // the aim line: faint dots straight down from the treat he holds
+  if(bk.touch!=null&&bk.st==='play'&&!bk.paused){
+    const x=bkSX(bk.aim); g.fillStyle='rgba(255,255,255,.4)';
+    for(let y=bkSY(BK_HOLD+2*bkR(bk.held))+6;y<jy+jh-2;y+=11){ g.beginPath(); g.arc(x,y,1.6,0,6.283); g.fill(); }
+  }
+  // the fill line
+  { const y=bkSY(BK_LINE);
+    if(bk.danger){ const p=.5+.5*Math.sin(now*.016); g.strokeStyle=`rgba(255,${70+60*p|0},${80+40*p|0},${.65+.35*p})`; g.lineWidth=2.6+p*1.4; }
+    else { g.strokeStyle='rgba(255,255,255,.42)'; g.lineWidth=2; }
+    g.setLineDash([9,7]); g.beginPath(); g.moveTo(jx+3,y); g.lineTo(jx+jw-3,y); g.stroke(); g.setLineDash([]); }
+  // shadows, then treats
+  const sh=bkG.shadow;
+  for(const b of bk.bodies){ const r=b.r*S, s=r/50*1.04; g.drawImage(sh.c,bkSX(b.x)+r*.06-sh.h*s,bkSY(b.y)+r*.14-sh.h*s,sh.h*2*s,sh.h*2*s); }
+  for(const b of bk.bodies) bkDrawTreat(g,b,bkSX(b.x),bkSY(b.y),b.r*S,now,ft);
+  // the treat he holds, and the next one in a bubble beside him
+  if(bk.st==='play'&&bk.ready){
+    const k=bk.held, r=bkR(k)*S, p=Math.min(1,(bk.t-bk.readyAt)/(reduce?.08:.24)), s=reduce?1:p<1?easeOutBack(p):1;
+    const hb=bkHeldBody||(bkHeldBody={id:0,k,a:0,fa:0,pop:-9,ooh:-9,dz:-9,born:0,r:0,y:0,blinkAt:0,blinkTo:0});
+    hb.k=k; hb.r=bkR(k); hb.y=BK_HOLD+hb.r; hb.x=bk.aim;
+    g.save(); g.translate(bkSX(bk.aim),bkSY(BK_HOLD)+r); g.scale(s,s);
+    const sp=bkG.spr[k], sc=r/sp.R; g.drawImage(sh.c,r*.06-sh.h*r/50,r*.14-sh.h*r/50,sh.h*r/25,sh.h*r/25);
+    g.drawImage(sp.c,-sp.h*sc,-sp.h*sc,sp.h*2*sc,sp.h*2*sc);
+    const gl=bkG.gloss, gs=r/50; g.drawImage(gl.c,-gl.h*gs,-gl.h*gs,gl.h*2*gs,gl.h*2*gs);
+    bkFace(g,k,r,'',0,.9,now<hb.blinkTo&&now>=hb.blinkAt,ft);
+    g.restore();
+    if(now>hb.blinkTo+50){ hb.blinkAt=now+2200+bkVisRnd()*4000; hb.blinkTo=hb.blinkAt+140; }
+  }
+  g.drawImage(bkG.front.c,bkG.front.x,bkG.front.y,bkG.front.w,bkG.front.h);
+  if(typeof bkDrawFx==='function') bkDrawFx(g,now);
+  g.setTransform(dpr,0,0,dpr,0,0);
+  bkDrawNext(g);
+  bkDrawStrip(g,now);
+  if(typeof bkDrawTop==='function') bkDrawTop(g,now);
+}
+let bkHeldBody=null;
+function bkDrawNext(g){                                      // "next": a small bubble on Crumb's roomier side
+  if(bk.st!=='play') return;
+  const cx=bkSX(bk.aim), side=cx<bkG.W/2?1:-1, cs=bkG.cs;
+  const x=cx+side*(cs*.5+24), y=bkSY(BK_HOLD)-cs*.42, R=17;
+  g.fillStyle='rgba(255,250,240,.92)'; g.strokeStyle='rgba(110,66,32,.75)'; g.lineWidth=1.5;
+  g.beginPath(); g.arc(x,y,R,0,6.283); g.fill(); g.stroke();
+  g.beginPath(); g.arc(x-side*(R+3),y+R*.55,3,0,6.283); g.fill(); g.stroke();      // a thought-bubble tail toward him
+  const ic=bkG.ico[bk.next], s=(R*.72)/(bkG.slot*.42);
+  g.drawImage(ic.c,x-ic.h*s,y-ic.h*s,ic.h*2*s,ic.h*2*s);
+  g.font='700 8.5px '+BK_FONT; g.textAlign='center'; g.fillStyle='rgba(255,255,255,.85)'; g.fillText('NEXT',x,y-R-4);
+}
+const BK_FONT='Fredoka,"Trebuchet MS",Verdana,system-ui,sans-serif';
+// the cookbook: every treat in a row, the ones she has never baked dark with a "?"
+function bkDrawStrip(g,now){
+  const {slot,stripX,stripY,stripH}=bkG, seen=lab.bakery.seen, gap=3, w=slot*11+gap*10;
+  g.fillStyle='rgba(20,10,40,.45)'; g.strokeStyle='rgba(255,255,255,.14)'; g.lineWidth=1.5;
+  g.beginPath(); g.roundRect(stripX-8,stripY,w+16,stripH,stripH/2); g.fill(); g.stroke();
+  for(let k=1;k<=BK_N;k++){
+    const cx=stripX+(k-1)*(slot+gap)+slot/2, cy=stripY+stripH/2;
+    const f=bkFx.flip[k], p=f!=null?Math.min(1,(now-f)/(reduce?150:650)):1;
+    const known=k<=seen&&!(p<.5);
+    const sx=reduce||p>=1?1:Math.abs(Math.cos(p*Math.PI));
+    if(k===bk.big&&known&&bk.st!=='card'){ g.fillStyle='rgba(255,212,92,.28)'; g.beginPath(); g.arc(cx,cy,slot*.5,0,6.283); g.fill(); }
+    if(!known&&k===seen+1){ g.fillStyle='rgba(180,150,255,.16)'; g.beginPath(); g.arc(cx,cy,slot*.5,0,6.283); g.fill(); }   // the next mystery
+    const ic=known?bkG.ico[k]:bkG.sil[k];
+    g.save(); g.translate(cx,cy); g.scale(Math.max(.02,sx)*(p<1?1+.25*Math.sin(p*Math.PI):1),1);
+    g.drawImage(ic.c,-ic.h,-ic.h,ic.h*2,ic.h*2);
+    if(!known){ g.fillStyle='rgba(235,225,255,.75)'; g.font='700 '+Math.round(slot*.46)+'px '+BK_FONT; g.textAlign='center'; g.textBaseline='middle'; g.fillText('?',0,1); g.textBaseline='alphabetic'; }
+    g.restore();
+  }
+}
+
+/* ── the DOM parts: score, best, the Shake button, Crumb and his bubble (written only when they change) ── */
+const bkDom={key:'',cKey:'',x:0,y:0,shown:0,wr:-1};
+function bkCrumbAct(name,ms){ bkCm.act=name; bkCm.until=performance.now()+ms;
+  const c=el('bkCrumb'), a=MASCOT_ACT[name];
+  if(a&&a.move&&!reduce&&c.firstChild) c.firstChild.animate(a.move,{duration:a.dur,easing:'ease-out'}); }
+function bkDomStep(now){
+  if(bkDom.shown!==bk.score){ const d=bk.score-bkDom.shown; bkDom.shown=d>0?Math.min(bk.score,bkDom.shown+Math.max(1,Math.ceil(d*.2))):bk.score; }   // a quick count-up
+  if(bkDom.wr!==bkDom.shown){ bkDom.wr=bkDom.shown; el('bkScore').textContent=bkDom.shown.toLocaleString('en-US'); }
+  const best=Math.max(lab.bakery.best,bk.st==='play'?bk.score:0), nb=bk.st==='play'&&bk.score>lab.bakery.best&&lab.bakery.best>0;
+  const key=best+'|'+nb+'|'+bk.shakes+'|'+(bk.st==='play'&&!bk.paused)+'|'+muted+'|'+CFG.MUSIC;
+  if(key!==bkDom.key){
+    bkDom.key=key;
+    el('bkBest').textContent=best.toLocaleString('en-US'); el('bkBestLbl').textContent=nb?'New best':'Best'; el('bkBestLbl').classList.toggle('nb',nb);
+    [...el('bkPips').children].forEach((p,i)=>p.classList.toggle('on',i<bk.shakes));
+    el('bkShake').disabled=!(bk.shakes>0&&bk.st==='play'&&!bk.paused);
+    el('bkSndBtn').classList.toggle('off',muted); el('bkMusicBtn').classList.toggle('off',!CFG.MUSIC);
+  }
+  // Crumb: over the treat he holds, feet on it
+  const cs=bkG.cs, x=Math.round(bkSX(bk.aim)-cs/2), y=Math.round(bkSY(BK_HOLD)-cs*.84);
+  if(now>=bkCm.blinkTo&&now>bkCm.blinkAt+150){ bkCm.blinkAt=now+2400+bkVisRnd()*3200; bkCm.blinkTo=bkCm.blinkAt+130; }
+  let mood=bk.st==='over'||bk.st==='card'?'faint':bkCm.act&&now<bkCm.until?bkCm.act:bk.danger?'tight':'idle';
+  if(bkCm.act&&now>=bkCm.until) bkCm.act='';
+  const blink=now>=bkCm.blinkAt&&now<bkCm.blinkTo&&(mood==='idle'||mood==='tight');
+  const ck=x+','+y+'|'+mood+(blink?' blink':'')+(reduce?' rm':'');
+  if(ck!==bkDom.cKey){
+    bkDom.cKey=ck; const c=el('bkCrumb');
+    c.style.transform='translate('+x+'px,'+y+'px)'; c.className='crumbFig '+mood+(blink?' blink':'')+(reduce?' rm':'');
+    bkDom.x=x; bkDom.y=y;
+  }
+  if(typeof bkSayStep==='function') bkSayStep(now);
+}
+
+/* ═══════ the loop: its own, only while the Bakery is up and not paused ═══════
+   Fixed steps from an accumulator (at most 12 a frame, so a slow frame never tunnels or spirals). When every treat is asleep
+   and nothing is animating it stops drawing every frame: a slow tick (4 a second) keeps the blinks going. The main game's
+   loop is parked the whole time (bkParked, called first thing in draw.js frame()) and started again by bkClose. */
+let bkRaf=0, bkTimer=0, bkLast=0, bkAcc=0, bkGxAt=0;
+function bkKick(){
+  if(!bk.open||bk.paused||document.hidden) return;
+  if(bkTimer){ clearTimeout(bkTimer); bkTimer=0; }
+  if(!bkRaf){ bkLast=performance.now(); bkRaf=requestAnimationFrame(bkFrame); }
+}
+function bkStop(){ if(bkRaf) cancelAnimationFrame(bkRaf); bkRaf=0; if(bkTimer) clearTimeout(bkTimer); bkTimer=0; }
+const bkParked=()=>{ if(!bk.open) return false; bk.mainOff=true; return true; };   // draw.js frame(): the Bakery has the screen
+function bkFrame(now){
+  bkRaf=0;
+  if(!bk.open||document.hidden) return;
+  const dt=Math.min(.1,Math.max(0,(now-bkLast)/1000)); bkLast=now;
+  let busy=false;
+  if(!bk.paused&&bk.st==='play'){
+    bkTilt(dt);
+    bkAcc+=dt; let n=0;
+    while(bkAcc>=BK_DT&&n<12){ bkStep(BK_DT); bkAcc-=BK_DT; n++; }
+    if(n>=12) bkAcc=0;
+    if(bk.queued&&bk.ready&&bk.touch==null){ bk.queued=false; bkDrop(bk.aim); }
+  }
+  if(typeof bkFxStep==='function') busy=bkFxStep(dt,now)||busy;
+  busy=bkFaces(dt,now)||busy;
+  bkDraw(now);
+  bkDomStep(now);
+  if(bk.paused) return;
+  const idle=!busy&&bk.st!=='over'&&bk.touch==null&&!bk.queued&&bk.ready&&!bk.danger&&!bk.rain.length&&bk.bodies.every(b=>b.z)
+    &&bk.t-bk.readyAt>.3&&now>=bkCm.until;
+  if(idle) bkTimer=setTimeout(()=>{ bkTimer=0; if(!bk.open||bk.paused||document.hidden) return; bkLast=performance.now()-16; bkFrame(performance.now()); },250);
+  else bkRaf=requestAnimationFrame(bkFrame);
+}
+function bkTilt(dt){                                         // gravity leans with the phone (the crumb toy's tilt), never with Reduce Motion
+  toy.gx+=((CFG.TILT&&toy.tiltOn?toy.gRaw:0)-toy.gx)*Math.min(1,dt*10);
+  const m=CFG.BK_TILT_MAX, gx=CFG.BK_TILT&&CFG.TILT&&!reduce?Math.max(-m,Math.min(m,toyGx())):0;
+  bk.gx=gx;
+  if(Math.abs(gx-bkGxAt)>.02){ bkGxAt=gx; for(const b of bk.bodies) bkWake(b); }   // a new lean wakes the pile
+}
+
+/* ── her finger: Crumb follows it; letting go drops the treat (a tap moves and drops) ── */
+const bkCanAim=()=>bk.open&&!bk.paused&&bk.st==='play';
+function bkAimAt(cx){ bk.aim=bkDropX((cx-bkG.jx)/bkG.S); }
+bkCv.addEventListener('pointerdown',e=>{
+  if(!bkCanAim()||bk.touch!=null) return;
+  e.preventDefault(); bk.touch=e.pointerId;
+  try{ bkCv.setPointerCapture(e.pointerId); }catch(_){}
+  bkAimAt(e.clientX); ac();
+  if(CFG.BK_TILT) toyAskTilt();
+  bkKick();
+});
+bkCv.addEventListener('pointermove',e=>{ if(e.pointerId!==bk.touch) return; bkAimAt(e.clientX); bkKick(); });
+bkCv.addEventListener('pointerup',e=>{
+  if(e.pointerId!==bk.touch) return;
+  bk.touch=null; if(!bkCanAim()) return;
+  bkAimAt(e.clientX);
+  if(bk.ready) bkDrop(bk.aim); else bk.queued=true;           // too soon after the last one: it goes as soon as he has the next
+  bkKick();
+});
+bkCv.addEventListener('pointercancel',e=>{ if(e.pointerId===bk.touch){ bk.touch=null; bkKick(); } });
+
+/* ── opening and leaving ── */
+function bkOpen(){
+  pauseForMenu(); labHide();
+  bk.open=true; bk.paused=false; el('bakery').hidden=false; el('bkPause').hidden=true; el('bkOver').hidden=true;
+  if(!lab.bakery.op){ lab.bakery.op=1; saveLab(); }
+  bkBadge();
+  if(!bk.live||bk.st!=='play'){ if(!bkLoadRun()) bkNew(); bk.live=true; }
+  bkLayout();
+  const c=el('bkCrumb'); if(!c.firstChild) c.innerHTML='<div class="mb">'+MASCOT_SVG+'</div>';
+  closetDress(c.querySelector('svg'),{...closet.on,head:closet.on.head||'chef'});   // the Chef's hat here if she has no hat on (her pick is not changed)
+  bkDom.shown=bk.score; bkDom.wr=-1; bkDom.key=''; bkDom.cKey='';
+  if(typeof bkSayOpen==='function') bkSayOpen();
+  bkKick();
+}
+function bkClose(){
+  if(!bk.open) return;
+  if(bk.st==='play') bkSaveRun();
+  bk.open=false; bk.paused=false; bk.touch=null; bkStop();
+  el('bakery').hidden=true;
+  if(bk.st!=='play') bk.live=false;                           // a finished jar: the next visit starts a fresh one
+  if(bk.mainOff){ bk.mainOff=false; requestAnimationFrame(frame); }   // the game's own loop again
+}
+function bkPause(){
+  if(!bk.open||bk.paused||bk.st!=='play') return;
+  bk.paused=true; bk.touch=null; bk.queued=false; bkSaveRun();
+  el('bkPauseScore').textContent=bk.score.toLocaleString('en-US'); bkRestartReset();
+  el('bkPause').hidden=false; bkStop(); bkDraw(performance.now()); bkDomStep(performance.now());
+}
+function bkResume(){ el('bkPause').hidden=true; bkRestartReset(); bk.paused=false; bkKick(); }
+let bkRestartT=0;
+function bkRestartReset(){ clearTimeout(bkRestartT); const b=el('bkRestart'); b.textContent='Restart'; b.classList.remove('confirm'); }
+function bkAgain(){ bkClearRun(); bkNew(); bk.live=true; el('bkOver').hidden=true; el('bkPause').hidden=true; bk.paused=false; bkDom.shown=0; bkDom.wr=-1;
+  if(typeof bkSayOpen==='function') bkSayOpen(true); bkKick(); }
+function bkToLab(){ bkClose(); openLab(); }
+function bkToHome(){ bkClose(); openMenu(); }
+function bkBadge(){ for(const id of ['startLab','menuLab']) el(id).classList.toggle('bkNewBadge',!lab.bakery.op); }
+function bkProg(){ const b=lab.bakery; return (b.best?'Best '+b.best.toLocaleString('en-US')+' · ':'')+b.seen+' of '+BK_N+' treats'; }
+el('bkPauseBtn').onclick=e=>{ e.stopPropagation(); bkPause(); };
+el('bkResume').onclick=e=>{ e.stopPropagation(); bkResume(); };
+el('bkRestart').onclick=e=>{ e.stopPropagation(); const b=el('bkRestart');
+  if(!b.classList.contains('confirm')){ b.textContent='Tap again to start over'; b.classList.add('confirm'); bkRestartT=setTimeout(bkRestartReset,3000); return; }
+  bkAgain(); };
+el('bkPauseLab').onclick=e=>{ e.stopPropagation(); bkToLab(); };
+el('bkPauseHome').onclick=e=>{ e.stopPropagation(); bkToHome(); };
+el('bkAgain').onclick=e=>{ e.stopPropagation(); bkAgain(); };
+el('bkOverLab').onclick=e=>{ e.stopPropagation(); bkToLab(); };
+el('bkOverHome').onclick=e=>{ e.stopPropagation(); bkToHome(); };
+el('bkShake').onclick=e=>{ e.stopPropagation(); if(bkCanAim()&&bkShake()) bkKick(); };
+el('bkSndBtn').onclick=e=>{ e.stopPropagation(); setMuted(!muted); bkDom.key=''; bkDomStep(performance.now()); };
+el('bkMusicBtn').onclick=e=>{ e.stopPropagation(); el('musicBtn').click(); bkDom.key=''; bkDomStep(performance.now()); };
+addEventListener('resize',()=>{ if(bk.open){ bkLayout(); bkKick(); if(bk.paused) bkDraw(performance.now()); } });
+document.addEventListener('visibilitychange',()=>{
+  if(!bk.open) return;
+  if(document.visibilityState==='hidden'){ bkSaveRun(); bkPause(); bkStop(); }   // the app goes to the background: saved, paused, the loop stopped
+});
+addEventListener('pagehide',()=>{ if(bk.open) bkSaveRun(); });
+bkBadge();

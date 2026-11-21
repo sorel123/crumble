@@ -6108,8 +6108,8 @@ test('Lab: a slim Lab button beside Settings opens the Lab card (one tile per ex
   await page.click('#startLab');
   const c = await page.evaluate(() => ({ card: !el('labCard').hidden, line: el('labCard').querySelector('.sub').textContent,
     tiles: [...document.querySelectorAll('#labList button')].map(b => [...b.children].map(x => x.textContent).join(' | ')) }));
-  assert.deepEqual(c, { card: true, line: "New things we are trying. Tell us what's fun.", tiles: ['🧩 Clear it in three | Three pieces. Leave the board empty. | 0 of 60', '🛟 Rescue the Crumbs | Clear a path. Get them out. | 0 of 3 · ☆☆☆☆☆☆☆☆☆'] });
-  assert.equal(await page.evaluate(() => LAB.length), 2, 'the registry has the two experiments');
+  assert.deepEqual(c, { card: true, line: "New things we are trying. Tell us what's fun.", tiles: ["🧁 Crumb's Bakery | Drop treats. Two the same bake a bigger one. | 5 of 11 treats", '🧩 Clear it in three | Three pieces. Leave the board empty. | 0 of 60', '🛟 Rescue the Crumbs | Clear a path. Get them out. | 0 of 3 · ☆☆☆☆☆☆☆☆☆'] });
+  assert.equal(await page.evaluate(() => LAB.length), 3, 'the registry has the three experiments');
   await page.click('#labBack');
   assert.deepEqual(await page.evaluate(() => ({ lab: el('labCard').hidden, menu: !el('menuCard').hidden, fits: el('menuClose').getBoundingClientRect().bottom <= innerHeight && el('menuLab').getBoundingClientRect().bottom <= innerHeight })),
     { lab: true, menu: true, fits: true });
@@ -6261,7 +6261,7 @@ test('Lab: progress survives a reload, is checked on load, merges from iCloud (u
   await page.waitForSelector('#l3Done:not([hidden])', { timeout: 5000 });
   assert.equal(await page.evaluate(() => dare.st.cookies), 8);
   await page.click('#l3Lab');
-  assert.equal(await page.evaluate(() => document.querySelector('#labList button i').textContent), '5 of 60');
+  assert.equal(await page.evaluate(() => document.querySelector('#labList button[data-id=three] i').textContent), '5 of 60');
 });
 // ── A cookie on the board (js/cookie.js) ──
 // on, with every gate open (the tests choose what to close); ODDS 1 so a deal that may land one does
@@ -6629,7 +6629,7 @@ const rsTestBoard = (page, rows, shapes) => page.evaluate(({ rows, shapes }) => 
 const rsView = page => page.evaluate(() => ({ rows: grid.map(r => r.map(g => g ? (g.cr ? 'c' : 'g') : '.').join('')), cr: rs.cr.map(x => x.out ? 'out' : x.r + ',' + x.c) }));
 test('Rescue: the Lab lists both games; its card shows the three boards (only the first open); the HUD reads Pieces with Undo, Reset and the target; fits 390x844 and 375x667', async ({ page }) => {
   await page.click('#startLab');
-  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#labList button')].map(b => b.dataset.id)), ['three', 'rescue']);
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#labList button')].map(b => b.dataset.id)), ['bakery', 'three', 'rescue']);
   await page.click('#labList button[data-id=rescue]');
   const c = await page.evaluate(() => ({ card: !el('rsCard').hidden, tiles: [...document.querySelectorAll('#rsGrid .rsTile')].map(b => [...b.children].map(x => x.textContent).join(' | ') + (b.disabled ? ' (locked)' : '')) }));
   assert.deepEqual(c, { card: true, tiles: ['1 | ☆☆☆ | ★★★ in 2', '🔒 | ☆☆☆ | Locked (locked)', '🔒 | ☆☆☆ | Locked (locked)'] });
