@@ -256,7 +256,21 @@ const DEV_SLIDERS=[            // [CFG key, label, min, max, step]
   ['GHOST_ALPHA','Landing ghost strength',0.2,1,0.05],
   ['ANTIC_REACH','Anticipation reach (cells)',1,5,0.25],
   ['ANTIC_SHIVER','Anticipation shiver (px)',0,3,0.1],
-  ['AVA_LEAN_MIN','Avalanche: lean that sends it sideways (share of g)',0.1,0.8,0.05]
+  ['AVA_LEAN_MIN','Avalanche: lean that sends it sideways (share of g)',0.1,0.8,0.05],
+  // (bakery) Crumb's Bakery (js/bakery.js): shown under their own "Bakery" heading
+  ['BK_GRAVITY','Bakery: gravity (jar units/s²)',800,5000,100],
+  ['BK_BOUNCE','Bakery: bounce',0,0.6,0.01],
+  ['BK_FRICTION','Bakery: friction',0,1,0.05],
+  ['BK_CHAIN_MS','Bakery: chain window (ms)',300,2000,50],
+  ['BK_LINE_MS','Bakery: time over the line (ms)',500,5000,100],
+  ['BK_DROP_MS','Bakery: next treat after a drop (ms)',100,1000,25],
+  ['BK_SHAKE_PTS','Bakery: points per shake',500,10000,250],
+  ['BK_TILT_MAX','Bakery: most tilt (share of g)',0,0.5,0.01],
+  ['BK_WEIGHTS.0','Bakery: odds of a Crumb',0,60,1],
+  ['BK_WEIGHTS.1','Bakery: odds of a Gumdrop',0,60,1],
+  ['BK_WEIGHTS.2','Bakery: odds of a Macaron',0,60,1],
+  ['BK_WEIGHTS.3','Bakery: odds of a Cookie',0,60,1],
+  ['BK_WEIGHTS.4','Bakery: odds of a Donut',0,60,1]
 ];
 const DEV_KEYS=[...DEV_TOGGLES.map(t=>t[0]),...DEV_SOUND_TOGGLES.map(t=>t[0]),...DEV_CHOICES.map(c=>c[0]),...DEV_SLIDERS.map(s=>s[0])];
 const cfgGet=k=>{ const [a,b]=k.split('.'); return b?CFG[a][b]:CFG[a]; };
@@ -279,7 +293,7 @@ function devLoad(){
 function devSnippet(){
   const f=v=>typeof v==='number'?+v.toFixed(4):typeof v==='string'?JSON.stringify(v):v;
   return '// dev panel snapshot — paste over the matching CFG entries\n'+DEV_KEYS.filter(k=>!k.includes('.')).map(k=>`  ${k}: ${f(CFG[k])},`).join('\n')
-    +`\n  SPECIALS: ${JSON.stringify(CFG.SPECIALS).replace(/"/g,'')},`+`\n  SKY_BITE: ${JSON.stringify(CFG.SKY_BITE)},`;
+    +`\n  SPECIALS: ${JSON.stringify(CFG.SPECIALS).replace(/"/g,'')},`+`\n  SKY_BITE: ${JSON.stringify(CFG.SKY_BITE)},`+`\n  BK_WEIGHTS: ${JSON.stringify(CFG.BK_WEIGHTS)},`;
 }
 function initDev(){
   el('adminBtn').hidden=!CFG.DEV_MODE;                   // the admin panel is reached from Settings, in dev mode only
@@ -352,6 +366,7 @@ function initDev(){
     box.append(row); list.append(box);
   }
   for(const [k,label,min,max,step] of DEV_SLIDERS){
+    if(k==='BK_GRAVITY'){ const h=make('div','devhead'); h.textContent='Bakery'; list.append(h); }   // (bakery) its own group
     const box=make('div'), head=make('div','head'), name=make('span'), out=make('output'), inp=make('input');
     const dp=(String(step).split('.')[1]||'').length;
     name.textContent=label;

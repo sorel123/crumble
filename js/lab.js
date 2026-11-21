@@ -332,7 +332,9 @@ const L3_TABLE=[
    pieces per board, 0 = not rescued yet]}}. Validated on load, each part on its own (an older save has no rescue);
    iCloud (cloud.js) merges done by union, at by max, stars by max, best by the smaller of two non-zero. */
 const LAB_RS=3;                                          // Rescue the Crumbs' boards (RS_COUNT in rescue.js, which loads later)
-const lab={three:{done:[],at:1},rescue:{stars:[0,0,0],best:[0,0,0]}};
+const lab={three:{done:[],at:1},rescue:{stars:[0,0,0],best:[0,0,0]},
+  bakery:{best:0,seen:5,crumbles:0,games:0,op:0}};       // (bakery) js/bakery.js: best score, biggest treat ever baked (1-5 are known), crumbles, runs, opened once
+const BK_SEEN0=5;
 function loadLab(){
   try{
     const o=JSON.parse(localStorage.getItem(LAB_STORE)||'null');
@@ -348,11 +350,19 @@ function loadLab(){
       if(Array.isArray(r.best)&&isInt(r.best[k],0,999)) lab.rescue.best[k]=r.best[k];
       if(!lab.rescue.stars[k]||!lab.rescue.best[k]){ lab.rescue.stars[k]=0; lab.rescue.best[k]=0; }   // one without the other is not a rescue
     }
+    const b=o.bakery, kb=lab.bakery;                    // (bakery) each field on its own; a save from before the Bakery has none
+    if(b&&typeof b==='object'){
+      if(isInt(b.best,0,1e9)) kb.best=b.best;
+      if(isInt(b.seen,BK_SEEN0,11)) kb.seen=b.seen;
+      if(isInt(b.crumbles,0,1e6)) kb.crumbles=b.crumbles;
+      if(isInt(b.games,0,1e7)) kb.games=b.games;
+      if(b.op===1) kb.op=1;
+    }
   }catch(e){}
 }
 function saveLab(){
   try{ localStorage.setItem(LAB_STORE,JSON.stringify({v:1,three:{done:lab.three.done,at:lab.three.at},
-    rescue:{stars:lab.rescue.stars.slice(),best:lab.rescue.best.slice()}})); }catch(e){}
+    rescue:{stars:lab.rescue.stars.slice(),best:lab.rescue.best.slice()},bakery:{...lab.bakery}})); }catch(e){}
   cloudDirty();
 }
 const l3IsDone=k=>lab.three.done.includes(k);
@@ -367,6 +377,7 @@ function l3Next(){                                     // the puzzle the big but
 /* ═══════ the Lab card ═══════ */
 // the experiments: one line each (id, title, one-line description, progress, open)
 const LAB=[
+  {id:'bakery',title:"🧁 Crumb's Bakery",sub:'Drop treats. Two the same bake a bigger one.',prog:()=>bkProg(),open:()=>bkOpen()},   // js/bakery.js
   {id:'three',title:'🧩 Clear it in three',sub:'Three pieces. Leave the board empty.',prog:()=>lab.three.done.length+' of '+L3_COUNT,open:()=>openL3()},
   {id:'rescue',title:'🛟 Rescue the Crumbs',sub:'Clear a path. Get them out.',prog:()=>rsProg(),open:()=>openRS()},   // js/rescue.js
 ];
