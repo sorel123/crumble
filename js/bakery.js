@@ -29,14 +29,17 @@ const BK_RUN='crumble.bakery.run';                          // the jar in progre
 const bkPts=k=>10*k*(k-1)/2;                                // points for baking tier k (tier 2 = 10 ... tier 11 = 550)
 const bkR=k=>BK_RAD[k-1]*BK_JW;                             // a tier's full radius in units
 
-/* ── the Bakery's own dice (a Park-Miller generator like dareRnd); its state rides in the run save ── */
-let bkSeed=1;
+/* ── the Bakery's own dice (Park-Miller generators like dareRnd); their state rides in the run save ──
+   Two streams: bkDealRnd hands out the treats and nothing else, so a run's seed (bk.seed0, what a friend link carries) always
+   deals the same treats in the same order, shakes or not; bkRnd moves things (the shake's kick, the CRUMBLE rain). */
+let bkSeed=1, bkDealSeed=1;
 const bkRnd=()=>(bkSeed=(bkSeed*16807)%2147483647)/2147483647;
+const bkDealRnd=()=>(bkDealSeed=(bkDealSeed*16807)%2147483647)/2147483647;
 let bkVisSeed=4242;                                         // looks only (sparkles, crumbs flying, blinks): never changes what she gets
 const bkVisRnd=()=>(bkVisSeed=(bkVisSeed*16807)%2147483647)/2147483647;
 function bkRoll(){                                          // the next treat: tiers 1..5 by CFG.BK_WEIGHTS
   const w=CFG.BK_WEIGHTS, sum=w.reduce((a,b)=>a+b,0);
-  let r=bkRnd()*sum;
+  let r=bkDealRnd()*sum;
   for(let i=0;i<w.length;i++){ if((r-=w[i])<0) return i+1; }
   return 1;
 }
@@ -48,9 +51,11 @@ const bk={
   score:0, held:1, next:1, ready:true, readyAt:0, aim:BK_JW/2, queued:false,
   chain:0, lastMerge:-9, big:1, cr:0, shakes:1, shakeNext:0,   // chain length, sim time of the last merge, biggest tier this run, crumbles this run, shake charges, points for the next charge
   overT:0, danger:false, rain:[], gx:0, warm:new Map(), warm2:new Map(), seed0:1,
+  dare:null,                                                // a friend's dare: {seed, beat, tier, passed} (never saved over her own jar)
 };
-function bkNew(seed){                                       // a fresh jar (seed pins the dice: tests)
-  bkSeed=bk.seed0=seed>0?Math.floor(seed)%2147483646+1:(Date.now()%2147483646)+1;
+function bkNew(seed,raw){                                   // a fresh jar (seed pins the dice: tests; raw: seed is the dice state itself, a link's)
+  bkDealSeed=bk.seed0=raw&&isInt(seed,1,2147483646)?seed:seed>0?Math.floor(seed)%2147483646+1:(Date.now()%2147483646)+1;
+  bkSeed=(bk.seed0*48271)%2147483647||1;
   bk.bodies=[]; bk.nid=1; bk.t=0; bk.score=0; bk.chain=0; bk.lastMerge=-9; bk.big=1; bk.cr=0;
   bk.shakes=1; bk.shakeNext=CFG.BK_SHAKE_PTS; bk.overT=0; bk.danger=false; bk.rain=[]; bk.warm.clear();
   bk.st='play'; bk.queued=false;
@@ -240,6 +245,7 @@ function bkBake(a,b){
 function bkWakeNear(x,y,reach){ for(const o of bk.bodies) if(!o.dead&&Math.hypot(o.x-x,o.y-y)<reach+o.r) bkWake(o); }
 function bkAddScore(p){
   bk.score+=p;
+  if(bk.dare&&!bk.dare.passed&&bk.score>bk.dare.beat){ bk.dare.passed=true; if(typeof bkFxBeat==='function') bkFxBeat(); }   // past the friend's score: once
   while(bk.score>=bk.shakeNext){ bk.shakeNext+=CFG.BK_SHAKE_PTS; if(bk.shakes<CFG.BK_SHAKE_MAX){ bk.shakes++; if(typeof bkFxCharge==='function') bkFxCharge(); } }
 }
 
@@ -304,27 +310,29 @@ function bkGameOver(){
   bk.st='over'; bk.danger=false; bk.queued=false;
   const s=lab.bakery, newBest=bk.score>s.best;
   bk.wasBest=s.best; bk.newBest=newBest&&bk.score>0;
-  if(newBest) s.best=bk.score;
+  if(newBest){ s.best=bk.score; s.bs=bk.seed0; s.bb=bk.big; }   // the best run's seed and biggest treat: Share my best sends them
   s.games++; saveLab();
-  bkClearRun();
+  if(!bk.dare) bkClearRun();
   if(typeof playedToday==='function') playedToday();
   if(typeof bkFxOver==='function') bkFxOver();
 }
 
 /* ── the jar in progress, saved (on each drop, on pause and when the app is hidden) and restored at rest ── */
 function bkSnap(){
-  return {v:1,sc:bk.score,seed:bkSeed,h:bk.held,n:bk.next,sh:bk.shakes,sn:bk.shakeNext,big:bk.big,cr:bk.cr,
+  return {v:1,sc:bk.score,seed:bkSeed,ds:bkDealSeed,s0:bk.seed0,h:bk.held,n:bk.next,sh:bk.shakes,sn:bk.shakeNext,big:bk.big,cr:bk.cr,
     b:bk.bodies.filter(b=>!b.dead).map(b=>[b.k,Math.round(b.x*10)/10,Math.round(Math.max(b.y,-200)*10)/10,Math.round(b.a*100)/100])};
 }
 function bkSaveRun(){
-  if(bk.st!=='play') return;
+  if(bk.st!=='play'||bk.dare) return;                       // a dare is never saved: her own jar keeps its save
   try{ localStorage.setItem(BK_RUN,JSON.stringify(bkSnap())); }catch(e){}
 }
 function bkClearRun(){ try{ localStorage.removeItem(BK_RUN); }catch(e){} }
 function bkRestore(o){                                      // true if o was a good save and is now the jar
   if(!o||o.v!==1||!isInt(o.sc,0,1e9)||!isInt(o.seed,1,2147483646)||!isInt(o.h,1,5)||!isInt(o.n,1,5)||!Array.isArray(o.b)||o.b.length>200) return false;
   for(const q of o.b) if(!Array.isArray(q)||!isInt(q[0],1,BK_N)||!isNum(q[1])||!isNum(q[2])) return false;
-  bkNew(o.seed); bkSeed=o.seed;
+  bkNew(o.seed); bkSeed=o.seed; bk.dare=null;
+  bkDealSeed=isInt(o.ds,1,2147483646)?o.ds:o.seed;          // a save from before the two streams: one state for both
+  bk.seed0=isInt(o.s0,1,2147483646)?o.s0:bkDealSeed;
   bk.score=o.sc; bk.held=o.h; bk.next=o.n;
   bk.shakes=isInt(o.sh,0,CFG.BK_SHAKE_MAX)?o.sh:0;
   bk.shakeNext=isInt(o.sn,1,1e9)&&o.sn>bk.score?o.sn:(Math.floor(bk.score/CFG.BK_SHAKE_PTS)+1)*CFG.BK_SHAKE_PTS;
@@ -740,9 +748,14 @@ function bkDomStep(now){
   if(bkDom.shown!==bk.score){ const d=bk.score-bkDom.shown; bkDom.shown=d>0?Math.min(bk.score,bkDom.shown+Math.max(1,Math.ceil(d*.2))):bk.score; }   // a quick count-up
   if(bkDom.wr!==bkDom.shown){ bkDom.wr=bkDom.shown; el('bkScore').textContent=bkDom.shown.toLocaleString('en-US'); }
   const best=Math.max(lab.bakery.best,bk.st==='play'?bk.score:0), nb=bk.st==='play'&&bk.score>lab.bakery.best&&lab.bakery.best>0;
-  const key=best+'|'+nb+'|'+bk.shakes+'|'+(bk.st==='play'&&!bk.paused)+'|'+muted+'|'+CFG.MUSIC;
+  const D=bk.dare, hint=bk.open&&!bk.paused&&bk.st==='play'&&!lab.bakery.hi;
+  const key=best+'|'+nb+'|'+bk.shakes+'|'+(bk.st==='play'&&!bk.paused)+'|'+muted+'|'+CFG.MUSIC+'|'+(D?D.beat+(D.passed?'p':''):'')+'|'+hint+'|'+bkG.W;
   if(key!==bkDom.key){
     bkDom.key=key;
+    const m=el('bkBeat'); m.hidden=!D;                         // a dare: "to beat N" by the score, then ticked once passed
+    if(D){ m.textContent=D.passed?'✓ beat '+D.beat.toLocaleString('en-US'):'to beat '+D.beat.toLocaleString('en-US'); m.classList.toggle('won',D.passed); }
+    const h=el('bkHint'); h.hidden=!hint;                        // the first-play hint, under Crumb, until her first touch
+    if(hint){ h.style.top=Math.round(bkSY(BK_LINE)+12)+'px'; h.classList.toggle('rm',reduce); }
     el('bkBest').textContent=best.toLocaleString('en-US'); el('bkBestLbl').textContent=nb?'New best':'Best'; el('bkBestLbl').classList.toggle('nb',nb);
     [...el('bkPips').children].forEach((p,i)=>p.classList.toggle('on',i<bk.shakes));
     el('bkShake').disabled=!(bk.shakes>0&&bk.st==='play'&&!bk.paused);
@@ -810,6 +823,7 @@ function bkAimAt(cx){ bk.aim=bkDropX((cx-bkG.jx)/bkG.S); }
 bkCv.addEventListener('pointerdown',e=>{
   if(!bkCanAim()||bk.touch!=null) return;
   e.preventDefault(); bk.touch=e.pointerId;
+  if(!lab.bakery.hi){ lab.bakery.hi=1; saveLab(); bkDom.key=''; }   // the first-play hint goes for good
   try{ bkCv.setPointerCapture(e.pointerId); }catch(_){}
   bkAimAt(e.clientX); ac();
   if(CFG.BK_TILT) toyAskTilt();
@@ -843,20 +857,25 @@ function bkClose(){
   if(!bk.open) return;
   if(bk.st==='play') bkSaveRun();
   bk.open=false; bk.paused=false; bk.touch=null; bkStop();
-  el('bakery').hidden=true;
-  if(bk.st!=='play') bk.live=false;                           // a finished jar: the next visit starts a fresh one
+  el('bakery').hidden=true; el('bkDare').hidden=true;
+  if(bk.st!=='play'||bk.dare){ bk.live=false; bk.dare=null; }   // a finished jar, or a dare she walked away from: next time it is her own jar
   if(bk.mainOff){ bk.mainOff=false; requestAnimationFrame(frame); }   // the game's own loop again
 }
 function bkPause(){
   if(!bk.open||bk.paused||bk.st!=='play') return;
   bk.paused=true; bk.touch=null; bk.queued=false; bkSaveRun();
   el('bkPauseScore').textContent=bk.score.toLocaleString('en-US'); bkRestartReset();
+  el('bkPauseSub').textContent=bk.dare?"A friend's dare: to beat "+bk.dare.beat.toLocaleString('en-US')+'. Leaving ends it.':'Your jar is saved.';
+  const b=lab.bakery, ps=el('bkPauseShare'); ps.hidden=!(b.best>0&&b.bs&&b.bb);   // Share my best: her best run's seed, score and treat
+  ps.textContent='Share my best · '+b.best.toLocaleString('en-US'); bkShareReset(ps);
   el('bkPause').hidden=false; bkStop(); bkDraw(performance.now()); bkDomStep(performance.now());
 }
 function bkResume(){ el('bkPause').hidden=true; bkRestartReset(); bk.paused=false; bkKick(); }
 let bkRestartT=0;
 function bkRestartReset(){ clearTimeout(bkRestartT); const b=el('bkRestart'); b.textContent='Restart'; b.classList.remove('confirm'); }
-function bkAgain(){ bkClearRun(); bkNew(); bk.live=true; el('bkOver').hidden=true; el('bkPause').hidden=true; bk.paused=false; bkDom.shown=0; bkDom.wr=-1;
+function bkAgain(){                                         // a fresh jar; on a dare, the same seed and the same score to beat
+  if(bk.dare){ bkNew(bk.dare.seed,true); bk.dare.passed=false; } else { bkClearRun(); bkNew(); }
+  bk.live=true; el('bkOver').hidden=true; el('bkPause').hidden=true; bk.paused=false; bkDom.shown=0; bkDom.wr=-1;
   if(typeof bkSayOpen==='function') bkSayOpen(true); bkKick(); }
 function bkToLab(){ bkClose(); openLab(); }
 function bkToHome(){ bkClose(); openMenu(); }
@@ -940,6 +959,11 @@ function bkFxShake(){
 function bkFxCharge(){
   const b=el('bkShake'); b.classList.remove('got'); void b.offsetWidth; if(!reduce) b.classList.add('got');
   toyPlay(0,t=>{ bell(t,{f:note(9),dur:.5,vol:.05}); bell(t+.07,{f:note(11),dur:.6,vol:.05}); });
+}
+function bkFxBeat(){                                        // a dare: she just passed her friend's score
+  const m=el('bkBeat'); m.classList.remove('pop'); void m.offsetWidth; if(!reduce) m.classList.add('pop');
+  toyPlay(.05,t=>{ [0,2,4,7].forEach((s,i)=>bell(t+i*.08,{f:note(9+s),dur:.7,vol:.07,wet:.3})); });   // a little fanfare
+  bkHap('achieve'); bkSay('bkBeat',3); bkCrumbAct('hop',950); bkDom.key='';
 }
 function bkFxDiscover(k,cookie){
   bkFx.flip[k]=performance.now();
@@ -1057,41 +1081,120 @@ function bkSayStep(now){
 /* ── the card at the end ── */
 function bkShowCard(){
   bk.st='card';
-  const s=lab.bakery;
+  const s=lab.bakery, D=bk.dare;
   el('bkOverScore').textContent=bk.score.toLocaleString('en-US');
   const ob=el('bkOverBest'); ob.textContent=bk.newBest?'★ NEW BEST ★':'Best '+s.best.toLocaleString('en-US'); ob.classList.toggle('nb',!!bk.newBest);
   el('bkBigName').textContent=BK_NAMES[bk.big-1];
-  const c=el('bkBigCv'), d=Math.min(3,devicePixelRatio||1); c.width=c.height=72*d;
-  const g=c.getContext('2d'); g.setTransform(d,0,0,d,36*d,36*d); bkPaint(g,bk.big,31);
-  const gl=bkG.gloss; if(gl) g.drawImage(gl.c,-gl.h*31/50,-gl.h*31/50,gl.h*2*31/50,gl.h*2*31/50);
-  bkFace(g,bk.big,31,'happy',0,0,false,0);
+  bkTreatIcon(el('bkBigCv'),bk.big);
   const cr=el('bkOverCr'); cr.hidden=!bk.cr; cr.textContent=bk.cr?'💥 '+(bk.cr===1?'One CRUMBLE!':bk.cr+' CRUMBLES!'):'';
+  // a dare: how it went against the friend, and "Send it back" (her score, the same seed) comes first
+  const dl=el('bkOverDare'), diff=D?bk.score-D.beat:0;
+  dl.hidden=!D; dl.classList.toggle('won',diff>0);
+  dl.textContent=!D?'':diff>0?'You beat your friend by '+diff.toLocaleString('en-US')+'!':diff<0?(-diff).toLocaleString('en-US')+' short. So close.':'A tie! So close.';
+  el('bkOverTitle').textContent=D?"A friend's dare":'The jar is full';
+  el('bkSendBack').hidden=!D; el('bkShare').hidden=!!D;
+  el('bkAgain').className=D?'ghost':'cta';
+  bkShareReset(el('bkSendBack')); bkShareReset(el('bkShare'));
   el('bkOver').hidden=false;
   if(bk.newBest&&!reduce) bkBurst(bkG.W/2,bkG.H*.3,40,BK_RAINBOW,320,4);
 }
+function bkTreatIcon(c,k){                                  // a treat on a small card canvas (72 css px), smiling
+  const d=Math.min(3,devicePixelRatio||1); c.width=c.height=72*d;
+  const g=c.getContext('2d'); g.setTransform(d,0,0,d,36*d,36*d); bkPaint(g,k,31);
+  const gl=bkG.gloss; if(gl) g.drawImage(gl.c,-gl.h*31/50,-gl.h*31/50,gl.h*2*31/50,gl.h*2*31/50);
+  bkFace(g,k,31,'happy',0,0,false,0);
+}
 const bkArticle=n=>/^[AEIOU]/.test(n)?'an':'a';
-function bkShareText(){ const n=BK_NAMES[bk.big-1]; return 'I baked '+bkArticle(n)+' '+n+" in Crumb's Bakery. "+bk.score.toLocaleString('en-US')+' points. '+SHARE_URL; }
-function bkShareCard(){                                     // the picture: the biggest treat, big, and the score
+
+/* ═══════ the friend link: a dare ═══════
+   ?bk=SEED-SCORE-TIER-CHECK on the site the game already shares (SHARE_URL): the run's dice seed (bk.seed0: the deal stream's
+   state at the start, so the same treats come in the same order), her score in tens, her biggest treat, all base 36, and a
+   3-character check of the three. No name, nothing about her. Read once at launch (bkReadLink, main.js) and taken out of the
+   address bar; a link that does not parse, or whose check does not match, is ignored and the site opens as usual. */
+const BK_LINK_KEY='bk';
+function bkLinkCheck(seed,sc,k){ let h=7; for(const ch of seed+'|'+sc+'|'+k+'|bakery') h=(h*131+ch.charCodeAt(0))%46656; return h.toString(36).padStart(3,'0'); }
+function bkLinkFor(seed,sc,k){
+  return SHARE_URL+'/?'+BK_LINK_KEY+'='+[seed.toString(36),(sc/10|0).toString(36),k.toString(36),bkLinkCheck(seed,sc,k)].join('-');
+}
+function bkLinkParse(v){                                    // {seed, beat, tier} or null
+  if(typeof v!=='string'||!/^[0-9a-z]{1,6}-[0-9a-z]{1,6}-[1-9ab]-[0-9a-z]{3}$/.test(v)) return null;
+  const [a,b,c,ck]=v.split('-'), seed=parseInt(a,36), beat=parseInt(b,36)*10, tier=parseInt(c,36);
+  if(!isInt(seed,1,2147483646)||!isInt(beat,0,1e9)||!isInt(tier,1,BK_N)||bkLinkCheck(seed,beat,tier)!==ck) return null;
+  return {seed,beat,tier};
+}
+function bkReadLink(){                                      // the dare she arrived with, if any; the address bar is tidied either way
+  try{
+    const q=new URLSearchParams(location.search); if(!q.has(BK_LINK_KEY)) return null;
+    const d=bkLinkParse(q.get(BK_LINK_KEY));
+    q.delete(BK_LINK_KEY);
+    const rest=q.toString(); history.replaceState(null,'',location.pathname+(rest?'?'+rest:'')+location.hash);
+    return d;
+  }catch(e){ return null; }
+}
+function bkShareText(seed,sc,k){
+  const n=BK_NAMES[k-1];
+  return 'I baked '+bkArticle(n)+' '+n+" in Crumb's Bakery and scored "+sc.toLocaleString('en-US')+'. Same treats, same order. Beat it: '+bkLinkFor(seed,sc,k);
+}
+function bkShareCard(sc,k){                                 // the picture: the biggest treat, big, and the score
   const cv=document.createElement('canvas'); cv.width=SHARE_W; cv.height=SHARE_H; const g=cv.getContext('2d');
   const sk=g.createLinearGradient(0,0,0,SHARE_H); sk.addColorStop(0,'#1E1238'); sk.addColorStop(.55,'#7A3F7E'); sk.addColorStop(1,'#F08A6C');
   g.fillStyle=sk; g.fillRect(0,0,SHARE_W,SHARE_H);
   g.textAlign='center'; g.fillStyle='#fff'; g.font='700 92px '+BK_FONT; g.fillText("Crumb's Bakery",SHARE_W/2,170);
-  g.font='600 44px '+BK_FONT; g.globalAlpha=.85; g.fillText('I baked '+bkArticle(BK_NAMES[bk.big-1])+' '+BK_NAMES[bk.big-1],SHARE_W/2,250); g.globalAlpha=1;
-  g.save(); g.translate(SHARE_W/2,640); bkPaint(g,bk.big,270); bkFace(g,bk.big,270,'happy',0,0,false,0); g.restore();
-  g.font='700 160px '+BK_FONT; g.fillStyle='#FFE07A'; g.fillText(bk.score.toLocaleString('en-US'),SHARE_W/2,1110);
+  g.font='600 44px '+BK_FONT; g.globalAlpha=.85; g.fillText('I baked '+bkArticle(BK_NAMES[k-1])+' '+BK_NAMES[k-1],SHARE_W/2,250); g.globalAlpha=1;
+  g.save(); g.translate(SHARE_W/2,640); bkPaint(g,k,270); bkFace(g,k,270,'happy',0,0,false,0); g.restore();
+  g.font='700 160px '+BK_FONT; g.fillStyle='#FFE07A'; g.fillText(sc.toLocaleString('en-US'),SHARE_W/2,1110);
   g.font='600 44px '+BK_FONT; g.fillStyle='#fff'; g.globalAlpha=.9; g.fillText(SHARE_FOOTER,SHARE_W/2,SHARE_H-70); g.globalAlpha=1;
   return cv;
 }
-async function bkShare(){                                   // the same path as the game's share (share.js): the share sheet, else a saved picture
-  const blob=await new Promise(res=>bkShareCard().toBlob(res,'image/png')); if(!blob) return 'failed';
-  const file=new File([blob],'crumbs-bakery.png',{type:'image/png'});
-  if(navigator.canShare&&navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file],title:"Crumb's Bakery",text:bkShareText()}); return 'shared'; }
+// the game's share path: the share sheet (the app's web view, Safari) with the picture and the words; else the words alone; else the
+// link is copied ('copied', the button says "Link copied"). 'cancelled' when she closes the sheet.
+async function bkShare(seed,sc,k){
+  const text=bkShareText(seed,sc,k);
+  if(navigator.share){
+    let file=null;
+    try{ const blob=await new Promise(res=>bkShareCard(sc,k).toBlob(res,'image/png')); if(blob) file=new File([blob],'crumbs-bakery.png',{type:'image/png'}); }catch(e){}
+    const data=file&&navigator.canShare&&navigator.canShare({files:[file],text})?{files:[file],title:"Crumb's Bakery",text}:{title:"Crumb's Bakery",text};
+    try{ await navigator.share(data); return 'shared'; }
     catch(e){ if(e&&e.name==='AbortError') return 'cancelled'; }
   }
-  const url=URL.createObjectURL(blob), a=document.createElement('a');
-  a.href=url; a.download='crumbs-bakery.png'; document.body.append(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),4000);
-  return 'saved';
+  try{ await navigator.clipboard.writeText(text); return 'copied'; }catch(e){ return 'failed'; }
 }
-el('bkShare').onclick=async e=>{ e.stopPropagation(); try{ await bkShare(); }catch(err){} };
+function bkShareReset(b){ clearTimeout(b._t); if(b._lbl!=null){ b.textContent=b._lbl; b._lbl=null; } b.classList.remove('done'); }
+async function bkShareBtn(b,seed,sc,k){
+  bkShareReset(b);
+  const r=await bkShare(seed,sc,k).catch(()=>'failed');
+  if(r!=='copied'&&r!=='failed') return r;
+  b._lbl=b.textContent; b.textContent=r==='copied'?'Link copied':"Couldn't share"; b.classList.add('done');
+  b._t=setTimeout(()=>bkShareReset(b),2400);
+  return r;
+}
+el('bkShare').onclick=e=>{ e.stopPropagation(); bkShareBtn(e.currentTarget,bk.seed0,bk.score,bk.big); };
+el('bkSendBack').onclick=e=>{ e.stopPropagation(); if(bk.dare) bkShareBtn(e.currentTarget,bk.dare.seed,bk.score,bk.big); };
+el('bkPauseShare').onclick=e=>{ e.stopPropagation(); const b=lab.bakery; if(b.best>0&&b.bs&&b.bb) bkShareBtn(e.currentTarget,b.bs,b.best,b.bb); };
+
+/* ── the dare card: over the Bakery, before anything else (no menu, no guided first game: those wait for the block game) ── */
+function bkPeekRun(){                                      // her saved jar, if there is one worth asking about (an empty jar is not)
+  try{ const o=JSON.parse(localStorage.getItem(BK_RUN)||'null'); return o&&o.v===1&&isInt(o.sc,0,1e9)&&Array.isArray(o.b)&&(o.b.length||o.sc)?o:null; }catch(e){ return null; }
+}
+function bkOpenDare(d){
+  bk.live=true; bkNew(d.seed,true); bk.dare={seed:d.seed,beat:d.beat,tier:d.tier,passed:false};   // the dare's jar waits behind the card
+  bkOpen();
+  bk.paused=true; bkStop();
+  const n=BK_NAMES[d.tier-1], mine=bkPeekRun();
+  el('bkDareLine').textContent='A friend baked '+bkArticle(n)+' '+n+' and scored '+d.beat.toLocaleString('en-US')+'.';
+  bkTreatIcon(el('bkDareCv'),d.tier);
+  el('bkDareJar').hidden=el('bkDareMine').hidden=!mine;
+  el('bkDareJar').textContent=mine?'You have a jar going ('+mine.sc.toLocaleString('en-US')+'). It stays saved.':'';
+  el('bkDarePlay').textContent=mine?'Play the dare':'Play';
+  el('bkDare').hidden=false; bkSayReset();
+  bkDraw(performance.now()); bkDomStep(performance.now());
+}
+function bkDareGo(){ el('bkDare').hidden=true; bk.paused=false; bkDom.key=''; bkSayOpen(); bkKick(); }
+function bkDareMine(){                                      // back to her own jar: the dare is dropped
+  el('bkDare').hidden=true; bk.dare=null;
+  if(!bkLoadRun()) bkNew();
+  bk.paused=false; bkDom.shown=bk.score; bkDom.wr=-1; bkDom.key=''; bkSayOpen(); bkKick();
+}
+el('bkDarePlay').onclick=e=>{ e.stopPropagation(); bkDareGo(); };
+el('bkDareMine').onclick=e=>{ e.stopPropagation(); bkDareMine(); };
+el('bkDareWhat').onclick=e=>{ e.stopPropagation(); bkToHome(); };

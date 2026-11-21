@@ -619,6 +619,28 @@
   .bkBig div{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
   .bkBig b{font-size:20px;font-weight:700}
   #bkOver .cta{min-width:min(240px,100%)}
+  .bkScoreLbl{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+  .bkBeat{display:inline-block;font-size:12px;font-weight:700;color:var(--gold);letter-spacing:.02em;text-shadow:0 1px 2px rgba(0,0,0,.4);transform-origin:0 70%}
+  .bkBeat[hidden]{display:none}
+  .bkBeat.won{color:#9BEA7A}
+  .bkBeat.pop{animation:bkBeatPop .6s cubic-bezier(.3,1.6,.5,1)}
+  @keyframes bkBeatPop{0%{transform:scale(1)}35%{transform:scale(1.45)}100%{transform:scale(1)}}
+  #bkHint{position:absolute;left:0;right:0;z-index:2;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:6px}
+  #bkHint[hidden]{display:none}
+  #bkHint .fing{font-style:normal;font-size:40px;line-height:1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.35));animation:bkFing 2.4s ease-in-out infinite}
+  #bkHint p{margin:0;padding:6px 14px;border-radius:999px;background:rgba(20,10,40,.55);color:#fff;font:600 15px/1.2 var(--font)}
+  #bkHint.rm .fing{display:none}
+  @keyframes bkFing{0%{transform:translateX(-64px);opacity:0}10%{transform:translateX(-64px);opacity:1}50%{transform:translateX(64px);opacity:1}
+    64%{transform:translateX(64px) translateY(-20px) scale(.85);opacity:0}100%{transform:translateX(64px) translateY(-20px) scale(.85);opacity:0}}
+  .bkOverDare{font-size:19px;font-weight:700;margin:0;color:#FFB4A0}
+  .bkOverDare.won{color:var(--gold)}
+  #bkDare{gap:12px}
+  #bkDare canvas{width:84px;height:84px}
+  .bkDareLine{font-size:20px;font-weight:700;margin:0;max-width:320px;line-height:1.3}
+  .bkDareJar{color:var(--gold)}
+  #bkDare .cta{min-width:min(240px,100%)}
+  .bkWhat{background:none;border:0;color:rgba(255,255,255,.7);font:600 14px var(--font);text-decoration:underline;padding:8px;cursor:pointer}
+  .ghost.done,.cta.done{color:var(--gold)}
   @media (max-height:720px){ #bkOver{gap:8px;padding-top:14px;padding-bottom:14px} #bkOver .big{font-size:56px} .bkBig canvas{width:58px;height:58px} #bkPause{gap:10px} }
   /* the NEW badge on the Lab buttons until the Bakery has been opened */
   .homeSet.bkNewBadge{position:relative;overflow:visible}
@@ -889,7 +911,7 @@
 <div id="bakery" hidden>
   <canvas id="bkCv" role="img" aria-label="Crumb's Bakery: the jar"></canvas>
   <div class="bkHud">
-    <div><div class="lbl">Score</div><div class="score" id="bkScore">0</div></div>
+    <div><div class="bkScoreLbl"><span class="lbl">Score</span><span class="bkBeat" id="bkBeat" hidden></span></div><div class="score" id="bkScore">0</div></div>
     <div class="right">
       <div><div class="lbl" id="bkBestLbl">Best</div><div class="best" id="bkBest">0</div></div>
       <button id="bkPauseBtn" class="bkBtn" type="button" aria-label="Pause"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/></svg></button>
@@ -900,26 +922,40 @@
   <div id="bkCrumb" class="crumbFig idle" aria-hidden="true"></div>
   <div id="bkSay" hidden aria-live="polite"></div>
   <div id="bkNew" hidden role="status"></div>
+  <div id="bkHint" hidden role="status"><i class="fing" aria-hidden="true">👆</i><p>Drag. Let go. Match two the same.</p></div>
   <button id="bkShake" type="button" aria-label="Shake the jar"><span>🫨 Shake</span><i id="bkPips"><b></b><b></b><b></b></i></button>
   <div class="overlay" id="bkPause" hidden>
     <p class="eyebrow">Paused · Crumb's Bakery</p>
     <p class="big" id="bkPauseScore">0</p>
-    <p class="sub">Your jar is saved.</p>
+    <p class="sub" id="bkPauseSub">Your jar is saved.</p>
     <button class="cta" id="bkResume" type="button">Resume</button>
+    <button class="ghost" id="bkPauseShare" type="button" hidden>Share my best</button>
     <button class="ghost" id="bkRestart" type="button">Restart</button>
     <button class="ghost" id="bkPauseLab" type="button">Back to the Lab</button>
     <button class="ghost" id="bkPauseHome" type="button">Home</button>
   </div>
   <div class="overlay" id="bkOver" hidden>
     <p class="eyebrow">Crumb's Bakery</p>
-    <h2 class="overTitle">The jar is full</h2>
+    <h2 class="overTitle" id="bkOverTitle">The jar is full</h2>
     <p class="big" id="bkOverScore">0</p>
     <p class="bkOverBest" id="bkOverBest"></p>
     <div class="bkBig"><canvas id="bkBigCv" width="72" height="72" aria-hidden="true"></canvas><div><span class="lbl">Biggest treat</span><b id="bkBigName"></b></div></div>
     <p class="sub" id="bkOverCr" hidden></p>
+    <p class="bkOverDare" id="bkOverDare" hidden></p>
+    <button class="cta" id="bkSendBack" type="button" hidden>Send it back</button>
     <button class="cta" id="bkAgain" type="button">Play again</button>
     <div class="overRow"><button class="ghost" id="bkShare" type="button">Share</button><button class="ghost" id="bkOverLab" type="button">Back to the Lab</button></div>
     <button class="ghost" id="bkOverHome" type="button">Home</button>
+  </div>
+  <div class="overlay" id="bkDare" hidden>
+    <h2 class="overTitle">🧁 Crumb's Bakery</h2>
+    <canvas id="bkDareCv" width="72" height="72" aria-hidden="true"></canvas>
+    <p class="bkDareLine" id="bkDareLine"></p>
+    <p class="sub">Same treats, same order. Can you beat it?</p>
+    <p class="sub bkDareJar" id="bkDareJar" hidden></p>
+    <button class="cta" id="bkDarePlay" type="button">Play</button>
+    <button class="ghost" id="bkDareMine" type="button" hidden>Back to my jar</button>
+    <button class="bkWhat" id="bkDareWhat" type="button">What is this?</button>
   </div>
 </div>
 

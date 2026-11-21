@@ -333,7 +333,7 @@ const L3_TABLE=[
    iCloud (cloud.js) merges done by union, at by max, stars by max, best by the smaller of two non-zero. */
 const LAB_RS=3;                                          // Rescue the Crumbs' boards (RS_COUNT in rescue.js, which loads later)
 const lab={three:{done:[],at:1},rescue:{stars:[0,0,0],best:[0,0,0]},
-  bakery:{best:0,seen:5,crumbles:0,games:0,op:0}};       // (bakery) js/bakery.js: best score, biggest treat ever baked (1-5 are known), crumbles, runs, opened once
+  bakery:{best:0,seen:5,crumbles:0,games:0,op:0,bs:0,bb:0,hi:0}};   // (bakery) js/bakery.js: best score, biggest treat ever baked (1-5 are known), crumbles, runs, opened once, the best run's seed and biggest treat (Share my best), the first-play hint done
 const BK_SEEN0=5;
 function loadLab(){
   try{
@@ -357,6 +357,8 @@ function loadLab(){
       if(isInt(b.crumbles,0,1e6)) kb.crumbles=b.crumbles;
       if(isInt(b.games,0,1e7)) kb.games=b.games;
       if(b.op===1) kb.op=1;
+      if(isInt(b.bs,1,2147483646)&&isInt(b.bb,1,11)){ kb.bs=b.bs; kb.bb=b.bb; }   // the best run's seed and treat go together
+      if(b.hi===1) kb.hi=1;
     }
   }catch(e){}
 }

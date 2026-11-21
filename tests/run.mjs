@@ -6170,7 +6170,7 @@ test('Lab: puzzle 1 played to its solution sweeps the board, says Solved, and is
   for (const [i, r, c] of sol) { await dragPiece(page, i, r, c); await frames(page, 2); }
   const s = await page.evaluate(() => ({ solved: l3.solved, empty: boardEmpty(), sweep: banners.some(b => b.txt === 'CLEAN SWEEP'), done: lab.three.done, at: lab.three.at,
     store: JSON.parse(localStorage.getItem('crumble.lab')), score, combo: combo > 0, dealing: !!dealing, trayNo, bonusMeter, ava: ava.live, hot: toy.hot, dareId: dare.id }));
-  assert.deepEqual(s, { solved: true, empty: true, sweep: true, done: [1], at: 2, store: { v: 1, three: { done: [1], at: 2 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0 } }, score: 0, combo: true, dealing: false, trayNo: 1, bonusMeter: 0, ava: false, hot: false, dareId: '' });
+  assert.deepEqual(s, { solved: true, empty: true, sweep: true, done: [1], at: 2, store: { v: 1, three: { done: [1], at: 2 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0, bs: 0, bb: 0, hi: 0 } }, score: 0, combo: true, dealing: false, trayNo: 1, bonusMeter: 0, ava: false, hot: false, dareId: '' });
   await page.waitForSelector('#l3Done:not([hidden])', { timeout: 5000 });
   assert.deepEqual(await page.evaluate(() => ({ eye: el('l3DoneEye').textContent, title: el('l3DoneTitle').textContent, next: !el('l3Next').hidden })), { eye: 'Puzzle 1 of 60', title: 'Solved!', next: true });
   const after = await page.evaluate(() => ({ stats: JSON.stringify(stats), best, cookies: dare.st.cookies, run: localStorage.getItem('crumble.run'), mode: localStorage.getItem('crumble.mode'), lab: localStorage.getItem('crumble.run.lab') }));
@@ -6247,7 +6247,7 @@ test('Lab: progress survives a reload, is checked on load, merges from iCloud (u
     const ch = cloudMerge({ v: 1, lab: { three: { done: [2, 9, 61, -1, 'a'], at: 12 } } }), ch2 = cloudMerge({ v: 1, lab: { three: { done: [1], at: 3 } } });
     return { ch, ch2, three: lab.three, blob: cloudBlob().lab };
   });
-  assert.deepEqual(m, { ch: true, ch2: false, three: { done: [1, 2, 3, 4, 9], at: 12 }, blob: { three: { done: [1, 2, 3, 4, 9], at: 12 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0 } } });
+  assert.deepEqual(m, { ch: true, ch2: false, three: { done: [1, 2, 3, 4, 9], at: 12 }, blob: { three: { done: [1, 2, 3, 4, 9], at: 12 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0, bs: 0, bb: 0 } } });
   await page.evaluate(() => { lab.three = { done: [1, 2, 3, 4], at: 5 }; saveLab(); dare.st.cookies = 7; saveDares(); });
   await labOpen(page, 5);
   await page.evaluate(() => { for (const [i, r, c] of l3.p.sol) place(i, r, c); });
@@ -6791,7 +6791,7 @@ test('Rescue: after three tries a Hint shows the next drop of the stored solutio
 test('Rescue: progress is saved, checked on load (older saves without it load), merged from iCloud (stars by max, best by the fewest)', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1, 2], at: 3 } })));
   await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
-  assert.deepEqual(await page.evaluate(() => lab), { three: { done: [1, 2], at: 3 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0 } }, 'an older save loads; no rescues yet');
+  assert.deepEqual(await page.evaluate(() => lab), { three: { done: [1, 2], at: 3 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0, bs: 0, bb: 0, hi: 0 } }, 'an older save loads; no rescues yet');
   await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1], at: 2 }, rescue: { stars: [3, 9, 2], best: [2, 4, 'x'] } })));
   await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
   assert.deepEqual(await page.evaluate(() => lab.rescue), { stars: [3, 0, 0], best: [2, 0, 0] }, 'bad values dropped (stars without a best are not a rescue)');
@@ -7354,10 +7354,10 @@ test('bakery: a first-ever treat is remembered for good; tiers 6 to 11 each put 
   // an old save without the Bakery loads, with defaults; a bad field is dropped on its own
   await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1, 2], at: 3 } })));
   await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
-  assert.deepEqual(await page.evaluate(() => ({ b: lab.bakery, d: lab.three.done })), { b: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0 }, d: [1, 2] });
+  assert.deepEqual(await page.evaluate(() => ({ b: lab.bakery, d: lab.three.done })), { b: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0, bs: 0, bb: 0, hi: 0 }, d: [1, 2] });
   await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, bakery: { best: 4820, seen: 99, crumbles: 2, games: -1, op: 1 } })));
   await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
-  assert.deepEqual(await page.evaluate(() => lab.bakery), { best: 4820, seen: 5, crumbles: 2, games: 0, op: 1 });
+  assert.deepEqual(await page.evaluate(() => lab.bakery), { best: 4820, seen: 5, crumbles: 2, games: 0, op: 1, bs: 0, bb: 0, hi: 0 });
 });
 test('bakery: the jar in progress saves and restores (score, dice, held and next, shakes, every treat), at rest; bad saves are refused', async ({ page }) => {
   const a = await page.evaluate(() => {
@@ -7499,9 +7499,9 @@ test('bakery: a first discovery flips its silhouette and shows "NEW! <name>"; th
   assert.ok(mid.st === 'over' && mid.n < 5, 'popping: ' + JSON.stringify(mid));
   await page.waitForFunction(() => bk.st === 'card', null, { timeout: 5000 });
   const c = await page.evaluate(() => ({ n: bk.bodies.length, card: !el('bkOver').hidden, score: el('bkOverScore').textContent, best: el('bkOverBest').textContent, name: el('bkBigName').textContent,
-    cr: el('bkOverCr').textContent, saved: JSON.parse(localStorage.getItem('crumble.lab')).bakery, run: localStorage.getItem(BK_RUN), share: bkShareText() }));
-  assert.deepEqual({ ...c, saved: [c.saved.best, c.saved.games] }, { n: 0, card: true, score: '4,820', best: '★ NEW BEST ★', name: 'Cinnamon roll', cr: '💥 One CRUMBLE!', saved: [4820, 1], run: null,
-    share: "I baked a Cinnamon roll in Crumb's Bakery. 4,820 points. https://crumble.win" });
+    cr: el('bkOverCr').textContent, saved: JSON.parse(localStorage.getItem('crumble.lab')).bakery, run: localStorage.getItem(BK_RUN), share: bkShareText(bk.seed0, bk.score, bk.big), s0: bk.seed0 }));
+  assert.deepEqual({ ...c, saved: [c.saved.best, c.saved.games, c.saved.bs, c.saved.bb], share: c.share.replace(/bk=[\w-]+$/, 'bk=…') }, { n: 0, card: true, score: '4,820', best: '★ NEW BEST ★', name: 'Cinnamon roll', cr: '💥 One CRUMBLE!', saved: [4820, 1, c.s0, 6], run: null,
+    s0: c.s0, share: "I baked a Cinnamon roll in Crumb's Bakery and scored 4,820. Same treats, same order. Beat it: https://crumble.win/?bk=…" });
   await page.click('#bkAgain');
   assert.deepEqual(await page.evaluate(() => ({ st: bk.st, score: bk.score, n: bk.bodies.length, card: el('bkOver').hidden })), { st: 'play', score: 0, n: 0, card: true });
 });
@@ -7512,10 +7512,13 @@ test('bakery: progress merges from iCloud by max (best, biggest treat, crumbles,
     const ch2 = cloudMerge({ v: 1, lab: { bakery: { best: -5, seen: 40 } } });
     return { ch, ch2, b: { ...lab.bakery }, blob: cloudBlob().lab.bakery };
   });
-  assert.deepEqual(r, { ch: true, ch2: false, b: { best: 4820, seen: 7, crumbles: 2, games: 3, op: 0 }, blob: { best: 4820, seen: 7, crumbles: 2, games: 3 } });
+  assert.deepEqual(r, { ch: true, ch2: false, b: { best: 4820, seen: 7, crumbles: 2, games: 3, op: 0, bs: 0, bb: 0, hi: 0 }, blob: { best: 4820, seen: 7, crumbles: 2, games: 3, bs: 0, bb: 0 } });
+  // a better best from the cloud brings its run's seed and treat (Share my best); a lower one, or one without them, does not
+  const s = await page.evaluate(() => [cloudMerge({ v: 1, lab: { bakery: { best: 6000, bs: 4242, bb: 9 } } }), cloudMerge({ v: 1, lab: { bakery: { best: 5000, bs: 7, bb: 3 } } }), lab.bakery.best, lab.bakery.bs, lab.bakery.bb]);
+  assert.deepEqual(s, [true, false, 6000, 4242, 9]);
 });
 
-/* ── (bakery round two) faces fixed to the treat, the bubble clear of NEXT, a save on every drop ── */
+/* ── (bakery round two) faces fixed to the treat, the friend link and its dare, the first-play hint ── */
 test('bakery: a face is fixed to its treat: drawn at the treat\'s own angle, upside down and all, and it never eases back upright', async ({ page }) => {
   await bkOpenIt(page);
   const r = await page.evaluate(() => {
@@ -7569,6 +7572,133 @@ test('bakery: the jar is saved on every drop, not only on pause and hide', async
   assert.deepEqual(r, { one: 1, two: 2, held: true });
 });
 
+// the site opened with a friend's Bakery link (seed, her score, her biggest treat); fresh: as a first-time visitor
+const bkLinkQ = (page, seed, beat, tier) => page.evaluate(([s, b, t]) => bkLinkFor(s, b, t).split('?')[1], [seed, beat, tier]);
+const bkOpenLink = async (page, server, q, fresh) => {
+  if (fresh) await page.evaluate(() => { sessionStorage.setItem('crumble.test.fresh', '1'); localStorage.clear(); });
+  await page.goto(server.url + '?' + q);
+  await page.waitForFunction(() => typeof state !== 'undefined' && !!cell && typeof bk !== 'undefined');
+};
+test('bakery: a friend link carries the seed, the score and the biggest treat, and reads back the same; a malformed or tampered one is ignored', async ({ page, server }) => {
+  const r = await page.evaluate(() => {
+    const cases = [[123456, 4820, 8], [1, 0, 1], [2147483646, 999999990, 11], [77, 30, 3]];
+    const back = cases.map(([s, b, t]) => { const l = bkLinkFor(s, b, t); return { l: l.startsWith(SHARE_URL + '/?bk='), p: bkLinkParse(l.split('bk=')[1]) }; });
+    const v = bkLinkFor(123456, 4820, 8).split('bk=')[1], [a, b, c, k] = v.split('-');
+    const bad = [[a, (parseInt(b, 36) + 1).toString(36), c, k], [a, b, '9', k], [a, b, c, 'zzz'], [a, b, 'c', k], ['0', b, c, k], [a + 'zzzzzz', b, c, k]].map(x => x.join('-'))
+      .concat(['', 'abc', v + '-1', v.replace(/-/g, '.'), '<script>', null]);
+    return { back, cases, bad: bad.map(x => bkLinkParse(x)) };
+  });
+  assert.deepEqual(r.back, r.cases.map(([seed, beat, tier]) => ({ l: true, p: { seed, beat, tier } })));
+  assert.deepEqual(r.bad, r.bad.map(() => null));
+  const q = await bkLinkQ(page, 123456, 4820, 8);
+  await bkOpenLink(page, server, q.replace(/-([0-9a-z]{3})$/, '-000'));
+  assert.deepEqual(await page.evaluate(() => ({ open: bk.open, dare: bk.dare, search: location.search })), { open: false, dare: null, search: '' }, 'a tampered link: the site as usual, the address tidied');
+  await bkOpenLink(page, server, 'bk=%3Cb%3E&x=1');
+  assert.deepEqual(await page.evaluate(() => ({ open: bk.open, search: location.search })), { open: false, search: '?x=1' }, 'only its own parameter is taken out');
+});
+
+test('bakery: a friend link opens straight on the dare card (no menu, no guided first game), the link leaves the address bar; the guide still comes with the block game', async ({ page, server }) => {
+  const q = await bkLinkQ(page, 123456, 4820, 8);
+  await bkOpenLink(page, server, q, true);
+  const v = await page.evaluate(() => ({ card: !el('bkDare').hidden, open: bk.open, paused: bk.paused, line: el('bkDareLine').textContent, play: el('bkDarePlay').textContent,
+    mine: el('bkDareMine').hidden, menu: !el('menuCard').hidden, guide, search: location.search, dare: bk.dare, seed0: bk.seed0, score: bk.score }));
+  assert.deepEqual(v, { card: true, open: true, paused: true, line: 'A friend baked a Blueberry pie and scored 4,820.', play: 'Play', mine: true, menu: false, guide: null,
+    search: '', dare: { seed: 123456, beat: 4820, tier: 8, passed: false }, seed0: 123456, score: 0 });
+  assert.equal(await page.evaluate(() => [...el('bkDare').querySelectorAll('p,h2,button')].filter(e => !e.hidden).map(e => e.textContent).join(' | ')),
+    "🧁 Crumb's Bakery | A friend baked a Blueberry pie and scored 4,820. | Same treats, same order. Can you beat it? | Play | What is this?");
+  await page.click('#bkDareWhat');
+  assert.deepEqual(await page.evaluate(() => ({ open: bk.open, menu: !el('menuCard').hidden, dare: bk.dare, fresh: guideFresh(), seen: localStorage.getItem('crumble.guide') })),
+    { open: false, menu: true, dare: null, fresh: true, seen: null }, 'What is this? leads Home; the guided first game still waits for her first block game');
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  assert.equal(await page.evaluate(() => bk.open), false, 'a reload does not start the dare again');
+});
+
+test('bakery: a dare deals the same treats in the same order as the link\'s seed, whatever she does (shakes too)', async ({ page, server }) => {
+  const want = await page.evaluate(() => { bkNew(98765, true); const s = [bk.held, bk.next]; for (let i = 0; i < 24; i++) { bk.ready = true; bkDrop(200); for (let j = 0; j < 60; j++) { bkStep(BK_DT); bk.overT = 0; } s.push(bk.next); } return s; });
+  await bkOpenLink(page, server, await bkLinkQ(page, 98765, 3000, 7));
+  await page.click('#bkDarePlay');
+  const got = await page.evaluate(() => {
+    bkStop(); const s = [bk.held, bk.next];
+    for (let i = 0; i < 24; i++) { if (i % 6 === 3) { bk.shakes = 1; bkShake(); } bk.ready = true; bkDrop(30 + (i * 97) % 330); for (let j = 0; j < 60; j++) { bkStep(BK_DT); bk.overT = 0; } s.push(bk.next); }
+    return s;
+  });
+  assert.deepEqual(got, want);
+});
+
+test('bakery: on a dare "to beat N" sits by the score; passing it fires once: a fanfare and Crumb\'s line', async ({ page, server }) => {
+  await bkOpenLink(page, server, await bkLinkQ(page, 4242, 100, 4));
+  await page.click('#bkDarePlay');
+  const r = await page.evaluate(() => {
+    bkStop(); let n = 0; const o = bkFxBeat; window.bkFxBeat = () => { n++; o(); };
+    const mk = () => { bkDomStep(performance.now()); const m = el('bkBeat'); return { on: !m.hidden && m.getBoundingClientRect().width > 0, t: m.textContent, won: m.classList.contains('won') }; };
+    const a = mk(); bkAddScore(60); bkAddScore(40); const b = [n, bk.dare.passed]; bkAddScore(30); const line = bkTalk.txt; bkAddScore(500); const c = mk();
+    window.bkFxBeat = o;
+    const s = el('bkScore').getBoundingClientRect(), m = el('bkBeat').getBoundingClientRect(), strip = bkG.stripY;
+    return { a, b, n, line: SAY.bkBeat.includes(line), c, clear: m.bottom <= strip && m.top < s.bottom };
+  });
+  assert.deepEqual(r, { a: { on: true, t: 'to beat 100', won: false }, b: [0, false], n: 1, line: true, c: { on: true, t: '✓ beat 100', won: true }, clear: true });
+});
+
+test('bakery: the dare\'s end card: "You beat your friend by N!" or "N short. So close.", "Send it back" carries her score and the same seed, Play again keeps both; else the link is copied', async ({ page, server }) => {
+  await bkOpenLink(page, server, await bkLinkQ(page, 555, 4820, 8));
+  await page.click('#bkDarePlay');
+  const end = async sc => { await page.evaluate(sc => { bkStop(); bk.score = sc; bk.big = 9; bkGameOver(); bkKick(); }, sc); await page.waitForFunction(() => bk.st === 'card', null, { timeout: 8000 }); };
+  const card = () => page.evaluate(() => ({ title: el('bkOverTitle').textContent, dare: el('bkOverDare').hidden ? null : el('bkOverDare').textContent,
+    order: [...el('bkOver').querySelectorAll('button')].filter(b => !b.hidden).map(b => b.textContent + (b.className === 'cta' ? '*' : '')) }));
+  await end(6020);
+  assert.deepEqual(await card(), { title: "A friend's dare", dare: 'You beat your friend by 1,200!', order: ['Send it back*', 'Play again', 'Back to the Lab', 'Home'] });
+  await page.evaluate(() => { window.__sh = null; Object.defineProperty(navigator, 'share', { configurable: true, value: async d => { window.__sh = d.text; } }); });
+  await page.click('#bkSendBack');
+  await page.waitForFunction(() => !!window.__sh);
+  const sh = await page.evaluate(() => ({ text: window.__sh, p: bkLinkParse(window.__sh.split('bk=')[1]) }));
+  assert.equal(sh.text.replace(/bk=[\w-]+$/, 'bk=…'), "I baked a Lime tart in Crumb's Bakery and scored 6,020. Same treats, same order. Beat it: https://crumble.win/?bk=…");
+  assert.deepEqual(sh.p, { seed: 555, beat: 6020, tier: 9 }, 'her score and treat, the same seed');
+  await page.click('#bkAgain');
+  assert.deepEqual(await page.evaluate(() => ({ d: bk.dare, s0: bk.seed0, score: bk.score, st: bk.st })), { d: { seed: 555, beat: 4820, tier: 8, passed: false }, s0: 555, score: 0, st: 'play' });
+  await end(4340);
+  assert.equal((await card()).dare, '480 short. So close.');
+  await page.evaluate(() => { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); window.__cl = null;
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async t => { window.__cl = t; } } }); });
+  await page.click('#bkSendBack');
+  await page.waitForFunction(() => !!window.__cl);
+  assert.deepEqual(await page.evaluate(() => [el('bkSendBack').textContent, bkLinkParse(window.__cl.split('bk=')[1]).beat]), ['Link copied', 4340]);
+});
+
+test('bakery: a jar in progress survives a dare: the card says so and offers Play the dare or Back to my jar; the dare never touches her save', async ({ page, server }) => {
+  const saved = await page.evaluate(() => { bkNew(55); for (let i = 0; i < 6; i++) { bk.ready = true; bkDrop(40 + i * 55); for (let j = 0; j < 80; j++) bkStep(BK_DT); } bk.score = 1230; bkSaveRun(); return localStorage.getItem(BK_RUN); });
+  const q = await bkLinkQ(page, 777, 900, 5);
+  await bkOpenLink(page, server, q);
+  assert.deepEqual(await page.evaluate(() => ({ jar: el('bkDareJar').hidden ? null : el('bkDareJar').textContent, play: el('bkDarePlay').textContent, mine: !el('bkDareMine').hidden, seed0: bk.seed0 })),
+    { jar: 'You have a jar going (1,230). It stays saved.', play: 'Play the dare', mine: true, seed0: 777 });
+  await page.click('#bkDarePlay');
+  await page.evaluate(() => { bkStop(); for (let i = 0; i < 5; i++) { bk.ready = true; bkDrop(100 + i * 40); for (let j = 0; j < 80; j++) bkStep(BK_DT); } bkPause(); bkResume(); bkStop(); bkGameOver(); bkKick(); });
+  await page.waitForFunction(() => bk.st === 'card', null, { timeout: 8000 });
+  assert.equal(await page.evaluate(() => localStorage.getItem(BK_RUN)), saved, 'drops, a pause and the end of the dare leave her save as it was');
+  await page.click('#bkOverLab'); await page.click('#labList button[data-id=bakery]');
+  assert.deepEqual(await page.evaluate(() => ({ score: bk.score, dare: bk.dare, s: bk.seed0 === JSON.parse(localStorage.getItem(BK_RUN)).s0 })), { score: 1230, dare: null, s: true }, 'her own jar, back');
+  await bkOpenLink(page, server, q);
+  await page.click('#bkDareMine');
+  assert.deepEqual(await page.evaluate(() => ({ score: bk.score, dare: bk.dare, card: el('bkDare').hidden, paused: bk.paused })), { score: 1230, dare: null, card: true, paused: false }, 'Back to my jar');
+});
+
+test('bakery: the first-play hint: the first time (a link too) until her first touch, then never again; Reduce Motion: the line only', async ({ page, server }) => {
+  await bkOpenLink(page, server, await bkLinkQ(page, 31, 500, 4), true);
+  const vis = () => page.evaluate(() => { const h = el('bkHint'); return { on: !h.hidden, text: h.textContent.trim(), fing: !h.hidden && getComputedStyle(h.querySelector('.fing')).display !== 'none' }; });
+  assert.equal((await vis()).on, false, 'not over the dare card');
+  await page.click('#bkDarePlay'); await page.evaluate(() => bkDomStep(performance.now()));
+  assert.deepEqual(await vis(), { on: true, text: '👆Drag. Let go. Match two the same.', fing: true });
+  await page.evaluate(() => { const r = bkCv.getBoundingClientRect(), o = { pointerId: 7, clientX: r.width / 2, clientY: r.height / 2, bubbles: true }; bkCv.dispatchEvent(new PointerEvent('pointerdown', o)); bkCv.dispatchEvent(new PointerEvent('pointerup', o)); bkDomStep(performance.now()); });
+  assert.deepEqual(await page.evaluate(() => [el('bkHint').hidden, lab.bakery.hi, JSON.parse(localStorage.getItem('crumble.lab')).bakery.hi]), [true, 1, 1]);
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  await bkOpenIt(page); await page.evaluate(() => bkDomStep(performance.now()));
+  assert.equal((await vis()).on, false, 'never again');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => { lab.bakery.hi = 0; saveLab(); });
+  await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
+  await page.evaluate(() => { if (!el('menuCard').hidden) closeMenu(); });
+  await bkOpenIt(page); await page.evaluate(() => bkDomStep(performance.now()));
+  assert.deepEqual(await vis(), { on: true, text: '👆Drag. Let go. Match two the same.', fing: false });
+});
 
 for (const { name, fn } of tests) {
   if (only && !only.test(name)) continue;

@@ -10,4 +10,5 @@ let resumed=loadRun();
 if(!resumed){ if(mode!=='endless'){ mode='endless'; lvl=null; } resumed=loadRun(); if(!resumed){ genTray(); updateDbg(); } }   // a saved run reopens exactly as it was (no opening is dealt)
 if(resumed) openMenu();                          // ...behind the front menu: a launch always opens on the menu, with Continue and Back to the game
 { const link=chReadLink(); if(link) openFriend(link); }   // (E2) a friend's Challenge link: its card, with "Beat N"
+{ const d=bkReadLink(); if(d) bkOpenDare(d); }   // (bakery) a friend's Bakery link: straight to its dare card, over everything
 syncHud(); requestAnimationFrame(frame);
