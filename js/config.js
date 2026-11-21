@@ -410,5 +410,24 @@ const CFG = {
   GUIDE_HINT_MS:  6000,  // a lesson's target cells pulse after this long with no piece picked up
   GUIDE_WAIT:     20,    // frames between a lesson's last drop and the next board (the clear plays out first)
 
+  // (bakery) Crumb's Bakery, the Lab's merge-drop game (js/bakery.js). Units are the jar's inside: 390 wide, 507 tall
+  BK_GRAVITY:     2600,  // units/s^2 (a treat falls the jar's height in about 0.6 s)
+  BK_BOUNCE:      .15,   // restitution of a hard hit (a slow touch never bounces)
+  BK_FRICTION:    .35,   // friction between treats and on the glass: turns sliding into rolling
+  BK_ROLL:        1.6,   // rolling resistance (per second, while touching): a rolling treat comes to rest
+  BK_GROW_MS:     120,   // a freshly baked treat grows from the old size to its own over this long (pushes, never launches)
+  BK_MERGE_COOL_MS: 80,  // a new treat cannot bake again for this long, so a chain reads as separate beats
+  BK_CHAIN_MS:    900,   // a merge within this long of the last one extends the chain (x2, x3 ... x8 on the points)
+  BK_LINE_MS:     2000,  // a settled treat above the dashed line this long ends the run
+  BK_DROP_MS:     400,   // from a drop until the next treat pops into Crumb's hands
+  BK_WEIGHTS:     [30,28,22,13,7],   // odds of each treat he is handed (Crumb, Gumdrop, Macaron, Cookie, Donut)
+  BK_TILT:        true,  // with the crumb toy's tilt on (and Reduce Motion off) gravity leans with the phone
+  BK_TILT_MAX:    .25,   // most sideways pull, share of gravity
+  BK_SHAKE_PTS:   3000,  // one more shake for every this many points (a run starts with one)
+  BK_SHAKE_MAX:   3,     // most shakes held at once
+  BK_CRUMBLE_PTS: 2000,  // two Party cakes crumble: this times the chain multiplier
+  BK_TALK_GAP:    3500,  // ms between Crumb's lines in the Bakery (a bigger moment may cut in)
+  BK_DPR:         3,     // the Bakery's canvas and treat sprites: device pixels, capped here
+
   SHOW_TENSION: false    // debug readout; off for the player (Admin can turn it on)
 };

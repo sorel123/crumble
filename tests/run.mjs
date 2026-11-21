@@ -6170,7 +6170,7 @@ test('Lab: puzzle 1 played to its solution sweeps the board, says Solved, and is
   for (const [i, r, c] of sol) { await dragPiece(page, i, r, c); await frames(page, 2); }
   const s = await page.evaluate(() => ({ solved: l3.solved, empty: boardEmpty(), sweep: banners.some(b => b.txt === 'CLEAN SWEEP'), done: lab.three.done, at: lab.three.at,
     store: JSON.parse(localStorage.getItem('crumble.lab')), score, combo: combo > 0, dealing: !!dealing, trayNo, bonusMeter, ava: ava.live, hot: toy.hot, dareId: dare.id }));
-  assert.deepEqual(s, { solved: true, empty: true, sweep: true, done: [1], at: 2, store: { v: 1, three: { done: [1], at: 2 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] } }, score: 0, combo: true, dealing: false, trayNo: 1, bonusMeter: 0, ava: false, hot: false, dareId: '' });
+  assert.deepEqual(s, { solved: true, empty: true, sweep: true, done: [1], at: 2, store: { v: 1, three: { done: [1], at: 2 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0 } }, score: 0, combo: true, dealing: false, trayNo: 1, bonusMeter: 0, ava: false, hot: false, dareId: '' });
   await page.waitForSelector('#l3Done:not([hidden])', { timeout: 5000 });
   assert.deepEqual(await page.evaluate(() => ({ eye: el('l3DoneEye').textContent, title: el('l3DoneTitle').textContent, next: !el('l3Next').hidden })), { eye: 'Puzzle 1 of 60', title: 'Solved!', next: true });
   const after = await page.evaluate(() => ({ stats: JSON.stringify(stats), best, cookies: dare.st.cookies, run: localStorage.getItem('crumble.run'), mode: localStorage.getItem('crumble.mode'), lab: localStorage.getItem('crumble.run.lab') }));
@@ -6791,7 +6791,7 @@ test('Rescue: after three tries a Hint shows the next drop of the stored solutio
 test('Rescue: progress is saved, checked on load (older saves without it load), merged from iCloud (stars by max, best by the fewest)', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1, 2], at: 3 } })));
   await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
-  assert.deepEqual(await page.evaluate(() => lab), { three: { done: [1, 2], at: 3 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] } }, 'an older save loads; no rescues yet');
+  assert.deepEqual(await page.evaluate(() => lab), { three: { done: [1, 2], at: 3 }, rescue: { stars: [0, 0, 0], best: [0, 0, 0] }, bakery: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0 } }, 'an older save loads; no rescues yet');
   await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1], at: 2 }, rescue: { stars: [3, 9, 2], best: [2, 4, 'x'] } })));
   await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
   assert.deepEqual(await page.evaluate(() => lab.rescue), { stars: [3, 0, 0], best: [2, 0, 0] }, 'bad values dropped (stars without a best are not a rescue)');
@@ -7221,6 +7221,160 @@ test('report: the stamp thumps in after the score (fxBusy only while it moves; R
   const rm = await over({ score: 61234, best: 100000 });
   assert.deepEqual([rm.inCls, rm.reportIn > 0], [false, false], 'Reduce Motion: it is just there');
   assert.ok(await page.evaluate(() => typeof shareText === 'function' && !/[A-D][+−]?\b.*grade/i.test(shareText())), 'the share text is unchanged');
+});
+
+/* ═══════ (bakery) Crumb's Bakery: js/bakery.js. Physics is driven through bkStep directly, never by the clock ═══════ */
+// steps the Bakery's world n times (in the page), stopping early if the run ends
+const bkSteps = (page, n) => page.evaluate(n => { for (let i = 0; i < n && bk.st === 'play'; i++) bkStep(BK_DT); }, n);
+// treats [tier, x] sitting on the floor, old enough to bake
+const bkFloor = (page, list) => page.evaluate(list => { for (const [k, x] of list) { const b = bkBody(k, x, BK_JH - bkR(k)); b.born = -1; } }, list);
+test('bakery: two of a kind that touch bake into the next treat where they met and score the table (10 x k(k-1)/2); different tiers never bake', async ({ page }) => {
+  await page.evaluate(() => bkNew(1));
+  const r3 = await page.evaluate(() => bkR(3));
+  await bkFloor(page, [[3, 150], [3, 150 + 2 * r3 - 0.2]]);
+  await bkSteps(page, 3);
+  const a = await page.evaluate(() => ({ n: bk.bodies.length, k: bk.bodies[0].k, x: bk.bodies[0].x, score: bk.score, chain: bk.chain, big: bk.big,
+    growing: bk.bodies[0].r < bk.bodies[0].rf, table: Array.from({ length: 11 }, (_, i) => bkPts(i + 1)) }));
+  assert.ok(Math.abs(a.x - (150 + r3)) <= 2, 'where they touched: ' + a.x);
+  delete a.x;
+  assert.deepEqual(a, { n: 1, k: 4, score: 60, chain: 1, big: 4, growing: true, table: [0, 10, 30, 60, 100, 150, 210, 280, 360, 450, 550] });
+  await bkSteps(page, 30);
+  assert.equal(await page.evaluate(() => Math.abs(bk.bodies[0].r - bkR(4)) < 1e-9), true, 'it has grown to its own size');
+  // neighbours of different tiers: never
+  await page.evaluate(() => bkNew(1));
+  await bkFloor(page, [[3, 40], [4, 110], [5, 180], [2, 250], [1, 320]]);
+  await page.evaluate(() => { for (const b of bk.bodies) b.vx = (195 - b.x) * 2; });   // pushed together into the middle
+  await bkSteps(page, 600);
+  assert.deepEqual(await page.evaluate(() => ({ ks: bk.bodies.map(b => b.k).sort(), score: bk.score })), { ks: [1, 2, 3, 4, 5], score: 0 });
+});
+test('bakery: a chain multiplies: bakes within BK_CHAIN_MS of each other count x2, x3 ...; a pause starts again at x1', async ({ page }) => {
+  await page.evaluate(() => bkNew(1));
+  const [r2, r5] = await page.evaluate(() => [bkR(2), bkR(5)]);
+  await bkFloor(page, [[2, 40], [2, 40 + 2 * r2 - .2], [5, 250], [5, 250 + 2 * r5 - .2]]);
+  await bkSteps(page, 2);
+  assert.deepEqual(await page.evaluate(() => ({ score: bk.score, chain: bk.chain })), { score: 30 + 2 * 150, chain: 2 }, 'gumdrops (30) then donuts doubled (2 x 150)');
+  // a third bake 0.5 s later: x3
+  await bkSteps(page, 60);
+  let s0 = await page.evaluate(() => bk.score);
+  await page.evaluate(() => { for (const x of [60, 60 + 2 * bkR(1) - .2]) { const b = bkBody(1, x, 100); b.born = -1; b.vy = 0; } });
+  await bkSteps(page, 1);
+  assert.deepEqual(await page.evaluate(s0 => ({ got: bk.score - s0, chain: bk.chain }), s0), { got: 3 * 10, chain: 3 });
+  // after the window has passed: x1 again
+  await bkSteps(page, 150);
+  s0 = await page.evaluate(() => bk.score);
+  await page.evaluate(() => { for (const x of [60, 60 + 2 * bkR(1) - .2]) { const b = bkBody(1, x, 100); b.born = -1; b.vy = 0; } });
+  await bkSteps(page, 1);
+  assert.deepEqual(await page.evaluate(s0 => ({ got: bk.score - s0, chain: bk.chain }), s0), { got: 10, chain: 1 });
+});
+test('bakery: a pile of mixed treats settles: everything asleep, no overlap past the slop, nothing through the walls or floor', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    bkNew(3);
+    const ks = [1, 3, 5, 7, 2, 4, 6, 8, 1, 3, 5, 2, 4, 9, 1, 2, 3, 6, 1, 4, 2, 5, 3, 1];
+    ks.forEach((k, i) => { const b = bkBody(k, 30 + ((i * 97) % 330), -60 - i * 70); b.born = -1; });
+    let steps = 0;
+    for (; steps < 2400; steps++) { bkStep(BK_DT); bk.overT = 0; if (bk.rain.length === 0 && bk.bodies.every(b => b.z)) break; }
+    const B = bk.bodies; let ov = 0;
+    for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) ov = Math.max(ov, B[i].r + B[j].r - Math.hypot(B[i].x - B[j].x, B[i].y - B[j].y));
+    return { steps, n: B.length, asleep: B.every(b => b.z), speed: Math.max(...B.map(b => Math.hypot(b.vx, b.vy))), ov,
+      out: B.filter(b => b.x < b.r - .01 || b.x > BK_JW - b.r + .01 || b.y > BK_JH - b.r + .01).length };
+  });
+  assert.ok(r.asleep && r.steps < 2400, 'all asleep within 20 s of sim time: ' + JSON.stringify(r));
+  assert.ok(r.speed < 1e-9 && r.out === 0, 'still and inside the jar: ' + JSON.stringify(r));
+  assert.ok(r.ov <= 1.5, 'no treat rests inside another (overlap ' + r.ov.toFixed(2) + ' units of 390; slop .5)');
+});
+test('bakery: the drop sequence for a pinned seed is fixed, comes from the Bakery\'s own dice (never Math.random), and only tiers 1-5', async ({ page }) => {
+  // the same generator, worked out here: Park-Miller from seed+1, weights 30/28/22/13/7
+  let s = 4242 % 2147483646 + 1; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const roll = () => { let r = rnd() * 100; const w = [30, 28, 22, 13, 7]; for (let i = 0; i < 5; i++) if ((r -= w[i]) < 0) return i + 1; return 1; };
+  const want = Array.from({ length: 32 }, roll);
+  const run = () => page.evaluate(() => {
+    ac();                                                        // the sound engine's one-time noise buffer is the game's, not the Bakery's
+    let calls = 0; const mr = Math.random; Math.random = () => { calls++; return mr(); };
+    const seen = [];
+    try {
+      bkNew(4242); seen.push(bk.held, bk.next);
+      for (let i = 0; i < 30; i++) {
+        bkDrop(40 + (i * 53) % 310); seen.push(bk.next);
+        for (let j = 0; j < 80 && !bk.ready; j++) { bkStep(BK_DT); bk.overT = 0; }
+      }
+    } finally { Math.random = mr; }
+    return { seen, calls };
+  });
+  const got = await run();
+  assert.deepEqual(got.seen, want);
+  assert.ok(got.seen.every(k => k >= 1 && k <= 5), 'only Crumb to Donut are handed out');
+  assert.equal(got.calls, 0, 'Math.random was never called, merges and all');
+  assert.deepEqual((await run()).seen, got.seen, 'the same seed plays the same jar');
+  const gap = await page.evaluate(() => { bkNew(9); bkDrop(100); let n = 0; while (!bk.ready && n < 200) { bkStep(BK_DT); n++; } return n; });
+  assert.ok(Math.abs(gap - 48) <= 1, 'the next treat is in his hands about 400 ms later (' + gap + ' steps)');
+});
+test('bakery: game over only after a settled treat has sat above the line for BK_LINE_MS (not a treat falling past it)', async ({ page }) => {
+  const fall = await page.evaluate(() => { bkNew(5); bkDrop(200); for (let i = 0; i < 360; i++) bkStep(BK_DT); return bk.st; });
+  assert.equal(fall, 'play', 'a dropped treat passes the line on its way down');
+  const r = await page.evaluate(() => {
+    const g = CFG.BK_GRAVITY; CFG.BK_GRAVITY = 0;                // a treat held still above the line
+    try {
+      bkNew(5); bkBody(4, 200, 30);
+      const at = []; for (let i = 1; i <= 420; i++) { bkStep(BK_DT); if (i === 300) at.push(bk.st, bk.danger); if (bk.st !== 'play') { at.push(i); break; } }
+      bkNew(5); const c = bkBody(4, 200, 30); c.born = -5;
+      for (let i = 0; i < 200; i++) bkStep(BK_DT);              // 1.67 s over the line ...
+      c.y = 200; c.z = false;                                    // ... then it is below it again
+      for (let i = 0; i < 200; i++) bkStep(BK_DT);
+      at.push(bk.st, bk.overT);
+      return at;
+    } finally { CFG.BK_GRAVITY = g; }
+  });
+  assert.deepEqual(r.slice(0, 2), ['play', true], 'at 2.5 s (1 s in the jar + 1.5 s over the line) it is still on, with the danger shown');
+  assert.ok(Math.abs(r[2] - 360) <= 1, 'over at 3 s: 1 s in the jar, then 2 s above the line (step ' + r[2] + ')');
+  assert.deepEqual(r.slice(3), ['play', 0], 'the clock starts again when it drops below');
+});
+test('bakery: two Party cakes CRUMBLE: no bigger treat, 2000 x the chain, ten Crumbs rain in over about a second, counted for good', async ({ page }) => {
+  const r11 = await page.evaluate(() => bkR(11));
+  await page.evaluate(() => { bkNew(2); lab.bakery.crumbles = 0; });
+  await bkFloor(page, [[11, r11], [11, r11 * 3 - .5]]);
+  await bkSteps(page, 2);
+  const a = await page.evaluate(() => ({ n: bk.bodies.length, score: bk.score, cr: bk.cr, rain: bk.rain.length, saved: JSON.parse(localStorage.getItem('crumble.lab')).bakery.crumbles }));
+  assert.deepEqual(a, { n: 0, score: 2000, cr: 1, rain: 10, saved: 1 });
+  await bkSteps(page, 60);
+  const mid = await page.evaluate(() => bk.bodies.length);
+  assert.ok(mid > 0 && mid < 10, 'they are still coming in half a second later (' + mid + ')');
+  await bkSteps(page, 120);
+  assert.equal(await page.evaluate(() => bk.bodies.reduce((n, b) => n + 2 ** (b.k - 1), 0)), 10, 'ten Crumbs came in (some may have baked into Gumdrops)');
+});
+test('bakery: a first-ever treat is remembered for good; tiers 6 to 11 each put one cookie in Crumb\'s jar the first time, never again', async ({ page }) => {
+  const c0 = await page.evaluate(() => { lab.bakery.seen = 5; saveLab(); return dare.st.cookies; });
+  const bakePair = k => page.evaluate(k => { bkNew(3); const r = bkR(k); for (const x of [r + 1, 3 * r + .5]) { const b = bkBody(k, x, BK_JH - r); b.born = -1; } for (let i = 0; i < 3; i++) bkStep(BK_DT); return { seen: lab.bakery.seen, cookies: dare.st.cookies }; }, k);
+  assert.deepEqual(await bakePair(4), { seen: 5, cookies: c0 }, 'a Donut is known from the start');
+  assert.deepEqual(await bakePair(5), { seen: 6, cookies: c0 + 1 }, 'the first Cinnamon roll: one cookie');
+  assert.deepEqual(await bakePair(5), { seen: 6, cookies: c0 + 1 }, 'the second: nothing');
+  assert.deepEqual(await bakePair(6), { seen: 7, cookies: c0 + 2 });
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => ({ seen: lab.bakery.seen, jar: JSON.parse(localStorage.getItem('crumble.dares')).cookies })), { seen: 7, jar: c0 + 2 });
+  assert.deepEqual(await bakePair(6), { seen: 7, cookies: c0 + 2 }, 'after a reload a Pancake is old news');
+  // an old save without the Bakery loads, with defaults; a bad field is dropped on its own
+  await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, three: { done: [1, 2], at: 3 } })));
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => ({ b: lab.bakery, d: lab.three.done })), { b: { best: 0, seen: 5, crumbles: 0, games: 0, op: 0 }, d: [1, 2] });
+  await page.evaluate(() => localStorage.setItem('crumble.lab', JSON.stringify({ v: 1, bakery: { best: 4820, seen: 99, crumbles: 2, games: -1, op: 1 } })));
+  await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
+  assert.deepEqual(await page.evaluate(() => lab.bakery), { best: 4820, seen: 5, crumbles: 2, games: 0, op: 1 });
+});
+test('bakery: the jar in progress saves and restores (score, dice, held and next, shakes, every treat), at rest; bad saves are refused', async ({ page }) => {
+  const a = await page.evaluate(() => {
+    bkNew(77);
+    for (let i = 0; i < 14; i++) { bkDrop(30 + (i * 71) % 330); for (let j = 0; j < 90; j++) { bkStep(BK_DT); bk.overT = 0; } }
+    bk.shakes = 2; bkSaveRun();
+    return { snap: bkSnap(), saved: JSON.parse(localStorage.getItem(BK_RUN)) };
+  });
+  assert.deepEqual(a.saved, a.snap);
+  const b = await page.evaluate(() => { bkNew(1); const ok = bkLoadRun(); const s = bkSnap(); return { ok, s, still: bk.bodies.every(b => b.vx === 0 && b.vy === 0), next: (() => { bkDrop(200); return bk.next; })() }; });
+  assert.equal(b.ok, true);
+  assert.deepEqual(b.s, a.snap, 'the same jar');
+  assert.ok(b.still, 'restored at rest');
+  const c = await page.evaluate(() => { bkNew(1); bkRestore(JSON.parse(localStorage.getItem(BK_RUN))); bkDrop(200); return bk.next; });
+  assert.equal(b.next, c, 'the dice carry on where they were');
+  const bad = await page.evaluate(() => [{ v: 2 }, { v: 1, sc: -1 }, { v: 1, sc: 0, seed: 5, h: 9, n: 1, b: [] }, { v: 1, sc: 0, seed: 5, h: 1, n: 1, b: [[12, 1, 1]] }, null].map(o => bkRestore(o)));
+  assert.deepEqual(bad, [false, false, false, false, false]);
 });
 
 for (const { name, fn } of tests) {
