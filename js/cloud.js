@@ -29,7 +29,8 @@ function cloudBlob(){
     chal:{s:chalRec.s, won:chalRec.won, gold:chalRec.gold}, gd:guideSeen()?1:0,
     dares:{cookies:dare.st.cookies, won:{...dare.st.won}, days:{...dare.st.days}},   // (dares) crumble.dares: the cookie jar
     closet:{own:[...closet.own].sort(), spent:closet.spent, on:{...closet.on}, ot:closet.ot},   // (closet) crumble.closet: what she bought, spent and wears
-    lab:{three:{done:lab.three.done.slice(), at:lab.three.at}, rescue:{stars:lab.rescue.stars.slice(), best:lab.rescue.best.slice()}}};   // (Lab) crumble.lab: puzzles solved, crumbs rescued
+    lab:{three:{done:lab.three.done.slice(), at:lab.three.at}, rescue:{stars:lab.rescue.stars.slice(), best:lab.rescue.best.slice()},
+      bakery:{best:lab.bakery.best, seen:lab.bakery.seen, crumbles:lab.bakery.crumbles, games:lab.bakery.games}}};   // (bakery) Crumb's Bakery: all by max   // (Lab) crumble.lab: puzzles solved, crumbs rescued
 }
 
 // Folds a cloud copy into this phone's progress. Returns true if anything here changed. Bad data changes nothing.
@@ -123,6 +124,13 @@ function cloudMerge(o){
     if(!isInt(st,1,3)||!isInt(b,1,999)) continue;       // a board not rescued there, or bad data
     if(st>lab.rescue.stars[k]){ lab.rescue.stars[k]=st; ch=true; }
     if(!lab.rescue.best[k]||b<lab.rescue.best[k]){ lab.rescue.best[k]=b; ch=true; }
+  }
+  const lk=o.lab&&o.lab.bakery;                         // (bakery) best, biggest treat, crumbles and runs: each by max
+  if(lk&&typeof lk==='object'){
+    if(isInt(lk.best,0,1e9)) up(lab.bakery,'best',lk.best);
+    if(isInt(lk.seen,BK_SEEN0,11)) up(lab.bakery,'seen',lk.seen);
+    if(isInt(lk.crumbles,0,1e6)) up(lab.bakery,'crumbles',lk.crumbles);
+    if(isInt(lk.games,0,1e7)) up(lab.bakery,'games',lk.games);
   }
   if(o.gd===1&&!guideSeen()){ guideMark(); ch=true; }   // (1.1 D) she has had the guided first game on another phone
   return ch;

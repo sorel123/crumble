@@ -3,7 +3,7 @@
 loadSkinSave(); applyTheme(); buildSkinsUI(); buildSettingsUI();
 initDev();
 
-migrateScale(); loadStats(); hesLoad(); checkUnlocks(); loadModes(); loadGoals(); loadDares(); loadCloset(); loadLab(); gcStart(); cloudStart();     // best score first: it decides which skins are open
+migrateScale(); loadStats(); hesLoad(); checkUnlocks(); loadModes(); loadGoals(); loadDares(); loadCloset(); loadLab(); bkBadge(); gcStart(); cloudStart();     // best score first: it decides which skins are open
 mascotInit(); closetDressAll(); layout(); grid=empty(); resetWorld();   // (closet) every crumb on screen wears her pick
 if(mode==='adventure'){ const o=peekRun('adventure'); if(o&&o.lv) lvl=LEVELS[o.lv.id-1]||null; if(!lvl) mode='endless'; }
 let resumed=loadRun();

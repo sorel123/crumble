@@ -895,6 +895,7 @@ function frameGap(now){                                // ms between drawn frame
 
 let last=0;
 function frame(now){
+  if(bkParked()) return;                               // (bakery) Crumb's Bakery has the screen: its own loop draws, and bkClose starts this one again
   requestAnimationFrame(frame);
   const gap=frameGap(now);
   if(gap&&now-last<gap-4) return;                     // not yet: a paced frame (the 4 ms slack lands it on the display's own tick)

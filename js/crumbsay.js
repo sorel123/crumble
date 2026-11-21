@@ -87,6 +87,18 @@ const SAY={
   rcLow:["we'll call that practice.","the board won. this time.","deep breath. go again."],
   rcMid:["solid. not legendary.","decent. i've seen worse.","respectable. barely."],
   rcHigh:["okay. that was really good.","i'd frame that one.","you're kind of good at this."],
+  // (bakery) Crumb's Bakery: js/bakery.js
+  bkOpen:["welcome to my bakery. don't touch anything.","drop two the same. watch.","i bake. you drop. easy."],
+  bkAgain:["again. fine. clean jar.","round two. i'm warmed up.","fresh jar. don't make it weird."],
+  bkNew:["ooh. a NEW one.","didn't know i could bake that.","write that down."],
+  bkChain:["again! again!","it keeps going!","chain! don't stop."],
+  bkBig:["that one's huge.","who's going to eat that?","now we're baking."],
+  bkDanger:["too full! too full!","it's at the line. do something.","uh oh."],
+  bkShake:["whoa whoa whoa.","i felt that.","not the jar!"],
+  bkCrumble:["CRUMBLE! that's the name of the game.","it crumbled. obviously.","all that cake. gone. worth it."],
+  bkOver:["the jar's full. my fault? no.","too many treats. is that possible?","we baked too hard."],
+  bkBest:["new best. head baker.","best ever. i'm framing it."],
+  bkCharge:["another shake. use it wisely.","shake's ready. no pressure."],
   quiet:["ok. now it gets interesting.","warm-up's over.","fine. now the fun stuff."],   // (quiet) Day: Volcano, the cannonball and the x2 meter are awake
 };
 const say={stop:0,stopDue:'',stopT:0,quiet:false,qSync:true,qDue:false,qT:0,el:null,txt:'',kind:'',until:0,over:false,last:-1e9,key:'',idle:0,placed:-1,lines:0,dry:0,backs:0,retOn:false,state:'',tight:false,best:false,sweeps:0,avaOn:false,fireN:-1};

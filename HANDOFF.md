@@ -70,6 +70,8 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
   - `crumble.closet` — Crumb's closet (`js/closet.js`): `{v:1, own:[ids bought], on:{head,face,neck}, spent, ot, seen:[ids]}`. Cookies she can spend are `dares.cookies - spent` (the jar itself is never lowered). `ot` is when the outfit last changed (for the iCloud merge), `seen` what she has seen on offer (the dot). Feat items are never in `own`. Validated on load: unknown ids, feat ids in `own` and items she does not own in `on` are dropped.
   - `crumble.lab` — the Lab (`js/lab.js`): `{v:1, three:{done:[k…], at:k}}`, the Clear-it-in-three puzzles solved (1..60) and the one she is on. Validated on load (bad entries dropped, a broken save starts fresh); in the iCloud backup (done by union, at by max). The Lab keeps no run save: leaving a puzzle starts it again.
   - `crumble.lab` `.rescue` — Rescue the Crumbs (`js/rescue.js`): `{stars:[s1,s2,s3], best:[n1,n2,n3]}`, the stars (0..3) and fewest pieces per board; a board with no stars has best 0. Validated on load (a bad entry resets that board; saves from before it load with all zeros); in the iCloud backup (stars by max, best by the fewest).
+  - `crumble.lab` `.bakery` — Crumb's Bakery (`js/bakery.js`): `{best, seen, crumbles, games, op}`: best score, the biggest tier ever baked (starts at 5: Crumb to Donut are known), CRUMBLEs and runs ever, `op` 1 once the Bakery has been opened (clears the NEW badge on the Lab buttons). Validated field by field on load; older saves load with the defaults. In the iCloud backup (best, seen, crumbles, games by max; `op` stays on the device).
+  - `crumble.bakery.run` — the Bakery jar in progress: `{v:1, sc, seed, h, n, sh, sn, big, cr, b:[[tier,x,y,angle]…]}` (score, dice state, held and next, shakes and the points for the next, biggest this run, crumbles this run, every treat). Saved on pause, when the app is hidden (and on pagehide) and on leaving the Bakery; cleared at game over and Restart. Restored at rest; a bad save is refused and a fresh jar starts.
   - `crumble.stats` — best score and lifetime stats (`games, lines, placed, sweeps, bestCombo, totalScore, bonuses`; `bonuses` is bonus runs earned, for 4.2's goals), loaded in `main.js` before `checkUnlocks()` so skins open from the saved best.
 
 ---
@@ -149,6 +151,7 @@ Last updated 2026-11-10, after recorded music (plan PR 7.4), the journey sky, an
 | `js/challenge.js` | Challenge mode (1.1 E1): frozen deal from a seed, medal bots, HUD, end card, results |
 | `js/lab.js` | the Lab (loaded after `dares.js`): experiment registry and cards; Clear it in three (puzzle generator, solver, `L3_TABLE` of the 60 puzzles, the `lab` mode, `crumble.lab`). `tools/lab3-table.mjs` rewrites the table |
 | `js/rescue.js` | Rescue the Crumbs (Lab, loaded after `lab.js`): the three boards, crumb gravity, the solver `rsSolve`, the HUD, cards, crumb sprites and the exit strip. `tools/rescue-check.mjs` proves each board |
+| `js/bakery.js` | Crumb's Bakery (Lab, loaded after `rescue.js`): the merge-drop physics (circles, fixed step), treats' art and faces, its own full-screen view and loop, juice, Crumb's lines, the card and share, the run save |
 | `js/ui.js` | persistence, unlocks, Settings |
 | `js/admin.js` | Admin panel |
 | `js/cloud.js` | iCloud backup of progress, app only (1.1 F) |
@@ -238,6 +241,7 @@ Top to bottom:
 | (quiet) | A quiet opening: in Endless, Volcano (and the other transformations), the cannonball's charge and the x2 bonus meter wait for the second sky stop (Day, about tray 8); the meter's chip is hidden until then and slides in, and Crumb says so once. `CFG.QUIET_START`. See the section at the end |
 | (voice) | Crumb is the one voice: the praise words (GOOD!, NICE!, GREAT! ...) are off by default (`CFG.PRAISE_WORDS`), Crumb remarks on big clears and now and then on a double; transformations no longer multiply the score (`TRANSFORM_MULT` 1.5 to 1). See the section at the end |
 | (report) | Crumb's report card: the Endless game-over card stamps a grade (D to A+, never an F) beside the sky line, with Crumb's face and one line (a quip when one applies, else one for the grade). `CFG.REPORT_CARD`, run counters saved as `rc`. See the section at the end |
+| (bakery) | Crumb's Bakery, the Lab's third game (first on the card): drop treats into a jar, two the same bake the next of eleven (Crumb to Party cake), chains multiply, two Party cakes CRUMBLE into a rain of Crumbs; Shake charges, first discoveries pay a cookie from tier 6, Crumb's own lines, a card with share. Own physics, view, loop and dice. `js/bakery.js`, `CFG.BK_*`. See the Bakery section at the end |
 
 Details for each, oldest first:
 
@@ -2061,3 +2065,61 @@ in one row between the score and the replay. Endless only (Daily, Adventure, Cha
 - **Check on the phone:** lose an Endless run early (a D or C, "that was quick." or a low line), a middling one and a new best
   (A- or better): the stamp lands after the score, the colour reads, the line is funny rather than mean, and the Home button
   is on screen on a small phone. Admin "Mascot crumb" off: the stamp and line stay, the face goes.
+
+## Crumb's Bakery (2026-11-21)
+
+The Lab's third game, first on the Lab card: "🧁 Crumb's Bakery — Drop treats. Two the same bake a bigger one." Crumb stands
+over a glass jar holding a treat; she aims with a finger and lets go. Two treats of the same kind that touch bake into the
+next one where they met. Everything is in `js/bakery.js`; the knobs are `CFG.BK_*` (config.js, and Admin under "Bakery").
+
+- **The treats.** Eleven tiers: Crumb, Gumdrop, Macaron, Cookie, Donut, Cinnamon roll, Pancake, Blueberry pie, Lime tart,
+  Chocolate cake, Party cake. Radius as a share of the jar's inside width (`BK_RAD`): .040 .052 .066 .083 .102 .124 .148
+  .174 .202 .232 .265. Crumb is only ever handed tiers 1-5, by `BK_WEIGHTS` [30,28,22,13,7].
+- **Points.** Baking tier k scores 10 x k(k-1)/2 (Gumdrop 10, Macaron 30 ... Party cake 550) times the chain. A bake within
+  `BK_CHAIN_MS` (900) of the last one extends the chain: x2, x3 ... capped at x8; a pause starts again at x1.
+- **CRUMBLE.** Two Party cakes make no bigger treat: they crumble for `BK_CRUMBLE_PTS` (2000) x the chain, and ten Crumbs
+  rain in over about a second (they may bake with each other and with Crumbs in the jar). Counted in `.bakery.crumbles`.
+- **The line.** A treat at least 1 s old, slower than 40 units/s, with its top above the dashed line for `BK_LINE_MS`
+  (2000) ends the run. A treat falling past the line never counts. While one is over: a red line, a ticking that speeds up,
+  scared faces and one worried line from Crumb.
+- **Shake.** A run starts with one shake, earns one more every `BK_SHAKE_PTS` (3000) points, holds at most `BK_SHAKE_MAX`
+  (3). It kicks every treat up and a little sideways and resets the line timer. Pips on the button show the charges.
+- **Tilt.** With the crumb toy's tilt on and Reduce Motion off, gravity leans with the phone, up to `BK_TILT_MAX` (.25).
+- **Discoveries.** `.bakery.seen` is the biggest tier ever baked (starts at 5). A first bake flips its silhouette in the
+  cookbook strip, shows "NEW! <name>" in the jar under the line, plays an arpeggio, and for tiers 6 to 11 puts one cookie
+  in Crumb's jar (`dareGift`), once ever.
+- **Physics** (all our own, no library). World units: the jar is 390 wide (`BK_JW`) and 507 tall (`BK_JH`), y down, 0 at
+  the jar's top. Fixed step 1/120 s (`BK_DT`), at most 12 steps a frame. Circles; sequential impulses with warm starting,
+  friction that makes treats roll, rolling resistance (`BK_ROLL`), a speculative margin so nothing tunnels, contacts solved
+  bottom-up, split-impulse position correction (slop 0.5, 4 passes), restitution (`BK_BOUNCE`) only on a new hard contact,
+  speed cap 1500. Sleep by speed and by how far a treat has drifted from where it settled; woken by a hit, a push or a
+  moving neighbour. A baked treat grows from the old size to its own over `BK_GROW_MS` (120) and cannot bake again for
+  `BK_MERGE_COOL_MS` (80), so a chain reads as separate beats. About 0.02 ms a step with a full jar.
+- **Dice.** Everything in the Bakery, looks included, comes from its own Park-Miller dice: `bkRnd` (seeded per run: the
+  drop sequence, the shake, the Crumb rain) and `bkVisRnd` (decorations, particles, which line Crumb says). Never
+  `Math.random` or `rnd`; a test pins a seed and counts `Math.random` calls.
+- **The view.** Its own full-screen `#bakery` with one canvas, Crumb, his speech bubble, the HUD (score, best, pause, music,
+  sound), the cookbook strip of all eleven (silhouettes until found), the Shake button, the pause card (Resume, a two-tap
+  Restart, Lab, Home) and the end card. Treat sprites are painted once per layout at `min(devicePixelRatio, BK_DPR)` (3); one
+  shared shadow and gloss; faces are drawn live and react (happy while held, ooh just baked, scared over the line, dizzy
+  after a shake, a blink now and then) and settle upright while the treat rolls.
+- **The loop.** `bkFrame` on its own requestAnimationFrame only while the Bakery is up and something moves; when the jar
+  sleeps it drops to a 250 ms tick. The game's `frame()` is parked underneath (`bkParked()`) and restarted on leaving.
+  Hidden app: saved, paused, loop stopped.
+- **Juice.** A soft drop bloop by size; on each bake a ring, crumbs in the treat's colours, "+points" and "xN", a pop and a
+  bell that climbs the scale with the chain, a low thump and a small screen shake from Pancake up; CRUMBLE: a flash, the
+  word, confetti, a boom. Game over: the treats pop one after another top to bottom, then the card (score, NEW BEST,
+  biggest treat, crumbles, Play again, Share, Back to the Lab, Home). Reduce Motion: no shake, no tilt, short pops.
+- **Crumb's lines.** `SAY` keys `bkOpen bkAgain bkNew bkChain bkBig bkDanger bkShake bkCrumble bkOver bkBest bkCharge`
+  (crumbsay.js), in a bubble beside him in the Bakery, at most one per `BK_TALK_GAP` (3500 ms) unless a bigger moment
+  cuts in.
+- **Share.** "I baked a/an <biggest> in Crumb's Bakery. N points." and the game's link, through the share sheet where
+  the share sheet takes files: a picture of the biggest treat, big, and the score; else the picture is downloaded.
+- **Saved.** `crumble.lab` `.bakery` and `crumble.bakery.run`; see the localStorage list. In the iCloud backup by max.
+- **Admin.** A "Bakery" heading with sliders for gravity, bounce, friction, chain window, line time, drop delay, shake
+  points, most tilt and the five weights (the copy-settings snippet includes `BK_WEIGHTS`). The rest are in config.js only.
+- **Tests:** the fifteen "bakery:" scenarios (merge table, chain, settling, pinned drop sequence and no Math.random, the line,
+  CRUMBLE, discoveries and cookies, run save, Lab tile and badge, fit at 390x844 and 375x667, finger input, the loop, tilt and
+  Reduce Motion, discovery chip / cascade / card / share text, iCloud merge).
+- **Check on the phone:** the drop feels weighty but quick; a pile comes to rest and stays still; chains read as separate
+  beats; Shake rescues a full jar; frame rate with a full jar at 3x; tilt is fun and not seasick.
