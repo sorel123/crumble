@@ -29,7 +29,7 @@ function loadSkinSave(){
     if(typeof o.homeWorld==='string' && isWorldUnlocked(o.homeWorld)
       && (HOME_WORLDS.some(w=>w.id===o.homeWorld)||TRANSFORMS[o.homeWorld])) CFG.HOME_WORLD=o.homeWorld;
     if(THEMES.some(t=>t.id===o.theme)) CFG.THEME=o.theme;
-    if(o.lookV!==2){ CFG.THEME='classic'; CFG.STYLE='blocks'; }   // 2026-10-30: everyone gets the new look once; Settings still changes it
+    if(o.lookV!==2){ CFG.THEME='classic'; CFG.STYLE='jewel'; }   // 2026-10-30: everyone gets the new look once; Settings still changes it
     if(o.sndV!==3) CFG.SND_SET='original';                         // 2026-11-12 (Jay): Original is the default again, for everyone once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
@@ -121,7 +121,7 @@ function buildSkinsUI(){
    chosen look is not stored on its own: it is the four saved settings, so `currentLook()` finds the preset they match
    (none = she mixed her own, no tile lit). */
 const LOOKS=[
-  {id:'classic', name:'Classic',      theme:'classic',  world:'night',   style:'blocks', motif:'none'},
+  {id:'classic', name:'Classic',      theme:'classic',  world:'night',   style:'jewel',  motif:'none'},   // (rebrand) the default: gems, as on the icon (it was Blocks until 2026-11; a saved Blocks pick stays, with no tile lit)
   {id:'night',   name:'Night Jewels', theme:'night',    world:'ocean',   style:'jewel',  motif:'none'},
   {id:'cotton',  name:'Cotton Candy', theme:'cotton',   world:'blossom', style:'clay',   motif:'heart'},
   {id:'mint',    name:'Mint Garden',  theme:'mint',     world:'forest',  style:'blocks', motif:'none'},
