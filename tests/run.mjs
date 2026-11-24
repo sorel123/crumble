@@ -69,6 +69,17 @@ test('front menu: Back from a card opened on the start card shows one home card,
     assert.deepEqual(await cards(), { start: true, menu: false }, 'Back from the menu ' + open);
   }
 });
+test('front menu (rebrand): the Bakery tile on the start card and the menu opens the Bakery; Home comes back to one home card with her best on the tile', async ({ page }) => {
+  const tile = () => page.evaluate(() => ({ sub: el('startBakerySub').textContent, sub2: el('menuBakerySub').textContent, drawn: [...document.querySelectorAll('#startBakery canvas')].every(c => c.width > 0 && c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] > 0) }));
+  assert.deepEqual(await tile(), { sub: 'Drop treats, bake bigger ones', sub2: 'Drop treats, bake bigger ones', drawn: true });
+  await page.click('#startBakery');
+  assert.deepEqual(await page.evaluate(() => ({ open: bk.open, view: !el('bakery').hidden, st: bk.st })), { open: true, view: true, st: 'play' });
+  await page.evaluate(() => { lab.bakery.best = 1230; lab.bakery.games = 1; });
+  await page.click('#bkPauseBtn'); await page.click('#bkPauseHome');
+  assert.deepEqual(await page.evaluate(() => ({ open: bk.open, start: !el('startCard').hidden, menu: !el('menuCard').hidden, sub: el('menuBakerySub').textContent === bkProg() && /^Best 1,230/.test(bkProg()) })), { open: false, start: false, menu: true, sub: true });
+  await page.click('#menuBakery');
+  assert.deepEqual(await page.evaluate(() => ({ open: bk.open, menu: !el('menuCard').hidden })), { open: true, menu: false });
+});
 test('8.4 pause: no mode pill in a game; pause offers Resume, Home (run saved, Endless says Continue) and End game (tap twice, back to the home screen)', async ({ page }) => {
   await play(page); await dealt(page);
   assert.equal(await page.evaluate(() => !!document.getElementById('modeTag')), false, 'the Endless pill is gone');
@@ -729,7 +740,7 @@ test('star gem: tray beam, hint ring and the clear animation draw without errors
     tray = [{ s: STAR, gi: STAR_GI }, { s: SHAPES[0], gi: 1 }, { s: SHAPES[0], gi: 1 }];
     await new Promise(r => setTimeout(r, 300));
     const t0 = performance.now(); place(0, 3, 3);
-    while ((shatters.length || blasts.length) && performance.now() - t0 < 2000) await new Promise(r => setTimeout(r, 16));
+    while ((shatters.length || starBeams.length) && performance.now() - t0 < 2000) await new Promise(r => setTimeout(r, 16));
     return performance.now() - t0;
   });
   assert.ok(r < 700, 'from drop to empty cells: ' + Math.round(r) + ' ms');
@@ -1271,7 +1282,7 @@ test('game-over card (8.1): Daily and Adventure use the same card', async ({ pag
   assert.equal((await cardState(page)).second, false, 'Daily: spent, so only Play again and Home');
 });
 
-/* ═══════ Bonus trays (plan 6.2, replaced the Blast Round) ═══════ */
+/* ═══════ Bonus trays (plan 6.2, replaced the old bonus round) ═══════ */
 // a row that one single-cell drop at (r,0) clears; combo is set so that drop's clear is combo k
 const clearAt = (r, k) => `grid[${r}] = grid[${r}].map((_, c) => (c ? { gi: 0, t: 1, f: 0, l: 0 } : null)); tray[0] = { s: SHAPES[0], gi: 1 }; combo = (${k}) - 1; place(0, ${r}, 0);`;
 const fillBonus = page => page.evaluate(() => { bonusMeter = CFG.BONUS_METER; syncBonusChip(); });
@@ -2311,7 +2322,7 @@ const chalStart = async (page, seed) => {
 };
 
 test('Challenge: the fourth mode tile opens its card; Today\'s challenge starts a 12-tray round with the next medal and the tray in the HUD', async ({ page }) => {
-  assert.equal(await page.evaluate(() => [...document.querySelectorAll('#startCard .homeGrid .tile b')].map(b => b.textContent).join(',')), 'Adventure,Daily,Challenge,Goals');
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('#startCard .homeGrid .tile b')].map(b => b.textContent).join(',')), "Crumb's Bakery,Adventure,Daily,Challenge,Goals");
   assert.ok(await page.evaluate(() => el('startSettings').getBoundingClientRect().bottom <= innerHeight), 'Settings still fits under the tiles');
   await page.click('#startChal'); await page.waitForSelector('#chalCard:not([hidden])');
   assert.deepEqual(await page.evaluate(() => ({ cont: el('chalCont').hidden, today: el('chalToday').className })), { cont: true, today: 'cta' });
@@ -5697,7 +5708,7 @@ test('play recorder: off writes nothing; on (REC_PLAY) keeps one well-formed rec
   assert.equal(await page.evaluate(() => localStorage.getItem('crumble.playlog')), null, 'Clear play log');
 });
 
-// ---- the Block Blast curve (DEALER_CURVE) ----
+// ---- the study curve (DEALER_CURVE) ----
 test('curve dealer: off by default; with it off a pinned home-dealer deal is unchanged (the tide pin is the home dealer test above)', async ({ page }) => {
   await play(page); await dealt(page);
   assert.equal(await page.evaluate(() => CFG.DEALER_CURVE), false);
@@ -5714,7 +5725,7 @@ test('curve dealer: Challenge is untouched, only Endless and Daily use it, it be
   assert.deepEqual(await page.evaluate(() => { mode = 'challenge'; const c = curveOn(); mode = 'adventure'; const a = curveOn(); mode = 'daily'; const d = curveOn(); mode = 'endless'; return [c, a, d, curveOn(), hdOn()]; }), [false, false, true, true, false], 'curve wins over home');
   await page.goto(server.url + '?dealer=curve'); await toGame(page);
   assert.deepEqual(await page.evaluate(() => [CFG.DEALER_CURVE, CFG.DEALER_HOME]), [true, false]);
-  assert.ok(await page.evaluate(() => DEV_TOGGLES.some(t => t[0] === 'DEALER_CURVE' && /Block Blast curve/.test(t[1]))), 'an Admin switch');
+  assert.ok(await page.evaluate(() => DEV_TOGGLES.some(t => t[0] === 'DEALER_CURVE' && /study curve/.test(t[1]))), 'an Admin switch');
   assert.deepEqual(await page.evaluate(() => ['CURVE_HEAT', 'CURVE_MULTI', 'CURVE_GIVE'].map(k => DEV_SLIDERS.some(s => s[0] === k))), [true, true, true], 'Admin sliders');
   await page.goto(server.url + '?dealer=tide'); await toGame(page);
   assert.deepEqual(await page.evaluate(() => [CFG.DEALER_CURVE, CFG.DEALER_HOME]), [false, false]);

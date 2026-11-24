@@ -518,7 +518,7 @@ el('musicBtn').onclick=e=>{ e.stopPropagation();     // the note button: Music o
   if(typeof renderMusicPick==='function') renderMusicPick();
   saveSkinSave();
 };
-/* The bonus trays' own sounds (plan 6.2; they were the Blast Round's). Synthesized and the same in every sound set, so no
+/* The bonus trays' own sounds (plan 6.2; they were the old bonus round's). Synthesized and the same in every sound set, so no
    other moment in the game shares them: a rising whoosh into a low hit and a fast saw run (start), a bright bell rise
    (meter full), and a bell cadence over a soft hit (bonus over). */
 const SHARED_SFX={                                    // the same in every set (they are the bonus trays' and the golden hand's own)

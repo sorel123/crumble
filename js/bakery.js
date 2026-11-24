@@ -878,8 +878,15 @@ function bkAgain(){                                         // a fresh jar; on a
   bk.live=true; el('bkOver').hidden=true; el('bkPause').hidden=true; bk.paused=false; bkDom.shown=0; bkDom.wr=-1;
   if(typeof bkSayOpen==='function') bkSayOpen(true); bkKick(); }
 function bkToLab(){ bkClose(); openLab(); }
-function bkToHome(){ bkClose(); openMenu(); }
-function bkBadge(){ for(const id of ['startLab','menuLab']) el(id).classList.toggle('bkNewBadge',!lab.bakery.op); }
+function bkToHome(){ bkClose(); bkTiles(); openMenu(); }
+function bkBadge(){ for(const id of ['startLab','menuLab']) el(id).classList.toggle('bkNewBadge',!lab.bakery.op);  bkTiles(); }
+function bkTiles(){                                         // (rebrand) the Bakery's own tile on both home cards: three treats, and her best once she has one
+  const b=lab.bakery, sub=b.best||b.games?bkProg():'Drop treats, bake bigger ones';
+  for(const p of ['start','menu']){
+    const t=el(p+'Bakery'); el(p+'BakerySub').textContent=sub;
+    if(!t._ico){ t._ico=1; [4,5,3].forEach((k,i)=>bkTreatIcon(t.querySelectorAll('canvas')[i],k)); }
+  }
+}
 function bkProg(){ const b=lab.bakery; return (b.best?'Best '+b.best.toLocaleString('en-US')+' · ':'')+b.seen+' of '+BK_N+' treats'; }
 el('bkPauseBtn').onclick=e=>{ e.stopPropagation(); bkPause(); };
 el('bkResume').onclick=e=>{ e.stopPropagation(); bkResume(); };
@@ -893,6 +900,8 @@ el('bkOverLab').onclick=e=>{ e.stopPropagation(); bkToLab(); };
 el('bkOverHome').onclick=e=>{ e.stopPropagation(); bkToHome(); };
 el('bkShake').onclick=e=>{ e.stopPropagation(); if(bkCanAim()&&bkShake()) bkKick(); };
 el('bkSndBtn').onclick=e=>{ e.stopPropagation(); setMuted(!muted); bkDom.key=''; bkDomStep(performance.now()); };
+el('startBakery').onclick=e=>{ e.stopPropagation(); ac(); bkOpen(); };
+el('menuBakery').onclick=e=>{ e.stopPropagation(); el('menuCard').hidden=true; bkOpen(); };
 el('bkMusicBtn').onclick=e=>{ e.stopPropagation(); el('musicBtn').click(); bkDom.key=''; bkDomStep(performance.now()); };
 addEventListener('resize',()=>{ if(bk.open){ bkLayout(); bkKick(); if(bk.paused) bkDraw(performance.now()); } });
 document.addEventListener('visibilitychange',()=>{

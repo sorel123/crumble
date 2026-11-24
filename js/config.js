@@ -111,7 +111,7 @@ const CFG = {
   CROWD_GEMS: 34,        //   ...gems that count as crowded whatever the room
   CROWD_TWO: 0.5,        //   ...odds a crowded-board candidate carries two such keys
   CROWD_KEY: 20,         //   ...score per key piece (up to two), and three times it off for a tray with none
-  CHAIN_BUILD: 0.8,      // (round 6) odds the tray after a board clear is big matching pieces that rebuild rows (Block Blast's chain of clears)
+  CHAIN_BUILD: 0.8,      // (round 6) odds the tray after a board clear is big matching pieces that rebuild rows (the study's chain of clears)
   OPEN_BUILD: 0.7,       // (round 4) odds an Endless or Daily game opens on an empty board with three of one piece (rectangle, bar or big L) to build off
   MATCH: 25,             // (round 4) EASY score for a tray of three alike (60% of it for two alike): a tray she reads as one plan
   MATCH_TRY: 0.35,       //   ...odds an EASY candidate is built that way
@@ -162,11 +162,11 @@ const CFG = {
   HOME_BLOCKY:    false, // (experiment) the cool stretch deals TIGHT trays: big pieces at strictly flush homes that keep the gems in few lines (no scatter); win mode prefers big multi-line drops
   HOME_WIPE_KEEP: 0.75,  // after the n-th board wipe in a row (each within 4 trays of the last) the chain's help carries on with odds this^n, else a cool stretch without it
 
-  // the Block Blast curve (solver.js "The Block Blast curve"): no phases, every slot's class is rolled from what 253 Block Blast trays
+  // the study curve (solver.js "The study curve"): no phases, every slot's class is rolled from what 253 recorded trays
   // showed. Endless and Daily only; beats DEALER_HOME when both are on. Also on with ?dealer=curve in the URL.
   DEALER_CURVE: /[?&]dealer=curve(&|$)/.test(location.search),   // off by default
   CURVE_TABLE: [26,70, 50,46, 70,25, 80,6],   // per gems bucket 0-12, 13-24, 25-36, 37+: % of slots rolled CLEAR, FLUSH (the rest FREE)
-  CURVE_MIX: [['1x5',108],['3x3',105],['2x3',101],['L4',80],['1x4',72],['L5',60],['2x2',52],['S4',38],['T4',24],['1x3',23],['1x1',17],['L3',10],['1x2',5]],   // Block Blast's shape counts (rotations pooled; its 3 diagonals have no shape here)
+  CURVE_MIX: [['1x5',108],['3x3',105],['2x3',101],['L4',80],['1x4',72],['L5',60],['2x2',52],['S4',38],['T4',24],['1x3',23],['1x1',17],['L3',10],['1x2',5]],   // the study's shape counts (rotations pooled; its 3 diagonals have no shape here)
   CURVE_SMALL: [5,6,12,21],   // % of pieces of 3 cells or fewer, per gems bucket (scales the small shapes of CURVE_MIX)
   CURVE_MULTI:  2,       // a CLEAR piece's odds go with (1 + lines its best drop clears) to this power (big multi-line drops)
   CURVE_DENSE:  1,       // a FLUSH piece's odds go with e^(this x its best flush spot's density: nearly-done lines gained, less half the new lines it opens)
@@ -194,7 +194,7 @@ const CFG = {
 
   // scoring
   LINE_POINTS: 10*SCORE_SCALE, COMBO_STEP: 0.5,
-  COMBO_CARRY: true,     // (round 6) Endless and Daily: the combo survives drops that clear nothing while she clears again within COMBO_GRACE drops (Block Blast's streak)
+  COMBO_CARRY: true,     // (round 6) Endless and Daily: the combo survives drops that clear nothing while she clears again within COMBO_GRACE drops (the study's streak)
   COMBO_GRACE: 3,        //   ...drops in a row without a clear that end the streak
   SWEEP_BONUS: 300*SCORE_SCALE, SWEEP_PER_GEM: 25*SCORE_SCALE,
 
@@ -224,8 +224,8 @@ const CFG = {
   OBVIOUS:        12,     // plan 3.4: score per piece in a hand with an OBVIOUS clear (a 5-7/8 full line with one plain gap it drops into); 0 = off
   OBVIOUS_MAX:    2,      // ...counted for at most this many pieces: one or two easy moves a tray, not three (every tray a gift is too much)
   ALT:            0.5,    // plan 3.4: score per legal spot (up to 8) for the hand's smallest piece of 2+ cells: room to put the awkward one
-  CLEAR_STYLE:    'crumble', // (7.5) 'crumble': a crack ripples along the line from the piece and each gem breaks into four pieces of itself that fall off the screen; 'squash': the line collapses to a glowing bar and is gone in ~100 ms (Block Blast's beat); 'burst': blocks fly out
-  CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like Block Blast)
+  CLEAR_STYLE:    'crumble', // (7.5) 'crumble': a crack ripples along the line from the piece and each gem breaks into four pieces of itself that fall off the screen; 'squash': the line collapses to a glowing bar and is gone in ~100 ms (the study's beat); 'burst': blocks fly out
+  CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like the study)
   CRUMBLE_STAGGER:0.4,    // (7.5) crumble only: frames between one gem's crack and the next along the line, out from the placed piece (~7 ms; was 0.75)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
   FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
@@ -239,7 +239,7 @@ const CFG = {
   FX_COMBO_SLAM:  true,   // (combo BIG_COMBO+) headline "COMBO n" slams in on every consecutive clear, with fireworks
   COLOR_GONE_BONUS: 60*SCORE_SCALE,   // points per colour wiped off the board by a clear ("COLOR GONE!")
 
-  // Bonus trays (plan 6.2, replaces the Blast Round). Clears fill a small meter; when it is full the next BONUS_TRAYS
+  // Bonus trays (plan 6.2, replaces the old bonus round). Clears fill a small meter; when it is full the next BONUS_TRAYS
   // trays pay x BONUS_MULT automatically. Dealing is untouched: the bonus only multiplies points.
   BONUS_METER:    10,     // meter to fill: each clear adds its lines, plus 1 per combo step above the first (at most BONUS_COMBO_MAX)
   BONUS_COMBO_MAX: 2,     // most extra meter one clear can add for its combo

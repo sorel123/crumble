@@ -124,7 +124,7 @@ async function rescue(){
 // everything in flight that a new run, or a restored one, starts without (effects, banners, drag, the bonus)
 function clearRunFx(){
   golden=null; goldenNext=false; goldenCool=0; trayHadSweep=false; trayCombo=0; starForced=false; starCool=0; transform=null; transformCool=0;
-  shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];blasts=[];drag=null;ret=null;
+  shatters=[];shards=[];pops=[];sweeps=[];waves=[];sparkles=[];banners=[];starBeams=[];drag=null;ret=null;
   praises=[];bursts=[];lineFlashes=[];stamps=[];bannerWait=0;sweepShow=null;
   chunks=[];rubble=[];orbs=[];rings=[];dust=[]; scoreHold=0; bestBeaten=false; hitWait=0;
   bonus=null; bonusTag=null; clearTimeout(bonusTagT); quietHid=false; quietIn=0; say.qSync=true; rcReset();   // (quiet) a new or restored run: the meter's slide-in and Crumb's line start from where it is

@@ -5,7 +5,7 @@
 const DEV_TOGGLES=[            // [CFG key, label]; 'A.b' is a key inside an object entry of CFG
   ['TIDE','Coaster dealing: easy and lean stretches (1.1 G)'],
   ['DEALER_HOME','Dealer: pieces have a home (new)'],
-  ['DEALER_CURVE','Dealer: Block Blast curve'],
+  ['DEALER_CURVE','Dealer: study curve'],
   ['HOME_BLOCKY','Home dealer: blocky cool stretch (TIGHT trays)'],
   ['REC_PLAY','Record play (stays on without ?dev)'],
   ['COMBO_CARRY','Combo carries across trays (round 6)'],
@@ -87,7 +87,7 @@ const DEV_CHOICES=[            // [CFG key, label, options, audition fn]
 // one-tap previews of the chosen set's moments (Settings -> Sound)
 const DEV_PREVIEWS=[['Clear',()=>Sfx.clear(1,0,1)],['Combo ×4',()=>Sfx.combo(4,2,0)],['Praise',()=>Sfx.praise(2)],
   ['Big praise',()=>Sfx.praise(4)],['Sweep',()=>Sfx.sweep(0)],['Golden',()=>Sfx.goldenWin()],
-  ['Bonus start',()=>Sfx.bonusStart()],['Bonus ready',()=>Sfx.bonusReady()],['Bonus over',()=>Sfx.bonusEnd()],['Star dealt',()=>Sfx.starIn()],['Star blast',()=>Sfx.star(9)]];
+  ['Bonus start',()=>Sfx.bonusStart()],['Bonus ready',()=>Sfx.bonusReady()],['Bonus over',()=>Sfx.bonusEnd()],['Star dealt',()=>Sfx.starIn()],['Star burst',()=>Sfx.star(9)]];
 const DEV_SOUND_TOGGLES=[       // shown in the Sound section
   ['PHONE_SPEAKER','Phone speaker mode (cut bass)']
 ];

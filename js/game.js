@@ -29,7 +29,7 @@ function mobility(){
 // goes live: the golden hand's own celebration owns that moment. An achievement that cannot go live (a bonus, a golden
 // hand or a star in play, a live one already, the cooldown, trays 1-5) still unlocks the look; that rule matters more
 // than the sky flip. The card is only drawn over the play (a banner), it never pauses or blocks anything.
-const ACHIEVE={rainbow:'Clean sweep', volcano:'Combo ×'+CFG.TRANSFORM_COMBO, starfield:'Star blast', goldvault:'Golden hand'};
+const ACHIEVE={rainbow:'Clean sweep', volcano:'Combo ×'+CFG.TRANSFORM_COMBO, starfield:'Star burst', goldvault:'Golden hand'};
 let newLook=false;                                // a look was just unlocked and Settings has not been opened since (the gear's dot)
 function syncLookDot(){ el('setBtn').classList.toggle('dot',newLook); el('pauseBtn').classList.toggle('dot',newLook); }   // (8.4) Settings lives on the pause card, so the dot shows on pause too
 function canGoLive(id){
@@ -75,7 +75,7 @@ const special=name=>!!(CFG.SPECIALS&&CFG.SPECIALS[name])&&mode!=='lab'&&!(mode==
 const specialLive=()=>!!(bonus||transform||golden||tray.some(t=>t&&t.s.star));
 const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>specialEnd+1;
 
-/* ═══════ Bonus trays (plan 6.2, replaces the Blast Round) ═══════
+/* ═══════ Bonus trays (plan 6.2, replaces the old bonus round) ═══════
    Clears fill a small meter (the chip under the board): each clear adds its lines, plus a little for a combo. When it is
    full, the next BONUS_TRAYS trays pay x BONUS_MULT, automatically: the sky shifts to violet, the board's rim pulses,
    a banner says "BONUS x2 · NEXT 3 TRAYS" and the chip counts the trays down. Nothing to tap and nothing to lose: dealing
@@ -247,7 +247,7 @@ function place(idx,r,c){
   hesPlace(total>0);                               // the hesitation log (save.js): the tray's first drop, timed
 
   if(s.star){
-    blasts.push({r,c,t:-starMs*0.06});               // the beams fire after the charge (b.t runs 0.06 per frame)
+    starBeams.push({r,c,t:-starMs*0.06});               // the beams fire after the charge (b.t runs 0.06 per frame)
     waves.push({x:bx+(c+.5)*cell,y:by+(r+.5)*cell,t:-starMs*0.026});
     for(let k=0;!reduce&&k<10;k++){
       const along=Math.random()*B, onRow=k%2===0;
@@ -272,8 +272,8 @@ function place(idx,r,c){
     if(s.star && starGems>=CFG.TRANSFORM_STAR_GEMS) triggerTransform('starfield');
     gained+=Math.round(CFG.LINE_POINTS*total*total*(1+(combo-1)*CFG.COMBO_STEP));
     if(s.star) gained=s.n*SCORE_SCALE+Math.max(gained-s.n*SCORE_SCALE,Math.round(CFG.STAR_PER_GEM*starGems*(1+(combo-1)*CFG.COMBO_STEP)));   // a star pays per gem
-    if(s.star&&starGems>0) pushBanner('STAR BLAST',starGems+(starGems===1?' gem':' gems'),'#E6D8FF');
-    if(!s.star){                                   // a star gets its own cross-shaped blast instead
+    if(s.star&&starGems>0) pushBanner('STAR BURST',starGems+(starGems===1?' gem':' gems'),'#E6D8FF');
+    if(!s.star){                                   // a star gets its own cross-shaped burst instead
       const st=-(reduce?0:CFG.CLEAR_BLINK)*0.16;        // sweeps start with the pop, not the blink
       rows.forEach(r2=>sweeps.push({horiz:true,idx:r2,t:st}));
       cols.forEach(c2=>sweeps.push({horiz:false,idx:c2,t:st}));
@@ -389,14 +389,14 @@ function place(idx,r,c){
       pushBanner('PHEW!','that was close',"#8FF7FF",1.3);
       Sfx.phew(total,beat,combo);                      // (6.5) the clear's own sound plus one stronger accent; it outranks the plain clear raised above
     }
-    if(!swept&&!(s.star&&starGems>0)&&praiseFirst) praise(total,combo);   // a star has its own STAR BLAST banner
+    if(!swept&&!(s.star&&starGems>0)&&praiseFirst) praise(total,combo);   // a star has its own STAR BURST banner
     if(oneV&&!reduce) bannerWait=Math.max(bannerWait,(swept&&!slammedNow)?0:vEnd);   // (A) PHEW, CLEAN SWEEP, a new look... wait their turn
     if(CFG.FX_HERO_STAMP&&!reduce&&!s.star&&(swept||escaped||total>=3||(loud&&total>=2)))   // (C) the piece that made the moment gets a crumb on each gem
       s.cells.forEach(([dr,dc],k)=>stamps.push({x:bx+(c+dc+.5)*cell,y:by+(r+dr+.5)*cell,t:-k*1.5}));
     mascotClear(total,combo,swept,escaped);          // (7.5f) the crumb reacts, sized like the clear
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
   } else if(comboCarries()&&combo>0&&++comboMiss<CFG.COMBO_GRACE){
-    // (round 6) Block Blast's streak: the combo carries over drops that clear nothing, as long as she clears again within COMBO_GRACE drops
+    // (round 6) the study's streak: the combo carries over drops that clear nothing, as long as she clears again within COMBO_GRACE drops
     if(fireSputter()) toyLastLife();               // (stakes) its last life: a tick (draw.js), and the crumb glances at the board (crumbtoy.js)
   } else {
     if(combo>=CFG.BIG_COMBO){ fireSnuff(); mascotAct('flat'); }   // (7.5d) the streak is over: the flames go out in a puff; (7.5f) the crumb gives it a flat stare

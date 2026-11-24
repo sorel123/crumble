@@ -557,7 +557,7 @@ function pickTier(a){
   return 'honest';
 }
 /* ═══ Payoff waves, setups and closers (plan 7.3, Endless and Daily) ═══
-   Block Blast's rhythm: build, build, bam. Four parts, all on top of the 6.1 phases (edge and recovery stay honest):
+   the study's rhythm: build, build, bam. Four parts, all on top of the 6.1 phases (edge and recovery stay honest):
    - The wave clock: every WAVE_MIN..WAVE_MAX trays a payoff tray is due. The trays before it lean on the pieces that
      square an area off (2x3s, 2x2s, 1x3/1x4 bars, BUILD_W). The payoff tray is drawn from big blocks and must offer
      PAYOFF_LINES+ lines; it pays only what the board offers: if no big hand does, the tray is an ordinary build tray
@@ -732,7 +732,7 @@ function noTedium(a0,hand,tier){
 }
 function waveDealt(hand){ bigHist.push(hand.filter(s=>s.n>=4).length); while(bigHist.length>4) bigHist.shift(); }
 /* ═══ Coaster dealing (1.1 G, Endless and Daily) ═══
-   Block Blast deals in stretches: a run of easy trays (big rectangles and bars that fit the board, lines everywhere),
+   the study deals in stretches: a run of easy trays (big rectangles and bars that fit the board, lines everywhere),
    then a lean run (S, Z, T, hooks, small L's; few free clears; the board climbs), then easy again. The tide is that
    stretch state. It does not read the board: EASY lasts TIDE_EASY_MIN..MAX trays, LEAN TIDE_LEAN_MIN..MAX, lengths
    rolled per stretch, a run starts EASY. Nothing on screen shows it. The 6.1 edge, recovery and relief still apply
@@ -837,7 +837,7 @@ function wayOut(lo,hi){
 }
 /* the stretch's hand: a candidate search like pickHandSteps, its pieces drawn from the stretch's weights times how well
    each fits this board (a shape with no spot is never drawn), scored for the stretch, and checked (a)-(c) above. */
-// (round 3) lines that are nearly done: 5 to 7 of 8 cells filled. Block Blast lets these pile up, then deals the keys that finish several at once
+// (round 3) lines that are nearly done: 5 to 7 of 8 cells filled. the study lets these pile up, then deals the keys that finish several at once
 function readyLines(lo,hi){ let n=0; for(let i=0;i<16;i++){ const k=pop32(lo&LINE_MASKS[i*2])+pop32(hi&LINE_MASKS[i*2+1]); if(k>=CFG.BIG_READY_CELLS&&k<N) n++; } return n; }
 function* tideHandSteps(a0,st,withStar){
   const [lo,hi]=packBits(a0), room0=roomNow, fit=fitTable(lo,hi), easy=st==='easy';
@@ -850,7 +850,7 @@ function* tideHandSteps(a0,st,withStar){
   if(easy&&!keys.length) keys=SHAPES.filter((s,i)=>fit[i]&&fit[i].lines>=1&&s.n>=2);
   const multi=keys.filter(s=>fit[SHAPES.indexOf(s)].lines>=2);
   // LEAN's quiet rescue: dry for LEAN_DRY trays, or on a board tighter than LEAN_ROOM, a piece that clears a line comes, the best of them first
-  // (round 6) Block Blast's comeback: on a crowded board every tray brings a piece that exactly finishes a line, in either stretch
+  // (round 6) the study's comeback: on a crowded board every tray brings a piece that exactly finishes a line, in either stretch
   // (LEAN's are its awkward ones); the old rescue still covers a dry LEAN spell
   const cb=bite('BITE_CROWD'), rb=bite('BITE_RESCUE');   // (sky bite) later stops: the comeback keys and the quiet rescue come later
   const crowded=CFG.CROWD_ROOM>0&&(room0<CFG.CROWD_ROOM*(1-cb)||pop32(lo)+pop32(hi)>=CFG.CROWD_GEMS+Math.round(8*cb));
@@ -859,7 +859,7 @@ function* tideHandSteps(a0,st,withStar){
   if(rescue){
     const ranked=[];
     SHAPES.forEach((s,i)=>{ if(!fit[i]||!fit[i].lines||s.n<2) return; let best=-1;
-      for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(!l) continue; const v=crowded?(l*N-s.n)/N+roomBits(_lo,_hi):l+roomBits(_lo,_hi); if(v>best) best=v; }   // (round 6) crowded: the key that takes away the most (cleared cells less its own), like Block Blast's bars into one-cell gaps
+      for(const m of placeMasks(s)){ if((lo&m.lo)||(hi&m.hi)) continue; const l=applyBits(lo,hi,s,m); if(!l) continue; const v=crowded?(l*N-s.n)/N+roomBits(_lo,_hi):l+roomBits(_lo,_hi); if(v>best) best=v; }   // (round 6) crowded: the key that takes away the most (cleared cells less its own), like the study's bars into one-cell gaps
       ranked.push({s,v:best}); });
     ranked.sort((x,y)=>y.v-x.v);
     const pref=!crowded?[]:easy?(CFG.EASY_RECT?ranked.filter(x=>isRect(x.s)):[]):ranked.filter(x=>awkward(x.s));   // (round 6) comeback keys keep the stretch's character: EASY's rectangles and bars, LEAN's awkward ones, when the board has any
@@ -1459,35 +1459,35 @@ function* homeDealSteps(a0){
   hdeal.n++; hdeal.f=kind==='FINISH'?fin+1:0; hdeal.wa=Math.min(99,(hdeal.wa|0)+1);        // FINISH keeps the phase and counts in it
   commitTray(hand,'HOME '+kind+(got&&got.sweep&&!tag?'·CLEAR':'')+tag+' '+hdeal.ph+(lk?'·LK':'')+(hdeal.len?' '+hdeal.n+'/'+hdeal.len:''));   // ·CLEAR: the cut can empty the board
 }
-/* ═══ The Block Blast curve (CFG.DEALER_CURVE; Endless and Daily, in place of the tide and the home dealer) ═══
-   Built from 253 trays read out of Jay's Block Blast recordings (plan-1.1/blockblast-study/trays). Block Blast has no hard
+/* ═══ The study curve (CFG.DEALER_CURVE; Endless and Daily, in place of the tide and the home dealer) ═══
+   Built from 253 trays read out of Jay's study recordings (plan-1.1/dealing-study/trays). the study has no hard
    mode and no small-piece finish mode: it deals big pieces that almost always have a clean place, the share of pieces that
    can finish a line rises with the fill, the board fills in dense lines, and wipes come from big multi-line clears of
    dense boards. The ups and downs come from that loop and from luck. So this dealer has no phases and no rules of the
    always/never kind, only odds:
    - Each slot's class is rolled from CURVE_TABLE by the gems on the board as dealt (buckets 0-12, 13-24, 25-36, 37+):
      CLEAR (a piece with a drop that completes a line now), FLUSH (no clear, but a strict home: bump 0, walls count as
-     filled, no cell sealed in) or FREE (it fits, but every spot sticks out). Block Blast's own "no legal spot" pieces are
+     filled, no cell sealed in) or FREE (it fits, but every spot sticks out). the study's own "no legal spot" pieces are
      not dealt (Jay's rule: a dealt tray never fails); their share goes to FREE, which on a 37+ board are tight ones.
-   - The piece within its class is drawn by Block Blast's shape counts (CURVE_MIX, rotations pooled), the small ones scaled to
+   - The piece within its class is drawn by the study's shape counts (CURVE_MIX, rotations pooled), the small ones scaled to
      CURVE_SMALL's share for the bucket. CLEAR pieces weigh (1 + lines their best drop clears)^CURVE_MULTI: a 3x3 or a bar
-     into a dense board is how Block Blast's 5-8 line comebacks happen. FLUSH pieces weigh e^(CURVE_DENSE x density) of
+     into a dense board is how the study's 5-8 line comebacks happen. FLUSH pieces weigh e^(CURVE_DENSE x density) of
      their best strict home: nearly-done lines (5-7 of 8) it adds, less half the new lines it opens: dense rows and columns.
    - The tray must play out in full (evalHand), its CLEAR and FLUSH pieces must reach their homes in some order
      (homeOrders), and of a few person-like plays (personPlays) at least CURVE_EASE get every piece down. Rolled classes
      that cannot be met together are re-picked (8 times), then re-rolled once and picked without the person check (4 more),
      then relaxed (·RELAX: the home order is dropped too); ensureWay stays the last guard (·GUARD).
-     The person check is not from Block Blast's numbers (they cannot show it): without it the bots lose a game in ~16
+     The person check is not from the study's numbers (they cannot show it): without it the bots lose a game in ~16
      trays to big pieces they place carelessly; with it a tray stays the same mix and classes, picked so a careless
      player usually gets all three down.
    - The luck dial: heat, a slow random walk in -1..1 (it drifts back toward 0), steps every tray and is saved with the run.
      Times CURVE_HEAT it moves share from FLUSH and FREE to CLEAR and raises the multi-line weight; below 0 the reverse,
      and pieces come bigger. A wipe warms it a little (CURVE_WIPE_NUDGE). CURVE_GIVE shifts every bucket's CLEAR share.
    - On an emptied board the tray is dealt by the 0-12 row as usual; with odds CURVE_TWINS it is three of one big piece.
-   No star and no golden hands (Block Blast has none); bonus trays and transformations still come. */
+   No star and no golden hands (the study has none); bonus trays and transformations still come. */
 const curveOn=()=>CFG.DEALER_CURVE&&tideOn();
 const CURVE_FAM={'1x1':[0],'1x2':[1,2],'1x3':[3,4],'1x4':[5,6],'1x5':[7,8],'2x2':[9],'3x3':[10],'L3':[11,12,13,14],'L5':[15,16,17,18],
-  'S4':[19,20,21,22],'T4':[23,24,25,26],'L4':[27,28,29,30,31,32,33,34],'2x3':[35,36]};   // Block Blast's shape names -> SHAPES (its D2/D3 diagonals: none)
+  'S4':[19,20,21,22],'T4':[23,24,25,26],'L4':[27,28,29,30,31,32,33,34],'2x3':[35,36]};   // the study's shape names -> SHAPES (its D2/D3 diagonals: none)
 const CURVE_WIPE_NUDGE=0.15, CURVE_DRIFT=0.93, CURVE_STEP=0.2;   // heat: a wipe's nudge; each tray heat = heat*DRIFT + a roll in +-STEP
 let curve={heat:0};
 const cvStats={rolled:{C:0,F:0,X:0},dealt:{C:0,F:0,X:0},relax:0,guard:0,twins:0,rerolls:0};   // this session only (the bot sim reads them)
@@ -1503,7 +1503,7 @@ function curveMix(b){
 }
 // the board's lines with gems, and nearly-done ones (5-7 of 8)
 function curveDensity(lo,hi){ return readyLines(lo,hi)-0.5*occLines(lo,hi); }
-/* every shape on this board: cls 'C' | 'F' | 'X' (FREE) | 'f' (flush only by sealing a cell in: Block Blast's measure calls it
+/* every shape on this board: cls 'C' | 'F' | 'X' (FREE) | 'f' (flush only by sealing a cell in: the study's measure calls it
    flush, the dealer does not deal it as either) | null (no spot); lines (its best drop), dens (its best strict home's density
    gain), spots (legal spots) */
 function curveTable(lo,hi){
@@ -1604,7 +1604,7 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
     if(withStar) hand[(rnd()*3)|0]=STAR;      // graded with the star in it, so the score is honest
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     let sc;
-    if(tier==='edge'){                                // Block Blast-honest: no piece is dead on arrival; the order and the space are hers
+    if(tier==='edge'){                                // honest: no piece is dead on arrival; the order and the space are hers
       const fit=hand.filter(s=>fitsBits(blo,bhi,s)).length;
       sc=fit===3?(tideOn()&&!ev.ok?-50:10):-200+fit;                 // (1.1 G) under the tide an edge tray must also play out in full (Jay: the deal never fails)
     }
@@ -1697,7 +1697,7 @@ function* dealSteps(){
   starCool=Math.max(0,starCool-1);
 
   waveTick();                                           // (7.3) setups age, the dry spell and the wave clock count
-  if(curveOn()){ yield* curveDealSteps(a0); return; } // the Block Blast curve (DEALER_CURVE) deals Endless and Daily instead of the tide below
+  if(curveOn()){ yield* curveDealSteps(a0); return; } // the study curve (DEALER_CURVE) deals Endless and Daily instead of the tide below
   if(hdOn()){ yield* homeDealSteps(a0); return; }     // the home dealer (DEALER_HOME) deals Endless and Daily instead of the tide below
   const freeOfSpecials=specialsOk&&!goldenNext&&!golden&&trayNo>specialEnd+1;   // (7.3) a closer never shares a tray with a star or golden hand, nor follows a special (bonus trays and looks only change points and colours, so they allow one)
   const tideNow=tideOn()&&tier!=='edge'&&tier!=='recovery'?tideStep():null;   // (1.1 G) 'easy' | 'lean' (null: edge, recovery, or no tide)
@@ -1707,7 +1707,7 @@ function* dealSteps(){
 
   // a star is dealt on ordinary trays only; a golden or sweep tray leaves a guaranteed one waiting
   // (4.5b) only when a cross is worth it, outside the specialOk() rules (trays 1-5, one live, never two in a row) and the cooldown
-  // (round 6) the chain: right after a board clear Block Blast deals big matching pieces (three 1x5s, three 2x2s, 2x3s) that
+  // (round 6) the chain: right after a board clear the study deals big matching pieces (three 1x5s, three 2x2s, 2x3s) that
   // rebuild whole rows, so the next clear comes quickly; the sweep run takes it from there
   if(tideOn()&&CFG.CHAIN_BUILD>0&&!wt&&trayNo>1&&!countFlat(a0)&&freeOfSpecials&&rnd()<CFG.CHAIN_BUILD*(1-bite('BITE_RUN'))){   // (an earned closer or chase keeps its tray)
     const pool=CFG.EASY_RECT&&tideNow==='easy'?OPEN_BUILD.filter(isRect):OPEN_BUILD;
@@ -1798,7 +1798,7 @@ function* dealSteps(){
    instead of emptying the board (no clean-sweep bonus on move one). About 1 in 8 keep the board bare, so a
    sweep is still possible sometimes, never always. */
 let openingKind='busy';   // plan 7.2: which kind of opening the last game was dealt (light, gift or busy)
-// (round 4) Block Blast's opening: an empty board and three of one piece, which placed together make one solid block to build off;
+// (round 4) the study's opening: an empty board and three of one piece, which placed together make one solid block to build off;
 // the EASY trays after it bring the pieces that sit flush against it and the ones that finish its lines
 const OPEN_BUILD=SHAPES.filter(s=>!s.star&&(s.n===s.rows*s.cols&&s.n>=4&&s.n<=6||isBigL(s)));
 function seedOpening(force){                               // force: 'light' after the guided first game (1.1 D)

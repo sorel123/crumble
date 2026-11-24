@@ -557,7 +557,7 @@ function stepConfetti(dt){
    star (more pop, a pale dust puff and a few specks per gem), 3 combo BIG_COMBO+ (more kick away from the piece),
    4 clean sweep (the most). Every quarter counts against the particle budget (fxLive): when it is short a gem breaks
    in two halves, or falls whole, or (budget spent) just goes. */
-// (speed) Block Blast's line is gone in ~100 ms; ours lingered 570 ms (one line) to 1 s, so the board looked busy after
+// (speed) the study's line is gone in ~100 ms; ours lingered 570 ms (one line) to 1 s, so the board looked busy after
 // every move. The everyday clear (tiers 1-2) now cracks in 2 frames and its pieces are gone in ~270-400 ms; the big
 // moments (tier 3 combo, tier 4 sweep) keep their long fall. Was CRACK 4, LIFE [0,34,56,..], FADE [0,12,10,..].
 const CRUMBLE_CRACK=2, RUBBLE_G=0.6, RUBBLE_POP=[0,.7,1.3,1.7,2.1], RUBBLE_KICK=[0,.3,.9,1.6,2], RUBBLE_LIFE=[0,16,24,60,66], RUBBLE_FADE=[0,8,9,10,10];
@@ -880,7 +880,7 @@ function fxBusy(){
   return !!(drag||ret||jw||flip||goldenCele||borderFlash||shownScore!==score||hitWait>0||shake>.2||punchT>.01||sweepFxT>0||lightningT>.01
     ||shatters.length||chunks.length||shards.length||lineFlashes.length||waves.length||pops.length||tags.length||bands.length
     ||slams.length||bursts.length||praises.length||banners.length||stamps.length||sweepShow||goldRain.length||orbs.length||rings.length||dust.length
-    ||sweeps.length||blasts.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||(fire.k>0&&!fire.out&&Math.abs(fire.k-fireTarget())>0.01)||guideHintOn()||labFx()||trayPopping()||toyBusy()||ava.live||dareBusy()||cookieBusy()||performance.now()<quietIn||performance.now()<reportIn);   // (report) the grade's stamp thumping in   // (quiet) the meter sliding in
+    ||sweeps.length||starBeams.length||rubble.length||confetti.length||fire.embers.length||fire.smoke.length||(fire.k>0&&!fire.out&&Math.abs(fire.k-fireTarget())>0.01)||guideHintOn()||labFx()||trayPopping()||toyBusy()||ava.live||dareBusy()||cookieBusy()||performance.now()<quietIn||performance.now()<reportIn);   // (report) the grade's stamp thumping in   // (quiet) the meter sliding in
 }
 function frameGap(now){                                // ms between drawn frames; 0 = every frame
   if(!CFG.FRAME_PACING) return 0;
@@ -1114,9 +1114,9 @@ function frame(now){
     }
   }
 
-  for(let i=blasts.length-1;i>=0;i--){                 // star blast: prismatic beams out along the row and column
-    const b=blasts[i]; b.t+=dt*0.06;                   // ~17 frames of beams, after the charge (b.t starts below 0)
-    if(b.t>=1){ blasts.splice(i,1); continue; }
+  for(let i=starBeams.length-1;i>=0;i--){                 // star burst: prismatic beams out along the row and column
+    const b=starBeams[i]; b.t+=dt*0.06;                   // ~17 frames of beams, after the charge (b.t starts below 0)
+    if(b.t>=1){ starBeams.splice(i,1); continue; }
     const cx=bx+(b.c+.5)*cell, cy=by+(b.r+.5)*cell;
     if(b.t<0){                                         // the charge: a ring pulls in to the star and it swells white
       const k=1+b.t/(CFG.STAR_CHARGE*0.06);            // 0 -> 1 over the charge
@@ -1149,7 +1149,7 @@ function frame(now){
   }
 
   /* line clear, in frames. Optional blink, then either:
-     squash — each gem collapses to a white-hot sliver along its line and is gone in ~6 frames (Block Blast's beat), or
+     squash — each gem collapses to a white-hot sliver along its line and is gone in ~6 frames (the study's beat), or
      burst  — each gem pops and becomes a whole block flung away from where the piece landed */
   const crumble=CFG.CLEAR_STYLE==='crumble'&&!reduce;     // (7.5) reduced motion: crumble falls back to the squash
   const squash=CFG.CLEAR_STYLE==='squash'||(CFG.CLEAR_STYLE==='crumble'&&reduce), POP=crumble?CRUMBLE_CRACK:squash?6:7;
