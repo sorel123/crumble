@@ -1,7 +1,7 @@
 // Crumble — Crumb's closet: hats (and glasses, and a cape) for the crumb, bought with dare cookies or earned by feats.
 // Plain script, loaded in order by index.html (after goals.js); shares globals with the other js/ files.
 /* The dares (js/dares.js) pay cookies into a jar; this is what they buy. Three slots, one item worn in each: head, face,
-   neck. Most items have a cookie price (cheap first, so her first cookies buy something); some cannot be bought and come
+   neck. Most items have a cookie price (cheap first, so the player's first cookies buy something); some cannot be bought and come
    from a feat the game already records (a 7-day dare streak, the Space dare, 10 board sweeps...). Nothing is ever for sale
    for money.
    Drawing: each item is one or two small SVG groups put into the crumb's own SVG (closetDress): `back` goes in first (under
@@ -9,12 +9,12 @@
    crumb has: its moods, blink and breath, the toy's spin, the cannonball's swell, the faint. One function dresses every
    crumb on screen (the board mascot, the menu's crumb, the closet's big crumb and the tiles' little ones).
    Spending: cookies in `crumble.dares` merge across devices by max, so they are never lowered. The closet keeps its own
-   `spent`, and she can spend `cookies - spent`.
+   `spent`, and the player can spend `cookies - spent`.
    Saved: `crumble.closet` = {v:1, own:[ids bought], on:{head,face,neck}, spent, ot: when the outfit last changed (ms; for
-   the iCloud merge), seen:[ids she has seen on offer: the dot]}. Feat items are never stored as owned: they are worn while
+   the iCloud merge), seen:[ids the player has seen on offer: the dot]}. Feat items are never stored as owned: they are worn while
    the feat holds, which (stats only grow) is for good. Validated on load; unknown ids are dropped.
-   The dot: on the Goals tiles and the closet button while something is newly within reach (an item she can now afford, or
-   a feat item just earned) that she has not seen in the closet yet. A feat earned mid-run gets one quiet line from the crumb. */
+   The dot: on the Goals tiles and the closet button while something is newly within reach (an item the player can now afford, or
+   a feat item just earned) that the player has not seen in the closet yet. A feat earned mid-run gets one quiet line from the crumb. */
 const CLOSET_STORE='crumble.closet';
 const CLOSET_SLOTS=['head','face','neck'];
 const CL_OL='stroke="#3B2414" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"';   // the items' outline: a touch darker than the crumb's
@@ -96,12 +96,12 @@ const closetDef=id=>CLOSET.find(d=>d.id===id)||null;
 const closet={own:new Set(),on:{head:'',face:'',neck:''},spent:0,ot:0,seen:new Set(),
   el:null,big:null,from:'',armed:'',met:null,checkAt:0,tell:false,actUntil:0,sayUntil:0,t:0};
 
-/* ── what she has ── */
+/* ── what the player has ── */
 const closetMet=d=>!!d.feat&&d.feat.val()>=d.feat.need;          // a feat item: earned (stats only grow, so for good)
 const closetOwns=id=>{ const d=closetDef(id); return !!d&&(d.feat?closetMet(d):closet.own.has(id)); };
 const closetSpendable=()=>Math.max(0,dare.st.cookies-closet.spent);
 const closetCanBuy=id=>{ const d=closetDef(id); return !!d&&!d.feat&&!closet.own.has(id)&&closetSpendable()>=d.price; };
-// within reach: what the dot is about (an item she can buy now, or a feat item she has earned) and she has not seen yet
+// within reach: what the dot is about (an item the player can buy now, or a feat item the player has earned) and the player has not seen yet
 const closetNew=()=>CLOSET.filter(d=>(d.feat?closetMet(d):closetCanBuy(d.id))&&!closet.seen.has(d.id)).map(d=>d.id);
 
 function loadCloset(){                                   // main.js, after the stats, Adventure and the dare jar have loaded
@@ -229,7 +229,7 @@ function openCloset(from){                               // from: 'goals' (the G
   el('closetSay').hidden=true; closet.big.className='crumbFig idle'+(reduce?' rm':'');
   el('closetCard').hidden=false; el('closetList').scrollTop=0; closetSyncDot();
 }
-function closeCloset(){                                  // back to where she came from: the card under it is still up
+function closeCloset(){                                  // back to where the player came from: the card under it is still up
   el('closetCard').hidden=true; closet.armed='';
   if(!el('goalsCard').hidden) renderGoals();
   const g=goalsSub(); el('menuGoalsSub').textContent=g; el('startGoalsSub').textContent=g;

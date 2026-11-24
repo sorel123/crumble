@@ -30,7 +30,7 @@ function loadSkinSave(){
       && (HOME_WORLDS.some(w=>w.id===o.homeWorld)||TRANSFORMS[o.homeWorld])) CFG.HOME_WORLD=o.homeWorld;
     if(THEMES.some(t=>t.id===o.theme)) CFG.THEME=o.theme;
     if(o.lookV!==2){ CFG.THEME='classic'; CFG.STYLE='jewel'; }   // 2026-10-30: everyone gets the new look once; Settings still changes it
-    if(o.sndV!==3) CFG.SND_SET='original';                         // 2026-11-12 (Jay): Original is the default again, for everyone once; Settings still changes it
+    if(o.sndV!==3) CFG.SND_SET='original';                         // 2026-11-12: Original is the default again, for everyone once; Settings still changes it
     else if(typeof o.sndSet==='string' && SOUND_SETS[o.sndSet]) CFG.SND_SET=o.sndSet;
     if(typeof o.muted==='boolean') setMuted(o.muted,false);
     if(o.musicPick==='shuffle'||MUSIC_TRACKS.some(t=>t.id===o.musicPick)) CFG.MUSIC_PICK=o.musicPick;   // 7.4
@@ -47,9 +47,9 @@ function loadSkinSave(){
     if(typeof o.dares==='boolean') CFG.DARES=o.dares;                 // (dares) Crumb's dares
     if(typeof o.tilt==='boolean') CFG.TILT=o.tilt;                    // (toy) lean the phone and it rolls
     if(typeof o.av2==='boolean') CFG.AVALANCHE=o.av2;                // (Avalanche) the board falls on a streak (`ava` was the off-by-default trial: ignored, so everyone gets it once)
-    if(typeof o.gold==='boolean') CFG.SPECIALS.golden=o.gold;        // (Jay) the golden hand, on a player switch while he decides whether to keep it
+    if(typeof o.gold==='boolean') CFG.SPECIALS.golden=o.gold;        // the golden hand, on a player switch
     if(typeof o.tl==='boolean') CFG.FX_TIMELAPSE=o.tl;                // the game-over timelapse (7.5g)
-    if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // she chose silence before music existed: keep it                // 6.8: music is on for everyone until she turns it off
+    if(typeof o.music==='boolean') CFG.MUSIC=o.music; else if(o.muted===true) CFG.MUSIC=false;   // the player chose silence before music existed: keep it                // 6.8: music is on for everyone until the player turns it off
     syncSoundBtns();
   }catch(e){}
 }
@@ -69,7 +69,7 @@ function setMotif(id){ CFG.MOTIF=id; buildCache(); renderMotifs(); renderLooks()
 function setWorld(id){
   if(!isWorldUnlocked(id)) return;
   CFG.HOME_WORLD=id;
-  syncHomeSky();                                    // (with the journey sky on, her world shows in Adventure and when it is off)
+  syncHomeSky();                                    // (with the journey sky on, the player's world shows in Adventure and when it is off)
   renderWorlds(); renderLooks(); saveSkinSave();
 }
 function renderSkins(){
@@ -119,7 +119,7 @@ function buildSkinsUI(){
    panel still mixes them one by one. To add one (e.g. a 4.5d transformation reward), append an entry: `need()` returns
    a short label while it is locked ('' / absent = open), and its tile shows that label and cannot be picked. The
    chosen look is not stored on its own: it is the four saved settings, so `currentLook()` finds the preset they match
-   (none = she mixed her own, no tile lit). */
+   (none = the player mixed the player's own, no tile lit). */
 const LOOKS=[
   {id:'classic', name:'Classic',      theme:'classic',  world:'night',   style:'jewel',  motif:'none'},   // (rebrand) the default: gems, as on the icon (it was Blocks until 2026-11; a saved Blocks pick stays, with no tile lit)
   {id:'night',   name:'Night Jewels', theme:'night',    world:'ocean',   style:'jewel',  motif:'none'},
@@ -177,7 +177,7 @@ function renderLooks(){
     if(lock){ s=document.createElement('span'); s.className='lock'; s.textContent='🔒 '+lock; b.append(s); }
   });
 }
-/* ═══════ the player's Settings: look + sound, saved as her defaults.
+/* ═══════ the player's Settings: look + sound, saved as the player's defaults.
    (The admin panel — tuning, testing — opens from its footer in dev mode.) */
 const SOUND_STYLES=[['original','Original'],['strings','Strings'],['steel','Steel drum'],['bells','Bells']];
 function renderThemes(){
@@ -238,8 +238,8 @@ function openSettings(){
 el('setBtn').onclick=e=>{ e.stopPropagation(); openSettings(); };
 el('startSettings').onclick=e=>{ e.stopPropagation(); openSettings(); };
 el('setDone').onclick=e=>{ e.stopPropagation(); el('setPanel').hidden=true; if(!overlayOpen()) paused=false; };   // opened over the mode menu, the game still waits
-// The hesitation log (plan 3.4) for Jay on her phone, where the home-screen app has no URL bar for ?dev: five quick
-// taps on the note at the bottom of Settings turn it into the log's medians. Nothing changes for her otherwise.
+// The hesitation log (plan 3.4) for the developer on the player's phone, where the home-screen app has no URL bar for ?dev: five quick
+// taps on the note at the bottom of Settings turn it into the log's medians. Nothing changes for the player's otherwise.
 let hesTaps=[];
 el('setNote').onclick=e=>{
   e.stopPropagation();

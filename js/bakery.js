@@ -1,7 +1,7 @@
 // Crumble — Crumb's Bakery (Lab): drop treats into a jar; two the same that touch bake into the next bigger one.
 // Plain script, loaded in order by index.html (after rescue.js); shares globals with the other js/ files. Everything here is
 // prefixed bk / BK_.
-/* The game in one paragraph: Crumb holds a treat over a glass jar and follows her finger; let go and he drops it. Treats are
+/* The game in one paragraph: Crumb holds a treat over a glass jar and follows the player's finger; let go and he drops it. Treats are
    circles in a little physics world of our own (no library): gravity, a low bounce, friction that makes them roll, and a
    solver that lets a pile settle and sleep. Two treats of the same tier that touch become the next tier where they met
    (it grows in over BK_GROW_MS, so its neighbours are pushed, not launched). Merges within BK_CHAIN_MS of each other are a
@@ -35,7 +35,7 @@ const bkR=k=>BK_RAD[k-1]*BK_JW;                             // a tier's full rad
 let bkSeed=1, bkDealSeed=1;
 const bkRnd=()=>(bkSeed=(bkSeed*16807)%2147483647)/2147483647;
 const bkDealRnd=()=>(bkDealSeed=(bkDealSeed*16807)%2147483647)/2147483647;
-let bkVisSeed=4242;                                         // looks only (sparkles, crumbs flying, blinks): never changes what she gets
+let bkVisSeed=4242;                                         // looks only (sparkles, crumbs flying, blinks): never changes what the player gets
 const bkVisRnd=()=>(bkVisSeed=(bkVisSeed*16807)%2147483647)/2147483647;
 function bkRoll(){                                          // the next treat: tiers 1..5 by CFG.BK_WEIGHTS
   const w=CFG.BK_WEIGHTS, sum=w.reduce((a,b)=>a+b,0);
@@ -51,7 +51,7 @@ const bk={
   score:0, held:1, next:1, ready:true, readyAt:0, aim:BK_JW/2, queued:false,
   chain:0, lastMerge:-9, big:1, cr:0, shakes:1, shakeNext:0,   // chain length, sim time of the last merge, biggest tier this run, crumbles this run, shake charges, points for the next charge
   overT:0, danger:false, rain:[], gx:0, warm:new Map(), warm2:new Map(), seed0:1,
-  dare:null,                                                // a friend's dare: {seed, beat, tier, passed} (never saved over her own jar)
+  dare:null,                                                // a friend's dare: {seed, beat, tier, passed} (never saved over the player's own jar)
 };
 function bkNew(seed,raw){                                   // a fresh jar (seed pins the dice: tests; raw: seed is the dice state itself, a link's)
   bkDealSeed=bk.seed0=raw&&isInt(seed,1,2147483646)?seed:seed>0?Math.floor(seed)%2147483646+1:(Date.now()%2147483646)+1;
@@ -262,7 +262,7 @@ function bkLineCheck(dt){
   if(bk.st==='play'&&bk.overT>=CFG.BK_LINE_MS/1000) bkGameOver();
 }
 
-/* ── her drops ── */
+/* ── the player's drops ── */
 function bkDropX(x){ const r=bkR(bk.held); return Math.max(r,Math.min(BK_JW-r,x)); }
 function bkDrop(x){                                         // Crumb lets go of the treat he holds, at x (units)
   if(bk.st!=='play'||!bk.ready) return null;
@@ -323,7 +323,7 @@ function bkSnap(){
     b:bk.bodies.filter(b=>!b.dead).map(b=>[b.k,Math.round(b.x*10)/10,Math.round(Math.max(b.y,-200)*10)/10,Math.round(b.a*100)/100])};
 }
 function bkSaveRun(){
-  if(bk.st!=='play'||bk.dare) return;                       // a dare is never saved: her own jar keeps its save
+  if(bk.st!=='play'||bk.dare) return;                       // a dare is never saved: the player's own jar keeps its save
   try{ localStorage.setItem(BK_RUN,JSON.stringify(bkSnap())); }catch(e){}
 }
 function bkClearRun(){ try{ localStorage.removeItem(BK_RUN); }catch(e){} }
@@ -719,7 +719,7 @@ function bkDrawNext(g){                                      // "next": a small 
   g.font='700 8.5px '+BK_FONT; g.textAlign='center'; g.fillStyle='rgba(255,255,255,.85)'; g.fillText('NEXT',x,y-R-4);
 }
 const BK_FONT='Fredoka,"Trebuchet MS",Verdana,system-ui,sans-serif';
-// the cookbook: every treat in a row, the ones she has never baked dark with a "?"
+// the cookbook: every treat in a row, the ones the player has never baked dark with a "?"
 function bkDrawStrip(g,now){
   const {slot,stripX,stripY,stripH}=bkG, seen=lab.bakery.seen, gap=3, w=slot*11+gap*10;
   g.fillStyle='rgba(20,10,40,.45)'; g.strokeStyle='rgba(255,255,255,.14)'; g.lineWidth=1.5;
@@ -754,7 +754,7 @@ function bkDomStep(now){
     bkDom.key=key;
     const m=el('bkBeat'); m.hidden=!D;                         // a dare: "to beat N" by the score, then ticked once passed
     if(D){ m.textContent=D.passed?'✓ beat '+D.beat.toLocaleString('en-US'):'to beat '+D.beat.toLocaleString('en-US'); m.classList.toggle('won',D.passed); }
-    const h=el('bkHint'); h.hidden=!hint;                        // the first-play hint, under Crumb, until her first touch
+    const h=el('bkHint'); h.hidden=!hint;                        // the first-play hint, under Crumb, until the player's first touch
     if(hint){ h.style.top=Math.round(bkSY(BK_LINE)+12)+'px'; h.classList.toggle('rm',reduce); }
     el('bkBest').textContent=best.toLocaleString('en-US'); el('bkBestLbl').textContent=nb?'New best':'Best'; el('bkBestLbl').classList.toggle('nb',nb);
     [...el('bkPips').children].forEach((p,i)=>p.classList.toggle('on',i<bk.shakes));
@@ -817,7 +817,7 @@ function bkTilt(dt){                                         // gravity leans wi
   if(Math.abs(gx-bkGxAt)>.02){ bkGxAt=gx; for(const b of bk.bodies) bkWake(b); }   // a new lean wakes the pile
 }
 
-/* ── her finger: Crumb follows it; letting go drops the treat (a tap moves and drops) ── */
+/* ── the player's finger: Crumb follows it; letting go drops the treat (a tap moves and drops) ── */
 const bkCanAim=()=>bk.open&&!bk.paused&&bk.st==='play';
 function bkAimAt(cx){ bk.aim=bkDropX((cx-bkG.jx)/bkG.S); }
 bkCv.addEventListener('pointerdown',e=>{
@@ -848,7 +848,7 @@ function bkOpen(){
   if(!bk.live||bk.st!=='play'){ if(!bkLoadRun()) bkNew(); bk.live=true; }
   bkLayout();
   const c=el('bkCrumb'); if(!c.firstChild) c.innerHTML='<div class="mb">'+MASCOT_SVG+'</div>';
-  closetDress(c.querySelector('svg'),{...closet.on,head:closet.on.head||'chef'});   // the Chef's hat here if she has no hat on (her pick is not changed)
+  closetDress(c.querySelector('svg'),{...closet.on,head:closet.on.head||'chef'});   // the Chef's hat here if the player has no hat on (the player's pick is not changed)
   bkDom.shown=bk.score; bkDom.wr=-1; bkDom.key=''; bkDom.cKey='';
   if(typeof bkSayOpen==='function') bkSayOpen();
   bkKick();
@@ -858,7 +858,7 @@ function bkClose(){
   if(bk.st==='play') bkSaveRun();
   bk.open=false; bk.paused=false; bk.touch=null; bkStop();
   el('bakery').hidden=true; el('bkDare').hidden=true;
-  if(bk.st!=='play'||bk.dare){ bk.live=false; bk.dare=null; }   // a finished jar, or a dare she walked away from: next time it is her own jar
+  if(bk.st!=='play'||bk.dare){ bk.live=false; bk.dare=null; }   // a finished jar, or a dare the player walked away from: next time it is the player's own jar
   if(bk.mainOff){ bk.mainOff=false; requestAnimationFrame(frame); }   // the game's own loop again
 }
 function bkPause(){
@@ -866,7 +866,7 @@ function bkPause(){
   bk.paused=true; bk.touch=null; bk.queued=false; bkSaveRun();
   el('bkPauseScore').textContent=bk.score.toLocaleString('en-US'); bkRestartReset();
   el('bkPauseSub').textContent=bk.dare?"A friend's dare: to beat "+bk.dare.beat.toLocaleString('en-US')+'. Leaving ends it.':'Your jar is saved.';
-  const b=lab.bakery, ps=el('bkPauseShare'); ps.hidden=!(b.best>0&&b.bs&&b.bb);   // Share my best: her best run's seed, score and treat
+  const b=lab.bakery, ps=el('bkPauseShare'); ps.hidden=!(b.best>0&&b.bs&&b.bb);   // Share my best: the player's best run's seed, score and treat
   ps.textContent='Share my best · '+b.best.toLocaleString('en-US'); bkShareReset(ps);
   el('bkPause').hidden=false; bkStop(); bkDraw(performance.now()); bkDomStep(performance.now());
 }
@@ -880,7 +880,7 @@ function bkAgain(){                                         // a fresh jar; on a
 function bkToLab(){ bkClose(); openLab(); }
 function bkToHome(){ bkClose(); bkTiles(); openMenu(); }
 function bkBadge(){ for(const id of ['startLab','menuLab']) el(id).classList.toggle('bkNewBadge',!lab.bakery.op);  bkTiles(); }
-function bkTiles(){                                         // (rebrand) the Bakery's own tile on both home cards: three treats, and her best once she has one
+function bkTiles(){                                         // (rebrand) the Bakery's own tile on both home cards: three treats, and the player's best once the player has one
   const b=lab.bakery, sub=b.best||b.games?bkProg():'Drop treats, bake bigger ones';
   for(const p of ['start','menu']){
     const t=el(p+'Bakery'); el(p+'BakerySub').textContent=sub;
@@ -969,7 +969,7 @@ function bkFxCharge(){
   const b=el('bkShake'); b.classList.remove('got'); void b.offsetWidth; if(!reduce) b.classList.add('got');
   toyPlay(0,t=>{ bell(t,{f:note(9),dur:.5,vol:.05}); bell(t+.07,{f:note(11),dur:.6,vol:.05}); });
 }
-function bkFxBeat(){                                        // a dare: she just passed her friend's score
+function bkFxBeat(){                                        // a dare: the player just passed the player's friend's score
   const m=el('bkBeat'); m.classList.remove('pop'); void m.offsetWidth; if(!reduce) m.classList.add('pop');
   toyPlay(.05,t=>{ [0,2,4,7].forEach((s,i)=>bell(t+i*.08,{f:note(9+s),dur:.7,vol:.07,wet:.3})); });   // a little fanfare
   bkHap('achieve'); bkSay('bkBeat',3); bkCrumbAct('hop',950); bkDom.key='';
@@ -1096,7 +1096,7 @@ function bkShowCard(){
   el('bkBigName').textContent=BK_NAMES[bk.big-1];
   bkTreatIcon(el('bkBigCv'),bk.big);
   const cr=el('bkOverCr'); cr.hidden=!bk.cr; cr.textContent=bk.cr?'💥 '+(bk.cr===1?'One CRUMBLE!':bk.cr+' CRUMBLES!'):'';
-  // a dare: how it went against the friend, and "Send it back" (her score, the same seed) comes first
+  // a dare: how it went against the friend, and "Send it back" (the player's score, the same seed) comes first
   const dl=el('bkOverDare'), diff=D?bk.score-D.beat:0;
   dl.hidden=!D; dl.classList.toggle('won',diff>0);
   dl.textContent=!D?'':diff>0?'You beat your friend by '+diff.toLocaleString('en-US')+'!':diff<0?(-diff).toLocaleString('en-US')+' short. So close.':'A tie! So close.';
@@ -1117,8 +1117,8 @@ const bkArticle=n=>/^[AEIOU]/.test(n)?'an':'a';
 
 /* ═══════ the friend link: a dare ═══════
    ?bk=SEED-SCORE-TIER-CHECK on the site the game already shares (SHARE_URL): the run's dice seed (bk.seed0: the deal stream's
-   state at the start, so the same treats come in the same order), her score in tens, her biggest treat, all base 36, and a
-   3-character check of the three. No name, nothing about her. Read once at launch (bkReadLink, main.js) and taken out of the
+   state at the start, so the same treats come in the same order), the player's score in tens, the player's biggest treat, all base 36, and a
+   3-character check of the three. No name, nothing about the player. Read once at launch (bkReadLink, main.js) and taken out of the
    address bar; a link that does not parse, or whose check does not match, is ignored and the site opens as usual. */
 const BK_LINK_KEY='bk';
 function bkLinkCheck(seed,sc,k){ let h=7; for(const ch of seed+'|'+sc+'|'+k+'|bakery') h=(h*131+ch.charCodeAt(0))%46656; return h.toString(36).padStart(3,'0'); }
@@ -1131,7 +1131,7 @@ function bkLinkParse(v){                                    // {seed, beat, tier
   if(!isInt(seed,1,2147483646)||!isInt(beat,0,1e9)||!isInt(tier,1,BK_N)||bkLinkCheck(seed,beat,tier)!==ck) return null;
   return {seed,beat,tier};
 }
-function bkReadLink(){                                      // the dare she arrived with, if any; the address bar is tidied either way
+function bkReadLink(){                                      // the dare the player arrived with, if any; the address bar is tidied either way
   try{
     const q=new URLSearchParams(location.search); if(!q.has(BK_LINK_KEY)) return null;
     const d=bkLinkParse(q.get(BK_LINK_KEY));
@@ -1156,7 +1156,7 @@ function bkShareCard(sc,k){                                 // the picture: the 
   return cv;
 }
 // the game's share path: the share sheet (the app's web view, Safari) with the picture and the words; else the words alone; else the
-// link is copied ('copied', the button says "Link copied"). 'cancelled' when she closes the sheet.
+// link is copied ('copied', the button says "Link copied"). 'cancelled' when the player closes the sheet.
 async function bkShare(seed,sc,k){
   const text=bkShareText(seed,sc,k);
   if(navigator.share){
@@ -1182,7 +1182,7 @@ el('bkSendBack').onclick=e=>{ e.stopPropagation(); if(bk.dare) bkShareBtn(e.curr
 el('bkPauseShare').onclick=e=>{ e.stopPropagation(); const b=lab.bakery; if(b.best>0&&b.bs&&b.bb) bkShareBtn(e.currentTarget,b.bs,b.best,b.bb); };
 
 /* ── the dare card: over the Bakery, before anything else (no menu, no guided first game: those wait for the block game) ── */
-function bkPeekRun(){                                      // her saved jar, if there is one worth asking about (an empty jar is not)
+function bkPeekRun(){                                      // the player's saved jar, if there is one worth asking about (an empty jar is not)
   try{ const o=JSON.parse(localStorage.getItem(BK_RUN)||'null'); return o&&o.v===1&&isInt(o.sc,0,1e9)&&Array.isArray(o.b)&&(o.b.length||o.sc)?o:null; }catch(e){ return null; }
 }
 function bkOpenDare(d){
@@ -1199,7 +1199,7 @@ function bkOpenDare(d){
   bkDraw(performance.now()); bkDomStep(performance.now());
 }
 function bkDareGo(){ el('bkDare').hidden=true; bk.paused=false; bkDom.key=''; bkSayOpen(); bkKick(); }
-function bkDareMine(){                                      // back to her own jar: the dare is dropped
+function bkDareMine(){                                      // back to the player's own jar: the dare is dropped
   el('bkDare').hidden=true; bk.dare=null;
   if(!bkLoadRun()) bkNew();
   bk.paused=false; bkDom.shown=bk.score; bkDom.wr=-1; bkDom.key=''; bkSayOpen(); bkKick();

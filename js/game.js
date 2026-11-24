@@ -79,7 +79,7 @@ const specialOk=()=>trayNo>=CFG.SPECIAL_FROM_TRAY && !specialLive() && trayNo>sp
    Clears fill a small meter (the chip under the board): each clear adds its lines, plus a little for a combo. When it is
    full, the next BONUS_TRAYS trays pay x BONUS_MULT, automatically: the sky shifts to violet, the board's rim pulses,
    a banner says "BONUS x2 · NEXT 3 TRAYS" and the chip counts the trays down. Nothing to tap and nothing to lose: dealing
-   is the ordinary dealing and her board and tiles are untouched. When the last tray is played a small "+N bonus" tag
+   is the ordinary dealing and the player's board and tiles are untouched. When the last tray is played a small "+N bonus" tag
    shows how much the doubling added. The meter holds while a bonus runs (it does not stack) and waits, full, if another
    special is live at the deal. Golden hand (x3) stays the only other multiplier a tray can carry. */
 let bonusMeter=0, specialEnd=-99, bonusTag=null;   // meter (saved); tray a special last ended in; {txt} the "+N bonus" tag after a bonus
@@ -208,13 +208,13 @@ function sweepPayoff(cleared,lead,quiet){            // returns the bonus; the c
   }
   return bonus;
 }
-function bestCheck(quiet){                           // after the points are added: the run just became her best, celebrate it now, not at game over
+function bestCheck(quiet){                           // after the points are added: the run just became the player's best, celebrate it now, not at game over
   if(bestBeaten || mode!=='endless' || !(best>0) || score<=best) return;
   bestBeaten=true;
   pushBanner('NEW BEST!','',"#8FF7FF");
   if(!reduce){ spawnConfetti(); for(let k=0;k<3;k++) waves.push({x:W/2,y:by+B/2,t:-k*0.15}); }
   glowT=Math.max(glowT,1.4); if(quiet) toyFanfare(); else Sfx.fanfare();
-  if(CFG.FX_CHASE && chaseBest>=CFG.CHASE_SKY_MIN) journeySweep();   // (7.5e) beating her best takes the sky a stage further, with the bright wipe
+  if(CFG.FX_CHASE && chaseBest>=CFG.CHASE_SKY_MIN) journeySweep();   // (7.5e) beating the player's best takes the sky a stage further, with the bright wipe
 }
 function place(idx,r,c){
   if(mode==='lab') labBefore(idx,r,c);             // (Lab) the board before this drop, for Undo (lab.js)
@@ -396,7 +396,7 @@ function place(idx,r,c){
     mascotClear(total,combo,swept,escaped);          // (7.5f) the crumb reacts, sized like the clear
     if(!paced()) tension=Math.max(0,tension-CFG.TENSION_DOWN);
   } else if(comboCarries()&&combo>0&&++comboMiss<CFG.COMBO_GRACE){
-    // (round 6) the study's streak: the combo carries over drops that clear nothing, as long as she clears again within COMBO_GRACE drops
+    // (round 6) the study's streak: the combo carries over drops that clear nothing, as long as the player clears again within COMBO_GRACE drops
     if(fireSputter()) toyLastLife();               // (stakes) its last life: a tick (draw.js), and the crumb glances at the board (crumbtoy.js)
   } else {
     if(combo>=CFG.BIG_COMBO){ fireSnuff(); mascotAct('flat'); }   // (7.5d) the streak is over: the flames go out in a puff; (7.5f) the crumb gives it a flat stare
@@ -530,7 +530,7 @@ function startDrag(id,x,y,pt){
   drag.tick=1;                                        // from here on, a new landing cell ticks
   Sfx.pickup(); if(tray[i]&&tray[i].s.star) Sfx.starPick();
 }
-function stepPending(){                               // called each frame: the deal finished and her finger is still down
+function stepPending(){                               // called each frame: the deal finished and the player's finger is still down
   if(!pendingPress||dealing||avaBusy()||drag) return;
   const p=pendingPress; pendingPress=null;
   if(state==='play'&&!paused&&!(stuck&&toyLast())&&!labBusy()) startDrag(p.id,p.x,p.y,p.pt);

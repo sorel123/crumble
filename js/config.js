@@ -20,7 +20,7 @@ const CFG = {
   STYLE: 'jewel',        // a SKINS id — Jewels (the faceted gems of the icon) by default since the 2026-11 rebrand; Blocks and the rest are picked in Settings; some are unlockable
   MOTIF: 'none',         // a MOTIFS id — face motif stamped on every tile, independent of skin
   UNLOCK_ALL: false,     // dev: pretend every skin is unlocked
-  HOME_WORLD: 'night',   // a HOME_WORLDS id, or a discovered TRANSFORMS id — her default background
+  HOME_WORLD: 'night',   // a HOME_WORLDS id, or a discovered TRANSFORMS id — the player's default background
   UNLOCK_ALL_WORLDS: false, // dev: every world selectable regardless of discovery
 
   // pressure and recovery (plan 6.1, Endless and Daily): the dealer reads the ROOM left on the board (room(), solver.js:
@@ -31,7 +31,7 @@ const CFG = {
   EDGE_HOLD_MIN:  2,
   EDGE_HOLD_MAX:  3,
   RECOVERY_TRIES: 2,     // recovery hands in a row before the dealer goes back to edge trays (a miss can really lose)
-  RELIEF_TRAYS:   2,     // guided trays earned by the clear that gets her out of the edge (the first may be a planned sweep)
+  RELIEF_TRAYS:   2,     // guided trays earned by the clear that gets the player out of the edge (the first may be a planned sweep)
   GIFT_CHANCE:    0.12,  // odds a calm tray is a guided one anyway, so a strong player still meets directed hands
   HONEST_TRIES:   2,     // candidate hands an honest tray looks at (the tidiest playable of these): a light hand, not a search
   BUILD_BIAS:     0.3,   // building phase: the crowded-board small-piece bias is scaled by this, so big pieces keep coming
@@ -91,11 +91,11 @@ const CFG = {
   TIDE_SMALL:     0.4,   // weight on pieces of 3 cells or fewer, both stretches (lower = bigger pieces overall)
   TIDE_FIT:       0.6,   // EASY: how much a piece's fit to the board (lines its best drop clears, how flush it sits) raises its odds
   EASY_BIG:       2.5,   // EASY: score per cell of the hand (higher = bigger pieces win more of the search)
-  EASY_ROOM:      15,    // EASY: score for the room left by her likely play (0..1 room), so big pieces come where they leave space
+  EASY_ROOM:      15,    // EASY: score for the room left by the player's likely play (0..1 room), so big pieces come where they leave space
   EASY_CASH:      2,     // (round 2) EASY: score per gem the hand can clear (a cash-in tray)
-  EASY_SWEEP:     60,    //   ...a hand her quick play would sweep with
-  EASY_STEER:     3,     //   ...late in the stretch, minus this per cell of distance to a sweep on the board she will leave
-  EASY_LOW:       2,     //   ...minus this per gem left on the board her quick play leaves (EASY drives the board down)
+  EASY_SWEEP:     60,    //   ...a hand the player's quick play would sweep with
+  EASY_STEER:     3,     //   ...late in the stretch, minus this per cell of distance to a sweep on the board the player will leave
+  EASY_LOW:       2,     //   ...minus this per gem left on the board the player's quick play leaves (EASY drives the board down)
   EASY_RUN_GEMS:  28,    // (round 2) in EASY the sweep run starts on boards this low (0 = as in calm), and neither it nor the sweep hunt waits for a cooldown
   EASY_RUN_TRAYS: 5,     //   ...and an EASY sweep run lasts up to this many trays
   BIG_SOLVE: 18,         // (round 3) an EASY tray on a board with BIG_READY nearly-done lines hunts the hand that clears the most lines at once (points per line past 2; 0 = off)
@@ -113,7 +113,7 @@ const CFG = {
   CROWD_KEY: 20,         //   ...score per key piece (up to two), and three times it off for a tray with none
   CHAIN_BUILD: 0.8,      // (round 6) odds the tray after a board clear is big matching pieces that rebuild rows (the study's chain of clears)
   OPEN_BUILD: 0.7,       // (round 4) odds an Endless or Daily game opens on an empty board with three of one piece (rectangle, bar or big L) to build off
-  MATCH: 25,             // (round 4) EASY score for a tray of three alike (60% of it for two alike): a tray she reads as one plan
+  MATCH: 25,             // (round 4) EASY score for a tray of three alike (60% of it for two alike): a tray the player reads as one plan
   MATCH_TRY: 0.35,       //   ...odds an EASY candidate is built that way
   FOLLOW: 40,            // (round 4) EASY penalty for a tray with no piece that clears right now, when the board has one
   SMALL_CAP: 30,         // (round 3) EASY penalty per small piece (3 cells or fewer) past the first in a tray, unless the tray clears the board; any value above 0 also keeps sweep-run trays to one small piece
@@ -123,7 +123,7 @@ const CFG = {
   LEAN_TRIES:     16,    // candidate hands a LEAN tray looks at
   LEAN_LINES:     1,     // a LEAN tray offers at most about this many lines (unless it is a rescue)
   LEAN_DRY:       3,     // LEAN's quiet rescue: after this many trays with no clear a piece that clears comes...
-  LEAN_ROOM:      0.3,   //   ...and on any board with less room than this (she made a mess: the dealer helps instead of holding to the stretch)
+  LEAN_ROOM:      0.3,   //   ...and on any board with less room than this (the player made a mess: the dealer helps instead of holding to the stretch)
   SOUND_ROOM:     0.12,  // a piece's sound spot may cost at most this much room (0..1) when it clears nothing
   // (sky bite) "The sky fights back": in Endless each journey stop deals a little leaner than the last (solver.js skyBite).
   // bite = SKY_BITE_SCALE x SKY_BITE[stop], past Space SKY_BITE[5] + SKY_DEEP_BITE per Deep space stop, uncapped. It only
@@ -152,7 +152,7 @@ const CFG = {
   HOME_EARN:      3,     // after the cool stretch win mode starts once this many lines are nearly done (or a crowded or low board)
   HOME_WIN_WAIT:  4,     // ...or anyway after this many warm trays
   HOME_WIN_MAX:   8,     // win mode lasts until the board is wiped (and its BUILD tray), or this many trays...
-  HOME_WIN_DRY:   2,     //   ...or this many trays in a row in which she cleared no line
+  HOME_WIN_DRY:   2,     //   ...or this many trays in a row in which the player cleared no line
   HOME_TWIST:     0.95,   // odds a cool tray is a TWIST (builds the board up, 0-1 lines) rather than a STEADY (1-2 lines)
   HOME_RESCUE_ROOM: 0.1,  // a board with less room than this gets a rescue tray whatever the phase (in a cool stretch no gift)
   HOME_FINISH_GEMS: 18,  // a board this low (and not empty) is low: FINISH trays may come, and a home that clears nothing must sit flush
@@ -194,7 +194,7 @@ const CFG = {
 
   // scoring
   LINE_POINTS: 10*SCORE_SCALE, COMBO_STEP: 0.5,
-  COMBO_CARRY: true,     // (round 6) Endless and Daily: the combo survives drops that clear nothing while she clears again within COMBO_GRACE drops (the study's streak)
+  COMBO_CARRY: true,     // (round 6) Endless and Daily: the combo survives drops that clear nothing while the player clears again within COMBO_GRACE drops (the study's streak)
   COMBO_GRACE: 3,        //   ...drops in a row without a clear that end the streak
   SWEEP_BONUS: 300*SCORE_SCALE, SWEEP_PER_GEM: 25*SCORE_SCALE,
 
@@ -202,13 +202,13 @@ const CFG = {
   GOLDEN_COMBO:    5,    // a combo this high (or higher) queues one for the next tray (so does a clean sweep)
   GOLDEN_CHANCE:   0.03, // random roll after every tray
   GOLDEN_COOLDOWN: 12,   // trays that must pass before another golden hand
-  GOLDEN_MULT:     3,    // multiplier when she finds it: clears at least (planned lines - 1), min 1 (a planned sweep: 3+ lines)
+  GOLDEN_MULT:     3,    // multiplier when the player finds it: clears at least (planned lines - 1), min 1 (a planned sweep: 3+ lines)
   GOLDEN_MIN_LINES:3,    // a jackpot-style golden hand must offer at least this many lines (a planned sweep always qualifies)
   GOLDEN_PARTIAL:  2,    // consolation multiplier for any other clear during the hand; a miss costs nothing
 
   MAX_RESCUES: 1,        // rescues one run gets: one, offered on the game-over card (plan 7.1; rescueAllowed is the single gate, the ad hook)
   RESCUE_FLOOR: 300*SCORE_SCALE,     // offer a rescue only above this score...
-  RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of her best
+  RESCUE_BEST_FRAC: 0.5, // ...or above this fraction of the player's best
   SHARDS: 8, SHAKE: 1.0, SPARKLE_RATE: 620,
   // juice — the feel layer (all toggleable from the Admin panel)
   FX_CHUNKS:      true,   // cleared gems burst outward as whole blocks (not slivers), away from where you placed
@@ -217,7 +217,7 @@ const CFG = {
   FX_PICKUP_GROW: true,   // a picked-up piece grows to board size over a few frames instead of snapping
   FX_LINE_PREVIEW:true,   // lines the held piece would clear light up in its colour
   FX_MAGNET:      false,  // on: the held piece seats into its landing slot and hops cell to cell. Off (default): it glides with the finger and a ghost marks the slot
-  GHOST_ALPHA:    0.6,    // how solid the landing ghost is (the "snap" she sees on the board while the piece glides)
+  GHOST_ALPHA:    0.6,    // how solid the landing ghost is (the "snap" the player sees on the board while the piece glides)
   MAGNET_REACH:   0.75,   // the slot is the nearest valid spot within this many cells of the floating piece, per axis; none in reach = no slot, release returns it
   MAGNET_HOLD:    0.05,   // hysteresis: the current slot is kept until the piece is this much farther out than REACH (or this much nearer another slot)
   GUIDE:          1.0,    // how much hand choice favours pieces that clear something RIGHT NOW, no sequence needed (0 = off)
@@ -228,7 +228,7 @@ const CFG = {
   CLEAR_BLINK:    0,      // frames the whole line flashes white before it goes (0 = instant, like the study)
   CRUMBLE_STAGGER:0.4,    // (7.5) crumble only: frames between one gem's crack and the next along the line, out from the placed piece (~7 ms; was 0.75)
   CLEAR_STAGGER:  0.35,   // frames of delay per cell of distance from the placed piece (the collapse ripples outward)
-  FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts her out of the edge / a recovery
+  FX_NARROW_ESCAPE: true, // (6.3) a short flourish when a clear lifts the player out of the edge / a recovery
   FX_PIECE_COLOR_CLEAR: true, // (D) a cleared line turns the colour of the piece that cleared it and breaks in that colour
   FX_ONE_VOICE:   true,   // (A) one headline at a time: praise or COMBO n, then COLOR GONE, then a banner, each with the board to itself
   PRAISE_WORDS:   false,  // (voice) the praise words on the board after a clear (GOOD!, NICE!, GREAT! ...). Off: Crumb is the one voice; the bursts and the big tiers' stings stay
@@ -289,8 +289,8 @@ const CFG = {
   FX_STAR_BURST:     true,   // star gem: beam through it in the tray, hint ring on the best cell, charge + beams + sparkles on the clear
   FX_PUNCH_ZOOM:     true,   // (combo BIG_COMBO+) brief 2-3% punch zoom
   FX_COMBO_FIRE:     true,   // (7.5d) from combo BIG_COMBO the board rim burns (hotter each step), the dragged piece sheds embers, the tray glows; a miss snuffs it in a puff
-  FX_CHASE:          true,   // (7.5e) Endless: a bar under the score fills toward her best ("N to beat" near the end); passing it jumps the journey sky a stage
-  CHASE_NEAR:        .75,    // (7.5e) from this share of her best the "N to beat" shows
+  FX_CHASE:          true,   // (7.5e) Endless: a bar under the score fills toward the player's best ("N to beat" near the end); passing it jumps the journey sky a stage
+  CHASE_NEAR:        .75,    // (7.5e) from this share of the player's best the "N to beat" shows
   CHASE_HOT:         .9,     // (7.5e) from this share the bar glows
   CHASE_SKY_MIN:     500*SCORE_SCALE,    // (7.5e) a best below this beats with the banner only, so a tiny early best does not skip dawn
   FX_MASCOT:         true,   // (7.5f) a cookie crumb on the board's top-left corner: nods/hops/smirks on clears, sweats when it is tight, faints on game over (js/mascot.js)
@@ -315,7 +315,7 @@ const CFG = {
   SLING_QUICK_MS:    250,    // ... only a swipe quicker than this (touch to lift, and fast) is a flick; a longer pull is always the slingshot ...
   SLING_MAX:         140,    // ... and the band stretches no further than this (px), so the fastest shot is SLING_SCALE x SLING_MAX
   FX_SPUTTER:        true,   // (stakes) a carried streak close to dying shows it: the fire drops a notch, then gutters to embers on its last life, with a tick
-  FX_CRUMB_TALK:     true,   // (talk) the crumb's bubble and signs: snark when she is away, dithers or misses; credit when she does something good (js/crumbsay.js)
+  FX_CRUMB_TALK:     true,   // (talk) the crumb's bubble and signs: snark when the player is away, dithers or misses; credit when the player does something good (js/crumbsay.js)
   TALK_GAP:          9000,   // (talk) ms between ordinary lines, so it never chatters
   TALK_MS:           2600,   // (talk) ms a line stays up
   TALK_IDLE_MS:      20000,  // (talk) ms without a touch before the first sign; the second comes at 2.4x, sleep at 4.5x
@@ -324,12 +324,12 @@ const CFG = {
   TALK_DITHER:       3,      // (talk) pieces picked up and put back in a row before "any day now."
   TALK_TWO:          .3,     // (voice) with the praise words off: odds he remarks on a 2-line clear (only when the talk gap allows)
   CH_PACE:           true,   // (pace) a friend's Challenge link with their pace: their mark on the bar, ahead/behind in the HUD, two crumb lines (js/challenge.js; links carry the pace either way)
-  DARES:             true,   // (dares) Endless: the crumb dares her once a run; beating it pays a cookie into the jar (js/dares.js). Needs the mascot
+  DARES:             true,   // (dares) Endless: the crumb dares the player's once a run; beating it pays a cookie into the jar (js/dares.js). Needs the mascot
   DARE_MAX:          3,      // (dares) dares a run at most: each one beaten brings the next, harder one
   DARE_SAY_MS:       4200,   // (dares) ms a dare's line stays up (an ordinary line: TALK_MS)
   DARE_NEXT_MS:      2200,   // (dares) ms after one is beaten before the next is issued (it still waits for a quiet board)
   DARE_TIERS:        [[.6,.35,.05],[.2,.55,.25],[.1,.35,.55]],   // (dares) odds of easy / medium / hard for the run's 1st, 2nd, 3rd dare
-  DARE_FADE:         .35,    // (dares) a dare she has beaten n times is picked 1/(1+DARE_FADE*n) as often
+  DARE_FADE:         .35,    // (dares) a dare the player has beaten n times is picked 1/(1+DARE_FADE*n) as often
   COOKIE:            true,   // (cookie) Endless: now and then a cookie lands on a gem; clear it in time and Crumb eats it, one into the jar (js/cookie.js). Needs the mascot and the dares
   COOKIE_ODDS:       .3,     // (cookie) the roll at a new tray, once the gates below allow one
   COOKIE_GAP:        6,      // (cookie) trays after one leaves (eaten or stale) before the next can land
@@ -356,12 +356,12 @@ const CFG = {
   TOY_SULK_HOLD:     6000,   // (toy) how long the sulk lasts
   TOY_BACK_MS:       560,    // (toy) the hop from the floor back to the rim
   REPORT_CARD:       true,   // (report) Endless game-over card: a grade (D .. A+, never an F) stamped beside the sky line and one line from Crumb (flow.js reportGrade)
-  REPORT_W:          [45,25,15,10,5],   // (report) points of the 0-100 mark: score vs her best before the run, sky stop, best combo, sweeps, dares beaten + cookies eaten
-  REPORT_TOP:        [1,5,12,3,3],      // (report) ... each part is full at: (score: her best), stop 5 (Space), combo 12, 3 sweeps, 3 dares + cookies
+  REPORT_W:          [45,25,15,10,5],   // (report) points of the 0-100 mark: score vs the player's best before the run, sky stop, best combo, sweeps, dares beaten + cookies eaten
+  REPORT_TOP:        [1,5,12,3,3],      // (report) ... each part is full at: (score: the player's best), stop 5 (Space), combo 12, 3 sweeps, 3 dares + cookies
   REPORT_CUTS:       [0,25,35,45,55,65,75,84,92],   // (report) the mark each grade starts at: D, C, C+, B-, B, B+, A-, A, A+. A new best is never below A- (REPORT_CUTS[6])
   REPORT_CANNON:     10,     // (report) gems one cannonball must break for "that cannonball carried you."
   QUIET_START:       true,   // (quiet) Endless: until the second sky stop (Day) no Volcano or other transformation, no cannonball charge and no bonus meter (hidden); the combo, fire, sweeps, Avalanche, dares and the cookie are as ever (game.js quietNow)
-  AVALANCHE:         true,   // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). On since Jay tried it (2026-11-14)
+  AVALANCHE:         true,   // (Avalanche) Endless: a clear deep in a streak may bring the whole board down; rows that fill clear and it falls again (js/avalanche.js). On by default since 2026-11-14
   AVA_COMBO:         4,      // (Avalanche) the streak it can start from
   AVA_CHANCE:        .3,     // (Avalanche) odds at AVA_COMBO ...
   AVA_STEP:          .1,     // ... plus this per combo step above it ...
@@ -375,7 +375,7 @@ const CFG = {
   AVA_LEAN:          true,   // (Avalanche) with tilt live, a leaned phone sends the gems to the low wall and full columns clear (else it falls down)
   AVA_LEAN_MIN:      .3,     // (Avalanche) the lean that counts, share of gravity (.3 = about 17 degrees; held in the hand reads under ~.15, a deliberate 25 degree lean ~.42)
   FX_TIMELAPSE:      true,   // (7.5g) the run's boards are recorded (capped, in the run save) and replay on the game-over card (js/timelapse.js)
-  FX_ANTICIPATION:   true,   // (7.5c) while she drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
+  FX_ANTICIPATION:   true,   // (7.5c) while the player drags a piece near a landing that completes a line, that line's gems shiver and a glint runs along it
   ANTIC_REACH:       2.5,    // (7.5c) cells from a completing landing where the shiver starts; it peaks as the piece arrives
   ANTIC_SHIVER:      1.2,    // (7.5c) most the gems move, in px (reduced motion: no movement, a steady soft glow)
 

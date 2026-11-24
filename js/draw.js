@@ -31,7 +31,7 @@ function goldGlow(cx,cy,r,now,ph,rgb='255,206,72'){
   ctx.fillStyle=g; ctx.fillRect(cx-r,cy-r,r*2,r*2);
 }
 // a lifted piece's drop shadow, rendered with shadowBlur once into its own canvas. (speed) shadowBlur is slow on iOS and
-// used to run on the pickup's first frame, a hitch right as her thumb lands; now each shape's shadow is kept (per board
+// used to run on the pickup's first frame, a hitch right as the player's thumb lands; now each shape's shadow is kept (per board
 // size) and the tray's are made ahead, one per idle frame after a deal (warmShadows), so a pickup draws a cached one.
 const shadowCache=new Map();
 function pieceShadow(s){
@@ -116,7 +116,7 @@ function glowSprite(hue){
 
 /* Pressure on screen (plan 6.6). One eased state, `scr`, that the room metric and the dealer's phase drive in Endless and Daily
    (Adventure keeps its old border glow). 6.7 puts the bonus / golden / mode looks on this same layer: it reads `scr.p` (0 calm .. 1 tight),
-   `scr.warm` (0 cool .. 1 amber: a recovery is amber, an edge is red-orange) and `scr.relief` (a 1 -> 0 flash when she gets out).
+   `scr.warm` (0 cool .. 1 amber: a recovery is amber, an edge is red-orange) and `scr.relief` (a 1 -> 0 flash when the player gets out).
    Everything is drawn BEHIND the gems or around them (sky wash, vignette, board rim, a band behind the tray): no block or board
    material is touched, and there is no number on screen. While a bonus runs its violet rim owns the rim and the wash is halved. */
 const scr={p:0,warm:0,relief:0,ph:'calm'};
@@ -193,7 +193,7 @@ function drawTrayBand(){                               // the tray dims as the r
 }
 
 /* Combo fire (plan 7.5d). From combo BIG_COMBO (3) the streak burns: flame tongues lick outward from the board frame, hotter
-   with each step (orange at 3, gold at 4, white-hot from 5); the piece she drags sheds embers; the tray glows warm behind the
+   with each step (orange at 3, gold at 4, white-hot from 5); the piece the player drags sheds embers; the tray glows warm behind the
    pieces. When a drop does not clear, the streak is over: the flames drop and a ring of smoke puffs off the rim with a soft "pff".
    One eased heat, `fire.k` (combo 3 = .4 .. combo 6+ = 1), plus `fire.flare`, a short kick on every new step. Everything sits in
    the board layer under the gems: the rim, the tray band, and capped lists of cheap sprites (embers, smoke); a bonus's own rim
@@ -362,12 +362,12 @@ function drawFireParticles(dt){                        // embers (additive) and 
   ctx.globalAlpha=1;
 }
 
-/* Whole-screen mode looks (plan 6.7). Four states she can read from across the room, each one eased weight in `lk`, drawn on the same
+/* Whole-screen mode looks (plan 6.7). Four states the player can read from across the room, each one eased weight in `lk`, drawn on the same
    layer as the 6.6 pressure wash: BEHIND the gems (a tinted vignette that is clear over the whole board, a faint wash) and in a ring just
    OUTSIDE the board frame. Block and board material are never touched, there is no new text.
      bonus   violet: vignette, a slow band of light sweeping the screen (faster on the last tray), an entrance flash
      golden  gold: vignette on top of the old gold wash, a shimmering gold ring
-     adventure  mint: vignette and a ring around the board that fills with the level's goal (her progress, readable without numbers)
+     adventure  mint: vignette and a ring around the board that fills with the level's goal (the player's progress, readable without numbers)
      daily   coral: vignette and a dashed ring that turns slowly (a "today only" ticket)
    Reduced motion: no sweep, no flash, a static ring. Pressure (6.6) keeps the frame itself, so these never fight it. */
 const lk={bonus:0,gold:0,adv:0,daily:0,flash:0,was:false,prog:0};
@@ -470,7 +470,7 @@ function drawSweepShow(dt){
   if(S.t<0) return;
   if(S.t<60){                                       // the flood
     for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-      if(grid[r][c]) continue;                      // she may already be placing again
+      if(grid[r][c]) continue;                      // the player may already be placing again
       const d=(r+c)/(2*(N-1)), lt=S.t-d*26;
       if(lt<0||lt>30) continue;
       const k=lt<8?easeOutBack(lt/8):lt>20?1-(lt-20)/10:1;
@@ -551,7 +551,7 @@ function stepConfetti(dt){
    (spawnRubble: drawImage of a sub-rectangle, so every skin keeps its shading). At the moment of the split the
    quarters sit exactly where the gem was, then pop a few px apart and fall with spin and gravity off the bottom of
    the screen, fading near the end. The line breaks as a wave: each gem's crack starts CRUMBLE_STAGGER frames per
-   cell along the line from the piece she just placed (game.js). Rubble is drawn over the board and the gems left on
+   cell along the line from the piece the player just placed (game.js). Rubble is drawn over the board and the gems left on
    it, and under the tray and everything after it (drawRubble). How big it gets follows the 6.3 hierarchy, by the
    shatter's tier: 1 single line (four quarters, a little pop, short life, no dust or specks: crisp), 2 multi-line or
    star (more pop, a pale dust puff and a few specks per gem), 3 combo BIG_COMBO+ (more kick away from the piece),
@@ -632,7 +632,7 @@ function dragPerf(){                                 // (speed) the last 600 fra
 const fxLive=()=>goldRain.length+bursts.length+shards.length+sparkles.length+dust.length+chunks.length+confetti.length+rubble.length;
 function fxRoom(){ return Math.round(CFG.PARTICLE_CAP*perf.fx)-fxLive(); }
 function perfFrame(gap){
-  if(!(gap>0&&gap<250)) return;                     // the first frame, or back from the background: not a frame she saw
+  if(!(gap>0&&gap<250)) return;                     // the first frame, or back from the background: not a frame the player saw
   perf.gaps[perf.gi]=gap; perf.gi=(perf.gi+1)%perf.gaps.length;
   if(gap>CFG.FRAME_BUDGET_MS) perf.over++;
   if(drag){ perf.dg[perf.di]=gap; perf.di=(perf.di+1)%perf.dg.length; }   // (speed) frames while a piece is held: Settings' five-tap note reports them
@@ -672,7 +672,7 @@ let jStage=0, jJumps=0, jShown=0, jw=null, jPend=null, jSweep=false;   // target
 const journeyOn=()=>!!CFG.JOURNEY_SKY&&paced();
 function journeyTarget(){ return Math.min(JOURNEY.length-1,skyStop()); }
 /* (sky bite) the stop the run has reached, counted past Space: the score's stage (CFG.JOURNEY_AT, then one more every
-   SKY_DEEP_EVERY points past the last threshold) plus one per jump (jJumps: sweeps, beating her best). 0 dawn .. 5 space,
+   SKY_DEEP_EVERY points past the last threshold) plus one per jump (jJumps: sweeps, beating the player's best). 0 dawn .. 5 space,
    6 = Deep space 1, 7 = Deep space 2 ... The sky art stops at Space; the dealer (skyBite, solver.js) and the game-over card
    keep counting. Read from score and jJumps only, so it holds with the journey sky switched off and across a resume. */
 function skyStop(sc=score,jumps=jJumps){
@@ -707,7 +707,7 @@ function journeyHandBack(){                            // right after endBonus/e
   if(!journeyOn()||!isJourney(curWorld)) return;
   if(jStage!==jShown&&!reduce&&bgFrom!==curWorld) beginWipe(); else { jShown=jStage; jSweep=false; }
 }
-function syncHomeSky(){                                // snap to her home sky (a Settings change, reduced motion): no animation
+function syncHomeSky(){                                // snap to the player's home sky (a Settings change, reduced motion): no animation
   jStage=Math.max(jStage,journeyTarget());
   if(transform||bonus) return;
   const id=homeSky(); jw=null; jShown=jStage; jSweep=false;
@@ -791,12 +791,12 @@ function drawWipe(dt,aboost){                          // the new sky comes down
   if(u>=1){ jw=null; ambientOld=[]; bgFrom=curWorld; bgT=1; }
 }
 
-/* (7.5c) Anticipation. While she holds a piece, every line it could complete somewhere on the board is "live"; as the
+/* (7.5c) Anticipation. While the player holds a piece, every line it could complete somewhere on the board is "live"; as the
    floating piece comes within CFG.ANTIC_REACH cells of a landing that completes it, that line's gems shiver (at most
    CFG.ANTIC_SHIVER px) and a glint runs along it through gem()'s own flash. Nothing is
    drawn over the board as a layer of its own (6.3: a pre-placement cue sits below a single clear). Once the piece is seated
    in a completing slot the coloured line preview takes over: those lines stop shivering.
-   Only while a piece is held, never at rest, so it is not a hint before she picks one up. The completing landings are
+   Only while a piece is held, never at rest, so it is not a hint before the player picks one up. The completing landings are
    listed once per pickup (antList); each frame is one distance per landing plus a sin or two per gem in a live line.
    Reduced motion: no shiver and no travelling glint, a steady soft brightening. */
 const antV=new Float32Array(2*N), antT=new Float32Array(2*N);   // per line (rows 0..N-1, then columns): eased value, this frame's target
@@ -1238,7 +1238,7 @@ function frame(now){
     ctx.globalAlpha=1;
   }
 
-  if(CFG.FX_STAR_BURST && !reduce && tray.some(t=>t&&t.s.star)){   // (4.5b) a soft ring on the best cell(s), so she need not count
+  if(CFG.FX_STAR_BURST && !reduce && tray.some(t=>t&&t.s.star)){   // (4.5b) a soft ring on the best cell(s), so the player need not count
     const sb=starBest(grid), k=0.5+0.5*Math.sin(now*0.006);
     for(const [r,c] of sb.cells){
       const x=bx+(c+.5)*cell, y=by+(r+.5)*cell;

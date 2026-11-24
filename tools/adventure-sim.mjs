@@ -1,4 +1,4 @@
-// Adventure sim (plan 4.1): plays every level with a bot that plays like a keen kid and reports, per level,
+// Adventure sim (plan 4.1): plays every level with a bot that plays like a keen player and reports, per level,
 // how often it wins and in how many pieces. Used to set LEVEL_PAR (3-star and 2-star piece counts) and to
 // check no level is a wall.
 //

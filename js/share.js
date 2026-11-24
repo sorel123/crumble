@@ -8,7 +8,7 @@ const SHARE_FILE='crumble-score.png';
 const SHARE_URL='https://crumble.win';
 const SHARE_FOOTER='Can you beat it?  \u00B7  crumble.win';
 
-// the board as she left it (or a timelapse picture, pic): filled cells in a soft gold, empty ones as faint slots
+// the board as the player left it (or a timelapse picture, pic): filled cells in a soft gold, empty ones as faint slots
 function drawShareBoard(g,x,y,size,pic){
   const n=N, cs=size/n, pad=cs*0.08, rim=size*0.028;
   g.fillStyle='rgba(255,255,255,.10)';
@@ -80,7 +80,7 @@ function shareSetup(){
 
 // the words that go with the picture: plain text and a plain URL, no markdown
 function shareText(){
-  if(mode==='challenge'&&chal){                        // (E2) a link that opens the same challenge, with her score to beat
+  if(mode==='challenge'&&chal){                        // (E2) a link that opens the same challenge, with the player's score to beat
     const m=chMedalOf(score,chal.deal.med);
     return 'I scored '+score+(m?' '+MEDALS[m-1].icon:'')+' on a Crumble Challenge. Same 12 trays for you. Can you beat it? '+chLinkFor(chal.seed,score,chal.deal,chPaceFor(chal.seed,score));
   }
@@ -88,7 +88,7 @@ function shareText(){
                        :'My Crumble score: '+score+'. Can you beat it? '+SHARE_URL;
 }
 
-// the share sheet takes the picture when it can; otherwise (or if she closes the sheet with an error) it saves it
+// the share sheet takes the picture when it can; otherwise (or if the player closes the sheet with an error) it saves it
 async function shareRun(){
   const cv=drawShareCard(shareData());
   const blob=await new Promise(res=>cv.toBlob(res,'image/png'));

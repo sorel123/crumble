@@ -1,14 +1,14 @@
 // Crumble — Music (plan 7.4): real recorded loops, a picker, a quiet pressure response, ducking under the sound family.
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ music ═══════
-   Fourteen recorded loops (music/*.m4a, CC0, see HANDOFF.md for source and licence), picked by mood for tweens. Nothing is
+   Fourteen recorded loops (music/*.m4a, CC0: "Music Loop Bundle" by Abstraction Music / Tallbeard Studios), picked by mood for tweens. Nothing is
    synthesised any more: if a file cannot be fetched the game is simply quiet.
    - Shuffle (8.5) plays every loop once before any repeats (a shuffle bag), moves on at each new game, and after
      `CFG.MUSIC_ROTATE` seconds on one loop crossfades to the next so the old loop's last bar fades into the new one's first.
    - `createMusic(ctx,out)` builds the graph on any context (the live one, or an offline one in the tests): looping buffer
      source -> track trim -> low-pass -> lift -> duck -> volume -> `out`. `play(buf,idx)` crossfades to another loop.
    - Intensity (0 calm .. 1 tight) opens the low-pass (the room gets brighter) and lifts the level a touch. It follows
-     `scr.p` (6.6) and eases back when she gets clear.
+     `scr.p` (6.6) and eases back when the player gets clear.
    - `duck(level,secs)` dips the whole music under a clear or a special; `arbFlush` in audio.js calls it with the winning event.
    - Settings > Sound has a switch (`CFG.MUSIC`), a picker (`CFG.MUSIC_PICK`: shuffle, one track, or Off which is the switch)
      and the Admin volume. Files are fetched on first use only (the service worker keeps them), and only the playing

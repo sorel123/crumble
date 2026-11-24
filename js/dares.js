@@ -1,14 +1,14 @@
 // Crumble — Crumb's dares: one small dare a run, in his voice; beating it pays a cookie into the jar.
 // Plain script, loaded in order by index.html (after crumbsay.js); shares globals with the other js/ files.
 /* Runs had no goal but a bigger score. In Endless (not Daily, Adventure, Challenge or the guided first game), once the
-   first tray is on the board, the crumb dares her: he says it (a bubble held DARE_SAY_MS) and a small chip under the HUD
+   first tray is on the board, the crumb dares the player: he says it (a bubble held DARE_SAY_MS) and a small chip under the HUD
    buttons keeps the dare and its progress up for the rest of the run. Beaten: he pays up grudgingly, a cookie hops from him
    into the jar on the chip (a clink, a haptic), the chip ticks, and DARE_NEXT_MS later he issues the next, harder one
    ("double or nothing."), up to DARE_MAX a run. A dare that can no longer be beaten this run ("don't flick me") fails with
    "knew it." and no other is offered until the next run. A run that ends with a dare open gets one line ("told you.").
    Nothing is ever lost: no penalty, ever.
    Picking: a tier is rolled first (DARE_TIERS: the first dare of a run leans easy, later ones harder), then a dare in it;
-   one she has beaten often is less likely (DARE_FADE), the last one is never picked twice in a row, and dares whose
+   one the player has beaten often is less likely (DARE_FADE), the last one is never picked twice in a row, and dares whose
    feature is off are not offered. Its own dice (dareRnd): the dealer's Math.random never moves, so pinned deals stay put.
    Checkers are fed from the game's events: place() calls dareDrop() once per drop, the cannonball's end calls
    dareCannon(), a throw of the crumb calls dareFlick(); the sky stage, the trays played and a new best are read in dareStep.
@@ -152,7 +152,7 @@ function dareCannon(n){                                // crumbtoy.js toyFireEnd
   const d=dareDef(dare.id); if(d.kind!=='cannon') return;
   dare.p=Math.max(dare.p,Math.min(n,d.need)); if(n>=d.need) dareWin();
 }
-function dareFlick(){                                  // crumbtoy.js toyUp: she threw the crumb
+function dareFlick(){                                  // crumbtoy.js toyUp: the player threw the crumb
   rc.t++;                                              // (report) throws this run
   if(dareOpen()&&dareDef(dare.id).kind==='noflick') dareFail();
 }
@@ -207,7 +207,7 @@ function dareCookie(){                                 // a cookie hops from the
   dare.hop=cookieHop(masc.x+toy.x+masc.s/2,masc.y+toy.y+masc.s-s*.6,j.left+j.width/2,j.top+j.height/2,[.6,1.15,.7],land);
 }
 function dareQuiet(now){                               // nothing bigger is going on: a dare line may speak
-  return state==='play'&&!paused&&!dealing&&!stuck&&!ava.live&&!toyHot()&&toy.mode==='rim'&&!masc.fainted&&!toy.sl&&!toy.demo   // (stakes) not while she aims the slingshot or its demo shows
+  return state==='play'&&!paused&&!dealing&&!stuck&&!ava.live&&!toyHot()&&toy.mode==='rim'&&!masc.fainted&&!toy.sl&&!toy.demo   // (stakes) not while the player aims the slingshot or its demo shows
     &&!banners.length&&!sweepShow&&!bands.length&&now>=say.until+350;
 }
 function dareStep(now,shown){

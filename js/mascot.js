@@ -1,8 +1,8 @@
 // Crumble — the mascot crumb (plan 7.5f).
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* A crumb of cookie perched on the top-left corner of the board frame, feet on the rim. It is the player's
-   wry sidekick (she is a tween, so it acts with its eyes and brows rather than being toddler-cute):
-     idle   breathes, blinks now and then, and watches the piece she is dragging
+   wry sidekick (the player is a tween, so it acts with its eyes and brows rather than being toddler-cute):
+     idle   breathes, blinks now and then, and watches the piece the player is dragging
      nod    a single clear: a small nod and a smile                         (6.3: the everyday clear stays quiet)
      hop    2+ lines: a hop with its arms up
      smug   a clear at combo BIG_COMBO+: lidded eyes, one brow up, a smirk
@@ -99,7 +99,7 @@ function mascotStep(now){                             // draw.js frame(): writes
   if(!on){ sayStep(now,false,false); if(m.key!=='off'){ m.key='off'; m.el.hidden=true; mascotReset(); m.key='off'; } m.lastState=state; return; }
   if(state==='won'&&m.lastState!=='won') mascotAct('sweep');   // a level won: the big one
   m.lastState=state;
-  const faint=(stuck&&!toyLast())||state==='over';   // (toy) a charged crumb does not faint when she is out of room: it is her last chance
+  const faint=(stuck&&!toyLast())||state==='over';   // (toy) a charged crumb does not faint when the player is out of room: it is the player's last chance
   if(faint!==m.fainted){                            // tips over on the rim, or stands back up (rescue)
     m.fainted=faint; m.act=''; m.el.getAnimations({subtree:true}).forEach(a=>a.cancel());
     if(faint&&!reduce) m.el.animate([{transform:'none'},{transform:'rotate(-14deg)',offset:.25},{transform:'translate(4%,-38%) rotate(80deg)'}],{duration:650,easing:'cubic-bezier(.5,0,.7,1.4)',fill:'forwards'});

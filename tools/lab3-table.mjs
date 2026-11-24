@@ -4,7 +4,7 @@
 // The generator (l3MakeAll in js/lab.js) is deterministic: puzzle k is built from seeds derived from k alone. It is too
 // slow to run on a phone when a puzzle opens (a few seconds for all 60 on a laptop), so the game reads this table and a
 // test checks the table against the generator. Changing the generator changes the puzzles everyone plays: on purpose only.
-// Needs Playwright (see HANDOFF.md, Workflow).
+// Needs Playwright (npm install).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

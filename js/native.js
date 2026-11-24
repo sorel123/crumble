@@ -65,7 +65,7 @@ function hapSelect(k){
    Quiet: no sign-in sheet. The only buttons are "🏆 Leaderboards" (1.1 F) on the game-over card (Endless and Daily)
    and in Settings' footer, and they show only in the app while signed in (gcButtons). If the phone is signed in to Game Center, scores and reached goals
    go up in the background and show in Apple's Games app; otherwise nothing happens. The ids below must match
-   the ones made in App Store Connect (HANDOFF.md, "Game Center"). */
+   the ones made in App Store Connect (tools/gc-setup.mjs). */
 const GC={
   BEST:'crumble.endless.best',            // classic leaderboard, all-time: the Endless best
   DAILY:'crumble.daily',                  // recurring leaderboard, resets daily: today's Daily score

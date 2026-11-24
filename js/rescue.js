@@ -14,7 +14,7 @@
      - Won: every crumb out. Stars by pieces used: 3 at or under par, 2 within par+2, else 1.
      - Stuck (no piece in the tray fits): "Not quite" and the board resets after a beat. No other way to lose, no timer.
      - Undo takes back one drop; Reset starts the board again. After the third failed or reset try a Hint button
-       ghosts the next drop of the stored solution (from the start again if she is off its path).
+       ghosts the next drop of the stored solution (from the start again if the player is off its path).
    Mode `lab` as Clear it in three (lab.js): no dealer, specials, bonus meter, Avalanche, cannonball charge, dares,
    journey sky, best, stats, Game Center or saved run. Progress: `crumble.lab` .rescue = {stars:[x3], best:[x3]}.
    The boards are checked by rsSolve (every order, every seat, clears and falls applied between drops) for the fewest
@@ -278,7 +278,7 @@ function rsWin(end){
   const k=rs.k, n=rs.used, st=rsStarsFor(k,n), R=lab.rescue, first=!R.stars[k];
   rs.over=true; rs.won=true; rs.undo=null; rs.hint=null; rs.stars=st;
   R.stars[k]=Math.max(R.stars[k],st); R.best[k]=R.best[k]?Math.min(R.best[k],n):n; saveLab();
-  playedToday();                                       // she played today (the streak); nothing else is counted
+  playedToday();                                       // the player played today (the streak); nothing else is counted
   const wait=Math.max(0,end-performance.now())+(reduce?100:250), mine=rs;
   setTimeout(()=>{
     if(rs!==mine||mode!=='lab') return;
@@ -287,7 +287,7 @@ function rsWin(end){
     glowT=Math.max(glowT,1.2); glowH=140; toyFanfare();
     if(st===3) crumbSay(sayPick('rsStar3'),0,'say dare',true);
     if(first) setTimeout(()=>{ if(rs===mine){ dareGift(); crumbSay(sayPick('rsCookie'),0,'say dare',true); } },reduce?200:1100);
-    setTimeout(()=>{ if(rs===mine&&mode==='lab'&&!overlayOpen()) rsShowDone(first); },reduce?600:first?2600:1700);   // (not over a card she opened meanwhile)
+    setTimeout(()=>{ if(rs===mine&&mode==='lab'&&!overlayOpen()) rsShowDone(first); },reduce?600:first?2600:1700);   // (not over a card the player opened meanwhile)
   },wait);
   labSync();
 }
@@ -322,10 +322,10 @@ function rsUndo(){
 }
 function rsReset(){
   if(!rs||rs.over||drag||mode!=='lab') return;
-  if(rs.used) rs.fails++;                               // a try she gave up on counts toward the hint
+  if(rs.used) rs.fails++;                               // a try the player gave up on counts toward the hint
   clearRunFx(); rsLay(true); Sfx.pickup(); rsHintOk(); labSync();
 }
-// the hint: the next drop of the stored solution while she is still on its path, else the board from the top and its first drop
+// the hint: the next drop of the stored solution while the player is still on its path, else the board from the top and its first drop
 function rsHint(){
   if(!rs||rs.over||!rs.hintOk||drag||mode!=='lab') return;
   const sol=rs.b.sol, h=rs.hist;
