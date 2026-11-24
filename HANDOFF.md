@@ -2146,3 +2146,14 @@ next one where they met. Everything is in `js/bakery.js`; the knobs are `CFG.BK_
 - **Check on the phone:** the drop feels weighty but quick; a pile comes to rest and stays still; chains read as separate
   beats; Shake rescues a full jar; frame rate with a full jar at 3x; tilt is fun and not seasick. Send yourself a link in
   Messages: one tap opens the dare card in Safari and Play starts the same treats.
+
+## App Store rebrand pass (2026-11-24, after the 4.1(a) "Copycats" rejection)
+Apple matched the listing, icon and screenshots to another developer's block game. What changed in the app:
+- **Icon:** the same three gems, now with Crumb standing on them and the journey sky behind (`tools/make-icon.html` draws it; the
+  1024 px iOS icon and the web `icon-*.png` are exported from it, saved as RGB with no alpha channel).
+- **Crumb's Bakery on the home cards:** a wide tile first in `.homeGrid` on both cards (`#startBakery`, `#menuBakery`,
+  `button.tile.wide`), filled by `bkTiles()` in `js/bakery.js` (three treat icons, then her best once she has one). It is still the
+  first tile in the Lab as well.
+- **Wording in everything that ships (js/, index.html):** the star gem's banner is "STAR BURST" (`starBeams` is the beam list),
+  Crumb's cannonball dares say "gems", and the comments no longer name any other game: the dealer notes say "the study" for the
+  recordings the curve was measured from. Keep it that way: no other game's name in shipped files, the listing or screenshots.

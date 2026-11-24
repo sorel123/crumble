@@ -19,7 +19,7 @@ function snapshot(){
     pace:{...pace},
     td:{st:tide.st,n:tide.n,len:tide.len},          // (1.1 G) the coaster's stretch
     hm:{ph:hdeal.ph,n:hdeal.n,len:hdeal.len,f:hdeal.f||0,wp:hdeal.wp|0,wr:hdeal.wr|0,wa:hdeal.wa===undefined?99:hdeal.wa,wn:hdeal.wn|0,lk:hdeal.lk|0},          // the home dealer's coaster (DEALER_HOME)
-    cv:{h:+curve.heat.toFixed(4)},                  // the Block Blast curve's luck dial (DEALER_CURVE)
+    cv:{h:+curve.heat.toFixed(4)},                  // the study curve's luck dial (DEALER_CURVE)
     wave:{n:wave.n,at:wave.at,due:wave.due?1:0,setups:setups.map(u=>({...u,dealt:u.dealt?1:0})),closerNext:closerNext?1:0,chaseNext:chaseNext?1:0,chaseCool,sr:sweepRun?sweepRun.n:-1,closerCool,dryN,bigHist:bigHist.slice(),closerTray:closerTray?1:0,trayClear:trayClear?1:0,jn:jack.n,ja:jack.at},   // (7.3)                                 // (6.1) the dealer's phase, so resume keeps the rhythm
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'||mode==='challenge'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
