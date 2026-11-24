@@ -1644,7 +1644,7 @@ test('achievements: unlocked looks open in Settings, persist across a reload, an
   assert.ok(await page.locator('#lookGrid [data-id=volcano]').isDisabled(), 'locked');
   assert.match(await page.locator('#lookGrid [data-id=volcano] .lock').textContent(), /Combo ×5/);
   await page.evaluate(() => el('lookGrid').querySelector('[data-id=volcano]').click());
-  assert.equal(await page.evaluate(() => CFG.STYLE), 'blocks', 'a locked look does nothing');
+  assert.equal(await page.evaluate(() => CFG.STYLE), 'jewel', 'a locked look does nothing');
   await page.evaluate(() => { el('setDone').click(); trayNo = 10; transformCool = 0; specialEnd = -99; triggerTransform('volcano'); transform = null; openSettings(); });
   assert.equal(await page.locator('#lookGrid [data-id=volcano]').isDisabled(), false, 'earned: open');
   await page.click('#lookGrid [data-id=volcano]');

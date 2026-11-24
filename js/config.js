@@ -17,7 +17,7 @@ const CFG = {
   APP_STORE_ID: '',      // the app's Apple ID, 6833015504 (App Store Connect, App Information). Set it here ON LAUNCH DAY: the web start card then
                          // links to the App Store (before release that link would show Apple's "not available" page). Safari's banner is index.html's apple-itunes-app tag.
   THEME: 'classic',      // a THEMES id — Classic (steel sky, navy board) by default; Night and the light modes in Settings → Look
-  STYLE: 'blocks',       // a SKINS id — Blocks (edge-to-edge, bevelled) by default; picked in Settings; some are unlockable
+  STYLE: 'jewel',        // a SKINS id — Jewels (the faceted gems of the icon) by default since the 2026-11 rebrand; Blocks and the rest are picked in Settings; some are unlockable
   MOTIF: 'none',         // a MOTIFS id — face motif stamped on every tile, independent of skin
   UNLOCK_ALL: false,     // dev: pretend every skin is unlocked
   HOME_WORLD: 'night',   // a HOME_WORLDS id, or a discovered TRANSFORMS id — her default background
