@@ -25,7 +25,7 @@ function tlLoad(o){                                   // restore(): older saves 
   tl=ok?{s:o.s,n:o.n,f:o.f.slice()}:{s:1,n:0,f:[]};
   if(!tl.f.length&&CFG.FX_TIMELAPSE) tl.f.push(tlPic(grid));
 }
-// the run's pictures for the card and the share image: the recorded ones plus the board she ended on
+// the run's pictures for the card and the share image: the recorded ones plus the board the player ended on
 function tlFrames(){
   const f=tl.f.slice(), end=tlPic(grid);
   if(f[f.length-1]!==end) f.push(end);

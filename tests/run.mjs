@@ -69,7 +69,7 @@ test('front menu: Back from a card opened on the start card shows one home card,
     assert.deepEqual(await cards(), { start: true, menu: false }, 'Back from the menu ' + open);
   }
 });
-test('front menu (rebrand): the Bakery tile on the start card and the menu opens the Bakery; Home comes back to one home card with her best on the tile', async ({ page }) => {
+test('front menu (rebrand): the Bakery tile on the start card and the menu opens the Bakery; Home comes back to one home card with the player’s best on the tile', async ({ page }) => {
   const tile = () => page.evaluate(() => ({ sub: el('startBakerySub').textContent, sub2: el('menuBakerySub').textContent, drawn: [...document.querySelectorAll('#startBakery canvas')].every(c => c.width > 0 && c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3] > 0) }));
   assert.deepEqual(await tile(), { sub: 'Drop treats, bake bigger ones', sub2: 'Drop treats, bake bigger ones', drawn: true });
   await page.click('#startBakery');
@@ -894,7 +894,7 @@ test('the hesitation log times the first drop of each tray, skips restored trays
   await page.evaluate(() => { const d = el('setDone'); if (d) d.click(); });
   m = await mv(); if (m) await dragPiece(page, m.i, m.r, m.c);
   assert.equal(await page.evaluate(() => hes.log.length), 2, 'opening Settings voids the sample');
-  // on her phone there is no URL bar: five quick taps on the Settings note show the same numbers
+  // on the player’s phone there is no URL bar: five quick taps on the Settings note show the same numbers
   await openSet(page);
   for (let k = 0; k < 5; k++) await page.click('#setNote');
   assert.match(await page.textContent('#setNote'), /^Last 2 trays \(2 kept\): first pickup [\d.]+s, pickup to drop [\d.]+s, first drop clears \d+%( · Drag: \d+ fps, \d+% late frames, worst \d+ ms \(\d+ frames\))?$/);
@@ -912,7 +912,7 @@ test('Settings fits one screen; a look sets theme, world, skin and motif togethe
   assert.equal(await page.locator('#lookGrid .look-btn').count(), 9, 'five everyday looks and the four earned ones');
   assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'true', 'Classic is lit by default');
   await page.click('#lookGrid [data-id=cotton]');
-  const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, home: curWorld === homeSky() }));   // (7.5b) the sky shows her home sky: the journey in Endless, else her world
+  const look = () => page.evaluate(() => ({ t: CFG.THEME, w: CFG.HOME_WORLD, s: CFG.STYLE, m: CFG.MOTIF, cs: curSkin, home: curWorld === homeSky() }));   // (7.5b) the sky shows the player’s home sky: the journey in Endless, else the player’s world
   assert.deepEqual(await look(), { t: 'cotton', w: 'blossom', s: 'clay', m: 'heart', cs: 'clay', home: true });
   assert.equal(await page.getAttribute('#lookGrid [data-id=cotton]', 'aria-pressed'), 'true');
   assert.equal(await page.getAttribute('#lookGrid [data-id=classic]', 'aria-pressed'), 'false');
@@ -1398,11 +1398,11 @@ test('a bonus plays through three real trays: left counts 3, 2, 1, then it ends;
   assert.deepEqual(seen, [3, 2, 1]);
   await dealt(page);
   const end = await page.evaluate(() => ({ bonus, world: curWorld === homeSky(), skin: curSkin }));
-  assert.deepEqual(end, { bonus: null, world: true, skin: skin }, 'it ended after the third tray; her tiles never changed');
+  assert.deepEqual(end, { bonus: null, world: true, skin: skin }, 'it ended after the third tray; the player’s tiles never changed');
   assert.deepEqual(errors.filter(e => !/ERR_FAILED/.test(e)), [], 'no page errors');
 });
 
-test('while a bonus runs the sky shifts and the rim pulses, but the board material and her tiles do not change', async ({ page, errors }) => {
+test('while a bonus runs the sky shifts and the rim pulses, but the board material and the player’s tiles do not change', async ({ page, errors }) => {
   await play(page);
   const before = await page.evaluate(() => ({ skin: curSkin, world: curWorld }));
   await page.evaluate(() => { trayNo = 10; bonusMeter = 0; startBonus(); });
@@ -1541,7 +1541,7 @@ test('golden hand: celebration never blocks play, rains only outside the board, 
   const ms = await page.evaluate(t => performance.now() - t, t0);
   assert.ok(ms < 1500, 'the next tray was playable after ' + Math.round(ms) + ' ms');
   const m = await page.evaluate(() => { for (let i = 0; i < 3; i++) if (tray[i]) for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (canPlace(tray[i].s, r, c, grid)) return { i, r, c }; });
-  await dragPiece(page, m.i, m.r, m.c);                // she can play straight away, through the glow
+  await dragPiece(page, m.i, m.r, m.c);                // the player can play straight away, through the glow
   await page.waitForFunction(() => goldRain.length + (goldenCele ? 1 : 0) === 0, null, { timeout: 15000, polling: 100 });   // waits for the celebration to end, however long a slow runner takes
   assert.equal(await page.evaluate(() => goldRain.length + (goldenCele ? 1 : 0)), 0, 'everything has finished');
   assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), []);
@@ -1849,7 +1849,7 @@ test('streak: counts days played, one missed day only pauses it, and the same da
   assert.deepEqual(await piece(), [1, 1, 1, 1], 'a second piece the same day is not another day');
   await day('2026-11-10'); assert.deepEqual(await piece(), [2, 2, 2, 2]);
   await day('2026-11-11'); assert.deepEqual(await piece(), [3, 3, 3, 3]);
-  await day('2026-11-12');                                                   // she has not played yet today: yesterday's streak is still alive
+  await day('2026-11-12');                                                   // the player has not played yet today: yesterday's streak is still alive
   assert.equal(await page.evaluate(() => streakNow()), 3);
   await day('2026-11-13');                                                   // a whole day missed: paused at 0, best kept
   assert.deepEqual(await page.evaluate(() => [streakNow(), goals.streak.best]), [0, 3]);
@@ -1998,7 +1998,7 @@ test('Original pickup and place follow the Admin volume sliders (6.4)', async ({
   }
 });
 
-test('phone speaker defaults on for touch devices unless she has chosen (6.4)', async ({ page }) => {
+test('phone speaker defaults on for touch devices unless the player has chosen (6.4)', async ({ page }) => {
   const r = await page.evaluate(() => {
     const out = {};
     localStorage.removeItem('crumble.speaker'); CFG.PHONE_SPEAKER = false; speakerDefault();
@@ -2116,7 +2116,7 @@ test('sound family (6.5): every set can play every event, and Original is the de
   assert.deepEqual(r.bad, [], 'no set throws on any event');
   assert.equal(r.dflt, 'original'); assert.equal(r.pick, 'soft'); assert.equal(r.place, 'drop');
   assert.equal(r.migrated, 'original', 'a sound choice saved before 2026-11-12 moves to Original once');
-  assert.equal(r.kept, 'bells', 'after that, her choice is kept');
+  assert.equal(r.kept, 'bells', 'after that, the player’s choice is kept');
 });
 
 // ---- pressure and recovery (plan 6.1) ----
@@ -2338,7 +2338,7 @@ test('Challenge: the fourth mode tile opens its card; Today\'s challenge starts 
   assert.deepEqual(await page.evaluate(() => [el('pauseEye').textContent, el('pauseNew').textContent]), ["Paused · Today's challenge", 'Restart']);
 });
 
-test('Challenge: the deal is frozen: the same seed deals the same board and the same twelve trays however she plays', async ({ page }) => {
+test('Challenge: the deal is frozen: the same seed deals the same board and the same twelve trays however the player plays', async ({ page }) => {
   await chalStart(page, 'test01');
   const open = await page.evaluate(() => JSON.stringify(chal.deal.open)), deal = await page.evaluate(() => JSON.stringify(chal.deal));
   const a = await chPlayRound(page, 'casual');
@@ -2465,7 +2465,7 @@ test('Challenge link (E2): the deal packs into the link and back exactly; a dama
   for (const x of r) { assert.equal(x.same, true); assert.ok(x.len < 130, 'short enough for a message: ' + x.len); assert.deepEqual([x.bad, x.junk, x.other], [null, null, null]); }
 });
 
-test('Challenge link (E2): Share sends a crumble.win link; opening it shows "Beat N", plays the same deal, and tells her when she beats it', async ({ page, server }) => {
+test('Challenge link (E2): Share sends a crumble.win link; opening it shows "Beat N", plays the same deal, and tells the player when the player beats it', async ({ page, server }) => {
   await chalStart(page, 'fr01');
   await page.evaluate(() => { score = 2340; gameOver(); });
   const sent = await page.evaluate(() => ({ text: shareText(), deal: JSON.stringify(chal.deal.trays.map(t => t.p)), med: chal.deal.med }));
@@ -2542,7 +2542,7 @@ test('pace: a pace packs into twelve short base-36 gains and back; anything off 
   assert.doesNotMatch(r.linkNone, /&p=/);
 });
 
-test('pace: a 12-tray round records her score after every tray; the best run keeps it and Share sends it', async ({ page }) => {
+test('pace: a 12-tray round records the player’s score after every tray; the best run keeps it and Share sends it', async ({ page }) => {
   await chalStart(page, 'pace01');
   const r = await chPlayRound(page, 'casual');
   assert.equal(r.done, true);
@@ -2787,7 +2787,7 @@ test('music (7.4): a loop starts playing on its own after the first touch, and o
   assert.deepEqual(await page.evaluate(() => Object.keys(musicBufs).map(Number)), await page.evaluate(() => [musicE.idx]));
 });
 
-test('music (7.4): the pressure response follows the pressure on screen and drops when she is clear', async ({ page }) => {
+test('music (7.4): the pressure response follows the pressure on screen and drops when the player is clear', async ({ page }) => {
   await play(page);
   await page.waitForFunction(() => musicE !== null, null, { timeout: 5000 });
   const m = await page.evaluate(() => { const o = {}; scr.p = 0; o.calm = musicTarget(); scr.p = .55; o.build = musicTarget(); scr.p = .8; o.edge = musicTarget(); scr.p = 1; o.tight = musicTarget(); state = 'over'; o.over = musicTarget(); state = 'play'; return o; });
@@ -2795,7 +2795,7 @@ test('music (7.4): the pressure response follows the pressure on screen and drop
   await page.evaluate(() => { musicTarget = () => 1; });                                  // a tight board for a while
   await page.waitForFunction(() => musicMi > .5, null, { timeout: 9000 });
   assert.ok(await page.evaluate(() => musicE.i > .5), 'the engine is told');
-  await page.evaluate(() => { musicTarget = () => 0; });                                  // she got clear
+  await page.evaluate(() => { musicTarget = () => 0; });                                  // the player got clear
   await page.waitForFunction(() => musicMi < .3, null, { timeout: 9000 });
 });
 
@@ -2850,7 +2850,7 @@ test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, 
     const o = {};
     const hole = SHAPES.find(s => s.rows === 2 && s.cols === 2 && s.n === 4);
     const pre = packGrid(grid);
-    grid[5][2] = grid[5][3] = { gi: 0, t: 1, f: 0, l: 0 };                         // her 1x2 squares it off: the 2x2 hole is walled in
+    grid[5][2] = grid[5][3] = { gi: 0, t: 1, f: 0, l: 0 };                         // the player 1x2 squares it off: the 2x2 hole is walled in
     waveAfterDrop(pre, 0, countFlat(packGrid(grid)), 0, false);
     o.setups = setups.map(u => [SETUP_RECTS[u.k].rows, SETUP_RECTS[u.k].cols, u.r, u.c]);
     const d0 = waveStats.dealt;
@@ -2858,7 +2858,7 @@ test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, 
     CFG.SETUP_CHANCE = 1; tray = [null, null, null]; genTray();
     o.first = tray.some(t => t.s === hole) && setups.some(u => u.dealt);
     o.dealt = waveStats.dealt - d0;
-    // she ignores it: the next deals never force it again (with chance 1 any hole piece now comes only by itself)
+    // the player ignores it: the next deals never force it again (with chance 1 any hole piece now comes only by itself)
     let forced = 0; const orig = offerSetup;
     for (let k = 0; k < 2; k++) { tray = [null, null, null]; const d1 = waveStats.dealt; genTray(); forced += waveStats.dealt - d1; }
     o.again = forced;
@@ -2870,7 +2870,7 @@ test('7.3 setups: squaring off a gap is remembered, its exact piece comes once, 
   assert.ok(r.first, 'with SETUP_CHANCE 1 the next tray carries the 2x2');
   assert.equal(r.dealt, 1);
   assert.equal(r.again, 0, 'one offer per setup');
-  assert.equal(r.old, 0, 'a hole she did not just make is no setup');
+  assert.equal(r.old, 0, 'a hole the player did not just make is no setup');
 });
 
 test('7.3 no tedium: never three small pieces while a big one fits; the 4+ floor over five trays', async ({ page }) => {
@@ -3035,7 +3035,7 @@ test('1.1 sweep run: a low calm board gets big readable pieces toward a sweep, e
   assert.ok(r.off, 'RUN_TRAYS 0 turns it off');
 });
 
-test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, saved with the run; Adventure and the switch keep her world', async ({ page }) => {
+test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, saved with the run; Adventure and the switch keep the player’s world', async ({ page }) => {
   await play(page);
   await dealt(page);
   const st = () => page.evaluate(() => ({ w: curWorld, stage: jStage, shown: jShown, wipe: !!jw, sweep: !!(jw && jw.sweep), jumps: jJumps }));
@@ -3068,9 +3068,9 @@ test('journey sky (7.5b): stages follow the score, a clean sweep jumps one, save
   assert.deepEqual(r.resumed, ['j4', false], 'a resume snaps to its stage, no wipe');
   assert.equal(r.old, 'j3', 'an older save follows the score alone');
   assert.equal(r.cap, 5, 'space is the last stage');
-  assert.ok(r.adv, 'Adventure keeps her own world');
+  assert.ok(r.adv, 'Adventure keeps the player’s own world');
   assert.equal(r.back, 'j5');
-  assert.ok(r.off, 'the Settings switch brings her world back and is saved');
+  assert.ok(r.off, 'the Settings switch brings the player’s world back and is saved');
   assert.deepEqual(r.fresh, ['j0', 0, 0], 'a new run starts at dawn again');
 });
 
@@ -3148,7 +3148,7 @@ test('Settings > Look: Clear effect (Crumble / Classic) and Glints while draggin
   assert.equal(await page.isVisible('#glintOn'), glint, 'the glint switch shows only when the game has the glints');
   if (glint) { await page.uncheck('#glintOn'); assert.equal(await page.evaluate(() => CFG.FX_ANTICIPATION), false); }
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(SKIN_STORE)));
-  assert.equal(saved.clear, 'squash', 'saved with her other settings');
+  assert.equal(saved.clear, 'squash', 'saved with the player’s other settings');
   await closeSet(page);
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 0, 0] });
   await page.evaluate(() => { window.__rub = 0; const of = frame; frame = function (now) { of(now); __rub = Math.max(__rub, rubble.length); }; });
@@ -3182,7 +3182,7 @@ test('7.5c anticipation: a line one piece from clearing shivers and glints as th
   await play(page);
   await setup(page, { rows: ['01111111', ...EMPTY.slice(1)], trayShapes: [0, 1, 0] });
   await frames(page, 5);
-  assert.equal((await antRead(page)).any, false, 'at rest nothing moves: it is not a hint before she picks a piece up');
+  assert.equal((await antRead(page)).any, false, 'at rest nothing moves: it is not a hint before the player picks a piece up');
   await holdAt(page, 0, 6, 6);
   let a = await antRead(page);
   assert.equal(a.n, 1, 'the single cell completes row 0 from exactly one landing');
@@ -3327,7 +3327,7 @@ test('7.5d combo fire: never over a gem, off with its switch (saved), steady und
   await page.click('#advLook summary');
   assert.equal(await page.isChecked('#fireOn'), true, 'on by default');
   await page.uncheck('#fireOn');
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(SKIN_STORE)).fire), false, 'saved with her settings');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(SKIN_STORE)).fire), false, 'saved with the player’s settings');
   await closeSet(page);
   await frames(page, 90);
   assert.equal(await page.evaluate(() => fire.k), 0, 'off: the flames fade out mid-streak');
@@ -3386,9 +3386,9 @@ test('7.5d combo fire: dragging at combo 6 with embers and a burning rim fits th
 const counted = async page => { await page.waitForFunction(() => shownScore === score, null, { timeout: 5000 }); await frames(page, 1); };
 const chaseRead = page => page.evaluate(() => { const b = el('chase'); return { hidden: b.hidden, cls: b.className, to: b.querySelector('.to').textContent, fill: b.querySelector('.fill').style.transform, target: chaseBest }; });
 
-test('7.5e chase your best: a bar under the score fills toward her best, "N to beat" near it, a glow at the end, gone once passed', async ({ page }) => {
+test('7.5e chase your best: a bar under the score fills toward the player’s best, "N to beat" near it, a glow at the end, gone once passed', async ({ page }) => {
   await play(page);
-  assert.ok((await chaseRead(page)).hidden, 'her very first run has no best to chase');
+  assert.ok((await chaseRead(page)).hidden, 'the player’s very first run has no best to chase');
   await page.evaluate(() => { best = 10000; start(); });
   await dealt(page);
   let c = await chaseRead(page);
@@ -3759,7 +3759,7 @@ test('crumb last chance: out of room with a charged crumb the run holds; a canno
 
 // ── the crumb talks (js/crumbsay.js) ──
 const said = page => page.evaluate(() => el('crumbSay').hidden ? null : { txt: el('crumbSay').textContent, cls: el('crumbSay').className });
-test('crumb talks: a remark for a clean sweep, a sign when she stops playing, then asleep, a line when she is back; the switch (saved) silences it', async ({ page }) => {
+test('crumb talks: a remark for a clean sweep, a sign when the player stops playing, then asleep, a line when the player is back; the switch (saved) silences it', async ({ page }) => {
   await play(page);
   await page.evaluate(() => { CFG.DARES = false; });   // (dares) a dare's line would wait for a quiet moment and land in this test's silences
   await dealt(page);
@@ -4089,13 +4089,13 @@ test('closet: buying with enough and not enough cookies (tap, "Get it", tap agai
   assert.equal(await page.textContent('#closetJar'), '🍪 1 cookie to spend');
   assert.equal(await tileText(page, 'bow'), '🍪 3 · 2 more');
   await page.click('.clTile[data-id="bow"]'); await page.click('.clTile[data-id="bow"]');
-  assert.deepEqual((await closetView(page)).own, ['party'], 'cannot buy what she cannot afford, however often she taps');
+  assert.deepEqual((await closetView(page)).own, ['party'], 'cannot buy what the player cannot afford, however often the player taps');
   assert.equal(await page.evaluate(() => closetBuy('bow')), false);
   assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('crumble.dares'))).cookies, 3, 'crumble.dares is untouched');
   await page.reload(); await page.waitForFunction(() => typeof closet !== 'undefined' && !!closet.met);
   v = await closetView(page);
   assert.deepEqual([v.own, v.on.head, v.spent, v.spend, v.saved.v], [['party'], 'party', 2, 1, 1], 'spent survives a reload');
-  assert.equal(await page.textContent('#startGoalsSub'), '1 cookie', 'the Goals tile counts the cookies she can spend');
+  assert.equal(await page.textContent('#startGoalsSub'), '1 cookie', 'the Goals tile counts the cookies the player can spend');
   await page.evaluate(() => { dare.st.cookies = 5; });          // two more dares won: 3 to spend, the bow tie now
   await openClosetFromStart(page);
   await page.click('.clTile[data-id="bow"]'); await page.click('.clTile[data-id="bow"]');
@@ -4161,7 +4161,7 @@ test('closet: wear and take off per slot; persists across a reload; the board ma
   assert.deepEqual((await closetView(page)).on, { head: '', face: 'shades', neck: '' });
   for (const sel of ['#heroCrumb', '#mascot']) assert.ok(!(await worn(sel)).includes('cl-beanie'), sel + ' took it off');
   await page.click('#closetBack');
-  assert.equal(await page.isVisible('#menuCard'), true, 'back to the menu she came from');
+  assert.equal(await page.isVisible('#menuCard'), true, 'back to the menu the player came from');
   // the mascot switched off: nothing on the board, the closet still works from the menu
   await page.evaluate(() => { CFG.FX_MASCOT = false; });
   await page.click('#menuCard #heroCrumb', { force: true }); await page.waitForSelector('#closetCard:not([hidden])');
@@ -4216,7 +4216,7 @@ test('closet: iCloud merge: bought items by union, spent by max, the outfit from
   assert.deepEqual(r.blob, { own: ['bow', 'party'], spent: 5, on: { head: '', face: '', neck: 'bow' }, ot: 2000 });
 });
 
-test('closet: the card fits and scrolls at 390x844 and 375x667, and Back returns to where she came from', async ({ page }) => {
+test('closet: the card fits and scrolls at 390x844 and 375x667, and Back returns to where the player came from', async ({ page }) => {
   await page.evaluate(() => { dare.st.cookies = 6; });
   for (const [w, h] of [[390, 844], [375, 667]]) {
     await page.setViewportSize({ width: w, height: h });
@@ -4238,13 +4238,13 @@ test('closet: the card fits and scrolls at 390x844 and 375x667, and Back returns
   }
 });
 
-test('closet: the dot shows on the Goals tile and the closet button when something new is in reach, and clears when she opens the closet; a feat earned mid-run gets one quiet line', async ({ page }) => {
+test('closet: the dot shows on the Goals tile and the closet button when something new is in reach, and clears when the player opens the closet; a feat earned mid-run gets one quiet line', async ({ page }) => {
   const dots = () => page.evaluate(() => ['startGoals', 'menuGoals', 'goalsCloset'].map(id => el(id).classList.contains('dot')));
   await frames(page, 2);
   assert.deepEqual(await dots(), [false, false, false], 'nothing in reach');
   await page.evaluate(() => { dare.st.cookies = 2; });
   await page.waitForFunction(() => el('startGoals').classList.contains('dot'));
-  assert.deepEqual(await dots(), [true, true, true], 'she can afford the party hat');
+  assert.deepEqual(await dots(), [true, true, true], 'the player can afford the party hat');
   await openClosetFromStart(page);
   assert.deepEqual(await dots(), [false, false, false], 'seen: gone');
   await page.click('#closetBack'); await page.click('#goalsBack');
@@ -4456,7 +4456,7 @@ test('Avalanche lean: the way is fixed when it fires (leaning back mid-slide cha
   assert.equal(await page.evaluate(() => [ava.live, ava.dir].join()), 'true,left', 'a left avalanche');
   const settled = leanRows(AVA_DOWN, 'left');
   assert.deepEqual(await boardStr(page), settled, 'the rule is done at once: packed left, two columns cleared');
-  await page.evaluate(() => { toy.gRaw = toy.gx = .7; });   // she leans the other way mid-fall
+  await page.evaluate(() => { toy.gRaw = toy.gx = .7; });   // the player leans the other way mid-fall
   await page.waitForFunction(() => grid.flat().some(g => g && g.av && ava.t > g.av[0][0] && avaOff(g.av, ava.t) < 0), null, { timeout: 5000 });
   const mid = await page.evaluate(() => { const g = grid.flat().find(g => g && g.av && avaOff(g.av, ava.t) < 0); avaAt(avaOff(g.av, ava.t)); return { now: avaDir(), dir: ava.dir, dx: avaDX, dy: avaDY, run: localStorage.getItem('crumble.run') }; });
   assert.deepEqual([mid.now, mid.dir], ['right', 'left'], 'the phone now says right; the fall keeps left');
@@ -4693,7 +4693,7 @@ test('fix: an Avalanche that empties the board is a clean sweep whose show start
   assert.ok(r.banners.indexOf('AVALANCHE!') < r.banners.indexOf('CLEAN SWEEP'), 'AVALANCHE! first, then CLEAN SWEEP, one at a time');
 });
 
-test('fix: a cannonball that passes her best raises NEW BEST; one that breaks the last gem is a full clean sweep (bonus, count, sky, look, show, save)', async ({ page }) => {
+test('fix: a cannonball that passes the player’s best raises NEW BEST; one that breaks the last gem is a full clean sweep (bonus, count, sky, look, show, save)', async ({ page }) => {
   await play(page);
   await dealt(page);
   const r = await page.evaluate(() => {
@@ -4878,7 +4878,7 @@ test('7.5g timelapse: a short run shows no replay; the share picture gets a four
   const strip = await page.evaluate(() => shareData().strip);
   assert.equal(strip.length, 4);
   assert.equal(strip[0], '.'.repeat(64), 'from the opening ...');
-  assert.equal(strip[3].replace(/\./g, '').length, 4, '... to the board she ended on');
+  assert.equal(strip[3].replace(/\./g, '').length, 4, '... to the board the player ended on');
   assert.ok(await page.evaluate(() => drawShareCard(shareData()).width === SHARE_W), 'the card draws');
   await openSet(page);
   await page.click('#advLook summary');
@@ -5069,10 +5069,10 @@ const guideView = page => page.evaluate(() => ({ n: guide && guide.n, ln: guide 
   tray: tray.map(t => (t ? SHAPES.indexOf(t.s) : null)), rows: grid.map(r => r.map(v => (v ? 'X' : '.')).join('')),
   seen: localStorage.getItem('crumble.guide'), score }));
 const lessonRows = (page, n) => page.evaluate(n => GUIDE_LESSONS[n - 1].board.map(r => r.replace(/[abc]/g, '.')), n);
-// what is on the board once lesson n is laid over what the last one left (gems only ever pop in, nothing of hers goes)
+// what is on the board once lesson n is laid over what the last one left (gems only ever pop in, nothing of the player’s goes)
 const overlay = (rows, add) => rows.map((r, i) => [...r].map((v, j) => (v === 'X' || add[i][j] === 'X' ? 'X' : '.')).join(''));
 
-test('guided first game (1.1 D): a fresh player gets three lessons in order, a sweep, then an ordinary light opening with her score', async ({ page, errors }) => {
+test('guided first game (1.1 D): a fresh player gets three lessons in order, a sweep, then an ordinary light opening with the player’s score', async ({ page, errors }) => {
   await freshPlayer(page);
   await play(page);
   let v = await guideView(page);
@@ -5111,7 +5111,7 @@ test('guided first game (1.1 D): a fresh player gets three lessons in order, a s
   assert.equal(v.n, null, 'the guide is over'); assert.equal(v.tier, 'OPENING'); assert.equal(o.kind, 'light'); assert.equal(v.trayNo, 1);
   assert.ok(o.filled >= 3 && o.filled <= 8, 'a light opening');
   assert.ok(o.banners.includes("You've got it!"));
-  assert.equal(v.score, scoreBefore, 'her score stays'); assert.ok(v.score > 0);
+  assert.equal(v.score, scoreBefore, 'the player’s score stays'); assert.ok(v.score > 0);
   assert.equal(v.seen, '1', 'never again');
   assert.deepEqual([o.gn, o.bonusMeter, o.star], [false, 0, false], 'nothing the guide queued leaks into ordinary dealing');
   // and never again: the next game opens like everyone else's
@@ -5135,14 +5135,14 @@ test('guided first game (1.1 D): a returning player, an old save without the fla
   assert.equal(await page.evaluate(() => { CFG.GUIDED_START = false; start(); return lastTier; }), 'OPENING', 'the switch turns it off');
 });
 
-test('guided first game (1.1 D): off-script ends it quietly, the ordinary dealer takes over from her board, and it never comes back', async ({ page }) => {
+test('guided first game (1.1 D): off-script ends it quietly, the ordinary dealer takes over from the player’s board, and it never comes back', async ({ page }) => {
   await freshPlayer(page);
   await play(page);
   await dragPiece(page, 1, 0, 0);                                                    // the 1x3 not in the gap: no row filled
   await dealt(page);
   const v = await guideView(page);
   assert.equal(v.n, null); assert.notEqual(v.tier, 'GUIDE'); assert.equal(v.trayNo, 1, 'ordinary dealing starts at tray 1 (specials still wait for tray 6)');
-  assert.equal(v.rows[5], 'XX...XXX', 'her board stays as it is');
+  assert.equal(v.rows[5], 'XX...XXX', 'the player’s board stays as it is');
   assert.ok(await page.evaluate(() => !banners.some(b => /got it/.test(b.txt))), 'no line: it ends quietly');
   assert.equal(v.seen, '1');
   await page.reload(); await toGame(page);
@@ -5314,7 +5314,7 @@ test('the deal never fails (1.1 G): on awkward boards every tray plays out in fu
       if (!evalHand(a0, hand, 400000).ok) o.bad.push(b.join('/') + ' ' + st + ' ' + lastTier + ' ' + hand.map(s => SHAPES.indexOf(s)).join(','));
       const [lo, hi] = packBits(a0), rm = roomBits(lo, hi);
       if (/EASY|LEAN/.test(lastTier) && !hand.every(s => soundBits(lo, hi, s, rm))) o.unsound++;
-      // a LEAN tray on a board she has made a mess of (tight, or dry for LEAN_DRY trays) carries a piece that clears a line
+      // a LEAN tray on a board the player has made a mess of (tight, or dry for LEAN_DRY trays) carries a piece that clears a line
       if (st === 'lean' && /LEAN/.test(lastTier) && (rm < CFG.LEAN_ROOM || dryN >= CFG.LEAN_DRY) && SHAPES.some(s => s.n >= 2 && bestDrop(lo, hi, s) >= 1)) {
         o.fixTries++; if (hand.some(s => !s.star && bestDrop(lo, hi, s) >= 1)) o.fixed++; }
     }
@@ -5433,7 +5433,7 @@ const HOME_SIM = `(trays, seed, check) => {
       for (let k = 0; k < left.length; k++) for (const m of placeMasks(left[k])) { if (nodes-- <= 0) return; if ((lo & m.lo) || (hi & m.hi) || homeAt(lo, hi, left[k], m, hb) < 0) continue; const a = _lo, b = _hi; dfs(a, b, left.filter((x, j) => j !== k)); } };
     dfs(lo0, hi0, hand); return best; };
   const rec = () => { const a0 = packGrid(grid), [lo, hi] = packBits(a0), hand = tray.map(t => t.s); const r = { t: hand.map(s => SHAPES.indexOf(s)).join(','), l: lastTier, g: game, gems: pop32(lo) + pop32(hi) };
-    if (out.length) { const p = out[out.length - 1]; p.cl = stats.lines - l0; p.sw = stats.sweeps - s0; } l0 = stats.lines; s0 = stats.sweeps;   // the tray before: lines she cleared in it, board wipes
+    if (out.length) { const p = out[out.length - 1]; p.cl = stats.lines - l0; p.sw = stats.sweeps - s0; } l0 = stats.lines; s0 = stats.sweeps;   // the tray before: lines the player cleared in it, board wipes
     if (check) { r.ok = evalHand(a0, hand, 400000).ok; r.home = hand.every((s, k) => homeAfterMates(lo, hi, hand, k, 20000)); r.small = hand.filter(s => s.n <= 3).length; r.flush = homeOrders(lo, hi, hand, 4000, 0) > 0;
       if (/^HOME WIN/.test(lastTier)) r.net = netOf(lo, hi, hand); }
     out.push(r); };
@@ -5509,7 +5509,7 @@ test('home dealer: bot-played trays on two seeds always have a solution, every p
       if (m[1] === 'FINISH') assert.ok(t.flush, 'a FINISH tray plays every piece strictly flush (or clearing) in some order, padding included: ' + t.l + ' ' + t.t);
     }
     // per game, from the dealer's own labels: win mode counts 1, 2, ... and ends only on a wipe (its BUILD tray, or the tray after
-    // the wipe), at HOME_WIN_MAX, or after HOME_WIN_DRY trays in a row she cleared nothing in; a cool stretch of HOME_COOL_MIN..MAX follows
+    // the wipe), at HOME_WIN_MAX, or after HOME_WIN_DRY trays in a row the player cleared nothing in; a cool stretch of HOME_COOL_MIN..MAX follows
     const games = {}; for (const t of r) if (t.m) (games[t.g] = games[t.g] || []).push(t);
     for (const g of Object.values(games)) {
       const ph = g.map(t => t.m[4][0]).join('');
@@ -5556,12 +5556,12 @@ test('home dealer: win mode starts when earned or after HOME_WIN_WAIT warm trays
     const W = CFG.HOME_WIN_WAIT, s0 = { ...hdStats.win };
     hdeal = { ph: 'warm', n: 0, len: 0, f: 0, wp: 0 }; o.warm = []; for (let k = 0; k < W + 1; k++) o.warm.push(deal(mid, true));
     hdeal = { ph: 'warm', n: 0, len: 0, f: 0, wp: 0 }; o.earned = deal(ready, true);
-    o.on = []; for (let k = 0; k < 3; k++) o.on.push(deal(mid, true));               // she clears in every tray: it carries on
+    o.on = []; for (let k = 0; k < 3; k++) o.on.push(deal(mid, true));               // the player clears in every tray: it carries on
     o.dry = [deal(mid, false), deal(mid, false)];                                   // the last tray and the one before it cleared nothing: cool
     hdeal = { ph: 'win', n: CFG.HOME_WIN_MAX - 1, len: CFG.HOME_WIN_MAX, f: 0, wp: 0 }; o.cap = [deal(mid, true), deal(mid, true)];
     hdeal = { ph: 'win', n: 2, len: CFG.HOME_WIN_MAX, f: 0, wp: 0 }; dryN = 0;
     B73(['00000000','00000000','00000000','00000000','00000000','00000000','00000000','11111110']);
-    waveAfterDrop(packGrid(grid), 1, 0, 1, false); o.wp = hdeal.wp;                  // she wipes the board in win mode
+    waveAfterDrop(packGrid(grid), 1, 0, 1, false); o.wp = hdeal.wp;                  // the player wipes the board in win mode
     o.wipe = [deal(Array(8).fill('00000000'), true), deal(mid, true)];
     o.ends = ['cap', 'dry', 'wipe'].map(k => (hdStats.win[k] || 0) - (s0[k] || 0));
     rndSrc = null; return o; })()`);
@@ -5571,7 +5571,7 @@ test('home dealer: win mode starts when earned or after HOME_WIN_WAIT warm trays
   assert.match(r.earned, /^HOME \w+(·\w+)? win 1\//, 'nearly-done lines (HOME_EARN) start it: ' + r.earned);
   assert.deepEqual(r.on.map(l => l.split(' ').pop()), ['2/' + M, '3/' + M, '4/' + M], 'it carries on across trays that clear: ' + r.on);
   assert.match(r.dry[0], / win 5\//, 'one dry tray does not end it: ' + r.dry);
-  assert.match(r.dry[1], / cool \d+\/\d+$/, 'HOME_WIN_DRY trays she cleared nothing in end it: ' + r.dry);
+  assert.match(r.dry[1], / cool \d+\/\d+$/, 'HOME_WIN_DRY trays the player cleared nothing in end it: ' + r.dry);
   assert.match(r.cap[0], new RegExp(' win ' + M + '/' + M + '$')); assert.match(r.cap[1], / cool /, 'HOME_WIN_MAX ends it: ' + r.cap);
   assert.equal(r.wp, 1, 'the wipe is seen as it happens');
   assert.match(r.wipe[0], /^HOME BUILD win 3\//, 'the emptied board gets its BUILD tray in win mode: ' + r.wipe);
@@ -5582,7 +5582,7 @@ test('home dealer: FINISH on a low board in a cool stretch empties it (single ce
   await play(page);
   const r = await page.evaluate('(() => {' + B73 + `
     CFG.DEALER_HOME = true; CFG.HOME_FINISH = 1; CFG.HOME_FINISH_HOT = 1; const o = {};
-    // can her pieces, each dropped at a strict home (a line, or flush: bump 0), empty the board in some order?
+    // can the player’s pieces, each dropped at a strict home (a line, or flush: bump 0), empty the board in some order?
     const empties = (lo, hi, hand) => { const rec = (lo, hi, left) => { if (!lo && !hi) return true; for (let k = 0; k < left.length; k++) for (const m of placeMasks(left[k])) {
       if ((lo & m.lo) || (hi & m.hi) || homeAt(lo, hi, left[k], m, 0) < 0) continue; const a = _lo, b = _hi; if (rec(a, b, left.filter((x, j) => j !== k))) return true; } return false; }; return rec(lo, hi, hand); };
     const deal = rows => { W73(); roomNow = 1; hdeal = { ph: 'cool', n: 1, len: 6, f: 0, hot: 0 }; const a0 = B73(rows), [lo, hi] = packBits(a0); rndSrc = mulberry(5); tray = [null, null, null]; genTray(); rndSrc = null;
@@ -6021,7 +6021,7 @@ test('stakes: slingshot: a pull launches opposite the pull (resting or on the mo
   assert.deepEqual(await page.evaluate(() => [toy.mode, toy.hot, !!toy.fire]), ['rim', true, false], 'hidden mid-pull: back on its perch, charged');
 });
 
-test("stakes: with Crumb's dares: a slingshot is a throw (\"don't flick me\" is lost), a tap's hint is not; the dare chip steps back for the aim, and no dare line talks while she aims", async ({ page }) => {
+test("stakes: with Crumb's dares: a slingshot is a throw (\"don't flick me\" is lost), a tap's hint is not; the dare chip steps back for the aim, and no dare line talks while the player aims", async ({ page }) => {
   await play(page);
   await dealt(page);
   await page.waitForFunction(() => !!dare.id);
@@ -6539,7 +6539,7 @@ test('sky bite: a late stop deals leaner (shorter EASY, longer LEAN, fewer small
   assert.equal(dawn.bad + deep.bad, 0, 'every tray dealt has a solution');
 });
 
-test('sky bite: the game-over card names the stop and her farthest (saved, past Space too, an older save without it), and still fits', async ({ page }) => {
+test('sky bite: the game-over card names the stop and the player’s farthest (saved, past Space too, an older save without it), and still fits', async ({ page }) => {
   await play(page); await dealt(page);
   await setup(page, { rows: EMPTY, trayShapes: [0, 0, 0] });
   await page.evaluate(() => tlReset());
@@ -7405,13 +7405,13 @@ test('bakery: the Lab tile (first, with its progress) and a NEW badge on the Lab
   assert.deepEqual(await page.evaluate(() => [...document.querySelector('#labList button').children].map(x => x.textContent)), ["🧁 Crumb's Bakery", 'Drop treats. Two the same bake a bigger one.', '5 of 11 treats']);
   await page.click('#labList button[data-id=bakery]');
   assert.deepEqual(await page.evaluate(() => ({ open: !el('bakery').hidden, op: JSON.parse(localStorage.getItem('crumble.lab')).bakery.op, chef: !!document.querySelector('#bkCrumb svg .cl-chef'), saved: closet.on.head })),
-    { open: true, op: 1, chef: true, saved: '' }, 'opened: the badge is spent; Crumb wears the Chef\'s hat without changing her pick');
+    { open: true, op: 1, chef: true, saved: '' }, 'opened: the badge is spent; Crumb wears the Chef\'s hat without changing the player’s pick');
   assert.deepEqual(await badge(), [false, false]);
   await page.evaluate(() => { lab.bakery.best = 4820; lab.bakery.seen = 7; bkToLab(); });
   assert.equal(await page.evaluate(() => document.querySelector('#labList button[data-id=bakery] i').textContent), 'Best 4,820 · 7 of 11 treats');
   await page.reload(); await page.waitForFunction(() => typeof lab !== 'undefined' && !!cell);
   assert.deepEqual(await badge(), [false, false], 'for good');
-  // her own hat wins
+  // the player’s own hat wins
   await page.evaluate(() => { closet.on.head = 'party'; }); await bkOpenIt(page);
   assert.deepEqual(await page.evaluate(() => [!!document.querySelector('#bkCrumb svg .cl-party'), !!document.querySelector('#bkCrumb svg .cl-chef')]), [true, false]);
 });
@@ -7592,7 +7592,7 @@ test('bakery: the jar is saved on every drop, not only on pause and hide', async
   assert.deepEqual(r, { one: 1, two: 2, held: true });
 });
 
-// the site opened with a friend's Bakery link (seed, her score, her biggest treat); fresh: as a first-time visitor
+// the site opened with a friend's Bakery link (seed, the player’s score, the player’s biggest treat); fresh: as a first-time visitor
 const bkLinkQ = (page, seed, beat, tier) => page.evaluate(([s, b, t]) => bkLinkFor(s, b, t).split('?')[1], [seed, beat, tier]);
 const bkOpenLink = async (page, server, q, fresh) => {
   if (fresh) await page.evaluate(() => { sessionStorage.setItem('crumble.test.fresh', '1'); localStorage.clear(); });
@@ -7628,12 +7628,12 @@ test('bakery: a friend link opens straight on the dare card (no menu, no guided 
     "🧁 Crumb's Bakery | A friend baked a Blueberry pie and scored 4,820. | Same treats, same order. Can you beat it? | Play | What is this?");
   await page.click('#bkDareWhat');
   assert.deepEqual(await page.evaluate(() => ({ open: bk.open, menu: !el('menuCard').hidden, dare: bk.dare, fresh: guideFresh(), seen: localStorage.getItem('crumble.guide') })),
-    { open: false, menu: true, dare: null, fresh: true, seen: null }, 'What is this? leads Home; the guided first game still waits for her first block game');
+    { open: false, menu: true, dare: null, fresh: true, seen: null }, 'What is this? leads Home; the guided first game still waits for the player’s first block game');
   await page.reload(); await page.waitForFunction(() => typeof state !== 'undefined' && !!cell);
   assert.equal(await page.evaluate(() => bk.open), false, 'a reload does not start the dare again');
 });
 
-test('bakery: a dare deals the same treats in the same order as the link\'s seed, whatever she does (shakes too)', async ({ page, server }) => {
+test('bakery: a dare deals the same treats in the same order as the link\'s seed, whatever the player does (shakes too)', async ({ page, server }) => {
   const want = await page.evaluate(() => { bkNew(98765, true); const s = [bk.held, bk.next]; for (let i = 0; i < 24; i++) { bk.ready = true; bkDrop(200); for (let j = 0; j < 60; j++) { bkStep(BK_DT); bk.overT = 0; } s.push(bk.next); } return s; });
   await bkOpenLink(page, server, await bkLinkQ(page, 98765, 3000, 7));
   await page.click('#bkDarePlay');
@@ -7659,7 +7659,7 @@ test('bakery: on a dare "to beat N" sits by the score; passing it fires once: a 
   assert.deepEqual(r, { a: { on: true, t: 'to beat 100', won: false }, b: [0, false], n: 1, line: true, c: { on: true, t: '✓ beat 100', won: true }, clear: true });
 });
 
-test('bakery: the dare\'s end card: "You beat your friend by N!" or "N short. So close.", "Send it back" carries her score and the same seed, Play again keeps both; else the link is copied', async ({ page, server }) => {
+test('bakery: the dare\'s end card: "You beat your friend by N!" or "N short. So close.", "Send it back" carries the player’s score and the same seed, Play again keeps both; else the link is copied', async ({ page, server }) => {
   await bkOpenLink(page, server, await bkLinkQ(page, 555, 4820, 8));
   await page.click('#bkDarePlay');
   const end = async sc => { await page.evaluate(sc => { bkStop(); bk.score = sc; bk.big = 9; bkGameOver(); bkKick(); }, sc); await page.waitForFunction(() => bk.st === 'card', null, { timeout: 8000 }); };
@@ -7672,7 +7672,7 @@ test('bakery: the dare\'s end card: "You beat your friend by N!" or "N short. So
   await page.waitForFunction(() => !!window.__sh);
   const sh = await page.evaluate(() => ({ text: window.__sh, p: bkLinkParse(window.__sh.split('bk=')[1]) }));
   assert.equal(sh.text.replace(/bk=[\w-]+$/, 'bk=…'), "I baked a Lime tart in Crumb's Bakery and scored 6,020. Same treats, same order. Beat it: https://crumble.win/?bk=…");
-  assert.deepEqual(sh.p, { seed: 555, beat: 6020, tier: 9 }, 'her score and treat, the same seed');
+  assert.deepEqual(sh.p, { seed: 555, beat: 6020, tier: 9 }, 'the player’s score and treat, the same seed');
   await page.click('#bkAgain');
   assert.deepEqual(await page.evaluate(() => ({ d: bk.dare, s0: bk.seed0, score: bk.score, st: bk.st })), { d: { seed: 555, beat: 4820, tier: 8, passed: false }, s0: 555, score: 0, st: 'play' });
   await end(4340);
@@ -7684,7 +7684,7 @@ test('bakery: the dare\'s end card: "You beat your friend by N!" or "N short. So
   assert.deepEqual(await page.evaluate(() => [el('bkSendBack').textContent, bkLinkParse(window.__cl.split('bk=')[1]).beat]), ['Link copied', 4340]);
 });
 
-test('bakery: a jar in progress survives a dare: the card says so and offers Play the dare or Back to my jar; the dare never touches her save', async ({ page, server }) => {
+test('bakery: a jar in progress survives a dare: the card says so and offers Play the dare or Back to my jar; the dare never touches the player’s save', async ({ page, server }) => {
   const saved = await page.evaluate(() => { bkNew(55); for (let i = 0; i < 6; i++) { bk.ready = true; bkDrop(40 + i * 55); for (let j = 0; j < 80; j++) bkStep(BK_DT); } bk.score = 1230; bkSaveRun(); return localStorage.getItem(BK_RUN); });
   const q = await bkLinkQ(page, 777, 900, 5);
   await bkOpenLink(page, server, q);
@@ -7693,15 +7693,15 @@ test('bakery: a jar in progress survives a dare: the card says so and offers Pla
   await page.click('#bkDarePlay');
   await page.evaluate(() => { bkStop(); for (let i = 0; i < 5; i++) { bk.ready = true; bkDrop(100 + i * 40); for (let j = 0; j < 80; j++) bkStep(BK_DT); } bkPause(); bkResume(); bkStop(); bkGameOver(); bkKick(); });
   await page.waitForFunction(() => bk.st === 'card', null, { timeout: 8000 });
-  assert.equal(await page.evaluate(() => localStorage.getItem(BK_RUN)), saved, 'drops, a pause and the end of the dare leave her save as it was');
+  assert.equal(await page.evaluate(() => localStorage.getItem(BK_RUN)), saved, 'drops, a pause and the end of the dare leave the player’s save as it was');
   await page.click('#bkOverLab'); await page.click('#labList button[data-id=bakery]');
-  assert.deepEqual(await page.evaluate(() => ({ score: bk.score, dare: bk.dare, s: bk.seed0 === JSON.parse(localStorage.getItem(BK_RUN)).s0 })), { score: 1230, dare: null, s: true }, 'her own jar, back');
+  assert.deepEqual(await page.evaluate(() => ({ score: bk.score, dare: bk.dare, s: bk.seed0 === JSON.parse(localStorage.getItem(BK_RUN)).s0 })), { score: 1230, dare: null, s: true }, 'the player’s own jar, back');
   await bkOpenLink(page, server, q);
   await page.click('#bkDareMine');
   assert.deepEqual(await page.evaluate(() => ({ score: bk.score, dare: bk.dare, card: el('bkDare').hidden, paused: bk.paused })), { score: 1230, dare: null, card: true, paused: false }, 'Back to my jar');
 });
 
-test('bakery: the first-play hint: the first time (a link too) until her first touch, then never again; Reduce Motion: the line only', async ({ page, server }) => {
+test('bakery: the first-play hint: the first time (a link too) until the player’s first touch, then never again; Reduce Motion: the line only', async ({ page, server }) => {
   await bkOpenLink(page, server, await bkLinkQ(page, 31, 500, 4), true);
   const vis = () => page.evaluate(() => { const h = el('bkHint'); return { on: !h.hidden, text: h.textContent.trim(), fing: !h.hidden && getComputedStyle(h.querySelector('.fing')).display !== 'none' }; });
   assert.equal((await vis()).on, false, 'not over the dare card');

@@ -1,11 +1,11 @@
 // Crumble — Goals, unlock progress and the play streak (plan 4.2).
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ goals ═══════
-   Calm on purpose: nothing here can be lost or failed. A streak is "days she played", and one missed day only
+   Calm on purpose: nothing here can be lost or failed. A streak is "days the player played", and one missed day only
    pauses it (the card says "play today to keep going", never a warning). Goals are lifetime ladders derived from
    `stats`, the Adventure record and the play days, one rung showing at a time; a reached rung gets one quiet banner.
    Saved in `crumble.goals` = {v:1, streak:{cur, best, last:"2026-11-09"}, done:["lines:25", ...]}. The first load
-   marks every rung she has already passed as done without a banner, so nobody is greeted with a pile of old news. */
+   marks every rung the player has already passed as done without a banner, so nobody is greeted with a pile of old news. */
 const GOALS_STORE='crumble.goals';
 const goals={streak:{cur:0,best:0,last:''},done:new Set(),fresh:true,days:0};
 const GOAL_FAMILIES=[
@@ -36,7 +36,7 @@ function saveGoals(){
   try{ localStorage.setItem(GOALS_STORE,JSON.stringify({v:1,streak:goals.streak,days:goals.days,done:[...goals.done]})); }catch(e){}
   cloudDirty();
 }
-// the streak she is on right now: alive while she played today or yesterday
+// the streak the player is on right now: alive while the player played today or yesterday
 function streakNow(){
   const s=goals.streak, t=dailyKey();
   return s.last===t||s.last===addDays(t,-1)?s.cur:0;
@@ -48,7 +48,7 @@ function playedToday(){
   s.cur=s.last===addDays(t,-1)?s.cur+1:1; s.best=Math.max(s.best,s.cur); s.last=t; goals.days++;
   saveGoals();
 }
-// the rung she is working on in a family: the first one not yet reached
+// the rung the player is working on in a family: the first one not yet reached
 const goalRung=f=>f.rungs.find(n=>!goals.done.has(rungId(f,n)))||0;
 function checkGoals(announce=true){
   let top=null, any=false;
@@ -60,7 +60,7 @@ function checkGoals(announce=true){
 }
 
 /* ── the card ── */
-function goalsSub(){                                   // the Goals tile's line on the menus; (dares) the cookie jar once she has any; (closet) the ones she can spend
+function goalsSub(){                                   // the Goals tile's line on the menus; (dares) the cookie jar once the player has any; (closet) the ones the player can spend
   const st=streakNow(), ck=dare.st.cookies?closetSpendable():0;
   if(ck) return ck+(ck===1?' cookie':' cookies')+(st?' · Streak '+st:'');
   return st?'🔥 '+st+(st===1?' day':' days')+' in a row':'Streak and unlocks';
@@ -94,7 +94,7 @@ function renderGoals(){
   const gl=el('goalList'); gl.textContent='';
   for(const f of GOAL_FAMILIES){ const n=goalRung(f); if(n) gl.append(goalRow(f.text(n),f.val(),n)); }
   if(!gl.children.length) gl.append(Object.assign(document.createElement('p'),{className:'setnote',textContent:'Every goal done. Wow.'}));
-  const dw=daresWon(), dl=el('goalsDares');           // (dares) one line for the jar; (closet) the cookies she can spend
+  const dw=daresWon(), dl=el('goalsDares');           // (dares) one line for the jar; (closet) the cookies the player can spend
   dl.hidden=!(dw||dare.st.cookies); dl.textContent='Dares won: '+dw+' · Cookies: '+closetSpendable();
   el('goalsDone').textContent=goals.done.size?goals.done.size+(goals.done.size===1?' goal':' goals')+' reached':'';
 }

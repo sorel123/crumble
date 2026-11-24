@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import { serve } from '../../tests/harness.mjs';
 import { chromium } from 'playwright';
-const [seed = 1, drops = 24, out = '/tmp/claude-0/shots/run', scale = 3] = process.argv.slice(2);
+const [seed = 1, drops = 24, out = '/tmp/shots/run', scale = 3] = process.argv.slice(2);
 fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
 const SEED = `(()=>{let a=${seed}>>>0;Math.random=()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};})();`;
 const CLOCK = `(()=>{let T=1000;const q=[];window.requestAnimationFrame=cb=>{q.push(cb);return q.length};window.cancelAnimationFrame=()=>{};performance.now=()=>T;

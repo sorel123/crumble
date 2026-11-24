@@ -2,11 +2,11 @@
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* ═══════ the guide ═══════
    A brand-new player (Endless, no best, no game played, never guided) opens on three hand-built boards instead of the
-   seeded opening, one short line each in the banner style, then "You've got it!" and an ordinary light opening (her
+   seeded opening, one short line each in the banner style, then "You've got it!" and an ordinary light opening (the player's
    score stays). No arrows, no forced moves: any legal move is allowed. The only help is a ghost pulse on the target
    cells after CFG.GUIDE_HINT_MS with no piece picked up. If a lesson's tray ends without its lesson (no row filled, no
    two lines, no sweep) the guide ends quietly and the ordinary dealer takes over from the board as it stands.
-   One board all the way through: a lesson's tray holds only the pieces the lesson needs, so nothing of hers is left
+   One board all the way through: a lesson's tray holds only the pieces the lesson needs, so nothing of the player's is left
    lying about, and the next lesson only adds gems (popping in) around the loose ones already there. The loose gems of
    lessons 1 and 2 sit in the rows lesson 3 completes, so the sweep takes them too.
      1  "Fill a row"      one row with a 3-wide gap; the tray holds only the 1x3 that fills it
@@ -56,7 +56,7 @@ for(const L of GUIDE_LESSONS){
   }).filter(g=>g.cells.length);
 }
 let guide=null;          // the live lesson: {n: 1-3, ln: lines cleared by this tray, sw: it swept, dn: bitmask of gaps already cleared}
-let guideIdleT=0;        // when she last did something (the tray arrived, a pickup, a drop): the hint waits CFG.GUIDE_HINT_MS from here
+let guideIdleT=0;        // when the player last did something (the tray arrived, a pickup, a drop): the hint waits CFG.GUIDE_HINT_MS from here
 function guideSeen(){ try{ return localStorage.getItem(GUIDE_STORE)==='1'; }catch(e){ return true; } }   // no storage: never (it would show every launch)
 function guideMark(){ try{ localStorage.setItem(GUIDE_STORE,'1'); }catch(e){} }
 const guideFresh=()=>CFG.GUIDED_START&&mode==='endless'&&stats.games===0&&!best&&!guideSeen();   // start() asks before it counts the game
@@ -94,7 +94,7 @@ function guideDeal(){
   if(n<GUIDE_LESSONS.length){ if(!guideFits(n+1)){ guideEnd(); return false; } guideLay(n+1); return true; }
   guideEnd();
   pushBanner("You've got it!",'','#8FF7FF',1);
-  seedOpening('light');                              // an ordinary light opening, tray 1 (her score stays)
+  seedOpening('light');                              // an ordinary light opening, tray 1 (the player's score stays)
   for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]&&!reduce) grid[r][c].t=-0.2-(r+c)*0.04;
   return true;
 }

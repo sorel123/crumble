@@ -1,7 +1,7 @@
 // Crumble — the crumb talks back: a speech bubble or a little sign beside the mascot.
 // Plain script, loaded in order by index.html (after crumbtoy.js); shares globals with the other js/ files.
-/* Jay, 2026-11-14: "more snarky animations... if you stop playing for a bit, he holds a sign hey where'd you go...
-   maybe even when you do something good too". The crumb is wry, never mean, and never long: one short line at a time.
+/* (2026-11-14) The crumb reacts with a little snark: if you stop playing for a bit he holds up a sign, and he chimes in
+   when you do something good too. The crumb is wry, never mean, and never long: one short line at a time.
      hot     charged for a cannonball: a bouncing "PULL ME BACK!" stays up until it is thrown (the one line that is a hint;
              "FLICK ME!" with the slingshot switched off). A tap on it says how ("pull me back and let go!")
      idle    no touch for TALK_IDLE_MS: it holds up a sign ("hey, where'd you go?"), then a second one, then it nods off (zzz);

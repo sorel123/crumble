@@ -4,7 +4,7 @@
 // For each board rsSolve searches every order and seat of the board's queue (clears and crumb falls between drops, a
 // stuck tray a dead end), deeper and deeper, so the first win it finds uses the fewest pieces; also printed: whether the
 // crumbs rest where the board puts them, and that the stored solution wins in par pieces. Exit code 1 if a board is off.
-// Needs Playwright (see HANDOFF.md, Workflow).
+// Needs Playwright (npm install).
 import { serve, openGame } from '../tests/harness.mjs';
 
 const only = process.argv[2] ? [Number(process.argv[2]) - 1] : null;

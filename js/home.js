@@ -1,13 +1,13 @@
 // Crumble — the front menu's showpiece (plan 8.3).
 // Plain script, loaded in order by index.html; shares globals with the other js/ files.
 /* The start card (launch with no saved run) and the mode menu (Home after a game, or the mode chip) share one look:
-     a gem logo   CRUMBLE spelled in her own gem skin (Crum in colours, ble in gold): the tiles drop in one by one when the
+     a gem logo   CRUMBLE spelled in the player's own gem skin (Crum in colours, ble in gold): the tiles drop in one by one when the
                   menu opens, then a ripple and a glint run along them every few seconds; tap a tile and it flips
-     the crumb    the mascot (7.5f) perched on the last tile: it blinks, watches where she taps, hops when the logo lands,
+     the crumb    the mascot (7.5f) perched on the last tile: it blinks, watches where the player taps, hops when the logo lands,
                   smirks when poked
      the sky      the journey sky (7.5b) travelling dawn -> day -> golden hour -> night -> aurora -> space and round again,
                   a stage every SKY_HOLD ms, drawn instead of the blurred board (frame() skips the board, tray and effects)
-     the buttons  a big Play, then Adventure / Daily / Challenge / Goals as a 2x2 of tiles with her progress on each, and a
+     the buttons  a big Play, then Adventure / Daily / Challenge / Goals as a 2x2 of tiles with the player's progress on each, and a
                   slim Settings button under them (E1: Challenge took Settings' tile)
    Cost: the sky is the same cached plate blit as in a game (two during a wipe); the logo and crumb are DOM, animated with
    CSS / Web Animations on transform and opacity only. The overlay drops its backdrop blur, so the menu is cheaper to draw
@@ -33,12 +33,12 @@ function homeInit(){
   h.append(logo,c);
   hero.el=h; hero.crumb=c; hero.pp=c.querySelector('.pp');
   el('menuSettings').onclick=e=>{ e.stopPropagation(); openSettings(); };
-  // the crumb watches where she touches the menu
+  // the crumb watches where the player touches the menu
   for(const id of ['startCard','menuCard']) el(id).addEventListener('pointerdown',e=>homeLook(e.clientX,e.clientY));
 }
 
 const homeCard=()=>!el('startCard').hidden?el('startCard'):!el('menuCard').hidden?el('menuCard'):null;
-// the tiles' faces: her skin's gem sprites, redrawn when the skin (or the screen) changes
+// the tiles' faces: the player's skin's gem sprites, redrawn when the skin (or the screen) changes
 function homeTiles(){
   hero.gems=gemBig;
   const px=Math.round(hero.tiles[0].offsetWidth*Math.min(devicePixelRatio||1,3))||132;
@@ -54,7 +54,7 @@ function homeStats(){
   if(st) k.push('<span>🔥 '+st+(st===1?' day':' days')+'</span>');
   return k.join('');
 }
-function homeFill(card){                               // the words on the card: her best, her streak, each mode's progress
+function homeFill(card){                               // the words on the card: the player's best, the player's streak, each mode's progress
   const today=daily.d[dailyKey()], liveD=peekRun('daily'), st=streakNow();
   const advS=advStars()?'Level '+nextLevel().id+' · ★ '+advStars():'Goal levels, no timer';
   const dayS=liveD&&liveD.dk===dailyKey()?'Today: in progress':today?'Today: best '+today.s:'New board today';
@@ -63,7 +63,7 @@ function homeFill(card){                               // the words on the card:
   sEl.innerHTML=stats; sEl.hidden=!stats;
   if(card.id==='startCard'){
     el('startAdvSub').textContent=advS; el('startDailySub').textContent=dayS; el('startGoalsSub').textContent=golS; el('startChalSub').textContent=chTileSub();
-    el('startHow').hidden=!!(best||stats);           // the how-to is for her first game; after that the stats take its place
+    el('startHow').hidden=!!(best||stats);           // the how-to is for the player's first game; after that the stats take its place
   } else {
     el('menuClose').textContent=state==='play'?'Back to the game':'Back';
     el('menuClose').hidden=state==='play'&&mode==='endless';   // (8.4) the big Endless button says Continue instead
@@ -158,7 +158,7 @@ function homeCrumble(){
   const dp=Math.min(devicePixelRatio||1,2), anims=[];
   hero.tiles.forEach((t,i)=>{
     const r=t.getBoundingClientRect(), w=r.width, src=t.querySelector('canvas'), b=t.querySelector('b'), cs=getComputedStyle(b);
-    const face=document.createElement('canvas'); face.width=face.height=Math.round(w*dp);   // the tile as she sees it: gem, then letter
+    const face=document.createElement('canvas'); face.width=face.height=Math.round(w*dp);   // the tile as the player sees it: gem, then letter
     const x=face.getContext('2d'); x.scale(dp,dp); x.drawImage(src,0,0,w,w);
     x.font=cs.fontWeight+' '+cs.fontSize+' '+cs.fontFamily; x.textAlign='center'; x.textBaseline='middle';
     const gold=t.classList.contains('gold');

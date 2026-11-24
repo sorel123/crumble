@@ -8,9 +8,9 @@
      sulk    thrown TOY_SULK_N times within TOY_SULK_MS it sits with a frown and shakes its head at the next grabs
      cannon  (Endless) a streak of CANNON_COMBO charges it: it glows. Thrown while charged it is a cannonball: every gem it
              flies over breaks (CANNON_PER_GEM points each) and slows it, up to CANNON_MAX gems. The one way the toy touches the board.
-             Breaking the last gem is a clean sweep and passing her best is NEW BEST (game.js sweepPayoff / bestCheck).
+             Breaking the last gem is a clean sweep and passing the player's best is NEW BEST (game.js sweepPayoff / bestCheck).
      sling   (stakes) charged, it is a slingshot (CANNON_SLING): touch it, pull away from where it should go and let go; it leaves
-             its perch the other way, faster for a longer pull (SLING_SCALE px/s per px, SLING_MIN..SLING_MAX). While she pulls a
+             its perch the other way, faster for a longer pull (SLING_SCALE px/s per px, SLING_MIN..SLING_MAX). While the player pulls a
              band runs from the perch to it and dots run along its real path (toyPath: the flight's own physics, toyFly, with the
              gems it would break taken out of a copy) for the first second. A flick still works, but only as a quick swipe
              (touch to lift within SLING_QUICK_MS, and fast at the lift); a longer gesture pulled past SLING_MIN is always the
@@ -117,7 +117,7 @@ function toyFireEnd(){                                              // out of st
   if(state==='play'&&boardEmpty()){                                 // it broke the last gem: a clean sweep, with everything a drop's sweep brings (game.js)
     score+=sweepPayoff(f.n,6,true); stats.sweeps++; rc.p++; mascotAct('sweep'); checkGoals(); dareDrop(0,0,0,true,false,false,false);   // (dares) a cannonball's sweep counts for a sweep dare
   }
-  if(state==='play') bestCheck(true);                               // and passing her best is NEW BEST, as for a drop
+  if(state==='play') bestCheck(true);                               // and passing the player's best is NEW BEST, as for a drop
   updateDbg(); tlRecord();
   if(state==='play'&&stuck){                                        // the last chance is spent: room for a piece and the run goes on, otherwise it ends as it would have
     toy.lastAsked=false; checkStuck();
@@ -125,8 +125,7 @@ function toyFireEnd(){                                              // out of st
   }
   if(state==='play'&&!dealing) saveRun();
 }
-/* The last chance (Jay 2026-11-14: "I had crumb charged and ran out of space and the game ended. should we let you clear
-   space with him?"). Out of room with a charged crumb, the run does not end: checkStuck (game.js) holds, the crumb stays on
+/* The last chance (2026-11-14): a charged crumb should be able to clear space when the board runs out of room. Out of room with a charged crumb, the run does not end: checkStuck (game.js) holds, the crumb stays on
    its feet, and it can be thrown even though the board is stuck. When the cannonball is spent the board is checked again. */
 const toyLast=()=>CFG.CANNON_SAVE&&stuck&&state==='play'&&toyHot()&&toyOn()&&mode==='endless';
 function toyLastAsk(){

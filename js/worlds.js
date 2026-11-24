@@ -10,7 +10,7 @@ const GOLD=6, STAR_GI=7, NCOLOR=6;        // NCOLOR = the ordinary colours dealt
 
 /* ═══════ worlds — Home (picked) + Transformations (earned) ═══════
    A world is a background gradient + an ambient particle effect, drawn
-   behind the board. HOME_WORLDS are always available; she picks one plus
+   behind the board. HOME_WORLDS are always available; the player picks one plus
    a tile skin on the start screen — that's the look for the whole run.
    TRANSFORMS are temporary: an achievement swaps both the world AND the
    tile skin for a few placements (see genGolden.. no — see place()/
@@ -37,7 +37,7 @@ const TRANSFORMS={
   storm:    {name:'Storm',      world:{top:'#232B38',bottom:'#0C1016',effect:'storm',flash:true},   skin:'storm'}
 };
 const TRANSFORM_IDS=Object.keys(TRANSFORMS);
-const BONUS_WORLD={top:'#3A1170',bottom:'#12062B',effect:'sparks'};   // the bonus trays' sky: deep violet, rising sparks (the board and tiles keep her look)
+const BONUS_WORLD={top:'#3A1170',bottom:'#12062B',effect:'sparks'};   // the bonus trays' sky: deep violet, rising sparks (the board and tiles keep the player's look)
 /* (7.5b) the journey sky, Endless and Daily: the sky travels as the score climbs and every clean sweep jumps a stage
    (draw.js, "journey sky"). Each stage is a world like the others (gradient + ambient effect) plus a cached decor sprite
    (sun, clouds, moon, planet...). Colours stay mid-to-dark so white HUD text reads on them; a light theme with dark ink
@@ -278,7 +278,7 @@ function startFlip(toWorld,toSkin){
   ambient=spawnAmbient(worldDef(curWorld).effect);
   flip={t:0,fromBig,fromSmall};
 }
-// the bonus trays' sky: only the background and its particles change, over ~BONUS_SKY_FRAMES; her tiles are never touched
+// the bonus trays' sky: only the background and its particles change, over ~BONUS_SKY_FRAMES; the player's tiles are never touched
 const BONUS_SKY_FRAMES=70;
 function startSky(toWorld){
   jw=null;

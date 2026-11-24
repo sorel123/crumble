@@ -139,11 +139,11 @@ function goalProgress(){
   return t==='lines'?lv.lines:t==='score'?score:t==='combo'?lv.combo:lv.swept?1:0;
 }
 // the HUD's right-hand box: Best in Endless, the goal in Adventure
-/* (7.5e) Chase your best. In Endless, a slim bar under the score fills as the shown score counts up toward the best she
+/* (7.5e) Chase your best. In Endless, a slim bar under the score fills as the shown score counts up toward the best the player
    started the run with (chaseBest). From CFG.CHASE_NEAR of it "N to beat" shows beside it; from CFG.CHASE_HOT the bar
    glows. When the shown score passes it the bar flashes and pops away; place() has already raised the NEW BEST banner
    and, with the journey sky on and a best of CFG.CHASE_SKY_MIN or more, jumped the sky a stage (journeySweep).
-   Plain DOM in the HUD: no canvas drawing, and it writes only when what it shows changes. Hidden on her very first run
+   Plain DOM in the HUD: no canvas drawing, and it writes only when what it shows changes. Hidden on the player's very first run
    (no best yet), in Daily and Adventure, and with Settings > Look > Advanced "Chase your best" off. */
 let chaseKey='', chaseT=0;
 function chaseSync(){
@@ -156,7 +156,7 @@ function chaseSync(){
   if(key===chaseKey) return;
   const was=chaseKey; chaseKey=key; clearTimeout(chaseT);
   if(key==='off'){ box.hidden=true; box.className=''; return; }
-  if(key==='won'){                                   // passed: a flash and a pop if she saw it happen, else simply gone
+  if(key==='won'){                                   // passed: a flash and a pop if the player saw it happen, else simply gone
     box.querySelector('.fill').style.transform='scaleX(1)';
     if(was&&was!=='off'&&!box.hidden){ box.className='won'+(reduce?' rm':''); chaseT=setTimeout(()=>{ box.hidden=true; },reduce?400:750); }
     else box.hidden=true;
@@ -228,7 +228,7 @@ function levelFailed(){
 function overlayOpen(){ return ['pauseCard','setPanel','menuCard','mapCard','dailyCard','goalsCard','chalCard','devPanel','closetCard',...LAB_CARDS].some(id=>!el(id).hidden); }
 function pauseForMenu(){ if(state==='play'){ paused=true; hapSelect('end'); drag=null; shake=0; hesVoid(); } }
 function hideMenus(){ el('closetCard').hidden=true; el('goalsCard').hidden=true; el('menuCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('chalCard').hidden=true; el('winCard').hidden=true; labHide(); paused=false; }
-function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; labLeave(); }      // keep what she was doing; it is waiting when she comes back
+function leaveMode(){ if(state==='play') saveRun(); lastRunJson=null; rndSrc=null; labLeave(); }      // keep what the player was doing; it is waiting when the player comes back
 function openMenu(){
   pauseForMenu(); el('winCard').hidden=true; el('mapCard').hidden=true; el('dailyCard').hidden=true; el('goalsCard').hidden=true; el('chalCard').hidden=true; labHide();
   el('menuChalSub').textContent=chTileSub();
@@ -241,7 +241,7 @@ function openMenu(){
   el('startCard').hidden=true;                        // one home card at a time: from the start card (Lab, Goals, Daily...) Back lands here, not on top of it
   el('menuCard').hidden=false;
 }
-function closeMenu(){                              // back to wherever she came from: the game, or the card that was up (a won level, game over)
+function closeMenu(){                              // back to wherever the player came from: the game, or the card that was up (a won level, game over)
   el('menuCard').hidden=true;
   if(state==='idle') el('startCard').hidden=false;      // nothing to go back to yet: the start card again
   if(state==='won') el('winCard').hidden=false; else if(state==='over'){ el('overCard').hidden=false; tlResume(); }
@@ -314,7 +314,7 @@ el('pauseNew').onclick=e=>{
   if(!b.classList.contains('confirm')){ b.textContent=restart?'Tap again to start over':'Tap again to end it'; b.classList.add('confirm'); pauseNewT=setTimeout(pauseNewReset,3000); return; }
   closePause(); if(restart) start(); else endToHome();
 };
-// End game (2026-11-12, Jay): the run is thrown away and the home screen comes up, as on a first launch with nothing saved
+// End game (2026-11-12): the run is thrown away and the home screen comes up, as on a first launch with nothing saved
 function endToHome(){
   cancelDeal(); clearRun(); clearRunFx(); stuck=false; state='idle'; mode='endless'; lvl=null; saveMode();
   grid=empty(); score=0; combo=0; shownScore=0; el('scoreVal').textContent='0'; resetWorld(); genTray();

@@ -1,6 +1,6 @@
 // Crumble — a cookie on the board: now and then a cookie lands on one gem; clear that gem in time and Crumb eats it.
 // Plain script, loaded in order by index.html (after dares.js); shares globals with the other js/ files.
-/* The lightest goal there is in Endless: it steers where she clears, with no new mode, and it feeds the hats (the cookie goes
+/* The lightest goal there is in Endless: it steers where the player clears, with no new mode, and it feeds the hats (the cookie goes
    into the dares jar, `crumble.dares`, which the closet spends).
    Lands: when a tray is dealt (stepDeal calls cookieDealt), if no cookie is on the board, at least COOKIE_GAP trays have passed
    since the last one left, the run is past its first COOKIE_START trays, the board holds COOKIE_MIN_GEMS gems and fewer than

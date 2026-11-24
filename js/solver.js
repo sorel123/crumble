@@ -84,7 +84,7 @@ function evalHand(a0,shapes,budget){
   }
   for(const p of PERMS){ dfs(lo0,hi0,p,0,0); if(res.sweep) break; }
   // 'guide': what clears RIGHT NOW with one obvious drop, no sequence — the easy, relaxing kind of hand
-  // obvPieces (plan 3.4): how many pieces have an OBVIOUS clear (obviousLines below), the kind she sees without looking.
+  // obvPieces (plan 3.4): how many pieces have an OBVIOUS clear (obviousLines below), the kind the player sees without looking.
   // alt: legal spots for the smallest piece of 2+ cells, capped at 8 — room to put the awkward one somewhere harmless.
   // (Singles are left out of alt on purpose, or it would reward dots and fight SINGLE_WEIGHT.)
   res.imm=0; res.immPieces=0; res.obvPieces=0; res.alt=0;
@@ -295,10 +295,10 @@ function* sweepHuntSteps(lo0,hi0,budget=CFG.SWEEP_HUNT_NODES){
         path.push({s:c.s,lines});
         if(!nlo&&!nhi){                                // a sweep: score it (every drop clears = 1 each; a dot costs a little)
           let sc=path.reduce((a,p)=>a+(p.lines?1:0)-(p.s.n===1?0.4:0),0)+(3-path.length)*0.5;
-          if(sc+easeW>bestSc-2){                             // (1.1) a sweep her quick play finds by itself (predictPlay) beats a cleverer one
+          if(sc+easeW>bestSc-2){                             // (1.1) a sweep the player's quick play finds by itself (predictPlay) beats a cleverer one
             const h=path.map(p=>p.s); while(h.length<3) h.push(SHAPES[1+(path.length%4)]);
             const pp=predictPlay(lo0,hi0,h); if(pp&&!(pp[0]|pp[1])) sc+=2;
-            if(easeW) sc+=easeW*sweepEase(lo0,hi0,h);   // (round 5) a sweep a person finds whichever way she plays it
+            if(easeW) sc+=easeW*sweepEase(lo0,hi0,h);   // (round 5) a sweep a person finds whichever way the player plays it
             if(sc>bestSc){ bestSc=sc; best=path.map(p=>p.s); }
           }
         }
@@ -328,7 +328,7 @@ function* closerSteps(a){
 /* (1.1 A) the two-tray chase, for an earned closer that finds no sweep on a small board (CHASE_GEMS). Of CHASE_TRIES candidate
    hands (most carrying a piece that clears a line now), deal one that can leave a board a three-piece sweep exists for (its
    tidiest play or its emptiest, both from evalHand; the closest to a sweep by sweepGap are hunted), and the next tray hunts
-   again on the board she actually made. null if none turns up.
+   again on the board the player actually made. null if none turns up.
    OFF by default (CHASE_TRIES 0): on the casual bot (4000 trays, seeds 1-3) it dealt 40-80 set-up hands, but the bot reached
    the sweepable board only 0-15 times, so sweeps did not measurably rise while the deal cost p95 rose about 2 ms. Kept for
    tuning (Admin slider) and for the Endless pacing work, where steering the board is decided. */
@@ -348,15 +348,15 @@ function* chaseSteps(a0,density){
   for(const t of tried.slice(0,3)){ if(yield* sweepHuntSteps(t.lo,t.hi,CFG.CHASE_NODES)) return t.hand; }
   return null;
 }
-/* (1.1) The sweep run: Jay's steering ("when it gets low, send jackpot style ones where an L squares it off, then a 3x3 and a
-   2x2 sweep it"). On a low calm board (RUN_GEMS or fewer gems, phase calm or relief, off cooldown, no special live) the
+/* (1.1) The sweep run: the design brief: when the board gets low, deal jackpot-style hands where an L squares it off,
+   then a 3x3 and a 2x2 sweep it. On a low calm board (RUN_GEMS or fewer gems, phase calm or relief, off cooldown, no special live) the
    dealer spends up to RUN_TRAYS trays dealing toward a sweep with big, readable pieces (RUN_POOL: bars, rectangles, corners
    and L's; no S, Z or T, no dots or dominoes). Each tray it first hunts: a sweep on the board is dealt as a closer and ends
    the run. Otherwise of RUN_TRIES candidate hands (most carrying a piece that clears a line now) it deals the one whose
    tidiest or emptiest play leaves a board a sweep hand exists for (checked with the hunt), else the one that leaves the
    board closest to a sweep (sweepGap), favouring clears. Off-script play needs no special case: the next tray reads the
-   board she made; a board grown past RUN_GEMS+RUN_SLACK or a phase change ends the run. Cooldown RUN_COOL after a run,
-   paid or not. Nothing on screen marks it (Jay: she spots the sweep herself). Not in a Challenge (its seeds stay as dealt). */
+   board the player made; a board grown past RUN_GEMS+RUN_SLACK or a phase change ends the run. Cooldown RUN_COOL after a run,
+   paid or not. Nothing on screen marks it (the player spots the sweep themselves). Not in a Challenge (its seeds stay as dealt). */
 const RUN_POOL=SHAPES.filter(s=>{
   if(s.n<3) return false;
   if(s.n===s.rows*s.cols) return true;                                       // bars and rectangles
@@ -365,9 +365,9 @@ const RUN_POOL=SHAPES.filter(s=>{
 });
 let sweepRun=null;                                    // {n: trays dealt in this run} or null
 const runPhase=()=>pace.ph==='calm'||pace.ph==='relief';
-/* (1.1) how a quick, greedy player is likely to play a hand (the run's guess at the board she will leave): an obvious
+/* (1.1) how a quick, greedy player is likely to play a hand (the run's guess at the board the player will leave): an obvious
    clear first (plan 3.4's kind; the one clearing the most lines), otherwise the biggest piece where it sits most flush
-   (most sides against gems or the wall). Clears applied between drops. Returns [lo,hi], or null if she would get stuck. */
+   (most sides against gems or the wall). Clears applied between drops. Returns [lo,hi], or null if the player would get stuck. */
 const NB=[]; for(let i=0;i<64;i++){ const r=i>>3,c=i&7; NB.push([[r-1,c],[r+1,c],[r,c-1],[r,c+1]].map(([y,x])=>y<0||x<0||y>7||x>7?-1:y*8+x)); }
 const bitAt=(lo,hi,i)=>i<32?(lo>>>i)&1:(hi>>>(i-32))&1;
 function predictPlay(lo,hi,hand){
@@ -441,7 +441,7 @@ function personPlays(lo0,hi0,hand,need){
     if(ok) done++;
     if(ok&&!lo&&!hi) sw++;
     if(!lo&&!hi||lines>=need) hits++;
-    left0+=pop32(lo)+pop32(hi)+left.reduce((a,s)=>a+s.n,0);   // left: gems on the board after her play, pieces she could not place counted in
+    left0+=pop32(lo)+pop32(hi)+left.reduce((a,s)=>a+s.n,0);   // left: gems on the board after the player's play, pieces the player could not place counted in
   }
   return {sw:sw/K,hit:hits/K,left:left0/K,done:done/K};   // done: the share of plays that got every piece down
 }
@@ -453,7 +453,7 @@ function* runHandSteps(a0){
     if(keys.length&&rnd()<0.6) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];
     const pp=predictPlay(lo0,hi0,hand);
     if(pp){
-      if(!(pp[0]|pp[1])){ if(!tideOn()||sweepEase(lo0,hi0,hand)>=CFG.SWEEP_EASE) return {hand,sweep:true}; if(i%8===7) yield; continue; }   // her quick play sweeps it already (round 5: and most ways a person plays it do; a sweep most would miss is not dealt at all)
+      if(!(pp[0]|pp[1])){ if(!tideOn()||sweepEase(lo0,hi0,hand)>=CFG.SWEEP_EASE) return {hand,sweep:true}; if(i%8===7) yield; continue; }   // the player's quick play sweeps it already (round 5: and most ways a person plays it do; a sweep most would miss is not dealt at all)
       tried.push({hand,lo:pp[0],hi:pp[1],g:sweepGap(pp[0],pp[1]),d:sweepDist(pp[0],pp[1])});
     }
     if(i%8===7) yield;
@@ -522,7 +522,7 @@ function roomBits(lo,hi){
 }
 /* The phase for the tray being dealt. calm (room >= ROOM_OK) and building deal honest hands; the edge (room <
    ROOM_EDGE) holds EDGE_HOLD_MIN..MAX honest trays; then up to RECOVERY_TRIES recovery hands (a sequence to
-   spot); a miss goes back to the edge. The clear that lifts her out of edge or recovery earns RELIEF_TRAYS
+   spot); a miss goes back to the edge. The clear that lifts the player out of edge or recovery earns RELIEF_TRAYS
    guided trays. pace.n counts the trays dealt in the phase so far. */
 function paceSet(ph){ pace.ph=ph; pace.n=0; }
 function paceStep(a0){
@@ -563,7 +563,7 @@ function pickTier(a){
      PAYOFF_LINES+ lines; it pays only what the board offers: if no big hand does, the tray is an ordinary build tray
      and the clock tries again next tray. A relief tray, a closer or a golden hand counts as the payoff.
    - Setups: after each drop, an empty exact rectangle (SETUP_RECTS), mostly walled in, whose filling completes a line,
-     and which her drop just made, is a setup. Each of the next SETUP_TRAYS trays has SETUP_CHANCE of carrying the
+     and which the player's drop just made, is a setup. Each of the next SETUP_TRAYS trays has SETUP_CHANCE of carrying the
      exact piece; once dealt it is never offered again for that setup, used or not.
    - Closers (earned): a clear leaving CLOSER_GEMS or fewer gems, reaching combo CLOSER_COMBO, or getting out of an edge
      hold queues a closer: a planned sweep (target up to CLOSER_TARGET cells), with a shimmer behind the tray. If no
@@ -607,7 +607,7 @@ function waveAfterDrop(before,lines,gemsLeft,comboNow,wasTight){
   if(!paced()) return;
   if(lines>0){
     trayClear=true;
-    if(!gemsLeft&&hdeal.ph==='win'&&!hdeal.wp) hdeal.wp=1;   // the home dealer: she wiped the board in win mode, which ends it
+    if(!gemsLeft&&hdeal.ph==='win'&&!hdeal.wp) hdeal.wp=1;   // the home dealer: the player wiped the board in win mode, which ends it
     if(!gemsLeft&&hdOn()) hdeal.wn=1;                      // ...and the wipe chain rolls at the next deal
     if(!gemsLeft&&curveOn()) curve.heat=Math.min(1,curve.heat+CURVE_WIPE_NUDGE);   // the curve: a wipe warms the luck dial a little (it drifts back)
     if(gemsLeft>0&&gemsLeft<=CFG.CLOSER_GEMS) closerNext=true;
@@ -618,7 +618,7 @@ function waveAfterDrop(before,lines,gemsLeft,comboNow,wasTight){
   const old=new Set(findHoles(blo,bhi).map(holeKey));
   setups=setups.filter(u=>{ const s=SETUP_RECTS[u.k], m=placeMasks(s).find(p=>p.r===u.r&&p.c===u.c);
     const open=!((lo&m.lo)||(hi&m.hi)) && (lineIds(lo|m.lo,hi|m.hi)&~lineIds(lo,hi));
-    if(!open&&!u.dealt&&u.age===0) waveStats.closed++;     // she filled or changed it herself before another tray came: it never had a chance
+    if(!open&&!u.dealt&&u.age===0) waveStats.closed++;     // the player filled or changed it themselves before another tray came: it never had a chance
     return open; });
   for(const h of findHoles(lo,hi)){
     const key=holeKey(h);
@@ -665,7 +665,7 @@ function* jackpotSteps(a0,density){
   let best=null, bestSc=-Infinity;
   for(let i=0;i<CFG.JACKPOT_TRIES;i++){
     const hand=makeHand(density);
-    if(keys.length&&rnd()<0.8) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];   // most tries carry one: the bam she can see
+    if(keys.length&&rnd()<0.8) hand[(rnd()*3)|0]=keys[(rnd()*keys.length)|0];   // most tries carry one: the bam the player can see
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     if(ev.ok&&(ev.sweep||ev.lines>=CFG.JACKPOT_LINES)){
       // played drop by drop it still pays: big single drops and obvious clears count, and the board it leaves stays tidy
@@ -737,13 +737,13 @@ function waveDealt(hand){ bigHist.push(hand.filter(s=>s.n>=4).length); while(big
    stretch state. It does not read the board: EASY lasts TIDE_EASY_MIN..MAX trays, LEAN TIDE_LEAN_MIN..MAX, lengths
    rolled per stretch, a run starts EASY. Nothing on screen shows it. The 6.1 edge, recovery and relief still apply
    on top (a relief starts a fresh EASY stretch).
-   Jay's rule, checked at EVERY deal and in both stretches: the tray always has a solution. From the board she left
+   The rule, checked at EVERY deal and in both stretches: the tray always has a solution. From the board the player left
    (nothing is planned ahead or queued) the tray is only dealt if (a) some order and placement fits all three pieces
    (evalHand), (b) each piece on its own has a sound spot, one that clears a line or makes no sealed hole and costs
-   little room (soundBits), and (c) the board her quick play is likely to leave (predictPlay) still has a way on:
-   it is roomy, or some piece the dealer can deal next clears a line there (wayOut). If she made a mess anyway, the
+   little room (soundBits), and (c) the board the player's quick play is likely to leave (predictPlay) still has a way on:
+   it is roomy, or some piece the dealer can deal next clears a line there (wayOut). If the player made a mess anyway, the
    next tray is chosen fresh for that board, and in LEAN, once the board has gone LEAN_DRY trays without a clear (or
-   is tight and dry for one), the tray carries a piece that clears a line (the quiet rescue). Only her placement
+   is tight and dry for one), the tray carries a piece that clears a line (the quiet rescue). Only the player's placement
    can lose a run. ensureWay() is the last guard: a hand that is not solvable is replaced by one that is.
    What the older help became under the tide (Challenge still deals with all of it, so its frozen seeds stay):
    the payoff wave, jackpot clock, build-up, setups' piece offers, noTedium/BIG_FLOOR, the calm gift and BUILD_BIAS
@@ -829,7 +829,7 @@ function soundBits(lo,hi,s,room0){
   }
   return false;
 }
-/* (c) a way on from the board she is likely to leave: still roomy, or a piece of 2+ cells clears a line there */
+/* (c) a way on from the board the player is likely to leave: still roomy, or a piece of 2+ cells clears a line there */
 function wayOut(lo,hi){
   if(roomBits(lo,hi)>=CFG.ROOM_OK) return true;
   for(const s of SHAPES) if(s.n>=2&&bestDrop(lo,hi,s)>=1) return true;
@@ -866,7 +866,7 @@ function* tideHandSteps(a0,st,withStar){
     fixers=(pref.length?pref:ranked).slice(0,4).map(x=>x.s);
     if(fixers.length) waveStats.rescues++;
   }
-  // (round 4) a tray she can read: two or three of one piece (a rectangle, bar or big L that fits), so the tray says "build this"
+  // (round 4) a tray the player can read: two or three of one piece (a rectangle, bar or big L that fits), so the tray says "build this"
   const twins=easy?SHAPES.filter((s,i)=>fit[i]&&s.n>=3&&(isRect(s)||!CFG.EASY_RECT&&isBigL(s))):[];
   const later=easy?[]:SHAPES.filter((s,i)=>!fit[i]&&s.n>=4&&s.n<=6);               // (round 2) LEAN puzzle pieces: big ones that do not fit until a line clears
   yield;                                              // the tables above cost a slice of their own
@@ -888,16 +888,16 @@ function* tideHandSteps(a0,st,withStar){
     let sc;
     if(!ev.ok) sc=-1000+ev.lines;
     else {
-      const waits=hand.filter(s=>!s.star&&!fitsBits(lo,hi,s)).length;              // pieces that only fit once another has cleared a line (Jay's 3x3 on a tight board)
+      const waits=hand.filter(s=>!s.star&&!fitsBits(lo,hi,s)).length;              // pieces that only fit once another has cleared a line (a 3x3 on a tight board)
       const sound=hand.every(s=>!fitsBits(lo,hi,s)&&!s.star||soundBits(lo,hi,s,room0));   // (such a piece has no spot yet: evalHand already proved its turn comes)
       const pp=ev.sweep?[0,0]:predictPlay(lo,hi,hand), left=pp||[ev.flo,ev.fhi];
       const way=left[0]===undefined||wayOut(left[0],left[1]);
       const awk=hand.filter(awkward).length, size=hand.reduce((a,s)=>a+(s.star?0:s.n),0);
-      sc=(sound?0:-60)+(way?0:-40)+(pp?0:easy?-60:-25);                                   // pp null: her quick play gets stuck (fair in LEAN, not what EASY is)
-      if(easy&&left[0]!==undefined) sc+=CFG.EASY_ROOM*roomBits(left[0],left[1]);   // EASY keeps the board she will leave open
+      sc=(sound?0:-60)+(way?0:-40)+(pp?0:easy?-60:-25);                                   // pp null: the player's quick play gets stuck (fair in LEAN, not what EASY is)
+      if(easy&&left[0]!==undefined) sc+=CFG.EASY_ROOM*roomBits(left[0],left[1]);   // EASY keeps the board the player will leave open
       if(easy){                                                                        // (round 2) a cash-in: the most gems cleared, and late in the stretch, steer toward an empty board
         const late=tide.n>tide.len/2, swept=pp&&!(pp[0]|pp[1]);
-        sc+=ev.cleared*CFG.EASY_CASH+(swept?CFG.EASY_SWEEP*(1-bite('BITE_RUN')):0)-(pp&&!swept?CFG.EASY_LOW*(pop32(pp[0])+pop32(pp[1])):0);   // the board she will leave: the fewer gems the better
+        sc+=ev.cleared*CFG.EASY_CASH+(swept?CFG.EASY_SWEEP*(1-bite('BITE_RUN')):0)-(pp&&!swept?CFG.EASY_LOW*(pop32(pp[0])+pop32(pp[1])):0);   // the board the player will leave: the fewer gems the better
         if(late&&!swept&&left[0]!==undefined) sc-=CFG.EASY_STEER*(1-bite('BITE_RUN'))*Math.min(sweepDist(left[0],left[1]),40);
       }
       const smallN=hand.filter(s=>!s.star&&s.n<=3).length;                          // (round 3) no onsy-twosies: one small piece a tray, more only to finish a board clear
@@ -906,7 +906,7 @@ function* tideHandSteps(a0,st,withStar){
       if(easy){ const same=hand.filter(s=>!s.star&&s.n>=3&&hand.filter(x=>x===s).length>=2).length;   // (round 4) twins or triplets: a tray that reads as one plan
         sc+=same>=3?CFG.MATCH:same>=2?CFG.MATCH*0.6:0;
         if(keys.length&&!ev.immPieces) sc-=CFG.FOLLOW; }
-      if(crowded&&fixers.length) sc+=ev.immPieces?CFG.CROWD_KEY*Math.min(ev.immPieces,2):-CFG.CROWD_KEY*3;   // (round 6) a crowded board's tray finishes a line, two if it can                               // (round 4) follow-through: something she started gets finished this tray
+      if(crowded&&fixers.length) sc+=ev.immPieces?CFG.CROWD_KEY*Math.min(ev.immPieces,2):-CFG.CROWD_KEY*3;   // (round 6) a crowded board's tray finishes a line, two if it can                               // (round 4) follow-through: something the player started gets finished this tray
       if(easy) sc+=(ev.sweep?40:0)+Math.min(ev.lines,6)*14+ev.imm*6+ev.immPieces*5+Math.min(ev.obvPieces,2)*4+size*CFG.EASY_BIG-CFG.TIDY*ev.rough*0.5-(awk>1?30*(awk-1):0);
       else sc+=(waits&&!rescue?CFG.LEAN_PUZZLE:0)+awk*4+size*0.8-CFG.TIDY*ev.rough*(rescue?1:0.5)-(rescue?Math.max(0,ev.lines-CFG.LEAN_LINES-1)*12:Math.max(0,ev.lines-CFG.LEAN_LINES)*25+Math.max(0,ev.immPieces-1)*10);
     }
@@ -960,7 +960,7 @@ function* ensureWaySteps(a0,hand,why){
    - The coaster reads the board, with a small clock: warm STEADY trays until win mode is earned (HOME_EARN nearly-done
      lines, a crowded board, or a low one) or HOME_WIN_WAIT warm trays have passed. Win mode deals WIN trays (FINISH on a
      low board) until the board is wiped (its BUILD tray is the last of it), or HOME_WIN_MAX trays, or HOME_WIN_DRY trays
-     in a row in which she cleared nothing (she blew it); never because the board has no big gift left. Then
+     in a row in which the player cleared nothing (the player blew it); never because the board has no big gift left. Then
      HOME_COOL_MIN..MAX cool trays (TWIST with odds HOME_TWIST, else STEADY; RESCUE on a crowded board), then warm again. A
      board clear outside win mode is followed by BUILD in its phase.
    - The wipe chain is rolled, not capped: wipes each within HOME_ROW_GAP trays of the one before are a row. At the deal after
@@ -971,12 +971,12 @@ function* ensureWaySteps(a0,hand,why){
    - HOME_BLOCKY (an experiment, off): cool trays are TIGHT (homeTightSteps) in place of TWIST: big pieces at strictly flush
      homes that keep the gems in few lines, so the hard stretch is short of space rather than ragged; WIN trays score a
      big piece that finishes 2+ lines at one drop higher. No plan is carried between trays: each tray reads the
-     board she left, so an off-plan drop breaks nothing. Golden hands and the star are not dealt under it (bonus trays and
+     board the player left, so an off-plan drop breaks nothing. Golden hands and the star are not dealt under it (bonus trays and
      transformations still are). */
 const hdOn=()=>CFG.DEALER_HOME&&!CFG.DEALER_CURVE&&tideOn();   // the curve wins when both are on
 const HOME_ROW_GAP=4;                                  // wipes within this many trays of the one before are a row (the wipe chain)
 let hdeal={ph:'warm',n:0,len:0,f:0,wp:0,wr:0,wa:99,wn:0,lk:0};   // wr: wipes in the row; wa: trays since the last wipe; wn: a wipe not yet rolled for (waveAfterDrop); lk: the chain's help is off until this cool stretch ends
-// the coaster: 'warm' | 'win' | 'cool', trays dealt in it, its length (win: HOME_WIN_MAX; cool: rolled; warm: 0); f: FINISH trays in a row; wp: she wiped the board in win mode (1; 2: its BUILD tray is dealt), which ends it
+// the coaster: 'warm' | 'win' | 'cool', trays dealt in it, its length (win: HOME_WIN_MAX; cool: rolled; warm: 0); f: FINISH trays in a row; wp: the player wiped the board in win mode (1; 2: its BUILD tray is dealt), which ends it
 const hdStats={kinds:{},fallback:0,guard:0,finClear:0,win:{started:0,lens:[]},winFlat:0,chain:{rolls:0,stops:0}};   // this session only (the bot sim reads them); winFlat: win-mode trays with no WIN tray (none removes gems)
 function resetHd(){ if(hdeal.ph==='win') hdWinEnd('over'); hdeal={ph:'warm',n:0,len:0,f:0,wp:0,wr:0,wa:99,wn:0,lk:0}; } // (no rnd() here: resetWave runs it on every path, Challenge included)
 function hdSet(ph,lk=0){ hdeal={f:hdeal.f||0,wp:0,wr:hdeal.wr|0,wa:hdeal.wa===undefined?99:hdeal.wa,wn:0,lk,ph,n:0,len:ph==='win'?CFG.HOME_WIN_MAX:ph==='cool'?CFG.HOME_COOL_MIN+((rnd()*(CFG.HOME_COOL_MAX-CFG.HOME_COOL_MIN+1))|0):0}; }
@@ -1090,7 +1090,7 @@ function cutPlay(lo0,hi0,tiles){
 function* homeCutSteps(lo,hi,want){
   const gems=pop32(lo)+pop32(hi), cands=[], emp=[], hb=hbOf(lo,hi);
   for(let i=0;i<16;i++) emp.push(8-pop32(lo&LINE_MASKS[i*2])-pop32(hi&LINE_MASKS[i*2+1]));
-  const ready=8-CFG.BIG_READY_CELLS;                   // a line a gift finishes is nearly done: she can see the gift coming
+  const ready=8-CFG.BIG_READY_CELLS;                   // a line a gift finishes is nearly done: the player can see the gift coming
   for(let k=0;k<LINE_SETS.length;k++){
     const ids=LINE_SETS[k], nl=ids.length, L=SET_LO[k], H=SET_HI[k], tlo=L&~lo, thi=H&~hi, n=pop32(tlo)+pop32(thi);
     if(!n||n>27) continue;
@@ -1123,7 +1123,7 @@ function* homeCutSteps(lo,hi,want){
   const look=want==='gift'?found.filter(f=>f.sweep).slice(0,8).concat(found.filter(f=>!f.sweep).slice(0,4)):found.slice(0,4);
   let best=null;
   for(const f of look){
-    if(want==='gift'){                                  // of the best few, the gift a person finds (personPlays: plays that vary like hers)
+    if(want==='gift'){                                  // of the best few, the gift a person finds (personPlays: plays that vary like the player's)
       const hand=f.tiles.map(t=>t.s);
       if(f.sweep) while(hand.length<3) hand.push(OPEN_BUILD[(rnd()*OPEN_BUILD.length)|0]);   // a clear in one or two pieces: the rest are big blocks to build with once the board is empty (BUILD's chain)
       if(f.sweep&&hand.length>f.tiles.length) f.pads=hand.slice(f.tiles.length);
@@ -1416,12 +1416,12 @@ function* homeDealSteps(a0){
   const [lo,hi]=packBits(a0), gems=pop32(lo)+pop32(hi);
   goldenNext=false;                                    // no golden hands under this dealer
   const crowded=roomNow<CFG.HOME_RESCUE_ROOM, low=gems>0&&gems<=CFG.HOME_FINISH_GEMS;
-  if(hdeal.wn){                                        // she wiped the board: one more in the row, and the roll whether the chain's help carries on
+  if(hdeal.wn){                                        // the player wiped the board: one more in the row, and the roll whether the chain's help carries on
     hdeal.wr=hdeal.wa<=HOME_ROW_GAP?(hdeal.wr|0)+1:1; hdeal.wa=0; hdeal.wn=0; hdStats.chain.rolls++;
     if(!hdeal.lk&&rnd()>=Math.pow(CFG.HOME_WIPE_KEEP,hdeal.wr)){ hdStats.chain.stops++; if(hdeal.ph==='win') hdWinEnd('wipe'); hdSet('cool',1); }
   }
-  if(hdeal.ph==='win'){                                // win mode ends on a wipe (after its BUILD tray), the cap, or when she blew it
-    const dry=Math.min(dryN,hdeal.n);                  // trays of win mode in a row in which she cleared nothing (waveTick counted the last)
+  if(hdeal.ph==='win'){                                // win mode ends on a wipe (after its BUILD tray), the cap, or when the player blew it
+    const dry=Math.min(dryN,hdeal.n);                  // trays of win mode in a row in which the player cleared nothing (waveTick counted the last)
     const why=hdeal.wp===2||hdeal.wp===1&&gems?'wipe':hdeal.n>=hdeal.len?'cap':dry>=CFG.HOME_WIN_DRY?'dry':null;
     if(why){ hdWinEnd(why); hdSet('cool'); }
   }
@@ -1460,7 +1460,7 @@ function* homeDealSteps(a0){
   commitTray(hand,'HOME '+kind+(got&&got.sweep&&!tag?'·CLEAR':'')+tag+' '+hdeal.ph+(lk?'·LK':'')+(hdeal.len?' '+hdeal.n+'/'+hdeal.len:''));   // ·CLEAR: the cut can empty the board
 }
 /* ═══ The study curve (CFG.DEALER_CURVE; Endless and Daily, in place of the tide and the home dealer) ═══
-   Built from 253 trays read out of Jay's study recordings (plan-1.1/dealing-study/trays). the study has no hard
+   Built from a study of 253 recorded trays. the study has no hard
    mode and no small-piece finish mode: it deals big pieces that almost always have a clean place, the share of pieces that
    can finish a line rises with the fill, the board fills in dense lines, and wipes come from big multi-line clears of
    dense boards. The ups and downs come from that loop and from luck. So this dealer has no phases and no rules of the
@@ -1468,7 +1468,7 @@ function* homeDealSteps(a0){
    - Each slot's class is rolled from CURVE_TABLE by the gems on the board as dealt (buckets 0-12, 13-24, 25-36, 37+):
      CLEAR (a piece with a drop that completes a line now), FLUSH (no clear, but a strict home: bump 0, walls count as
      filled, no cell sealed in) or FREE (it fits, but every spot sticks out). the study's own "no legal spot" pieces are
-     not dealt (Jay's rule: a dealt tray never fails); their share goes to FREE, which on a 37+ board are tight ones.
+     not dealt (the rule: a dealt tray never fails); their share goes to FREE, which on a 37+ board are tight ones.
    - The piece within its class is drawn by the study's shape counts (CURVE_MIX, rotations pooled), the small ones scaled to
      CURVE_SMALL's share for the bucket. CLEAR pieces weigh (1 + lines their best drop clears)^CURVE_MULTI: a 3x3 or a bar
      into a dense board is how the study's 5-8 line comebacks happen. FLUSH pieces weigh e^(CURVE_DENSE x density) of
@@ -1604,16 +1604,16 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
     if(withStar) hand[(rnd()*3)|0]=STAR;      // graded with the star in it, so the score is honest
     const ev=evalHand(a0,hand,CFG.NODE_BUDGET);
     let sc;
-    if(tier==='edge'){                                // honest: no piece is dead on arrival; the order and the space are hers
+    if(tier==='edge'){                                // honest: no piece is dead on arrival; the order and the space are the player's
       const fit=hand.filter(s=>fitsBits(blo,bhi,s)).length;
-      sc=fit===3?(tideOn()&&!ev.ok?-50:10):-200+fit;                 // (1.1 G) under the tide an edge tray must also play out in full (Jay: the deal never fails)
+      sc=fit===3?(tideOn()&&!ev.ok?-50:10):-200+fit;                 // (1.1 G) under the tide an edge tray must also play out in full (the deal never fails)
     }
     else if(!ev.ok) sc=-100+ev.lines;                      // all three must be playable
     else if(tier==='honest') sc=10-CFG.TIDY*ev.rough+(buildUp?CFG.BUILD_UP*payoffRoom(ev.flo,ev.fhi):0);   // any playable hand, prefer the tidiest of a few (8.2: before a payoff, one that leaves a multi-line gap)
-    else if(tier==='recovery') sc=ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough+(ev.immPieces<=1?15:0)-(ev.obvPieces>1?15:0);   // the way out is a sequence she has to see
+    else if(tier==='recovery') sc=ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough+(ev.immPieces<=1?15:0)-(ev.obvPieces>1?15:0);   // the way out is a sequence the player has to see
     else sc=(ev.sweep?60:0)+ev.lines*10+ev.cleared*1.5-CFG.TIDY*ev.rough;
     if(ev.ok&&guided) sc+=CFG.GUIDE*(ev.imm*9+ev.immPieces*5+hand.reduce((a,s)=>a+(s.n>=5?3:0),0));   // obvious drops and big pieces: the guided, easy feel
-    if(ev.ok&&guided) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears she sees at a glance, and room for the awkward piece
+    if(ev.ok&&guided) sc+=CFG.OBVIOUS*Math.min(ev.obvPieces,CFG.OBVIOUS_MAX)+CFG.ALT*ev.alt;       // plan 3.4: clears the player sees at a glance, and room for the awkward piece
     if(ev.ok&&aim&&!ev.sweep){ let g=99; if(ev.flo!==undefined) g=sweepGap(ev.flo,ev.fhi); if(ev.glo!==undefined) g=Math.min(g,sweepGap(ev.glo,ev.ghi)); sc-=CFG.SWEEP_AIM*Math.min(g,30); }
     if(sc>bestScore){ bestScore=sc; bestHand=hand; bestEv=ev; }
     if(tier==='edge'){ if(sc>0) break; }
@@ -1628,8 +1628,8 @@ function* pickHandSteps(a0,density,tier,withStar,candidates=CFG.CANDIDATES,puzzl
 }
 /* Golden hand plan (4.5c): the best way to play the pieces still in the tray. Tries every order and spot (clears
    applied between placements, like evalHand) and returns the most lines (a sweep beats anything), plus WHICH
-   lines: ids 0-7 are rows, 8-15 columns. The board paints exactly those, so she sees what to aim for but still
-   solves the placement herself. Re-run after every placement so the glow only ever names lines still reachable. */
+   lines: ids 0-7 are rows, 8-15 columns. The board paints exactly those, so the player sees what to aim for but still
+   solves the placement themselves. Re-run after every placement so the glow only ever names lines still reachable. */
 function lineIds(lo,hi){ let m=0; for(let i=0;i<16;i++){ const L=LINE_MASKS[i*2],H=LINE_MASKS[i*2+1]; if((lo&L)===L&&(hi&H)===H) m|=1<<i; } return m; }
 function goldenSolve(a,shapes,budget=6000){
   const [lo0,hi0]=packBits(a), idx=[]; shapes.forEach((s,i)=>{ if(s&&!s.star) idx.push(i); });
@@ -1793,7 +1793,7 @@ function* dealSteps(){
 /* The opening (plan 3.1): a new game does not start on an empty board with random pieces. The board holds a
    seeded pattern, one or two nearly-full lines each missing one gap of 2-4 cells, and the first tray is
    verified with the solver to complete a line with a single obvious drop (plus the other two pieces still
-   playable). So her first move is a clear, and every game starts the same relaxed way.
+   playable). So the player's first move is a clear, and every game starts the same relaxed way.
    Plan 6.0: most openings also scatter 2-4 gems outside the seeded lines, so the first clear leaves blocks
    instead of emptying the board (no clean-sweep bonus on move one). About 1 in 8 keep the board bare, so a
    sweep is still possible sometimes, never always. */
@@ -1865,7 +1865,7 @@ function seedOpening(force){                               // force: 'light' aft
 function genRescue(){
   const a0=packGrid(grid);
   const density=countFlat(a0)/(N*N);
-  if(paced()){                                      // (6.1) a recovery hand: a way out she has to see, not a jackpot
+  if(paced()){                                      // (6.1) a recovery hand: a way out the player has to see, not a jackpot
     const {hand,ev}=pickHand(a0,density,'recovery',false,CFG.CANDIDATES*4);
     if(ev&&ev.ok){ commitTray(hand,'RESCUE'); return; }
   }

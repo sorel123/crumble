@@ -4,7 +4,7 @@
    Progress, not runs: the best score, lifetime stats, goals and the streak, unlocked skins and discovered looks,
    Adventure records and Daily results, (dares) the cookie jar `crumble.dares` (closet) `crumble.closet` and (Lab) the puzzles solved and crumbs rescued `crumble.lab`. One JSON value under one key in the player's own iCloud key-value store
    (NSUbiquitousKeyValueStore, through the in-app CloudStore plugin, ios/App/App/CloudStore.swift). It never reaches us.
-   No UI: a new phone (or a reinstall) signed in to the same Apple account picks her progress up by itself.
+   No UI: a new phone (or a reinstall) signed in to the same Apple account picks the player's progress up by itself.
 
    Merge, never overwrite: on launch, when the app comes back to the front, when iCloud says another device changed
    it, and just before every write, the cloud copy is read and folded into this phone's progress:
@@ -28,7 +28,7 @@ function cloudBlob(){
     unlocked:[...unlocked].sort(), disc:[...discoveredWorlds].sort(), adv:adv.lv, daily:daily.d,
     chal:{s:chalRec.s, won:chalRec.won, gold:chalRec.gold}, gd:guideSeen()?1:0,
     dares:{cookies:dare.st.cookies, won:{...dare.st.won}, days:{...dare.st.days}},   // (dares) crumble.dares: the cookie jar
-    closet:{own:[...closet.own].sort(), spent:closet.spent, on:{...closet.on}, ot:closet.ot},   // (closet) crumble.closet: what she bought, spent and wears
+    closet:{own:[...closet.own].sort(), spent:closet.spent, on:{...closet.on}, ot:closet.ot},   // (closet) crumble.closet: what the player bought, spent and wears
     lab:{three:{done:lab.three.done.slice(), at:lab.three.at}, rescue:{stars:lab.rescue.stars.slice(), best:lab.rescue.best.slice()},
       bakery:{best:lab.bakery.best, seen:lab.bakery.seen, crumbles:lab.bakery.crumbles, games:lab.bakery.games, bs:lab.bakery.bs, bb:lab.bakery.bb}}};   // (bakery) Crumb's Bakery: all by max   // (Lab) crumble.lab: puzzles solved, crumbs rescued
 }
@@ -133,7 +133,7 @@ function cloudMerge(o){
     if(isInt(lk.crumbles,0,1e6)) up(lab.bakery,'crumbles',lk.crumbles);
     if(isInt(lk.games,0,1e7)) up(lab.bakery,'games',lk.games);
   }
-  if(o.gd===1&&!guideSeen()){ guideMark(); ch=true; }   // (1.1 D) she has had the guided first game on another phone
+  if(o.gd===1&&!guideSeen()){ guideMark(); ch=true; }   // (1.1 D) the player has had the guided first game on another phone
   return ch;
 }
 

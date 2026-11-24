@@ -22,7 +22,7 @@ async function gameOver(){
       :score>=600*SCORE_SCALE?'Good chains. Save the big shapes for open space.'
       :'Clear rows early — do not let the board fill up.');
     el('overMsg').hidden=!el('overMsg').textContent;
-    stopLine();                                      // (sky bite) how far the sky went, and her farthest
+    stopLine();                                      // (sky bite) how far the sky went, and the player's farthest
     if(rcOn) reportShow();                           // (report) the grade and Crumb's line, beside the sky line
   }
   const offer=rescueAllowed(prevBest);              // (8.1) one marked one-time offer; otherwise only Play again and Home
@@ -32,7 +32,7 @@ async function gameOver(){
   el('overCard').hidden=false;
   tlShow();                                          // (7.5g) the run replays on the card; the buttons above are already live
 }
-/* (sky bite) Endless: one line on the game-over card, "You reached Night." then "Your best is Aurora." or, past her
+/* (sky bite) Endless: one line on the game-over card, "You reached Night." then "Your best is Aurora." or, past the player's
    record, "Farthest yet!". The farthest stop is kept in the saved stats as farStop = stop + 1 (0: none recorded yet, so an
    older save's first game names the stop and claims no record). Past Space the stop reads "Deep space 2". */
 function stopLine(){
@@ -44,7 +44,7 @@ function stopLine(){
   el('overStop').textContent=t; el('overStop').hidden=false;
 }
 /* (report) Crumb's report card (Endless): a grade stamped beside the sky line and one line from Crumb, to soften a loss with
-   a laugh and to show someone. reportGrade is pure: a 0-100 mark from the run (CFG.REPORT_W parts: score against her best
+   a laugh and to show someone. reportGrade is pure: a 0-100 mark from the run (CFG.REPORT_W parts: score against the player's best
    before this run, the sky stop, the best combo, sweeps, dares beaten + cookies eaten; each part full at CFG.REPORT_TOP), then
    nine grades D .. A+ by CFG.REPORT_CUTS. Never an F. A new best is never below A-. A first game (no best yet) is graded on
    the other parts, scaled up to 100. The line is a quip when one clearly applies (REPORT_QUIPS, in priority order), else one
@@ -74,7 +74,7 @@ const REPORT_QUIPS=[
   ['rcDares', r=>r.offered>=1&&r.dares>=r.offered],
   ['rcStale', r=>r.stale>0],
   ['rcDeflate',r=>r.deflates>0],
-  ['rcIgnored',r=>!!r.toy&&r.throws===0&&r.stop>=1],   // he was there to throw (past the quiet opening) and she never did
+  ['rcIgnored',r=>!!r.toy&&r.throws===0&&r.stop>=1],   // he was there to throw (past the quiet opening) and the player never did
   ['rcQuick', r=>r.stop<1],
 ];
 function reportLine(r){                             // {key, txt}: the same run always gets the same line
@@ -108,7 +108,7 @@ function reportShow(){
   st.classList.remove('in'); void st.offsetWidth;
   if(!reduce){ st.classList.add('in'); reportIn=performance.now()+1050; }   // it thumps in after the score has shown; Reduce Motion: it is just there
 }
-// The one rescue of a run (plan 7.1): offered on the game-over card while she has it and the run is worth saving.
+// The one rescue of a run (plan 7.1): offered on the game-over card while the player has it and the run is worth saving.
 // Every check for it goes through here, so an ad can gate it later in one place. A level always offers its rescue.
 const rescueAllowed=(bestRef)=>rescuesUsed<CFG.MAX_RESCUES && mode!=='challenge' && (mode==='adventure' || ((score>=CFG.RESCUE_FLOOR || score>=bestRef*CFG.RESCUE_BEST_FRAC) && score>0));
 async function rescue(){
@@ -117,7 +117,7 @@ async function rescue(){
   waves.push({x:W/2,y:by+B/2,t:0}); glowT=1;
   Sfx.rescue();
   combo=0; comboMiss=0; goldenNext=false; cancelDeal(); genRescue();
-  if(paced()){ paceSet('recovery'); pace.n=CFG.RECOVERY_TRIES; } else tension=0.5;   // (6.1) the rescue tray is her last recovery try: clear out and relief follows, miss and it is the edge again
+  if(paced()){ paceSet('recovery'); pace.n=CFG.RECOVERY_TRIES; } else tension=0.5;   // (6.1) the rescue tray is the player's last recovery try: clear out and relief follows, miss and it is the edge again
   el('overCard').hidden=true; tlStop(); state='play';
   syncActions(); saveRun();
 }

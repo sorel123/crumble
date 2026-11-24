@@ -7,7 +7,7 @@
 
    ═══════ Clear it in three ═══════
    A puzzle: a part-filled board, exactly three pieces in the tray, nothing more is dealt. Place all three so the board ends
-   completely empty. No score, no timer, no losing: a drop that leaves her unable to finish (a piece that fits nowhere, or
+   completely empty. No score, no timer, no losing: a drop that leaves the player's unable to finish (a piece that fits nowhere, or
    all three placed with gems left) gets "Not quite" and the board puts itself back after a beat. Reset and a one-step Undo
    are always there. After three failed tries on a puzzle Crumb offers a hint: a ghost of where one right piece goes.
    Solving plays the clean-sweep moment, then a small card.
@@ -369,7 +369,7 @@ function saveLab(){
 }
 const l3IsDone=k=>lab.three.done.includes(k);
 const l3Open=k=>isInt(k,1,L3_COUNT)&&(k===1||l3IsDone(k)||l3IsDone(k-1));   // in order, but any solved one can be replayed
-function l3Next(){                                     // the puzzle the big button plays: the one she was on, else the first open unsolved one
+function l3Next(){                                     // the puzzle the big button plays: the one the player was on, else the first open unsolved one
   const at=lab.three.at;
   if(l3Open(at)&&!l3IsDone(at)) return at;
   for(let k=1;k<=L3_COUNT;k++) if(l3Open(k)&&!l3IsDone(k)) return k;
@@ -428,7 +428,7 @@ const l3Pulse=()=>mode==='lab'&&!!l3&&!!l3.hint&&state==='play'&&!paused;   // d
 function playL3(k){
   const p=l3Puzzle(k); if(!p||!l3Open(k)) return;
   leaveMode(); hideMenus(); labHide();
-  mode='lab'; lvl=null;                                 // not saved as the mode: a relaunch opens where she was before the Lab
+  mode='lab'; lvl=null;                                 // not saved as the mode: a relaunch opens where the player was before the Lab
   lab.three.at=k; saveLab();
   labFresh();
   l3={k,p,fails:0,undo:null,hint:null,hintOk:false,over:false,solved:false};
@@ -493,7 +493,7 @@ function l3Solved(){
   l3.over=true; l3.solved=true; l3.undo=null;
   if(first){ lab.three.done.push(k); lab.three.done.sort((a,b)=>a-b); }
   lab.three.at=Math.min(L3_COUNT,first?k+1:lab.three.at); saveLab();
-  playedToday();                                        // she played today (the streak), nothing else is counted
+  playedToday();                                        // the player played today (the streak), nothing else is counted
   const cookie=first&&lab.three.done.length%5===0;
   crumbSay(sayPick('l3Solve'),0,'say dare',true);
   if(cookie) setTimeout(()=>{ if(l3&&l3.k===k){ dareGift(); crumbSay(sayPick('l3Cookie'),0,'say dare',true); } },reduce?300:1900);
@@ -520,7 +520,7 @@ function l3Reset(){
   if(!l3||l3.over||drag||mode!=='lab') return;
   clearRunFx(); l3Lay(true); Sfx.pickup();
 }
-// the hint: one right next drop from the board as it is (from the start, if she has already gone wrong), as a ghost
+// the hint: one right next drop from the board as it is (from the start, if the player has already gone wrong), as a ghost
 function l3Hint(){
   if(!l3||l3.over||!l3.hintOk||drag||mode!=='lab') return;
   const [lo,hi]=packBits(packGrid(grid));

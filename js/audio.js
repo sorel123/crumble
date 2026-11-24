@@ -52,7 +52,7 @@ function buildChain(c){
   const mus=c.createGain(); mus.gain.value=1; mus.connect(mhp1); mhp1.connect(mhp2); mhp2.connect(c.destination);
   return {master:m,revIn:rin,nbuf:nb,setSpeaker,smp,orig:og,mus};
 }
-/* phone-speaker default (6.4): on for touch devices unless she has chosen either way (the Settings toggle
+/* phone-speaker default (6.4): on for touch devices unless the player has chosen either way (the Settings toggle
    saves crumble.speaker; the Admin panel's saved tuning counts too). A web page can't tell headphones apart. */
 function speakerDefault(){
   try{
@@ -497,7 +497,7 @@ const Sfx={
     const v=PLACE_SMP[k]; if(v){ ac(); smp(v[0],{vol:v[1]*CFG.SND_PLACE_VOL,rate:jit()*Math.pow(.97,Math.max(0,n-1))}); }
   }
 };
-/* Two buttons on the game screen, each its own sound (Jay, 2026-11-10): the speaker is Sound effects (`muted`), the note is
+/* Two buttons on the game screen, each its own sound (2026-11-10): the speaker is Sound effects (`muted`), the note is
    Music (`CFG.MUSIC`). Settings > Sound has the same two switches; they mirror each other. Before this there was only the
    speaker, and the music (6.8) ignored it, so a "muted" game kept playing music. */
 function syncSoundBtns(){

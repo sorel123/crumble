@@ -4,7 +4,7 @@
    snapshot() returns the whole run as plain JSON data; restore(o) puts it back and returns true, or false (and
    changes nothing) if the data does not look right. Both are pure with respect to storage. saveRun()/loadRun() are the
    localStorage side. Not captured: effects in flight (they are cosmetic) and a live transformation (it ends on resume). The bonus meter and a live bonus (trays left, points it added) are kept (plan 6.2).
-   restore() never deals an opening: the saved board and tray are exactly what she left. */
+   restore() never deals an opening: the saved board and tray are exactly what the player left. */
 const STATS_STORE='crumble.stats';   // the run's own key depends on the mode (modes.js: runStore)
 function snapshot(){
   return {
@@ -24,7 +24,7 @@ function snapshot(){
     lv:mode==='adventure'&&lvl?{id:lvl.id,lines:lv.lines,pieces:lv.pieces,combo:lv.combo,swept:lv.swept?1:0}:mode==='daily'||mode==='challenge'?{id:0,lines:lv.lines,pieces:lv.pieces,combo:0,swept:0}:null,
     dk:mode==='daily'?dk:null,   // (4.1) this level run's counters
     ch:mode==='challenge'&&chal?{seed:chal.seed,deal:chal.deal,won:chal.won,beat:chal.beat||0,bt:chal.beaten?1:0,
-      pc:chal.pace?chal.pace.slice():null,fp:chal.fp||null,pa:chal.pa|0,pw:chal.pw|0}:null,   // (E1) the round's seed and its whole frozen deal; (pace) her pace so far, the friend's, the crumb's two lines
+      pc:chal.pace?chal.pace.slice():null,fp:chal.fp||null,pa:chal.pa|0,pw:chal.pw|0}:null,   // (E1) the round's seed and its whole frozen deal; (pace) the player's pace so far, the friend's, the crumb's two lines
     bonus:bonus?{left:bonus.left,extra:bonus.extra}:null,
     jy:jJumps,                                        // (7.5b) sweeps this run: the journey sky's extra stages
     cb:chaseBest,                                     // (7.5e) the best this run chases (the live `best` is rewritten mid-run by saveStats)
@@ -127,7 +127,7 @@ function syncGoldChip(){                          // (4.5c) what the golden hand
 function syncActions(){
   const live=state==='play'&&!dealing;
   el('noMoves').hidden=!(stuck&&live);
-  el('starNote').hidden=!(live&&!stats.starSeen&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until she has used one
+  el('starNote').hidden=!(live&&!stats.starSeen&&tray.some(t=>t&&t.s.star));   // the very first star ever: one line, until the player has used one
   syncGoldChip();
   syncBonusChip();
 }
@@ -188,11 +188,11 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 addEventListener('pagehide',saveRun);
 
 /* ═══════ hesitation log (plan 3.4) ═══════
-   The measurement the dealer is tuned against: for every tray, how long from the tray appearing to her first
+   The measurement the dealer is tuned against: for every tray, how long from the tray appearing to the player's first
    pickup, how long from the pickup that led to the first drop to that drop, and whether that first drop cleared.
    Recorded always (a few numbers per tray), shown only with ?dev, in the frame readout: rolling medians of the
    last HES_WINDOW samples, with the sample count. The last HES_KEEP samples persist in `crumble.hes`, so after
-   she has played normally Jay can open ?dev on her phone and read them.
+   the player has played normally the developer can open ?dev on the player's phone and read them.
    A sample is thrown away when it would not be a real hesitation: the tray came back through restore() (resume
    after a force-quit), or the app was hidden or Settings / Admin were open before the first drop. */
 const HES_STORE='crumble.hes', HES_KEEP=60, HES_WINDOW=20;
@@ -238,7 +238,7 @@ const recHex=g=>g.map(row=>{ let b=0; for(let c=0;c<N;c++) if(row[c]) b|=0x80>>c
 function recGame(resumed){                             // start(): a new game (and the knobs it is dealt under)
   if(!recOn()) return;
   const L=recLoad(); L.g++; recLive=true; recCur=null;
-  const cfg={}; for(const k in CFG) if(k==='DEALER_HOME'||k==='DEALER_CURVE'||k.startsWith('CURVE_')||k.startsWith('HOME_')&&k!=='HOME_WORLD') cfg[k]=CFG[k];   // the dealers' knobs (HOME_WORLD is her sky)
+  const cfg={}; for(const k in CFG) if(k==='DEALER_HOME'||k==='DEALER_CURVE'||k.startsWith('CURVE_')||k.startsWith('HOME_')&&k!=='HOME_WORLD') cfg[k]=CFG[k];   // the dealers' knobs (HOME_WORLD is the player's sky)
   L.e.push(resumed?{k:'g',g:L.g,m:mode,cfg,r:1}:{k:'g',g:L.g,m:mode,cfg});
 }
 function recTray(shapes,label){                        // commitTray: the tray as dealt, on the board it was dealt on
