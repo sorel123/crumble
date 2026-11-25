@@ -25,6 +25,7 @@ const STAR={cells:[[0,0]],rows:1,cols:1,n:1,star:true};
 const cvs=el('c'), ctx=cvs.getContext('2d'), safeProbe=el('safe');
 const N=CFG.GRID;
 let W,H,dpr,cell,B,bx,by,trayY,trayH,trayCell;
+let U=1, colSide=0;   // (iPad) U: how much bigger than a phone everything is drawn (1 on every iPhone); colSide: the empty sky beside the centred column, each side
 let grid,tray,score=0,best=0,combo=0,rescuesUsed=0;
 let tension=0, sweepCool=0, lastTier='—', trayNo=0;
 let pace={ph:'calm',n:0,hold:0,len:0}, roomNow=1;   // (6.1) the dealer's phase (calm|building|edge|recovery|relief), trays dealt in it, the edge hold, relief length; room at the last deal

@@ -348,6 +348,10 @@ function buildCache(){
   }
   gemBig=t.big; gemSmall=t.small;
 }
+// (iPad) one scale for the whole game: 1 on every iPhone (up to 440 x 956), bigger on an iPad, so a tablet shows the same
+// game in a centred portrait column, just larger, with the sky filling the sides. The board, tray and canvas words grow
+// through cell; the DOM (top bar, chips, cards) through CSS zoom: var(--u).
+function uiScale(w,h){ return Math.round(Math.max(1,Math.min(w/480,h/844,1.8))*1000)/1000; }
 function layout(){
   dpr=Math.min(devicePixelRatio||1,2);
   W=cvs.clientWidth; H=cvs.clientHeight;
@@ -355,12 +359,16 @@ function layout(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const cs=getComputedStyle(safeProbe);
   const insetT=parseFloat(cs.paddingTop)||0, insetB=parseFloat(cs.paddingBottom)||0;
-  const HUD=92+insetT, Hb=H-insetB; hudH=HUD;
-  B=Math.min(W-26,Hb-HUD-190,520);
+  U=uiScale(W,H);
+  const HUD=(92+insetT)*U, Hb=H-insetB; hudH=HUD;     // the top bar is zoomed by U too (CSS --u)
+  B=Math.min(W-26,Hb-HUD-190*U,520*U);
   cell=B/N; bx=(W-B)/2;
-  by=HUD+Math.max(8,(Hb-HUD-B-cell*2.6-24)*0.34);
+  by=HUD+Math.max(8*U,(Hb-HUD-B-cell*2.6-24*U)*0.34);
   trayH=cell*2.4;
-  trayY=by+B+Math.max(16,(Hb-by-B-trayH-14)*0.5);
+  trayY=by+B+Math.max(16*U,(Hb-by-B-trayH-14*U)*0.5);
+  colSide=Math.max(0,bx-9-18*U);                      // the top bar's edges line up with the board's frame (9 px outside the cells)
+  const rs=document.documentElement.style;
+  rs.setProperty('--u',U); rs.setProperty('--side',colSide+'px'); rs.setProperty('--colw',(W-2*colSide)+'px');
   trayCell=cell*0.66;                         // the size most tray pieces show at; long ones shrink to fit (trayFit)
   SPRITES.clear(); TILES.clear();
   buildCache();

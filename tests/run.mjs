@@ -7736,6 +7736,33 @@ for (const size of IPADS) {
   }, { viewport: SIZES[size] });
 }
 
+test('iPad (2/6): every iPhone keeps scale 1 and its old board; an iPad draws the game bigger, the top bar lined up with the board', async ({ page }) => {
+  for (const k of ['se', 'phone', 'max']) {
+    await page.setViewportSize(SIZES[k]); await frames(page, 2);
+    const r = await page.evaluate(() => ({ U, B, side: colSide, zoom: getComputedStyle(document.querySelector('.hud')).zoom }));
+    assert.equal(r.U, 1, k + ': scale 1'); assert.equal(r.side, 0, k + ': no side margin');
+    assert.equal(r.B, Math.min(SIZES[k].width - 26, 520), k + ': the board is as wide as before');
+  }
+  await page.setViewportSize(SIZES.ipad13); await frames(page, 2);
+  await play(page); await dealt(page);
+  const r = await page.evaluate(() => { const s = el('scoreBox').getBoundingClientRect(), b = el('pauseBtn').getBoundingClientRect(); return { U, B, bx, by, cell, trayY, trayH, s: s.left, sH: s.height, pR: el('mute').getBoundingClientRect().right, pH: b.height }; });
+  assert.ok(r.U > 1.5 && r.U <= 1.8, 'the 13-inch iPad is drawn about 1.6x: ' + r.U);
+  assert.ok(r.B > 800, 'the board is far bigger than the phone cap of 520: ' + r.B);
+  assert.ok(Math.abs(r.s - (r.bx - 9)) < 2 && Math.abs(r.pR - (r.bx + r.B + 9)) < 2, 'the score and the last button line up with the board frame: ' + JSON.stringify(r));
+  assert.ok(Math.abs(r.pH - 40 * r.U) < 1, 'the buttons are zoomed with the board');
+  assert.ok(r.trayY + r.trayH <= 1376, 'the tray is on screen');
+}, { viewport: SIZES.phone });
+
+test('iPad (2/6): on a 13-inch iPad a dragged piece lands where it was dropped', async ({ page }) => {
+  await play(page);
+  await setup(page, { rows: EMPTY });
+  const before = await snap(page);
+  await dragPiece(page, 0, 3, 3);
+  const after = await snap(page);
+  assert.equal(after.filled, before.tray[0].n, 'the piece is on the board');
+  assert.ok(after.rows.slice(3, 3 + before.tray[0].rows).every(r => /1/.test(r.slice(3, 3 + before.tray[0].cols))), 'where it was dropped');
+}, { viewport: SIZES.ipad13 });
+
 for (const { name, fn, opts } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];

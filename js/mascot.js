@@ -69,7 +69,7 @@ function mascotInit(){
 function mascotPlace(){                               // layout() calls this: feet on the board frame's top edge, left corner
   if(!masc.el) return;
   const top=by-9, room=top-hudH;                    // the frame is drawn 9 px outside the cells (buildBoardBg)
-  const s=Math.round(Math.max(28,Math.min(46,room+8)));
+  const s=Math.round(Math.max(28*U,Math.min(46*U,room+8*U)));
   masc.s=s; masc.x=bx+6; masc.y=top-s*44/48+1.5;
   const st=masc.el.style; st.width=st.height=s+'px'; st.left=masc.x+'px'; st.top=masc.y+'px';
   if(toy.mode==='rim'){ toy.x=Math.max(0,Math.min(toyXMax(),toy.x)); toyWrite(); }

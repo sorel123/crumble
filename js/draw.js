@@ -1426,7 +1426,7 @@ function frame(now){
     if(b.t>=1){ banners.splice(i,1); i--; continue; }
     const sc=0.6+0.4*easeOutBack(Math.min(1,b.t*2.4));
     const a=b.t>0.8?(1-b.t)/0.2:1;
-    const bs=Math.round(Math.min(W*0.13,62)), ss=Math.round(Math.min(W*0.07,34)), gap=Math.min(W*0.1,48);
+    const bs=Math.round(Math.min(W*0.13,62*U)), ss=Math.round(Math.min(W*0.07,34*U)), gap=Math.min(W*0.1,48*U);
     const tw=textW(b.txt,bs), bfit=Math.min(1,W*0.9/tw);
     const sp=sprite('banner|'+b.txt+'|'+b.sub+'|'+b.col+'|'+bs, Math.max(tw,textW(b.sub,ss))+bs*0.8, bs*1.4+(b.sub?gap+ss:0), x=>{
       const dy=b.sub?-(gap+ss)/2+bs*0.1:0;

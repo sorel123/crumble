@@ -195,5 +195,5 @@ function sayStep(now,shown,faint){                         // mascot.js mascotSt
   if(key===say.key) return; say.key=key;
   if(!txt){ e.hidden=true; return; }
   e.hidden=false; e.textContent=txt; e.className=kind+(right?' fromL':' fromR')+(reduce?' rm':'');
-  e.style.left=right?px+'px':''; e.style.right=right?'':px+'px'; e.style.top=py+'px';
+  e.style.left=right?px/U+'px':''; e.style.right=right?'':px/U+'px'; e.style.top=py/U+'px';   // (iPad) the bubble is zoomed by U (CSS), so its own offsets are too
 }
