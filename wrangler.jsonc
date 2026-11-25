@@ -1,0 +1,7 @@
+// Cloudflare Worker "crumble": serves only site/ (npm run build:web), never the whole repository.
+{
+  "name": "crumble",
+  "compatibility_date": "2026-11-01",
+  "build": { "command": "npm run build:web" },
+  "assets": { "directory": "./site" }
+}
