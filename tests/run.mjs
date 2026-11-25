@@ -2,7 +2,7 @@
 //   npm test
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { serve, openGame, play, snap, setup, dragPiece, geometry, fingerFor, fingers, frames, watchPlace, placed, dragView, dealt, watchFrames, frameLog } from './harness.mjs';
+import { serve, openGame, SIZES, IPADS, play, snap, setup, dragPiece, geometry, fingerFor, fingers, frames, watchPlace, placed, dragView, dealt, watchFrames, frameLog } from './harness.mjs';
 import { expectedAssets } from '../tools/stamp-sw.mjs';
 // A launch with a saved run opens on the front menu (Continue / Back to the game); tests that reload go straight back to the game.
 const toGame = async page => {
@@ -13,7 +13,7 @@ const toGame = async page => {
 const SCORE_SCALE = 10;                      // the game's SCORE_SCALE (js/config.js); a test that sets a score thinks in boosted points
 const EMPTY = Array(8).fill('00000000');
 const tests = [];
-const test = (name, fn) => tests.push({ name, fn });
+const test = (name, fn, opts = {}) => tests.push({ name, fn, opts });   // opts.viewport: open at another screen size (harness SIZES)
 // (8.4) in a game, Settings is on the pause card; Done goes back to it, and Resume back to the game
 const openSet = async page => { await page.click('#pauseBtn'); await page.click('#setBtn'); };
 const closeSet = async page => { await page.click('#setDone'); if (await page.isVisible('#pauseCard')) await page.click('#pauseResume'); };
@@ -7720,10 +7720,26 @@ test('bakery: the first-play hint: the first time (a link too) until the player�
   assert.deepEqual(await vis(), { on: true, text: '👆Drag. Let go. Match two the same.', fing: false });
 });
 
-for (const { name, fn } of tests) {
+// ── iPad: every size opens cleanly; the board, the tray and the top bar are on screen ──
+const onScreen = (r, label) => assert.ok(r.left >= -0.5 && r.top >= -0.5 && r.right <= r.vw + 0.5 && r.bottom <= r.vh + 0.5, label + ' is on screen: ' + JSON.stringify(r));
+for (const size of IPADS) {
+  test(`iPad (${size}): opens with no errors on the home card; a game shows the board, the tray and the top bar on screen`, async ({ page, errors }) => {
+    assert.equal(await page.isVisible('#startCard'), true, 'the home card');
+    await play(page); await dealt(page);
+    const r = await page.evaluate(() => {
+      const vw = innerWidth, vh = innerHeight, box = e => { const b = el(e).getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, vw, vh }; };
+      return { board: { left: bx, top: by, right: bx + B, bottom: by + B, vw, vh }, tray: { left: bx, top: trayY, right: bx + B, bottom: trayY + trayH, vw, vh }, score: box('scoreBox'), best: box('bestBox'), pause: box('pauseBtn') };
+    });
+    for (const k of Object.keys(r)) onScreen(r[k], k);
+    assert.ok(r.board.top >= r.score.bottom, 'the board sits under the top bar');
+    assert.deepEqual(errors.filter(e => !/net::ERR_FAILED/.test(e)), [], 'no script errors');
+  }, { viewport: SIZES[size] });
+}
+
+for (const { name, fn, opts } of tests) {
   if (only && !only.test(name)) continue;
   for (const k of Object.keys(server.patches)) delete server.patches[k];
-  const { browser, page, errors } = await openGame(server.url);
+  const { browser, page, errors } = await openGame(server.url, opts);
   try {
     await fn({ page, errors, server });
     console.log(`ok   ${name}`);
