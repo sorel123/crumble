@@ -1,4 +1,4 @@
-// Test harness: serves the game, opens it at an iPhone-sized viewport, and gives tests
+// Test harness: serves the game, opens it at an iPhone-sized viewport (or any of SIZES), and gives tests
 // pointer-event input plus a read-only view of the game's state.
 //
 // No hook is added to the game itself. The game's state lives in top-level `let`/`const`
@@ -36,10 +36,19 @@ export function serve() {
 // Seeded Math.random so a run of the game is repeatable (mulberry32).
 const SEED_SCRIPT = seed => `(()=>{let a=${seed}>>>0;Math.random=()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};})();`;
 
-export async function openGame(url, { seed = 1 } = {}) {
+// Screen sizes the game is checked at, in CSS points. The phones are what the older tests were written for;
+// the iPads are portrait unless the name says otherwise (iPad mini, iPad Air 11-inch, iPad Pro 13-inch).
+export const SIZES = {
+  phone: { width: 390, height: 844 }, se: { width: 375, height: 667 }, max: { width: 440, height: 956 },
+  mini: { width: 744, height: 1133 }, ipad11: { width: 820, height: 1180 }, ipad13: { width: 1032, height: 1376 },
+  ipad13Wide: { width: 1376, height: 1032 }, ipad11Wide: { width: 1180, height: 820 },
+};
+export const IPADS = ['mini', 'ipad11', 'ipad13'];
+
+export async function openGame(url, { seed = 1, viewport = SIZES.phone } = {}) {
   const browser = await chromium.launch();
   const context = await browser.newContext({
-    viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+    viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
   });
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());   // the game degrades fine without its font
   const page = await context.newPage();
